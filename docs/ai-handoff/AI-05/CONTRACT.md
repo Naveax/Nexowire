@@ -1,0 +1,51 @@
+# AI-05 Immutable external CAS and executor contract
+
+## Admission identity
+
+The original request identity is the exact validated `deviceId`, `epoch`, `requestId`, `fingerprint` and `capability`. In the PostgreSQL-bound CAS, authenticated owner/device/session/epoch/generation/requiredPrivilege is copied from plain own enumerable data descriptors and frozen before async SQL. The external reservation receipt, including `created` and `sequence`, is separately validated, detached and frozen before another SQL await. A remote returned object may not retroactively turn a historical `created:false` into `created:true`.
+
+No reflected/accessor, Proxy, symbol, hidden, inherited or unexpected identity key is admission. Only primitive typed fields from a strict schema are accepted. `Object.freeze` and local SQL locks are not cryptographic identity, OS privilege or externally operated anti-rollback proof.
+
+## HTTPS transport and configuration
+
+External reserve/revoke/re-pair requests are snapshotted from own enumerable data descriptors, strictly parsed and frozen **before** credential resolution or network awaits. Their original wire bytes retain the approved immutable request identity even when caller references mutate. Each client and witness adapter pins a detached configuration object in its constructor: authority ID, device/epoch, token or credential-provider reference, trusted CAS provider and pool are not retargeted by the caller later.
+
+Network uncertainty (timeout, lost ACK, HTTP 408/425/429/5xx, invalid or absent trustworthy admission) never authorizes a retry of a mutation. The transport has no internal mutation retry. Explicit HTTP 403/409 can count as refusal only where an independently operated server guarantees those outcomes were issued **before** any side-effect. Reconciliation of UNKNOWN must use an external durable request tombstone/OS observation, not a new invocation.
+
+## Executor and Broker boundary
+
+AI-05's approved executor callback must use the exact immutable payload bytes and fingerprint admitted by an independently protected Broker CAS fence. `CORE_EXECUTOR_DISPATCH_ENABLED=false` remains in source; no test fixture or signed JSON receipt enables it. AI-04 owns the separate Broker-side per-effect authorization and signed receipts. AI-07 owns OS worker launch/containment. The coordinator owns `src/agent/native-agent.ts`, `operation-journal.ts`, CI workflow and integration.
+
+A valid `created:false` is **not** new execution permission. After lost ACK / restart / UNKNOWN no second mutation is allowed for the original UUID. No physical Windows/device/kernel authorization is claimed by this source-only PR.
+
+## Proxy trust boundary
+PostgreSQL request, authenticated scope and external receipt reject Proxy-wrapped objects before Reflect descriptor inspection. No hostile Proxy traps are invoked during admission. This is source hardening, not independent native identity evidence.
+
+## Frozen protected Broker callback and canonical input
+Canonicalizing a caller-owned nested Proxy would otherwise invoke `getPrototypeOf`/`ownKeys` traps before final fingerprint validation. The AI-05 executor boundary now refuses Proxy-wrapped nested input without invoking traps. A frozen approved Broker request is not enough if the freeze encloses accessors: exact `requestId`, capability, fingerprint, and nested owner/device/session/epoch/generation/privilege fields must be plain own enumerable data descriptors, with no extra or missing keys. The signed external Broker gate remains separately owned by AI-04. No JSON or frozen JavaScript object is independent physical authorization. `CORE_EXECUTOR_DISPATCH_ENABLED=false` is unchanged.
+
+## Original Broker dispatch request and approved expected snapshot
+The executor's `snapshotCoreWindowsDispatchRequest(raw)` builds a detached two-level plain record synchronously from exactly `requestId/capability/fingerprint/scope` and the seven own enumerable owner/device/session/epoch/generation/privilege fields. No getter, Proxy trap, inherited, hidden or extra key is evaluated or admitted. UUIDs, fingerprint, capability, positive safe integer epochs/generation and required privilege are validated before the nested snapshot is frozen. Direct `assertCoreApprovedDispatchRequest` callers are also forced through this expected-request snapshot, not loose property reads. `executeCoreWindowsMutation` reads `admission.fence/request` through own data descriptors and uses the detached request across external CAS callbacks.
+
+This is a **structural** input contract only. The separate Broker `BrokerExternalDispatchFence` and OS native readback must still independently authenticate owner, session, generation and exact mutation bytes at effect execution. Flag `CORE_EXECUTOR_DISPATCH_ENABLED=false` remains hard-disabled.
+
+## Runtime immutable CORE denial capability collections
+The sandbox and native-effect CORE denial capability lists are exposed through a frozen `ReadonlySet<string>` façade with a private backing Set. Merely annotating a publicly exported `new Set(...)` as `ReadonlySet` does not prevent JavaScript callers from invoking `.clear()`, `.delete()` or `Set.prototype.clear.call(...)`. The façade preserves `has`, iteration and `forEach` without exposing any mutating Set target. This is defense-in-depth; it does not replace signed Broker/native OS admission or change the default `CORE_EXECUTOR_DISPATCH_ENABLED=false`.
+
+## JSON payload enumerable-data-only boundary
+The executor's recursive canonical snapshot rejects non-enumerable nested object fields and non-enumerable array element indices, as well as accessors, symbols and Proxy wrappers. Otherwise hidden data could be silently promoted into visible JSON during detached copy creation, changing what the caller considered part of the authorized wire input. The snapshot refuses ambiguous hidden values before CAS/Broker dispatch; no fallback or permissive serialization is used.
+
+## Runtime pinning of HTTPS authority and trust-root configuration
+The remote CAS and external grant CAS clients normalize their HTTPS authority to an immutable primitive URL string, rather than expose a mutable `URL` object after constructor validation. Runtime descriptor locks reject JS reassignment of `url`, `endpoint`, `settings` and `config` bindings; the HttpsMonotonicTrustRoot and PostgresBoundGrantCas also reject post-construction `config` reassignment. This protects the checked endpoint/authority/credential resolution from simple post-construction retargeting across CAS awaits. It does not make a same-process compromised JavaScript runtime or external HTTPS server trustworthy. Independent CAS custody and protected Broker remain separate requirements.
+
+## Descriptor-only CAS constructor binding
+
+The four AI-05 CAS authority constructors now capture configuration using descriptor-only own enumerable fields before validation. Proxy-backed configs, getter-backed endpoint/token/authority/provider inputs, inherited/hidden fields, symbol keys and unknown fields are rejected rather than executing caller-owned getter/trap code during `{...config}` spread. The original endpoint and resolver remain runtime-pinned and immutable across awaits. This narrows JavaScript-source trust boundary only; external credentials, protected Broker and physical CAS provenance are separate and required.
+
+## Original provider-method binding across async waits
+
+PostgresBoundGrantCas now binds both its PostgreSQL pool `connect` method and independent external-CAS `reserveIfCurrent` method at construction. Pinning only the config object pointer is insufficient: a retained provider object can have its method overwritten during provenance, identity, SQL or readback awaits. Dedicated non-reassignable bound function fields preserve the original provider target, while the external service must still authenticate current owner/session and supply genuine atomic CAS. The adapter does not claim OS-level isolation or make attacker-controlled providers trustworthy.
+
+## 2026-11-01 HTTP 2xx body-loss UNKNOWN contract
+
+A 200 HTTPS status is not itself an authenticated durable CAS receipt. The server may have committed reserve, revoke or re-pair before the response body becomes unreadable. This adapter now classifies a failed `Response.text()` on a successful status as `EXTERNAL_GRANT_TRANSPORT_UNKNOWN`, `EXTERNAL_REVOKE_OUTCOME_UNKNOWN` or `EXTERNAL_REPAIR_OUTCOME_UNKNOWN`, respectively. These terminal source-side error paths never trigger a hidden retry or imply the original UUID can be replayed. The independently protected authority must reconcile UNKNOWN using a durable claim tombstone and owner/session/epoch proof; it must not mint another request UUID to repeat an uncertain physical effect. The new isolated test uses a 200 response whose synthetic body stream fails and asserts exactly one HTTP attempt per operation. This is **not** a real hosted CAS or a protected native callback.
