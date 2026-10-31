@@ -58,3 +58,10 @@
   previous PASS is inherited. This shape validation does not bind a changed
   but valid public key to the historical physical consent. External issuer-pin
   provenance is a P0 dependency and CORE production NO-GO.
+
+## Native IPC cryptographic self-consistency candidate
+
+- Baseline exact HEAD `2fef25808393eb84232872507e2d316e9a23b327`, CI run #41243991732 **SUCCESS 8/8**, Windows native 5/5 PASS. Historical: the new commit requires a separate exact-run validation.
+- `EnrollmentClient.RequireAcceptedFrame` now rejects a structurally valid fake `verified:true` response unless the supplied canonical P-256 key matches the grant's issuer hash and verifies the grant signature. For attestation, the signed witness must match the service-incarnation/SID/session/LUID and grant hash, and the runtime rejects stale witness TTL before stdout.
+- Native `--self-test` uses ephemeral software P-256 fixtures and negative mutations for top-level and nested duplicate fields, unknown/missing fields, downgrade, `mayDispatch:true`, fake key/signatures, altered grant and mismatched witness.
+- **NOT an independently pinned issuer or signed installed Agent identity.** Matching self-contained signatures are not grant authority. CORE disabled, Draft, physical-service and external mTLS/CAS NO-GO remain.

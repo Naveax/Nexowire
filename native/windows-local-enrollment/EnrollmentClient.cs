@@ -1,4 +1,7 @@
 using System.IO.Pipes;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.RegularExpressions;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.Win32.SafeHandles;
@@ -28,20 +31,67 @@ internal static class EnrollmentClient
         // malformed/missing witness remains a rejection, not a compiler
         // definite-assignment ambiguity.
         var witnessPresent=root.TryGetProperty("witness",out var witness);
-        Protocol.Require(fields.Count==8 && witnessPresent &&
+        var grantPresent=root.TryGetProperty("grant",out var grant);
+        var evidencePresent=root.TryGetProperty("evidence",out var evidence);
+        var keyPresent=root.TryGetProperty("spkiBase64",out var key);
+        Protocol.Require(fields.Count==8 && witnessPresent && grantPresent &&
+            evidencePresent && keyPresent &&
             root.TryGetProperty("version",out var version) &&
             version.ValueKind==JsonValueKind.Number && version.TryGetInt32(out var v) && v==2 &&
             root.TryGetProperty("verified",out var verified) && verified.ValueKind==JsonValueKind.True &&
             root.TryGetProperty("mayDispatch",out var dispatch) && dispatch.ValueKind==JsonValueKind.False &&
-            root.TryGetProperty("grant",out var grant) && grant.ValueKind==JsonValueKind.Object &&
-            root.TryGetProperty("evidence",out var evidence) && evidence.ValueKind==JsonValueKind.Object &&
-            root.TryGetProperty("spkiBase64",out var key) && key.ValueKind==JsonValueKind.String &&
+            grant.ValueKind==JsonValueKind.Object &&
+            evidence.ValueKind==JsonValueKind.Object &&
+            key.ValueKind==JsonValueKind.String &&
             key.GetString() is {Length:>0 and <=1024} &&
             root.TryGetProperty("keyProvider",out var provider) && provider.ValueKind==JsonValueKind.String &&
             provider.GetString() is "Microsoft Platform Crypto Provider" or "Microsoft Software Key Storage Provider");
         Protocol.Require(operation=="attest"
             ? witness.ValueKind==JsonValueKind.Object
             : witness.ValueKind==JsonValueKind.Null);
+
+        // Self-consistent cryptography is a necessary, never sufficient,
+        // condition before emitting a "verified:true" IPC frame to stdout.
+        // The independent Agent verifier MUST still pin the installed device
+        // identity, issuer, grant generation and current revocation/CAS.
+        try
+        {
+            var encoded=key.GetString() ?? throw new InvalidDataException("LOCAL_ENROLLMENT_REJECTED");
+            var issuerHash=Program.RequireCanonicalAuthoritySpki(encoded);
+            var signed=Protocol.Read<SignedGrant>(Encoding.UTF8.GetBytes(grant.GetRawText()));
+            Protocol.Require(signed.Payload is not null && signed.Payload.IssuerSpkiSha256==issuerHash);
+            var grantBytes=Protocol.GrantBytes(signed.Payload);
+            using var signer=ECDsa.Create();
+            var der=Convert.FromBase64String(encoded);
+            signer.ImportSubjectPublicKeyInfo(der,out var consumed);
+            Protocol.Require(consumed==der.Length &&
+                Protocol.Verify(signer,grantBytes,signed.SignatureBase64));
+
+            var snapshot=Protocol.Read<SessionEvidence>(Encoding.UTF8.GetBytes(evidence.GetRawText()));
+            Protocol.Require(Protocol.Uuid(snapshot.BootId) &&
+                snapshot.WindowsSessionId>0 && snapshot.OwnerSid==signed.Payload.OwnerSid &&
+                snapshot.LogonLuid is {Length:16} &&
+                Regex.IsMatch(snapshot.LogonLuid,"^[a-f0-9]{16}\\z") &&
+                snapshot.LogonLuid!="0000000000000000");
+
+            if(operation=="attest")
+            {
+                var signedWitness=Protocol.Read<SignedSession>(
+                    Encoding.UTF8.GetBytes(witness.GetRawText()));
+                Protocol.Require(signedWitness.Payload is not null);
+                var w=signedWitness.Payload;
+                Protocol.Require(w.EnrollmentSha256==Protocol.Hash(grantBytes) &&
+                    w.OwnerSid==snapshot.OwnerSid && w.BootId==snapshot.BootId &&
+                    w.WindowsSessionId==snapshot.WindowsSessionId &&
+                    w.LogonLuid==snapshot.LogonLuid &&
+                    w.ObservedAtMs>=signed.Payload.ConsentedAtMs &&
+                    Protocol.Verify(signer,Protocol.SessionBytes(w),
+                        signedWitness.SignatureBase64));
+            }
+        }
+        catch(Exception e) when(e is JsonException or CryptographicException or FormatException
+            or ArgumentException or NotSupportedException)
+        { throw new InvalidDataException("LOCAL_ENROLLMENT_REJECTED"); }
     }
     [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)]
     private static extern SafePipeHandle CreateFileW(string name,uint access,uint share,IntPtr sa,
@@ -79,6 +129,15 @@ internal static class EnrollmentClient
         // validate the provisioned issuer pin and signed scope before use.
         using var doc=JsonDocument.Parse(response);
         RequireAcceptedFrame(doc.RootElement,operation);
+        // Even a locally valid signature cannot excuse an expired attestation
+        // after transport or scheduling delays. The external verifier must
+        // perform its own current-session and revoke readback too.
+        if(operation=="attest")
+        {
+            var w=doc.RootElement.GetProperty("witness").GetProperty("payload");
+            Protocol.Require(w.GetProperty("observedAtMs").GetInt64()<=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() &&
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()<w.GetProperty("validUntilMs").GetInt64());
+        }
         Console.WriteLine(doc.RootElement.GetRawText());
     }
 }

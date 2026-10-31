@@ -223,3 +223,23 @@ the real ProgramData store. **Important:** even a well-formed substituted
 authority key is not independently trusted: signed installation identity,
 externally pinned issuer and monotonic off-device revocation remain separate
 production P0 blockers.
+
+## AI-02 reject self-inconsistent native IPC success
+
+A client-facing native pipe response marked `verified:true` must now carry
+a structurally valid and **cryptographically self-consistent** P-256 signed
+grant. Its supplied canonical public key must hash to the grant's issuer
+SPKI fingerprint; the signature must verify over the fixed domain-separated
+grant bytes. Status requires bounded, valid native service incarnation/SID/
+session/LUID evidence. Attestation additionally requires a signed matching
+witness (owner, OS session, incarnation, LUID, grant hash, consent time),
+with a final unexpired time check immediately before output.
+
+This deliberately does **not** turn a self-signed, internally consistent
+but unpinned pipe response into a trusted device or permission. Hostile
+same-owner caller/process identity and trusted installed public-key pin,
+external monotonic revocation/current generation and one-use CAS are still
+independent authorization prerequisites. `mayDispatch` remains `false`.
+Disposable positive and negative native tests exercise valid EC signatures
+plus mutation, fake key, nested duplicate and tampered witness cases with no
+SCM, UAC, enrollment or protected-store writes.

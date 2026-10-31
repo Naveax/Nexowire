@@ -168,36 +168,72 @@ internal static class SelfTest
     }
     private static void VerifyIpcFraming()
     {
-        // Strict parser-only contract tests. No SCM, pipe, grant or consent.
-        const string goodStatus = """{"version":2,"verified":true,"mayDispatch":false,"grant":{},"spkiBase64":"dGVzdA==","keyProvider":"Microsoft Software Key Storage Provider","evidence":{},"witness":null}""";
-        const string missingWitness = """{"version":2,"verified":true,"mayDispatch":false,"grant":{},"spkiBase64":"dGVzdA==","keyProvider":"Microsoft Software Key Storage Provider","evidence":{}}""";
-        var goodAttest=goodStatus.Replace("\"witness\":null","\"witness\":{}");
-        using(var accepted=JsonDocument.Parse(goodStatus))
-            EnrollmentClient.RequireAcceptedFrame(accepted.RootElement,"status");
-        using(var acceptedAttest=JsonDocument.Parse(goodAttest))
-            EnrollmentClient.RequireAcceptedFrame(acceptedAttest.RootElement,"attest");
+        // Disposable ephemeral EC key. This is not an external pin, grant,
+        // physical enrollment, service registration or user approval.
+        using var signer=ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var spki=signer.ExportSubjectPublicKeyInfo();
+        var grant=new Grant(2,"ES256-P1363","physical-console","diagnostic-owner-0001",
+            "S-1-5-21-100-200-300-1001",
+            "11111111-1111-4111-8111-111111111111",
+            "22222222-2222-4222-8222-222222222222",
+            "33333333-3333-4333-8333-333333333333",
+            new string('a',64),Protocol.Hash(spki),1,1700000000000,null);
+        var grantBytes=Protocol.GrantBytes(grant);
+        var grantSig=Convert.ToBase64String(signer.SignData(grantBytes,
+            HashAlgorithmName.SHA256,DSASignatureFormat.IeeeP1363FixedFieldConcatenation));
+        var signedGrant=new SignedGrant(grant,grantSig);
+        var snapshot=new SessionEvidence("55555555-5555-4555-8555-555555555555",
+            2,grant.OwnerSid,"0000000000001234");
+        var session=new Session(2,Protocol.Hash(grantBytes),
+            "44444444-4444-4444-8444-444444444444",
+            "nexowire.local-enrollment.session",snapshot.BootId,
+            snapshot.WindowsSessionId,snapshot.OwnerSid,snapshot.LogonLuid,
+            1700000001000,1700000011000);
+        var sessionSig=Convert.ToBase64String(signer.SignData(Protocol.SessionBytes(session),
+            HashAlgorithmName.SHA256,DSASignatureFormat.IeeeP1363FixedFieldConcatenation));
+        var signedSession=new SignedSession(session,sessionSig);
+        var spkiBase64=Convert.ToBase64String(spki);
+        var provider="Microsoft Software Key Storage Provider";
+        var goodStatus=JsonSerializer.Serialize(new {version=2,verified=true,mayDispatch=false,
+            grant=signedGrant,spkiBase64,keyProvider=provider,evidence=snapshot,witness=(object?)null},
+            Protocol.Json);
+        var goodAttest=JsonSerializer.Serialize(new {version=2,verified=true,mayDispatch=false,
+            grant=signedGrant,spkiBase64,keyProvider=provider,evidence=snapshot,
+            witness=(object?)signedSession},Protocol.Json);
+        using(var doc=JsonDocument.Parse(goodStatus))
+            EnrollmentClient.RequireAcceptedFrame(doc.RootElement,"status");
+        using(var doc=JsonDocument.Parse(goodAttest))
+            EnrollmentClient.RequireAcceptedFrame(doc.RootElement,"attest");
+
+        var missingWitness=goodStatus.Replace(",\"witness\":null","");
+        var invalidSignature=Convert.ToBase64String(new byte[64]);
         foreach(var (json,operation) in new (string Json,string Operation)[]{
             (goodStatus.Replace("\"verified\":true","\"verified\":false"),"status"),
             (goodStatus.Replace("\"mayDispatch\":false","\"mayDispatch\":true"),"status"),
             (goodStatus.Replace("\"version\":2","\"version\":1"),"status"),
             (goodStatus.Replace("\"witness\":null","\"witness\":null,\"error\":\"REJECTED\""),"status"),
             (goodStatus.Replace("\"verified\":true","\"verified\":true,\"verified\":true"),"status"),
-            (goodStatus.Replace("\"grant\":{}","\"grant\":{\"payload\":1,\"payload\":2}"),"status"),
+            (goodStatus.Replace("\"payload\":{","\"payload\":{\"version\":2,"),"status"),
             (goodStatus.Replace("\"witness\":null","\"witness\":null,\"coreActive\":true"),"status"),
-            (goodStatus.Replace("\"keyProvider\":\"Microsoft Software Key Storage Provider\"",
-                "\"keyProvider\":\"unknown-provider\""),"status"),
-            (goodStatus.Replace("\"spkiBase64\":\"dGVzdA==\"","\"spkiBase64\":\"\""),"status"),
+            (goodStatus.Replace("\"keyProvider\":\""+provider+"\"","\"keyProvider\":\"unknown-provider\""),"status"),
+            (goodStatus.Replace("\"spkiBase64\":\""+spkiBase64+"\"","\"spkiBase64\":\"\""),"status"),
             (missingWitness,"status"),
             (goodAttest,"status"),
             (goodStatus,"attest"),
-            (missingWitness,"attest")
+            (missingWitness,"attest"),
+            (goodStatus.Replace(grantSig,invalidSignature),"status"),
+            (goodAttest.Replace(sessionSig,invalidSignature),"attest"),
+            (goodStatus.Replace(grant.EnrollmentId,"66666666-6666-4666-8666-666666666666"),"status"),
+            (goodAttest.Replace(snapshot.LogonLuid,"0000000000009999"),"attest"),
+            (goodStatus.Replace(spkiBase64,"dGVzdA=="),"status"),
+            (goodAttest.Replace(session.EnrollmentSha256,new string('f',64)),"attest")
         })
         {
             using var doc=JsonDocument.Parse(json);
-            var rejected=false;
+            var denied=false;
             try{EnrollmentClient.RequireAcceptedFrame(doc.RootElement,operation);}
-            catch(InvalidDataException){rejected=true;}
-            Protocol.Require(rejected);
+            catch(InvalidDataException){denied=true;}
+            Protocol.Require(denied);
         }
     }
     private static void VerifyConsoleSnapshotPolicy()
