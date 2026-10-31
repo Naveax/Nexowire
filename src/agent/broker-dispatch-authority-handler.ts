@@ -102,6 +102,12 @@ export function createBrokerDispatchAuthorityHandler(config:{
        !verify(null,bytes,key,signature))return fail();
     let value:unknown;
     try{value=JSON.parse(bytes.toString('utf8'))}catch{return fail()}
+    // Verify the exact signed UTF-8 wire form, not merely parsed values.
+    // This protocol requires compact JSON.stringify bytes, not arbitrary
+    // JSON spelling or RFC 8785 canonicalization.
+    const canonical=JSON.stringify(value);
+    if(!canonical || !Buffer.from(canonical,'utf8').equals(bytes))
+      return fail();
     return {raw:envelope,value};
   };
   const scoped=(p:DispatchBrokerPrincipal,s:{ownerId:string;deviceId:string;

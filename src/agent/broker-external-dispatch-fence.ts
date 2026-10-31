@@ -249,7 +249,14 @@ export class BrokerExternalDispatchFence {
          signature.length!==64||
          !verify(null,bytes,this.publicKey,signature))
         deny('DISPATCH_SIGNATURE_UNTRUSTED');
-      return JSON.parse(bytes.toString('utf8')) as unknown;
+      // A valid signature over ambiguous JSON is not an authorization.
+      // JSON.parse accepts duplicate keys, UTF-8 replacement and equivalent
+      // escape sequences that other parsers may interpret differently.
+      const parsed=JSON.parse(bytes.toString('utf8')) as unknown;
+      const canonical=JSON.stringify(parsed);
+      if(!canonical || !Buffer.from(canonical,'utf8').equals(bytes))
+        deny('DISPATCH_SIGNATURE_UNTRUSTED');
+      return parsed;
     }catch{return deny('DISPATCH_SIGNATURE_UNTRUSTED')}
   }
   private checkPermit(value:unknown,req:BrokerDispatchRequest,
