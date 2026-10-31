@@ -243,3 +243,19 @@ independent authorization prerequisites. `mayDispatch` remains `false`.
 Disposable positive and negative native tests exercise valid EC signatures
 plus mutation, fake key, nested duplicate and tampered witness cases with no
 SCM, UAC, enrollment or protected-store writes.
+
+## Bind native attestation reply to the current submitted authority challenge
+
+The client now retains the **exact signed authority-challenge payload sent over
+IPC** and refuses a signed witness unless every session field matches that
+specific payload, including the one-use nonce, owner SID, boot/service
+incarnation, Windows session, logon LUID, and timestamp. Even a validly
+device-signed *old or different* witness may not satisfy a new request. The
+client still requires self-contained signatures and rejects expired/future
+witness output, while `mayDispatch=false` is unchanged.
+
+The standalone parser's negative tests include altered nonce, boot ID,
+Windows session, logon LUID and absent challenge context. This remains
+necessary defense in depth, **not** authority: neither the local client nor
+its tests establish the externally pinned issuer, signed installed Agent
+identity, current generation/revoke or durable remote one-use CAS.

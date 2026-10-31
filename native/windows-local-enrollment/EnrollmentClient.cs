@@ -12,10 +12,13 @@ internal static class EnrollmentClient
 {
     // Framing/denial validation is not authorization. A separate Agent verifier
     // must pin the installed device key and verify signed grant/witness scope.
-    internal static void RequireAcceptedFrame(JsonElement root,string operation)
+    internal static void RequireAcceptedFrame(JsonElement root,string operation,
+        SignedSession? submittedChallenge=null)
     {
         Protocol.Require(operation is "status" or "attest" &&
-            root.ValueKind==JsonValueKind.Object);
+            root.ValueKind==JsonValueKind.Object &&
+            (operation=="attest" ? submittedChallenge?.Payload is not null :
+                submittedChallenge is null));
         // A diagnostic pipe response is untrusted. Deny duplicate fields at
         // every depth and any unknown/missing top-level v2 fields.
         Protocol.RejectDuplicates(root);
@@ -59,8 +62,9 @@ internal static class EnrollmentClient
             var encoded=key.GetString() ?? throw new InvalidDataException("LOCAL_ENROLLMENT_REJECTED");
             var issuerHash=Program.RequireCanonicalAuthoritySpki(encoded);
             var signed=Protocol.Read<SignedGrant>(Encoding.UTF8.GetBytes(grant.GetRawText()));
-            Protocol.Require(signed.Payload is not null && signed.Payload.IssuerSpkiSha256==issuerHash);
-            var grantBytes=Protocol.GrantBytes(signed.Payload);
+            var payload=signed.Payload ?? throw new InvalidDataException("LOCAL_ENROLLMENT_REJECTED");
+            Protocol.Require(payload.IssuerSpkiSha256==issuerHash);
+            var grantBytes=Protocol.GrantBytes(payload);
             using var signer=ECDsa.Create();
             var der=Convert.FromBase64String(encoded);
             signer.ImportSubjectPublicKeyInfo(der,out var consumed);
@@ -69,7 +73,7 @@ internal static class EnrollmentClient
 
             var snapshot=Protocol.Read<SessionEvidence>(Encoding.UTF8.GetBytes(evidence.GetRawText()));
             Protocol.Require(Protocol.Uuid(snapshot.BootId) &&
-                snapshot.WindowsSessionId>0 && snapshot.OwnerSid==signed.Payload.OwnerSid &&
+                snapshot.WindowsSessionId>0 && snapshot.OwnerSid==payload.OwnerSid &&
                 snapshot.LogonLuid is {Length:16} &&
                 Regex.IsMatch(snapshot.LogonLuid,"^[a-f0-9]{16}\\z") &&
                 snapshot.LogonLuid!="0000000000000000");
@@ -78,13 +82,17 @@ internal static class EnrollmentClient
             {
                 var signedWitness=Protocol.Read<SignedSession>(
                     Encoding.UTF8.GetBytes(witness.GetRawText()));
-                Protocol.Require(signedWitness.Payload is not null);
-                var w=signedWitness.Payload;
-                Protocol.Require(w.EnrollmentSha256==Protocol.Hash(grantBytes) &&
+                var w=signedWitness.Payload ??
+                    throw new InvalidDataException("LOCAL_ENROLLMENT_REJECTED");
+                // Bind this reply to the exact request we just sent. A valid
+                // signed witness from an earlier or parallel challenge cannot
+                // satisfy another nonce, boot/session or owner scope.
+                Protocol.Require(w==submittedChallenge!.Payload &&
+                    w.EnrollmentSha256==Protocol.Hash(grantBytes) &&
                     w.OwnerSid==snapshot.OwnerSid && w.BootId==snapshot.BootId &&
                     w.WindowsSessionId==snapshot.WindowsSessionId &&
                     w.LogonLuid==snapshot.LogonLuid &&
-                    w.ObservedAtMs>=signed.Payload.ConsentedAtMs &&
+                    w.ObservedAtMs>=payload.ConsentedAtMs &&
                     Protocol.Verify(signer,Protocol.SessionBytes(w),
                         signedWitness.SignatureBase64));
             }
@@ -100,6 +108,7 @@ internal static class EnrollmentClient
     {
         using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(5));
         byte[] request;
+        SignedSession? submittedChallenge=null;
         if(operation=="status")request=JsonSerializer.SerializeToUtf8Bytes(new {version=2,operation},Protocol.Json);
         else
         {
@@ -109,6 +118,7 @@ internal static class EnrollmentClient
             while((read=await stdin.ReadAsync(chunk,deadline.Token))>0)
             {Protocol.Require(buf.Length+read<=16384);buf.Write(chunk,0,read);}
             var challenge=Protocol.Read<SignedSession>(buf.ToArray());
+            submittedChallenge=challenge;
             request=JsonSerializer.SerializeToUtf8Bytes(new {version=2,operation,challenge},Protocol.Json);
         }
         Protocol.Require(request.Length<=16384);
@@ -128,7 +138,7 @@ internal static class EnrollmentClient
         // Wire bytes alone are UNTRUSTED. The Agent/independent verifier must
         // validate the provisioned issuer pin and signed scope before use.
         using var doc=JsonDocument.Parse(response);
-        RequireAcceptedFrame(doc.RootElement,operation);
+        RequireAcceptedFrame(doc.RootElement,operation,submittedChallenge);
         // Even a locally valid signature cannot excuse an expired attestation
         // after transport or scheduling delays. The external verifier must
         // perform its own current-session and revoke readback too.

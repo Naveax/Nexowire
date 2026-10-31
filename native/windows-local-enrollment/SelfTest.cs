@@ -192,6 +192,11 @@ internal static class SelfTest
         var sessionSig=Convert.ToBase64String(signer.SignData(Protocol.SessionBytes(session),
             HashAlgorithmName.SHA256,DSASignatureFormat.IeeeP1363FixedFieldConcatenation));
         var signedSession=new SignedSession(session,sessionSig);
+        using var externalChallengeSigner=ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var challengeSig=Convert.ToBase64String(externalChallengeSigner.SignData(
+            Protocol.ChallengeBytes(session),HashAlgorithmName.SHA256,
+            DSASignatureFormat.IeeeP1363FixedFieldConcatenation));
+        var submittedChallenge=new SignedSession(session,challengeSig);
         var spkiBase64=Convert.ToBase64String(spki);
         var provider="Microsoft Software Key Storage Provider";
         var goodStatus=JsonSerializer.Serialize(new {version=2,verified=true,mayDispatch=false,
@@ -203,7 +208,7 @@ internal static class SelfTest
         using(var doc=JsonDocument.Parse(goodStatus))
             EnrollmentClient.RequireAcceptedFrame(doc.RootElement,"status");
         using(var doc=JsonDocument.Parse(goodAttest))
-            EnrollmentClient.RequireAcceptedFrame(doc.RootElement,"attest");
+            EnrollmentClient.RequireAcceptedFrame(doc.RootElement,"attest",submittedChallenge);
 
         var missingWitness=goodStatus.Replace(",\"witness\":null","");
         var invalidSignature=Convert.ToBase64String(new byte[64]);
@@ -231,9 +236,37 @@ internal static class SelfTest
         {
             using var doc=JsonDocument.Parse(json);
             var denied=false;
-            try{EnrollmentClient.RequireAcceptedFrame(doc.RootElement,operation);}
+            try{EnrollmentClient.RequireAcceptedFrame(doc.RootElement,operation,
+                operation=="attest"?submittedChallenge:null);}
             catch(InvalidDataException){denied=true;}
             Protocol.Require(denied);
+        }
+        // A validly signed response for this installed key is not a reply
+        // to a DIFFERENT request. The requested challenge signature belongs
+        // to an independent authority, not to the local witness signer.
+        foreach(var foreign in new[]{
+            submittedChallenge with {Payload=session with {
+                Nonce="66666666-6666-4666-8666-666666666666"}},
+            submittedChallenge with {Payload=session with {
+                BootId="77777777-7777-4777-8777-777777777777"}},
+            submittedChallenge with {Payload=session with {
+                WindowsSessionId=4}},
+            submittedChallenge with {Payload=session with {
+                LogonLuid="0000000000009999"}}
+        })
+        {
+            var rejected=false;
+            using var doc=JsonDocument.Parse(goodAttest);
+            try{EnrollmentClient.RequireAcceptedFrame(doc.RootElement,"attest",foreign);}
+            catch(InvalidDataException){rejected=true;}
+            Protocol.Require(rejected);
+        }
+        using(var doc=JsonDocument.Parse(goodAttest))
+        {
+            var deniedNoRequest=false;
+            try{EnrollmentClient.RequireAcceptedFrame(doc.RootElement,"attest");}
+            catch(InvalidDataException){deniedNoRequest=true;}
+            Protocol.Require(deniedNoRequest);
         }
     }
     private static void VerifyConsoleSnapshotPolicy()

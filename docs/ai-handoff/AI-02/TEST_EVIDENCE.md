@@ -65,3 +65,15 @@
 - `EnrollmentClient.RequireAcceptedFrame` now rejects a structurally valid fake `verified:true` response unless the supplied canonical P-256 key matches the grant's issuer hash and verifies the grant signature. For attestation, the signed witness must match the service-incarnation/SID/session/LUID and grant hash, and the runtime rejects stale witness TTL before stdout.
 - Native `--self-test` uses ephemeral software P-256 fixtures and negative mutations for top-level and nested duplicate fields, unknown/missing fields, downgrade, `mayDispatch:true`, fake key/signatures, altered grant and mismatched witness.
 - **NOT an independently pinned issuer or signed installed Agent identity.** Matching self-contained signatures are not grant authority. CORE disabled, Draft, physical-service and external mTLS/CAS NO-GO remain.
+
+## Request-bound attestation candidate (new exact-SHA CI required)
+
+- Extends AI-02 signed v2 IPC client to compare attestation witness against
+  the **specific challenge request payload** passed by the caller, before
+  accepting a valid signed frame. Null request context or foreign nonce,
+  boot incarnation, OS session or logon LUID denies.
+- Disposable self-test uses separate ephemeral EC keys for the device witness
+  and the independently signed authority challenge. This proves only a
+  local parser property, not a real external verifier or production consent.
+- Await new exact HEAD CI. The preceding CI run #41246540822, whatever its
+  eventual result, is historical evidence for preceding SHA `7f017aa2f97911e0b618866ec4b8f98cf9792237`.
