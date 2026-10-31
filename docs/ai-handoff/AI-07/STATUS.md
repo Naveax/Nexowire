@@ -69,3 +69,7 @@ Linux diagnostic forced termination no longer abandons direct-child cleanup afte
 ## Disposable Linux FD/seccomp kernel negatives (1 Nov 2026)
 - Added `test/ai07-sandbox-linux-fd-seccomp.test.ts` with a test-owned native C fixture. `close_range(0..UINT_MAX)` closes all inherited descriptors (including stdio and a deliberately inherited `/dev/null` handle); narrow BPF seccomp allows only exit/exit_group/rt_sigreturn and requires EPERM on socket, openat and getpid. The process never connects to a network or executes a user task.
 - Two deliberately broken compilation variants independently prove the negative checks reject: FD closure disabled (exit 53) and seccomp disabled (exit 55, only if the host supports harmless baseline syscalls). Unsupported host primitives fail BLOCKED, never simulated PASS.
+
+## Test-owned environment leak negative and cleanup audit (1 Nov 2026)
+- The disposable Linux FD/seccomp fixture now sets a synthetic child-inherited `NW07_TEST_ONLY_SENTINEL=FAKE_TEST_ONLY`; its forked test child must `clearenv()` before FD/seccomp checks. The deliberately disabled environment clear returns exit `59`. This tests only test-owned userspace environment clearing, **not** Windows/Agent protected credentials or a production identity.
+- Clock failure/timeout paths now use an exact-owned child SIGKILL plus bounded WNOHANG reap helper; uncertainty returns BLOCKED. No outside PID, service or host security setting is modified.

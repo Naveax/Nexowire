@@ -54,6 +54,12 @@ static int seccomp_fence(void){
 }
 #endif
 static int child_probe(int inherited){
+  /* Clear only the disposable child process's hardcoded test-only secret.
+   * This is libc memory hygiene, not a protected production credential. */
+#ifndef NW07_TEST_DISABLE_ENV_CLEAR
+ if(clearenv()!=0)return 65;
+#endif
+ if(getenv("NW07_TEST_ONLY_SENTINEL")!=NULL)return 59;
 #ifndef NW07_TEST_DISABLE_FD_CLOSURE
 #ifdef SYS_close_range
  if(syscall(SYS_close_range,0U,~0U,0U)<0)return 52;
@@ -99,15 +105,30 @@ static int monotonic_ms(long long *out){
  *out=(long long)t.tv_sec*1000+(long long)t.tv_nsec/1000000;
  return 0;
 }
+static int terminate_owned_child(pid_t pid){
+ if(pid<=1)return -1;
+ if(kill(pid,SIGKILL)<0&&errno!=ESRCH)return -1;
+ for(int attempt=0;attempt<120;attempt++){
+  int status=0;
+  pid_t got=waitpid(pid,&status,WNOHANG);
+  if(got==pid || (got<0&&errno==ECHILD))return 0;
+  if(got<0&&errno!=EINTR)return -1;
+  struct timespec nap={.tv_sec=0,.tv_nsec=20000000L};
+  (void)nanosleep(&nap,NULL);
+ }
+ return -1;
+}
 int main(void){
+ /* Hardcoded fixture-only sentinel, never a user or Broker credential. */
+ if(setenv("NW07_TEST_ONLY_SENTINEL","FAKE_TEST_ONLY",1)!=0)return 66;
  int inherited=open("/dev/null",O_RDONLY|O_CLOEXEC);
- if(inherited<3)return 60;
+ if(inherited<3){if(inherited>=0)close(inherited);return 60;}
  pid_t pid=fork();
  if(pid<0){close(inherited);return 61;}
  if(pid==0)_exit(child_probe(inherited));
  close(inherited);
  long long start,now;
- if(monotonic_ms(&start)<0){kill(pid,SIGKILL);return 62;}
+ if(monotonic_ms(&start)<0){(void)terminate_owned_child(pid);return 62;}
  int status=0, reaped=0, forced=0;
  for(;;){
   pid_t got=waitpid(pid,&status,WNOHANG);
@@ -120,15 +141,7 @@ int main(void){
   (void)nanosleep(&nap,NULL);
  }
  if(!reaped){
-  (void)kill(pid,SIGKILL); /* only exact test-owned child */
-  for(int attempt=0;attempt<100;attempt++){
-   pid_t got=waitpid(pid,&status,WNOHANG);
-   if(got==pid){reaped=1;break;}
-   if(got<0 && errno==ECHILD){reaped=1;break;}
-   if(got<0 && errno!=EINTR)break;
-   struct timespec nap={.tv_sec=0,.tv_nsec=20000000L};
-   (void)nanosleep(&nap,NULL);
-  }
+  (void)terminate_owned_child(pid); /* no success on ambiguous cleanup */
   return 63; /* timeout always blocked */
  }
  if(forced || !WIFEXITED(status))return 64;
@@ -151,6 +164,7 @@ test('AI-07 Linux kernel closes inherited descriptors and denies socket/openat/g
       {name:'protected',define:null,expected:0},
       {name:'fd-closure-disabled',define:'-DNW07_TEST_DISABLE_FD_CLOSURE',expected:53},
       {name:'seccomp-disabled',define:'-DNW07_TEST_DISABLE_SECCOMP',expected:55},
+      {name:'env-clear-disabled',define:'-DNW07_TEST_DISABLE_ENV_CLEAR',expected:59},
     ] as const;
     for(const v of variants){
       const binary=join(dir,v.name);

@@ -69,3 +69,6 @@ A dedicated, isolated Linux test uses `pidfd_open` plus `PR_SET_CHILD_SUBREAPER`
 
 ### Native kernel FD+seccomp test is not a task launcher
 The new `ai07-sandbox-linux-fd-seccomp` test exercises disposable Linux child close_range (including 0/1/2 and an inherited test FD) and real seccomp errno-denial for socket/openat/getpid, with intentional no-closure and no-seccomp negative variants. It never accepts arbitrary command lines, credentials, external process identifiers or network destinations, and never authorizes `executeTaskWithOsSandbox`. Production still requires protected native identity, filesystem/network/IPC enforcement and cgroup descendant-drain evidence.
+
+### Test-only inherited environment negative
+The Linux disposable fixture checks actual inherited environment bytes with a **synthetic sentinel** and forces `clearenv()` before its own seccomp/FD test. A build without clearing must return exit 59. This is no real secret/credential proof and cannot replace protected native child environment generation, owner-scoped OS authorization, or independent readback. Even fixture teardown uses an exact owned PID and finite reap loops.

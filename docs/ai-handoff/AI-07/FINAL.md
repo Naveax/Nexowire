@@ -52,3 +52,6 @@ The disposable Linux kernel negative test now avoids unbounded actor `waitpid` a
 
 ### Kernel FD/seccomp diagnostic (1 Nov 2026)
 Added disposable Linux native fixture `test/ai07-sandbox-linux-fd-seccomp.test.ts` with independently failing disabled-close_range and disabled-seccomp controls. Local isolated Linux 6.18.57/GCC 14.2 observations: protected exit 0, no-FD-close exit 53, no-seccomp exit 55; Node22 standalone test 1/1 PASS. Exact-head repository CI must still confirm this commit. No real task worker, Windows OS isolation or revoked process tree acceptance; production NO-GO stays.
+
+### Synthetic environment and bounded fixture teardown
+Test-only Linux fixture now also rejects inherited synthetic environment when `clearenv` is deliberately disabled (exit 59), and forcefully reaps only its test-owned exact child on timeout and clock error. No task-scope credential exposure tested. No production worker enable or authorization: NO-GO.
