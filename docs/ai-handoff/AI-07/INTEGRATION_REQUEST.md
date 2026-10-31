@@ -8,7 +8,7 @@ AI-07 did **not** edit `src/agent/executors.ts`, Broker, package.json, workflows
 6. **AI-08/CI coordinator:** Independently retain #832 RED negatives and test exact installed signed binaries, direct IP/TCP/UDP/DNS/loopback, path escape, child/grandchild, inherited handles/env and revoke/UNKNOWN. Coordinator alone owns shared workflow/integration changes. Never mark synthetic green as physical containment.
 
 ## Coordinator CI verification request
-- In an **isolated Windows runner** with native MSVC environment, compile `native/task-os-sandbox-windows-appcontainer-probe-p07.c` with `cl /W4 /WX` (Advapi32 linked via pragma); invoke with invalid args and expect exit 64, and in an unprivileged non-AppContainer process with `--selftest-only` expect 77. A truly AppContainer Job selftest requires an independent test harness, not host Agent execution. Do not mark absent native execution PASS.
+- In an **isolated Windows runner** with native MSVC environment, compile `native/task-os-sandbox-windows-token-job-readback-p07.c` with `cl /W4 /WX` (Advapi32 linked via pragma); invoke with invalid args and expect exit 64, and in an unprivileged non-AppContainer process with `--selftest-only` expect 77. A truly AppContainer Job selftest requires an independent test harness, not host Agent execution. Do not mark absent native execution PASS.
 - On disposable Linux namespace-capable container/VM run opt-in `NW07_RUN_NATIVE_NAMESPACE_PROBE=1` separately; unsupported namespace/close_range returns BLOCKED, never a fake PASS. Independently verify kernel isolation, inherited file descriptors, child process and cgroup drain; no task executable is permitted by this diagnostic.
 
 

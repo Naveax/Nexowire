@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
  * No registry, UAC, ACL, service, installed Agent or shared target mutation.
  */
 const nativePath=fileURLToPath(new URL(
-  '../native/task-os-sandbox-windows-appcontainer-probe-p07.c', import.meta.url,
+  '../native/task-os-sandbox-windows-token-job-readback-p07.c', import.meta.url,
 ));
 test('AI-07 MSVC native build and reject non-selftest task input', {
   skip: process.platform !== 'win32' ? 'Windows-only native test; physical verdict NOT_RUN' : false,

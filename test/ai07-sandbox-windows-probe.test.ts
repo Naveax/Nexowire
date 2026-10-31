@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const source = readFileSync(
-  new URL('../native/task-os-sandbox-windows-appcontainer-probe-p07.c', import.meta.url),
+  new URL('../native/task-os-sandbox-windows-token-job-readback-p07.c', import.meta.url),
   'utf8',
 );
 
