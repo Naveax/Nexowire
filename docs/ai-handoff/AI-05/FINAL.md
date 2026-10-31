@@ -14,3 +14,6 @@
 - Remaining P0 gates: protected Broker admission and receipts, external CAS hosting/restore custody, native Windows identity/ACL trust, sandbox worker, real two-device enrollment/revoke/restart.
 - Guardrail: `CORE_EXECUTOR_DISPATCH_ENABLED=false`; no merge, deploy, UAC, ACL, local enrollment or production mutation.
 - Coordinator handoff: review PR #992 and integration requests; merge/release decision stays with coordinator.
+
+## Follow-up delta
+The prior six-test handoff was extended to nine targeted AI-05 synthetic negatives, including original request getter, polluted keys/prototypes and non-enumerable identity/proof fields. Consult current PR HEAD and CI for final verification; local machine/physical acceptance remains unperformed and production stays NO_GO.

@@ -34,7 +34,8 @@ function immutableRequest(candidate:unknown):Readonly<CasRequest>{
   if((prototype!==Object.prototype&&prototype!==null)||
      keys.length!==required.length||
      required.some(key=>!Object.prototype.hasOwnProperty.call(descriptors,key)||
-       !('value' in descriptors[key]!)))
+       !('value' in descriptors[key]!)||
+       descriptors[key]!.enumerable!==true))
     reject('BOUND_CAS_REQUEST_INVALID');
   const detached=Object.fromEntries(
     required.map(key=>[key,descriptors[key]!.value]),
@@ -183,7 +184,8 @@ function immutableScope(
   if((prototype!==Object.prototype&&prototype!==null)||
      keys.length!==required.length||
      required.some(key=>!Object.prototype.hasOwnProperty.call(descriptors,key)||
-       !('value' in descriptors[key]!)))
+       !('value' in descriptors[key]!)||
+       descriptors[key]!.enumerable!==true))
     reject('BOUND_CAS_UNVERIFIED_SCOPE');
   const snapshot=Object.freeze({
     ownerId:descriptors.ownerId!.value as string,
@@ -224,7 +226,8 @@ function immutableExternalReceipt(
   if((prototype!==Object.prototype&&prototype!==null)||
      keys.length!==required.length||
      required.some(key=>!Object.prototype.hasOwnProperty.call(descriptors,key)||
-       !('value' in descriptors[key]!)))
+       !('value' in descriptors[key]!)||
+       descriptors[key]!.enumerable!==true))
     reject('BOUND_CAS_EXTERNAL_PROOF_MISMATCH');
   const detached=Object.fromEntries(
     required.map(key=>[key,descriptors[key]!.value]),

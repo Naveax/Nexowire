@@ -13,3 +13,5 @@ Completed: isolated #05 immutable request+scope+external receipt source changes 
 In progress: exact final SHA typecheck, Node 22/24 and platform CI, cross-owner QA.
 Next: inspect actual CI logs; fix only AI-05 paths; never relaunch an existing same-SHA CI.
 Never turn on CORE_EXECUTOR_DISPATCH_ENABLED or deploy this branch.
+
+2026-10-31 additional hardening: caller-owned CAS request is snapshotted without accessors; hidden/non-enumerable keys on request, scope or receipt are denied. Source/test candidate SHA before this handoff commit: `caadd1db53fb4993402a0abd06f3b8f2abb7c883`. CI run 41197201487 observed in_progress. This document's future HEAD needs fresh exact-SHA CI.

@@ -261,3 +261,48 @@ test('AI-05 request pollution and symbol keys cannot enter CAS identity',async()
   assert.equal(h.evidence.externalCalls,0);
   assert.equal(h.evidence.queries.length,0);
 });
+
+test('AI-05 hidden non-enumerable authorization fields fail closed',async()=>{
+  const input=request();
+  Object.defineProperty(input,'requestId',{
+    value:ids.request,enumerable:false,configurable:true,
+  });
+  const first=fixture({resolve:async()=>scope()});
+  await assert.rejects(first.cas.reserve(input),
+    hasCode('BOUND_CAS_REQUEST_INVALID'));
+  assert.equal(first.evidence.externalCalls,0);
+  assert.equal(first.evidence.queries.length,0);
+
+  const returnedScope=scope();
+  Object.defineProperty(returnedScope,'ownerId',{
+    value:ids.owner,enumerable:false,configurable:true,
+  });
+  const second=fixture({resolve:async()=>returnedScope});
+  await assert.rejects(second.cas.reserve(request()),
+    hasCode('BOUND_CAS_UNVERIFIED_SCOPE'));
+  assert.equal(second.evidence.externalCalls,0);
+  assert.equal(second.evidence.queries.length,0);
+
+  const third=fixture({
+    resolve:async()=>scope(),
+    reserve:async(input,bound)=>{
+      const receipt:ExternalGrantCasReceipt={
+        authorityId:ids.authority,deviceId:input.deviceId,epoch:input.epoch,
+        requestId:input.requestId,ownerId:bound.ownerId,
+        sessionEpoch:bound.sessionEpoch,
+        grantGeneration:bound.expectedGeneration,
+        fingerprint:input.fingerprint,capability:input.capability,
+        sequence:71,created:true,
+      };
+      Object.defineProperty(receipt,'created',{
+        value:true,enumerable:false,configurable:true,
+      });
+      return receipt;
+    },
+  });
+  await assert.rejects(third.cas.reserve(request()),
+    hasCode('BOUND_CAS_EXTERNAL_PROOF_MISMATCH'));
+  assert.equal(third.evidence.externalCalls,1);
+  assert.equal(third.evidence.insert,null);
+  assert.ok(third.evidence.queries.includes('ROLLBACK'));
+});

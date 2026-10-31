@@ -11,3 +11,6 @@
 - Newly added test cases: 6 source/synthetic cases (owner/session/UUID mutation, identity getter denial, lost ACK no retry, already-reserved UUID no insert, receipt created/sequence mutation after validation, receipt getter denial). Latest final-head CI result pending; not marked PASS.
 - No real PostgreSQL hosting provenance, protected OS identity, Windows Broker, physical UAC/ACL, workstation or live Agent mutation tests performed. Do not label source CI as physical acceptance.
 - Existing upstream #980 CI 41113730982 was reported 7/7 success on its own exact SHA; it does not certify this new head.
+
+## Additional adversarial source tests
+The source/test child `caadd1db53fb4993402a0abd06f3b8f2abb7c883` adds two cases: malicious request getter never invoked and polluted/prototype/symbol request denied. The latest patch also adds a ninth synthetic case: hidden non-enumerable authorization fields on request, authenticated scope and external receipt denied before mutation. The exact final-head CI must be checked separately; do not reuse run 41197201487 from the pre-handoff source SHA.

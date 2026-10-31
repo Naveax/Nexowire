@@ -19,3 +19,6 @@ The local PostgreSQL device/delegation row locks do not replace the independentl
 AI-04 owns Broker admission, signed effect receipts, Job/kernel readback, and the existing `broker-external-dispatch-fence.ts`. AI-05 owns the CAS and executor modules only. The coordinator owns `native-agent.ts`, `operation-journal.ts`, shared CI and production integration. AI-07 owns OS sandbox provider; no worker is authorized by this source-only change.
 
 `CORE_EXECUTOR_DISPATCH_ENABLED=false` remains mandatory. No test fixture, signed request, JSON receipt or mocked HIGH/ACL status is a physical grant or host isolation proof.
+
+## Original request data provenance
+`CasRequest` is copied from exactly five own enumerable data descriptors (deviceId, epoch, requestId, fingerprint, capability) before provenance, identity or SQL awaits. Inherited fields, symbol keys, unknown extra keys, accessor descriptors and hidden non-enumerable fields fail closed. Authenticated scope and external receipt apply the same own-enumerable-data rule before their first downstream await. This is structural binding only, not signed identity proof.
