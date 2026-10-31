@@ -24,6 +24,7 @@ export const DEFAULT_STACK=Object.freeze([
   {number:987,head:'ai/04-broker-admission-20261031',parent:980},
   {number:992,head:'ai/05-cas-executor',parent:980},
   {number:985,head:'ai/06-console-claim',parent:980},
+  {number:996,head:'coord/core-claim-verified-ledger-20261031',parent:980},
   {number:990,head:'ai/07-isolation-worker-20261031',
     base:'docs/07-task-os-sandbox-provider-contract-20261024'},
 ]);

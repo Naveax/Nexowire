@@ -2,7 +2,7 @@
 
 **Status: NON-DESTRUCTIVE SOURCE SIMULATION. NEVER A MERGE OR RELEASE PERMIT.**
 
-This coordinator-owned tool checks whether the current **13-PR dependency DAG**
+This coordinator-owned tool checks whether the current **14-PR dependency DAG**
 can be combined in the intended order without ordinary three-way Git tree conflicts.
 It is deliberately separate from the exact-SHA CI and physical acceptance gates in
 coordinator PR #994.
@@ -27,7 +27,7 @@ Requirement: Git 2.38+ with `git merge-tree --write-tree` support, Node 22+.
 
    ```bash
    git clone --no-checkout https://github.com/Naveax/Nexowire.git /tmp/v108-dryrun-source
-   for id in 986 980 981 982 988 983 984 993 989 987 992 985 990; do
+   for id in 986 980 981 982 988 983 984 993 989 987 992 985 996 990; do
      git -C /tmp/v108-dryrun-source fetch --no-tags origin "pull/$id/head:refs/remotes/origin/coord-pr-$id"
    done
    ```
@@ -45,7 +45,7 @@ PowerShell equivalent for fetching branches in a disposable clone:
 ```powershell
 $source = Join-Path $env:TEMP "v108-dryrun-source"
 git clone --no-checkout https://github.com/Naveax/Nexowire.git $source
-986,980,981,982,988,983,984,993,989,987,992,985,990 | ForEach-Object {
+986,980,981,982,988,983,984,993,989,987,992,985,996,990 | ForEach-Object {
   git -C $source fetch --no-tags origin "pull/$_/head:refs/remotes/origin/coord-pr-$_"
   if ($LASTEXITCODE -ne 0) { throw "PR fetch $_ failed." }
 }
@@ -78,3 +78,11 @@ simulation on a fresh snapshot. Do not use the result as automatic merge approva
   independent anti-rollback or physical authority proof.
 - A missing native provider, current owner/session evidence, external CAS, or
   trusted revoke witness leaves CORE mutation dispatch **disabled**.
+
+## Added P0 sibling: CORE native claim verification (#996)
+
+Coordinator Draft #996 is based on #980 and is rehearsed after #985 but before
+#990. Its additive D1 SQL migration and negative regression tests **do not**
+activate CORE. A conflict-free tree only proves Git composition; the AI-06
+native readback, Worker-side exact-identity CAS, signed current session and
+physical effect-boundary evidence remain missing until independently proven.
