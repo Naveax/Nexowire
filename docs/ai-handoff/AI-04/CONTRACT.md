@@ -17,3 +17,9 @@
 - Windows helper must verify HIGH token/ACL, Job assignment, limits, non-breakaway and child identity with actual Win32 APIs before releasing a suspended root. Any unsupported/UNKNOWN result is BLOCKED.
 - `native/windows-job-owner.c` uses `STARTUPINFOEXW` and `PROC_THREAD_ATTRIBUTE_HANDLE_LIST` to duplicate/allow only stdin, stdout and stderr. Attribute construction failure aborts without unrestricted inheritance fallback.
 - A Job handle, provisional DACL, synthetic process or MSVC compilation PASS is NOT proof against equal-HIGH SeDebug, a stolen handle before seal, or an owner-PC production threat model. C4133 warnings must remain fatal.
+
+## Config ve signed claim nesnesi sahipliği (2026-11-01)
+
+- Broker fence yapıcısı `config` bağımlılıklarını yalnız own enumerable data descriptor alanlarından tek defa alarak immutable mapping'e sabitler. Sonradan `authority`, `verifyIdentity`, protected HIGH readback veya owner revocation callback referansı değiştirilemez. Hostile getter/Proxy/extra alan source-only DENY'dır. Uzak CAS nesnesi kendi yaşam döngüsünden yine sorumludur; JavaScript freeze OS imzası değildir.
+- Dış CAS'tan dönen `DispatchClaim` payload/signature alanları da yalnız iki kendi veri descriptor'ından tek okumada detached immutable primitive snapshot'a dönüşür. İmza `payload`ın orijinal UTF-8 baytlarına karşı doğrulanır; signed byte canonicalization ayrıca korunur. Değişebilir nesne, accessor/Proxy, ek/symbol/inherited key reddedilir.
+- Bu sözleşmelerin tümü AI-04 JS source sınırıdır. OS HIGH principal, Job/revoke, external durable CAS ve fiziki cihaz kabulünü ikame etmez.

@@ -17,3 +17,12 @@
 - **Explicitly NOT DONE:** merge, rebase, force push, tag/release/deploy, CORE enable, service/ACL/UAC/DPAPI alteration, real Windows user devices or physical enrollment.
 
 The 14 November 2026 target does not override missing kernel or owner evidence.
+
+## 2026-11-01 review candidate update
+
+- Historical `b4b1cb...` source evidence above is not the latest HEAD.
+- Source SHA `d971f0239d3d2b76b406697aac0183cbdea60097` adds immutable signed receipt envelope negative tests (11 cases) and had Node22/24 SUCCESS; [run 41246475485](https://github.com/Naveax/Nexowire/actions/runs/41246475485) Windows job still in progress when this handoff was prepared. Six completed jobs SUCCESS at that observation.
+- Source SHA `0ce89fce32252ba84478472f3fc9d479156ee18c` pins top-level Broker identity/CAS dependencies and adds four negative constructor tests. After this document commit, check the **live PR exact HEAD and its own CI**; prior results cannot be inherited.
+- All changes remain AI-04 owned. No merge, rebase, deploy, Windows service, UAC/ACL, real device or CORE flag mutation.
+- Remaining physical P0: equal-HIGH SeDebug, UAC-linked Medium, pre-seal Job handle duplication, native protected Broker/OS owner identity, independently operated persistent one-use CAS, isolated worker/revoke drain and two authorized-device acceptance.
+- **Decision: source-only REVIEW pending latest exact-HEAD CI; production CORE NO_GO.**

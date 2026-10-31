@@ -27,3 +27,11 @@
 ## Yeni identity/readiness değişikliği: CI PENDING
 - `test/ai04-broker-identity-race.test.ts` 5 sentetik test eklendi: stabil kapsam + begin CAS sırasında scope kaybı + commit CAS sırasında scope kaybı + iki identity provider UNKNOWN aşaması. Eski `bcdb6be4d446aaa70023ef7ff87f9764d0df503e` / `41201230598` SUCCESS yeni kaynağın kanıtı değildir.
 - Remote CAS atomik revoke, gerçek owner SID ve native OS readback kanıtı mevcut değildir; bunlar ayrı BLOCKED kapılar olarak korunur.
+
+## 2026-11-01 | Latest source and newly staged tests
+
+- Önceki exact-source SHA `46909dd677188396646681605959792ae81091e3`; CI `41243950808` **SUCCESS 7/7**, Node22 2,774 / 2,420 PASS / 0 FAIL / 352 SKIP / 2 TODO. Windows fixture 27/27, native guardian MSVC + Job regressions steps SUCCESS, physical equal-HIGH and UAC-linked negative probes BLOCKED.
+- Signed claim envelope source SHA `d971f0239d3d2b76b406697aac0183cbdea60097` CI `41246475485`; Node22 and Node24 jobs PASS, source-only 11 new receipt object tests PASS. Node22 2,785 tests / 2,431 PASS / 0 FAIL / 352 SKIP / 2 TODO. Windows browser-live in_progress at preparation time. Never extrapolate 7/7.
+- Latest pinned constructor callback candidate source SHA `0ce89fce32252ba84478472f3fc9d479156ee18c`: add `test/ai04-broker-config-snapshot.test.ts` four negative mutation/retarget/accessor/Proxy tests. **No passing CI is yet attributed to this candidate or following docs commit**. Required checks: Node22/24 typecheck, build, full tests and Windows browser-live physical Job native/MSVC fixture. Changed only AI-04 paths.
+- `npm run typecheck`, `npm test`, `npm run build`: previously recorded successful GitHub runner exit 0 applies only to corresponding exact prior SHA. This new source+doc SHA is not yet verified; local Windows physical exit code N/A, not run. No user device touched.
+- All source-only positive/negative results remain distinct from protected OS/owner/session/real independent CAS, kernel handle/descendant and two-PC physical acceptance. Physical CORE NO_GO.
