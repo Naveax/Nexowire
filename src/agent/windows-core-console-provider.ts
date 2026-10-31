@@ -20,11 +20,60 @@ import {revokePhysicalConsoleGrant} from './windows-console-grant.js';
 const PURPOSE='core-console-profile-v1';
 const EnvelopeSchema=z.strictObject({version:z.literal(1),purpose:z.literal(PURPOSE),
   protection:z.literal('windows-dpapi-current-user'),ciphertext:z.string().min(4).max(16000)});
+// The native trust boundary is not implemented by this JS module. The receipt
+// is descriptive metadata only; a protected OS component must atomically consume
+// the physical decision and independently read back the current Windows logon.
+export interface NativeCoreConsentProof {
+  version:1;challengeId:string;receiptId:string;ownerAccountId:string;
+  deviceId:string;installationId:string;enrollmentId:string;
+  ownerEpoch:number;grantGeneration:number;revokeEpoch:number;
+  windowsSessionId:number;windowsUserSid:string;windowsLogonLuid:string;
+  windowsLogonSessionEpoch:string;approvedAtMs:number;consumed:true;
+}
+export interface NativeCoreConsentChallenge {
+  version:1;challengeId:string;ownerAccountId:string;deviceId:string;
+  installationId:string;enrollmentId:string;ownerEpoch:number;
+  grantGeneration:number;revokeEpoch:number;
+}
+export interface NativeCoreConsentAuthority {
+  /** Protected native OS UI + atomic one-use decision. Never Agent/Hub or JS MessageBox.
+   * Capture the interactive owner logon before the prompt, revalidate it after the
+   * user returns, and only then consume the receipt. Bind the owner to a separately
+   * provisioned Windows SID, token AuthenticationId, WTS session ID and logon epoch. */
+  approveAndConsume(challenge:NativeCoreConsentChallenge,signal:AbortSignal):Promise<NativeCoreConsentProof|null>;
+  /** Independent protected OS readback must verify current Windows logon/session. */
+  currentReadback(receiptId:string,signal:AbortSignal):Promise<NativeCoreConsentProof|null>;
+}
+const NativeProofSchema=z.strictObject({
+  version:z.literal(1),challengeId:z.string().uuid(),receiptId:z.string().uuid(),
+  ownerAccountId:z.string().min(8).max(128),deviceId:z.string().min(8).max(128),
+  installationId:z.string().uuid(),enrollmentId:z.string().uuid(),
+  ownerEpoch:z.number().int().positive().safe(),
+  grantGeneration:z.number().int().positive().safe(),
+  revokeEpoch:z.number().int().nonnegative().safe(),
+  windowsSessionId:z.number().int().positive().safe(),
+  windowsUserSid:z.string().regex(/^S-\d-\d+(?:-\d+)+$/i),
+  windowsLogonLuid:z.string().regex(/^[0-9a-f]{16}$/i).refine(v=>!/^0+$/.test(v)),
+  windowsLogonSessionEpoch:z.string().uuid(),
+  approvedAtMs:z.number().int().positive().safe(),consumed:z.literal(true),
+});
+const NATIVE_KEYS=Object.keys(NativeProofSchema.shape);
+function sameNativeProof(value:unknown,expected:NativeCoreConsentProof):value is NativeCoreConsentProof {
+  const parsed=NativeProofSchema.safeParse(value);
+  return parsed.success && Object.keys(parsed.data).length===NATIVE_KEYS.length &&
+    NATIVE_KEYS.every(k=>parsed.data[k as keyof NativeCoreConsentProof]===
+      expected[k as keyof NativeCoreConsentProof]);
+}
 interface Profile {version:1;installationId:string;deviceId:string;authorityUrl:string;
-  certificate:SignedCoreConsoleEnrollmentV1|null;privateKey:string|null;pendingRevoke:boolean}
+  certificate:SignedCoreConsoleEnrollmentV1|null;privateKey:string|null;
+  nativeConsent?:NativeCoreConsentProof;pendingRevoke:boolean}
 const ProfileSchema=z.strictObject({version:z.literal(1),installationId:z.string().uuid(),
   deviceId:z.string().min(8).max(128),authorityUrl:z.string().url(),
-  certificate:z.unknown().nullable(),privateKey:z.string().max(256).nullable(),pendingRevoke:z.boolean()});
+  certificate:z.unknown().nullable(),privateKey:z.string().max(256).nullable(),
+  // Accept legacy profile shapes only so they can remain revocable. The proof is
+  // separately validated below; an old/incomplete proof becomes absent and can
+  // never authorize enrollment or admission.
+  nativeConsent:z.unknown().optional(),pendingRevoke:z.boolean()});
 export interface CoreProfileStore {load():Promise<Profile|null>;save(profile:Profile):Promise<void>;
   stop():Promise<void>;clearStop():Promise<void>;stopped():Promise<boolean>;readonly stopFile:string;
   block?():Promise<void>;clearBlock?():Promise<void>;blocked?():Promise<boolean>}
@@ -105,7 +154,10 @@ if($checked.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $owner -
     // Async DPAPI must never block the Agent's WSS/heartbeat event loop.
     const plaintext=await unprotectWindowsUserSecretForPurpose(envelope.ciphertext,PURPOSE);
     const parsed=ProfileSchema.parse(JSON.parse(plaintext));
-    const profile=parsed as Profile;
+    const consent=NativeProofSchema.safeParse(parsed.nativeConsent);
+    const profile={...parsed} as Profile;
+    if(consent.success)profile.nativeConsent=consent.data;
+    else delete profile.nativeConsent;
     if(profile.certificate){
       if(!profile.privateKey)throw new Error('CORE_PRIVATE_KEY_MISSING');
       const key=createPrivateKey({key:Buffer.from(profile.privateKey,'base64'),type:'pkcs8',format:'der'});
@@ -179,21 +231,11 @@ $timer.Add_Tick({[Console]::Out.WriteLine($(if([NxCoreConsole]::DesktopAllowed()
 $timer.Start();[Console]::Out.WriteLine($(if([NxCoreConsole]::DesktopAllowed()){'DEFAULT'}else{'BLOCKED'}));[Console]::Out.WriteLine('READY');[Console]::Out.Flush()
 try{[System.Windows.Forms.Application]::Run($context)}finally{$timer.Stop();$timer.Dispose();$icon.Visible=$false;$icon.Dispose()}
 `;
-const consentScript=String.raw`
-$ErrorActionPreference='Stop'
-Add-Type -AssemblyName System.Windows.Forms
-$p=[Console]::In.ReadToEnd()|ConvertFrom-Json
-$message='Bu PC için süresiz, geri alınabilir fiziksel kontrol izni verilsin mi?'+[Environment]::NewLine+[Environment]::NewLine+
- 'Sahip: '+$p.owner+[Environment]::NewLine+'Cihaz: '+$p.device+[Environment]::NewLine+'Yetki sunucusu: '+$p.authority+[Environment]::NewLine+[Environment]::NewLine+
- 'Fare, klavye ve pencere kontrolü. Sistem tepsisindeki Nexowire CORE simgesinden istediğiniz an KAPATIN. Windows kilidi, UAC ve yönetici izinleri değişmez.'
-$result=[System.Windows.Forms.MessageBox]::Show($message,'Nexowire CORE - yerel ilk onay',[System.Windows.Forms.MessageBoxButtons]::YesNo,[System.Windows.Forms.MessageBoxIcon]::Warning,[System.Windows.Forms.MessageBoxDefaultButton]::Button2)
-@{approved=($result -eq [System.Windows.Forms.DialogResult]::Yes)}|ConvertTo-Json -Compress
-`;
-
 export interface WindowsCoreProviderOptions {
   deviceId:string;authority:CoreConsoleAuthorityClient;store:CoreProfileStore;
   broker:Pick<PrivilegedBrokerClient,'probe'>;
-  consent?:(binding:CoreConsoleBinding,signal:AbortSignal)=>Promise<boolean>;
+  /** Trusted native integration only. The production composition root does NOT install one yet. */
+  nativeConsent?:NativeCoreConsentAuthority;
   native?:(capability:string,input:unknown,stopFile:string,signal:AbortSignal)=>Promise<unknown>;
   monitor?:{desktopAllowed():boolean;close():void};
 }
@@ -273,12 +315,56 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
     const bridge=probe.reachable===true&&probe.elevated===true&&probe.version===NEXOWIRE_VERSION;
     const pinned=this.spki();
     const localValid=local?.certificate?.signatureBase64===this.profile.certificate?.signatureBase64&&!local?.pendingRevoke;
-    return {certificate:this.revoked||!localValid||!this.matches(state)||await this.options.store.stopped()||await this.options.store.blocked?.()?null:this.profile.certificate,
-      pinnedLocalSpkiDer:pinned,
-      current:{...this.current(state),bridgeVerified:state.bridgeVerified&&bridge},
+    // A legacy DPAPI certificate or native-looking JS fixture is NOT physical
+    // consent. No shipped native authority means enrollment remains required.
+    const nativeValid=await this.currentNativeConsent(signal,state);
+    // Native OS readback is an async trust boundary. Owner re-pair, CORE OFF,
+    // revoke, session rotation or Broker loss during it must not publish an
+    // evidence snapshot based on the older authority/bridge observations.
+    const latest=await this.options.authority.call(this.profile,'read',{},signal);
+    const latestProbe=await this.options.broker.probe();
+    const latestBridge=latestProbe.reachable===true&&latestProbe.elevated===true&&
+      latestProbe.version===NEXOWIRE_VERSION;
+    const unchanged=JSON.stringify(this.current(state))===JSON.stringify(this.current(latest))&&
+      state.enrollmentId===latest.enrollmentId&&
+      state.publicKeySpki===latest.publicKeySpki&&
+      state.nativeConsentReceiptId===latest.nativeConsentReceiptId&&
+      state.windowsUserSid===latest.windowsUserSid&&
+      state.windowsSessionId===latest.windowsSessionId&&
+      state.windowsLogonLuid===latest.windowsLogonLuid&&
+      state.windowsLogonSessionEpoch===latest.windowsLogonSessionEpoch;
+    const certificate=this.revoked||signal.aborted||!localValid||!nativeValid||
+      !unchanged||!bridge||!latestBridge||!this.matches(latest)||
+      await this.options.store.stopped()||await this.options.store.blocked?.()?null:this.profile.certificate;
+    return {certificate,pinnedLocalSpkiDer:pinned,
+      current:{...this.current(latest),bridgeVerified:latest.bridgeVerified&&latestBridge},
       observedAtMs,desktop:this.allowedDesktop()?'default':'unknown',
-      nativeAdmission:bridge&&this.allowedDesktop()?'verified':'unavailable',
-      brokerVersionVerified:bridge} as CoreConsoleEvidence;
+      nativeAdmission:!!certificate&&nativeValid&&latestBridge&&this.allowedDesktop()?'verified':'unavailable',
+      brokerVersionVerified:latestBridge,
+      nativeConsentProviderPresent:!!this.options.nativeConsent} as CoreConsoleEvidence;
+  }
+  private async currentNativeConsent(signal:AbortSignal,authorityState:CoreAuthorityState):Promise<boolean>{
+    const recorded=this.profile.nativeConsent;
+    const e=this.profile.certificate?.enrollment;
+    if(!recorded||!e||!this.options.nativeConsent||this.closed||signal.aborted)return false;
+    if(recorded.enrollmentId!==e.enrollmentId||
+      recorded.ownerAccountId!==e.ownerAccountId||
+      recorded.deviceId!==e.deviceId||
+      recorded.installationId!==e.installationId||
+      recorded.ownerEpoch!==e.ownerEpoch||
+      recorded.grantGeneration!==e.grantGeneration||
+      recorded.revokeEpoch!==e.revokeEpoch||
+      authorityState.nativeConsentReceiptId!==recorded.receiptId||
+      authorityState.windowsUserSid!==recorded.windowsUserSid||
+      authorityState.windowsSessionId!==recorded.windowsSessionId||
+      authorityState.windowsLogonLuid!==recorded.windowsLogonLuid||
+      authorityState.windowsLogonSessionEpoch!==recorded.windowsLogonSessionEpoch)return false;
+    try{
+      // A real implementation must freshly obtain this from a distinct OS
+      // protected logon/desktop ledger; not a JS cache or local profile echo.
+      const fresh=await this.options.nativeConsent.currentReadback(recorded.receiptId,signal);
+      return sameNativeProof(fresh,recorded);
+    }catch{return false;}
   }
   private eligible(e:CoreConsoleEvidence){if(!this.binding)return false;return evaluateCoreConsoleEnrollment({certificate:e.certificate,
     pinnedLocalSpkiDer:e.pinnedLocalSpkiDer,trustedCurrentReadback:e.current,
@@ -311,39 +397,71 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
     signal=AbortSignal.any([signal,this.lifetime.signal]);
     await this.initialize();
     if(this.closed||signal.aborted)throw new Error('CORE_PROVIDER_CLOSED_OR_CANCELLED');
+    // The existing JS MessageBox/boolean adapter is NOT an independently
+    // attestable physical decision. No native provider ships at present.
+    if(!this.options.nativeConsent)return false;
     if(this.pending)throw new Error('CORE_ENROLLMENT_PROMPT_ACTIVE');this.pending=true;
     try{
       const state=await this.options.authority.call(this.profile,'read',{},signal);
       if(!state.coreEnabled||state.accessMode!=='full'||!state.deviceOnline)throw new Error('CORE_OWNER_ENABLE_REQUIRED');
       const bridge=await this.options.broker.probe();
       if(!bridge.reachable||!bridge.elevated||bridge.version!==NEXOWIRE_VERSION)throw new Error('CORE_BROKER_VERIFICATION_REQUIRED');
-      if(this.profile.certificate&&this.matches(state)&&!this.revoked&&!(await this.options.store.stopped()))return true;
+      if(this.profile.certificate&&this.matches(state)&&!this.revoked&&
+        !(await this.options.store.stopped())&&await this.currentNativeConsent(signal,state))return true;
       if(!this.options.native)await executeCoreConsoleNative('probe',{},'',signal);
-      const binding={ownerAccountId:state.ownerAccountId,deviceId:this.profile.deviceId,installationId:this.profile.installationId};
-      const decision=this.options.consent?await this.options.consent(binding,signal):
-        (await runCorePowerShell(consentScript,{owner:binding.ownerAccountId,device:binding.deviceId,authority:this.options.authority.url},signal,120000) as {approved?:boolean}).approved===true;
-      await this.options.authority.call(this.profile,'dismiss',{},signal);
-      if(!decision||signal.aborted)return false;
-      if(!this.options.native)await executeCoreConsoleNative('probe',{},'',signal);
-      // Recheck all epochs AFTER the local user made a decision.
-      const fresh=await this.options.authority.call(this.profile,'read',{},signal);
-      if(JSON.stringify(this.current(state))!==JSON.stringify(this.current(fresh)))throw new Error('CORE_CHANGED_DURING_LOCAL_CONSENT');
+      // Fence any legacy approval BEFORE issuing a new challenge. The challenge
+      // must bind epochs after this monotonic revoke, not before it.
       await this.revoke();
-      // A new local consent never clears STOP while an old native operation
-      // could still be running. Drain the bounded native worker first.
       await this.tail;
+      const fresh=await this.options.authority.call(this.profile,'read',{},signal);
+      if(!fresh.coreEnabled||fresh.accessMode!=='full'||!fresh.deviceOnline||
+        !fresh.bridgeVerified||fresh.ownerAccountId!==state.ownerAccountId||
+        fresh.deviceId!==state.deviceId)throw new Error('CORE_REVOKED_DURING_ENROLLMENT');
+      const challenge:NativeCoreConsentChallenge={version:1,challengeId:randomUUID(),
+        ownerAccountId:fresh.ownerAccountId,deviceId:fresh.deviceId,
+        installationId:this.profile.installationId,enrollmentId:randomUUID(),
+        ownerEpoch:fresh.ownerEpoch,grantGeneration:fresh.grantGeneration,revokeEpoch:fresh.revokeEpoch};
+      const proof=await this.options.nativeConsent.approveAndConsume(challenge,signal);
+      if(!proof||signal.aborted)return false;
+      const parsed=NativeProofSchema.safeParse(proof);
+      const now=Date.now();
+      if(!parsed.success||!Object.keys(proof).every(k=>NATIVE_KEYS.includes(k))||
+        !Object.entries(challenge).every(([k,v])=>
+          proof[k as keyof NativeCoreConsentProof]===v)||
+        proof.approvedAtMs>now+5000||proof.approvedAtMs<now-120000)
+        throw new Error('CORE_NATIVE_CONSENT_BINDING_INVALID');
+      const independent=await this.options.nativeConsent.currentReadback(proof.receiptId,signal);
+      if(!sameNativeProof(independent,proof))throw new Error('CORE_NATIVE_CONSENT_READBACK_REQUIRED');
       const latest=await this.options.authority.call(this.profile,'read',{},signal);
+      if(JSON.stringify(this.current(fresh))!==JSON.stringify(this.current(latest))||
+        latest.enrollmentId!==fresh.enrollmentId||latest.publicKeySpki!==fresh.publicKeySpki)
+        throw new Error('CORE_CHANGED_DURING_LOCAL_CONSENT');
+      if(!this.options.native)await executeCoreConsoleNative('probe',{},'',signal);
       const key=generateKeyPairSync('ed25519');const der=key.publicKey.export({type:'spki',format:'der'});
-      const enrollment={version:1 as const,scope:'physical-console' as const,...binding,
-        enrollmentId:randomUUID(),ownerEpoch:latest.ownerEpoch,grantGeneration:latest.grantGeneration,
-        revokeEpoch:latest.revokeEpoch,approvedLocallyAtMs:Date.now(),issuerSpkiSha256:createHash('sha256').update(der).digest('hex')};
-      const profile:Profile={...this.profile,privateKey:key.privateKey.export({type:'pkcs8',format:'der'}).toString('base64'),pendingRevoke:false,
-        certificate:{enrollment,signatureBase64:sign(null,canonicalCoreConsoleEnrollment(enrollment),key.privateKey).toString('base64')}};
-      // Persist first: failure/ACK loss never manufactures ACTIVE. A later read
-      // must match the independently registered enrollment ID and issuer key.
+      const enrollment={version:1 as const,scope:'physical-console' as const,
+        ownerAccountId:challenge.ownerAccountId,deviceId:challenge.deviceId,
+        installationId:challenge.installationId,enrollmentId:challenge.enrollmentId,
+        ownerEpoch:challenge.ownerEpoch,grantGeneration:challenge.grantGeneration,
+        revokeEpoch:challenge.revokeEpoch,approvedLocallyAtMs:proof.approvedAtMs,
+        issuerSpkiSha256:createHash('sha256').update(der).digest('hex')};
+      const profile:Profile={...this.profile,
+        privateKey:key.privateKey.export({type:'pkcs8',format:'der'}).toString('base64'),
+        pendingRevoke:false,nativeConsent:proof,
+        certificate:{enrollment,signatureBase64:
+          sign(null,canonicalCoreConsoleEnrollment(enrollment),key.privateKey).toString('base64')}};
       await this.options.store.save(profile);this.profile=profile;
-      await this.options.authority.call(profile,'enroll',{certificate:profile.certificate,publicKeySpki:der.toString('base64')},signal);
-      this.binding=binding;this.revoked=false;await this.options.store.clearStop();await this.options.store.clearBlock?.();await this.startMonitor();return true;
+      const registered=await this.options.authority.call(profile,'enroll',{certificate:profile.certificate,
+        publicKeySpki:der.toString('base64'),nativeConsent:proof},signal);
+      if(registered.nativeConsentReceiptId!==proof.receiptId||
+        registered.windowsUserSid!==proof.windowsUserSid||
+        registered.windowsSessionId!==proof.windowsSessionId||
+        registered.windowsLogonLuid!==proof.windowsLogonLuid||
+        registered.windowsLogonSessionEpoch!==proof.windowsLogonSessionEpoch)
+        throw new Error('CORE_NATIVE_CONSENT_AUTHORITY_BINDING_REQUIRED');
+      this.binding={ownerAccountId:challenge.ownerAccountId,deviceId:challenge.deviceId,
+        installationId:challenge.installationId};
+      this.revoked=false;await this.options.store.clearStop();
+      await this.options.store.clearBlock?.();await this.startMonitor();return true;
     }finally{this.pending=false;}
   }
   execute(request:CoreConsoleDispatch,signal:AbortSignal):Promise<CoreConsoleReceipt>{
@@ -363,6 +481,18 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
       let outcome:'succeeded'|'denied'|'unknown'='unknown';let data:unknown;
       try{
         await this.options.authority.call(this.profile,'claim',fields,signal);
+        // Session/owner readback is repeated after external admission and as
+        // close as this source path can get to the native effect. Native OS
+        // code must still enforce its own final logon/target checks.
+        const finalEvidence=await this.inspect(signal);
+        const finalEnrollment=finalEvidence.certificate?.enrollment;
+        if(!this.eligible(finalEvidence)||finalEvidence.nativeAdmission!=='verified'||
+          finalEvidence.nativeConsentProviderPresent!==true||!finalEnrollment||
+          finalEnrollment.enrollmentId!==request.enrollmentId||
+          finalEnrollment.ownerEpoch!==request.ownerEpoch||
+          finalEnrollment.grantGeneration!==request.grantGeneration||
+          finalEnrollment.revokeEpoch!==request.revokeEpoch)
+          throw new Error('CORE_CONSOLE_FINAL_SESSION_READBACK_REQUIRED');
         const native=this.options.native??executeCoreConsoleNative;
         // The marker lets native cleanup release pressed keys before exiting.
         // Cancellation does not grant a new request or permit a blind replay.

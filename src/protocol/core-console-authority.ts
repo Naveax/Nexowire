@@ -29,6 +29,21 @@ export const CoreAuthorityRequestSchema=z.strictObject({
   deviceId:id,installationId:z.string().uuid(),nonce:z.string().uuid(),
   issuedAtMs:z.number().int().positive().safe(),
   certificate:z.unknown().optional(),publicKeySpki:z.string().max(128).optional(),
+  // An Agent-provided receipt is not a physical approval until separately
+  // authenticated and atomically consumed by an installed native verifier.
+  nativeConsent:z.strictObject({
+    version:z.literal(1),challengeId:z.string().uuid(),receiptId:z.string().uuid(),
+    ownerAccountId:id,deviceId:id,installationId:z.string().uuid(),enrollmentId:z.string().uuid(),
+    ownerEpoch:z.number().int().positive().safe(),
+    grantGeneration:z.number().int().positive().safe(),
+    revokeEpoch:z.number().int().nonnegative().safe(),
+    // Native verifier binds this to the current token AuthenticationId and WTS session.
+    windowsSessionId:z.number().int().positive().safe(),
+    windowsUserSid:z.string().regex(/^S-\d-\d+(?:-\d+)+$/i),
+    windowsLogonLuid:z.string().regex(/^[0-9a-f]{16}$/i).refine(v=>!/^0+$/.test(v)),
+    windowsLogonSessionEpoch:z.string().uuid(),
+    approvedAtMs:z.number().int().positive().safe(),consumed:z.literal(true),
+  }).optional(),
   requestId:z.string().uuid().optional(),fingerprint:z.string().regex(/^[a-f0-9]{64}$/).optional(),
   signature:z.string().length(88).optional(),
   outcome:z.enum(['succeeded','denied','unknown']).optional(),
@@ -40,6 +55,9 @@ export interface CoreAuthorityState extends CoreConsoleCurrentReadback {
   enrollmentRequested:boolean;
   enrollmentId:string|null; publicKeySpki:string|null;
   physicalActive:boolean; statusObservedAtMs:number|null;
+  nativeConsentReceiptId:string|null; windowsUserSid:string|null;
+  windowsSessionId:number|null; windowsLogonLuid:string|null;
+  windowsLogonSessionEpoch:string|null;
 }
 export interface CoreAuthorityResponse {nonce:string;state:CoreAuthorityState}
 export const CoreAuthorityStateSchema=z.strictObject({ownerAccountId:id,deviceId:id,
@@ -48,11 +66,29 @@ export const CoreAuthorityStateSchema=z.strictObject({ownerAccountId:id,deviceId
   grantGeneration:z.number().int().positive().safe(),revokeEpoch:z.number().int().nonnegative().safe(),
   coreEnabled:z.boolean(),accessMode:z.enum(['safe','full']),deviceOnline:z.boolean(),bridgeVerified:z.boolean(),
   enrollmentRequested:z.boolean(),enrollmentId:z.string().uuid().nullable(),publicKeySpki:z.string().length(60).nullable(),
-  physicalActive:z.boolean(),statusObservedAtMs:z.number().int().nonnegative().safe().nullable()});
+  physicalActive:z.boolean(),statusObservedAtMs:z.number().int().nonnegative().safe().nullable(),
+  nativeConsentReceiptId:z.string().uuid().nullable(),
+  windowsUserSid:z.string().regex(/^S-\d-\d+(?:-\d+)+$/i).nullable(),
+  windowsSessionId:z.number().int().positive().safe().nullable(),
+  windowsLogonLuid:z.string().regex(/^[0-9a-f]{16}$/i).refine(v=>!/^0+$/.test(v)).nullable(),
+  windowsLogonSessionEpoch:z.string().uuid().nullable()});
 export function coreOperationBytes(input:CoreAuthorityRequest):Buffer {
-  return Buffer.from(JSON.stringify(['nexowire.core-console.operation.v1',
+  // Existing read/report/reserve/claim/complete/revoke signatures must retain
+  // their v1 bytes. Only newly attested enrollment extends the signed fields.
+  const fields:unknown[]=['nexowire.core-console.operation.v1',
     input.action,input.deviceId,input.installationId,input.nonce,input.issuedAtMs,
-    input.requestId??null,input.fingerprint??null,input.outcome??null,input.active??null]));
+    input.requestId??null,input.fingerprint??null,input.outcome??null,input.active??null];
+  if(input.action==='enroll'&&input.nativeConsent)fields.push([
+    input.nativeConsent.version,input.nativeConsent.challengeId,
+    input.nativeConsent.receiptId,input.nativeConsent.ownerAccountId,
+    input.nativeConsent.deviceId,input.nativeConsent.installationId,
+    input.nativeConsent.enrollmentId,input.nativeConsent.ownerEpoch,
+    input.nativeConsent.grantGeneration,input.nativeConsent.revokeEpoch,
+    input.nativeConsent.windowsSessionId,input.nativeConsent.windowsUserSid,
+    input.nativeConsent.windowsLogonLuid,input.nativeConsent.windowsLogonSessionEpoch,
+    input.nativeConsent.approvedAtMs,input.nativeConsent.consumed,
+  ]);
+  return Buffer.from(JSON.stringify(fields));
 }
 export function corePublicKey(spki:string){
   const der=Buffer.from(spki,'base64');
