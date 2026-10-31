@@ -82,3 +82,6 @@ Added AI-07 test cases with 32768-character single argument, two 20000-character
 
 ### Hidden argv metadata negatives (1 Nov 2026)
 New `test/ai07-sandbox-hostile-input.test.ts` negative cases assert `INVALID_TASK_INTENT` with a hidden throwing getter, symbol-keyed metadata, nonindexed field, and a throwing Proxy ownKeys trap, without evaluating the getter. Exact HEAD CI required; never interpret source-only blocked status as native worker isolation.
+
+### Strict nested own-keys regression (2026-11-01)
+New `test/ai07-sandbox-structured-ownkeys.test.ts`: baseline source-only task shape is well formed yet execution denied. Seven negatives reject non-enumerable top/root/network/budget fields, symbolic root/endpoints, an unknown top-level permit and a throwing network Proxy ownKeys without invoking hidden getters. Native worker remains unavailable; exact HEAD CI and tests must be verified separately, not inferred from prior SHA.

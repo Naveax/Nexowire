@@ -86,3 +86,7 @@ Linux diagnostic forced termination no longer abandons direct-child cleanup afte
 
 ## 2026-11-01 argv own-key fail-closed validation
 - Source-only bounded argv now demands precisely `length` plus its indexed own data descriptors. Extra non-enumerable own properties, symbols or throwing ownKeys traps classify `INVALID_TASK_INTENT`; no getter is evaluated. A future immutable serialized-byte admission is still required; JavaScript reflection alone is not a trusted attester. CORE/task execution remains denied.
+
+## 2026-11-01 strict nested intent own-data schema
+- Source-only assessment now rejects unknown/non-enumerable/symbolic/accessor own keys at top-level task, taskRoot, network and budgets. An empty allowedEndpoints array must expose only its intrinsic length; hidden endpoints invalidate NETWORK_MUST_BE_DEFAULT_DENY. A throwing Proxy ownKeys trap remains BLOCKED rather than throwing or granting permission. New targeted AI-07 test uses a valid baseline and explicitly checks the blocker for seven malformed cases.
+- This is JS input-shape hardening only; a Proxy may mutate the object between reflection calls. Native immutable request-byte snapshot, independent owner/CAS/Broker admission and OS kernel isolation remain **NO-GO**.

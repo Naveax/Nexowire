@@ -34,3 +34,6 @@ Run disposable Linux test of direct parent death *before* namespace PID1 install
 
 ### File-root admission gap: openat2 is not hardlink confinement
 AI-04/05 must not treat `openat2` RESOLVE_* alone, `st_nlink`, a canonical path string, or a synthetic negative fixture as full filesystem isolation. Require trusted root mount/inode identity, durable immutable request binding and an OS-protected file access boundary with hostile link/hardlink/rename/race acceptance. AI-08/coordinator can independently run `test/ai07-sandbox-linux-openat2-root.test.ts` (expected exit 0 / 55 / 56 / 57) on disposable Linux; no tests require a live machine or privileged Agent.
+
+### Non-authoritative JS envelope hardening for AI-04/05
+AI-07 now validates the complete own-key schema of source intent, including root/network/budgets and endpoint array hidden metadata. Do not use JS reflection as a native security proof: proxies, async mutation and serializer differences still require a frozen canonical native request byte buffer, signed capability/fingerprint identity and independent CAS/Broker gate before **any** side effect. There is no runtime permit in this PR.

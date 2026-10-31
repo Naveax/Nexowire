@@ -67,3 +67,6 @@ Added isolated `test/ai07-sandbox-linux-openat2-root.test.ts` with real Linux `o
 
 ### argv additional-own-key hardening
 Strict extra-key rejection and hostile argv negative regression added; preserves no execution permit, no fallbacks, UNKNOWN reconciliation and native OS production NO-GO.
+
+### Nested source-intent key inspection
+Added allowlisted exact own-data-key checks for top-level task, root, network, budgets and empty endpoints plus seven targeted negatives. Retains deny-only execution, no replay, and all native production blockers; PR still Draft / NO-GO.

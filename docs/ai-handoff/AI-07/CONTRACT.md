@@ -81,3 +81,6 @@ The disposable `test/ai07-sandbox-linux-openat2-root.test.ts` tests `RESOLVE_BEN
 
 ### Strict source-only argv shape
 In `boundedArgs`, `Reflect.ownKeys(args).length` must exactly match `args.length+1` alongside each own indexed data descriptor check. This rejects hidden or symbolic fields and throwing Proxy ownKeys traps so additional JS metadata cannot be silently ignored in source validation. It is no proof of actual native argv serialization; immutable signed input/OS grant remains AI-05/04-owned.
+
+### Strict nested source-only own-data schema
+`exactOwnDataKeys` rejects unexpected, symbol, hidden and accessor own keys for the declared top-level task, taskRoot, network and budgets objects; the zero-endpoint list must have only its native array length property. Unexpected top/root keys add INVALID_TASK_INTENT; unexpected network/endpoint keys add NETWORK_MUST_BE_DEFAULT_DENY; unexpected budget keys add INVALID_RESOURCE_BUDGET. This is **not** a deep immutable snapshot or safe Proxy execution boundary; AI-05/AI-04 must bind signed exact native serialization across asynchronous admission.

@@ -64,6 +64,37 @@ function ownFieldExists(value: Record<string, unknown> | null, field: string): b
   try { return Object.getOwnPropertyDescriptor(value, field) !== undefined; }
   catch { return true; } // Unknown report layout must be reconciled, not replayed.
 }
+/** Reject even non-enumerable/symbolic or accessor extra request fields.
+ * This is a source-only shape check, NOT an authenticated snapshot: a hostile
+ * Proxy can mutate values between descriptor reads, so the native admission
+ * owner must still sign and compare exact immutable serialized bytes. */
+function exactOwnDataKeys(value: unknown, expected: readonly string[]): boolean {
+  if (!record(value)) return false;
+  try {
+    const actual = Reflect.ownKeys(value);
+    if (actual.length !== expected.length) return false;
+    if (!actual.every(key => typeof key === 'string' && expected.includes(key))) {
+      return false;
+    }
+    return expected.every(key => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      return descriptor !== undefined && 'value' in descriptor;
+    });
+  } catch { return false; }
+}
+const TASK_KEYS = Object.freeze([
+  'schema','platform','taskId','originalRequestId','ownerId','deviceId',
+  'grantId','ownerEpoch','grantGeneration','executableDigest',
+  'baseWorktreeSha','workerPrivilege','args','envAllowlist','taskRoot',
+  'network','budgets',
+] as const);
+const ROOT_KEYS = Object.freeze([
+  'canonicalPath','volumeOrMountIdentity','rootFileIdOrInode',
+] as const);
+const NETWORK_KEYS = Object.freeze(['default','allowedEndpoints'] as const);
+const BUDGET_KEYS = Object.freeze([
+  'cpuMs','wallMs','memoryBytes','maxProcesses','outputBytes','diskBytes',
+] as const);
 function plainEmptyObject(value: unknown): boolean {
   if (!record(value)) return false;
   try { return Reflect.ownKeys(value).length === 0; }
@@ -73,7 +104,8 @@ function emptyList(value: unknown): boolean {
   try {
     return Array.isArray(value) &&
       Object.getPrototypeOf(value) === Array.prototype &&
-      Object.getOwnPropertyDescriptor(value, 'length')?.value === 0;
+      Object.getOwnPropertyDescriptor(value, 'length')?.value === 0 &&
+      Reflect.ownKeys(value).length === 1;
   } catch { return false; }
 }
 function boundedArgs(value: unknown): boolean {
@@ -150,7 +182,9 @@ export function assessTaskSandboxSourceOnly(
   const root = record(maybeRoot) ? maybeRoot : null;
   const network = record(maybeNetwork) ? maybeNetwork : null;
   const budgets = record(maybeBudgets) ? maybeBudgets : null;
-  if (!task || own(task, 'schema') !== 1 || !boundedId(own(task, 'taskId')) ||
+  if (!exactOwnDataKeys(task, TASK_KEYS) ||
+    !exactOwnDataKeys(root, ROOT_KEYS) ||
+    own(task, 'schema') !== 1 || !boundedId(own(task, 'taskId')) ||
     !boundedId(own(task, 'originalRequestId')) || !boundedId(own(task, 'ownerId')) ||
     !boundedId(own(task, 'deviceId')) || !boundedId(own(task, 'grantId')) ||
     !nonnegativeEpoch(own(task, 'ownerEpoch')) || !nonnegativeEpoch(own(task, 'grantGeneration')) ||
@@ -169,11 +203,12 @@ export function assessTaskSandboxSourceOnly(
   if (!task || !plainEmptyObject(own(task, 'envAllowlist'))) {
     blockers.push('AMBIENT_ENVIRONMENT_FORBIDDEN');
   }
-  if (!network || own(network, 'default') !== 'deny' ||
+  if (!exactOwnDataKeys(network, NETWORK_KEYS) ||
+      own(network, 'default') !== 'deny' ||
       !emptyList(own(network, 'allowedEndpoints'))) {
     blockers.push('NETWORK_MUST_BE_DEFAULT_DENY');
   }
-  if (!budgets ||
+  if (!exactOwnDataKeys(budgets, BUDGET_KEYS) ||
     !positiveBudget(own(budgets, 'cpuMs'), 86_400_000) ||
     !positiveBudget(own(budgets, 'wallMs'), 86_400_000) ||
     !positiveBudget(own(budgets, 'memoryBytes'), Number.MAX_SAFE_INTEGER) ||
