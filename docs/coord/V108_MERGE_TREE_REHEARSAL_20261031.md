@@ -2,7 +2,7 @@
 
 **Status: NON-DESTRUCTIVE SOURCE SIMULATION. NEVER A MERGE OR RELEASE PERMIT.**
 
-This coordinator-owned tool checks whether the current **16-PR dependency DAG**
+This coordinator-owned tool checks whether the current **17-PR dependency DAG**
 can be combined in the intended order without ordinary three-way Git tree conflicts.
 It is deliberately separate from the exact-SHA CI and physical acceptance gates in
 coordinator PR #994.
@@ -27,7 +27,7 @@ Requirement: Git 2.38+ with `git merge-tree --write-tree` support, Node 22+.
 
    ```bash
    git clone --no-checkout https://github.com/Naveax/Nexowire.git /tmp/v108-dryrun-source
-   for id in 986 1002 994 980 981 982 988 983 984 993 989 987 992 985 996 990; do
+   for id in 980 1005 986 1002 994 981 982 988 983 984 993 989 987 992 985 996 990; do
      git -C /tmp/v108-dryrun-source fetch --no-tags origin "pull/$id/head:refs/remotes/origin/coord-pr-$id"
    done
    ```
@@ -45,7 +45,7 @@ PowerShell equivalent for fetching branches in a disposable clone:
 ```powershell
 $source = Join-Path $env:TEMP "v108-dryrun-source"
 git clone --no-checkout https://github.com/Naveax/Nexowire.git $source
-986,1002,994,980,981,982,988,983,984,993,989,987,992,985,996,990 | ForEach-Object {
+980,1005,986,1002,994,981,982,988,983,984,993,989,987,992,985,996,990 | ForEach-Object {
   git -C $source fetch --no-tags origin "pull/$_/head:refs/remotes/origin/coord-pr-$_"
   if ($LASTEXITCODE -ne 0) { throw "PR fetch $_ failed." }
 }
@@ -100,3 +100,15 @@ physical effect-boundary evidence remain missing until independently proven.
 
 A 16-PR clean tree is only a Git-level hypothesis. Keep CORE NO-GO, all PRs
 Draft, and require independent cross-version tests plus installed acceptance.
+
+## 2026-11-01: explicit #1005 journal-owner/core composition
+
+Coordinator Draft [#1005](https://github.com/Naveax/Nexowire/pull/1005) is a direct
+child of #980. It preserves rollback-independent journal authority and remote
+CAS while backporting #1002's PID process-incarnation check and Windows regression.
+The 17-PR rehearsal now composes #980 -> #1005 first, then independently
+attempts #986 WAL, #1002 released-Agent candidate and #994 source evidence.
+Any Git conflict remains a hard BLOCKED and cannot be resolved with generic
+ours/theirs selection. Even a clean tree requires the combined same-SHA native
+Agent/CORE adversarial suite. AI-07's separate child #1004 remains a review
+handoff and is not automatically counted as already merged.
