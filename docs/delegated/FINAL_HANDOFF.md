@@ -2,7 +2,56 @@
 
 **REL-03 PARTIAL. Nihai kabul / sürüm hazır / üretim PASS ilan edilmez.** Bu belge dört ayrı Draft PR'ın aşağıdaki exact-SHA snapshot'larını kapsar; branch'ler birleştirilmedi. Kaynak/sentetik belge teslimi ile gerçek ürün kabulü birbirinden ayrılır.
 
-## Snapshot ve sayım
+
+## Operasyon Tur 4 — güncel GitHub uzlaştırması (1 Kasım 2026, Europe/Istanbul)
+
+Bu bölüm **güncel PR metadata/commit-run API okumasıdır**. Alttaki **31 Ekim tarihsel snapshot** ve görev bazındaki eski exact-SHA/test sonuçları silinmedi; yeni commit için eski testler otomatik PASS sayılmaz. Dört PR da `open / Draft / unmerged`, ortak base `a19a228dc6f19fd484cf935e941a00ea625233f8`. Bu dosyayı değiştiren commit'in kendi SHA'sı aynı commit'in içinden önceden yazılamaz; **yeni #999 HEAD/CI, PR açıklamasında ayrıca doğrulanacaktır**.
+
+| Destek PR | Son gözlenen exact HEAD (bu dosya güncellemesi öncesi) | Dosya | Bu HEAD'in otomatik CI durumu |
+|---|---|---:|---|
+| [#1000](https://github.com/Naveax/Nexowire/pull/1000) | `10654ce1f17e7aaef5744dcd88996694e06d64d5` | 7 | [CI 41245745671](https://github.com/Naveax/Nexowire/actions/runs/41245745671): completed/**action_required**, `jobs=[]` |
+| [#998](https://github.com/Naveax/Nexowire/pull/998) | `edc283fdbf9664225b71fa774cc95a91b2c0882b` | 8 | [CI 41213214191](https://github.com/Naveax/Nexowire/actions/runs/41213214191): completed/**action_required**, `jobs=[]` |
+| [#997](https://github.com/Naveax/Nexowire/pull/997) | `3bdd96f10168850d04e1a0b5483ea7378bb25ac7` | 8 | [CI 41217302958](https://github.com/Naveax/Nexowire/actions/runs/41217302958): completed/**action_required**, `jobs=[]` |
+| [#999](https://github.com/Naveax/Nexowire/pull/999) | `f94da3377915db20d1ba49025abef3cfaba149ae` | 8 | [CI 41217840496](https://github.com/Naveax/Nexowire/actions/runs/41217840496): completed/**action_required**, `jobs=[]` |
+
+**31 dosya ≠ 26 görev:** 7+8+8+8 PR çıktısı, alttaki 26 farklı görev ID'sine karşılık gelir; görev durumu değişmedi: **10 PASS* / 12 PARTIAL / 4 BLOCKED / 0 NOT_STARTED**. PASS* yalnız destek belgesi/offline sentetik teslimi kapsamındadır. #1000 `478e5564e5c85e8973bf3c7b6e05cecb7c802085` → `10654ce1f17e7aaef5744dcd88996694e06d64d5` karşılaştırması **yalnız `docs/delegated/MAIN_TEAM_REQUESTS.md`** dosyasında +17/−11 satır gösterir; yeni metin #1003 Cloudflare/Agent oturumlarını talep 01, 02, 04'e kaynak olarak bağlar. #1000'ın önceki typecheck/kaynak kontrolleri bu yeni commit için yeniden çalıştırılmadı, yeni `action_required` run da job PASS sağlamaz. #999 `abd377657dbc1647416191730f8130fe4a168837` sentetik redaction testinin exact SHA'sıdır; sonraki `f94da337...` yalnız `FINAL_HANDOFF.md` güncellemesidir, R/REL kaynakları değişmemiştir.
+
+**Bağımsız olarak önceki izole snapshot'larda çalışmış test:** #998 `edc283fdbf9664225b71fa774cc95a91b2c0882b` kota **18/18**; #997 `3bdd96f10168850d04e1a0b5483ea7378bb25ac7` S5 **44/44**; #999 `abd377657dbc1647416191730f8130fe4a168837` redaction **19/19**. **Toplam 81/81**, üç **ayrı** sentetik test yürütmesinin toplamıdır. **Dört PR'ın bir araya getirilmiş ağacında birleşik test: NOT_RUN.** Yeni #1000 ve bu handoff commit'inde bu 81 test yeniden çalıştırılmadı; bir kod/CI/CORE/cihaz kabulüne taşınmaz.
+
+### 14 ana ekip talebinin izlenebilirliği
+
+Yetkili tekil kaynak: Köle 1'in [`MAIN_TEAM_REQUESTS.md` dosyası, #1000 exact HEAD `10654ce1...`](https://github.com/SinsiVinci/Nexowire-fork/blob/10654ce1f17e7aaef5744dcd88996694e06d64d5/docs/delegated/MAIN_TEAM_REQUESTS.md); `K-S1-REQ-01`–`14` **14 benzersiz ID** olarak yeniden sayıldı. Her talepte öncelik, karar sahibi, kaynak PR/dosya, istenen karar, kabul kanıtı, engellenen görev ve açık durum bulunur. Bunlar **tamamlanmış talepler/ürün onayı değildir**.
+
+| ID | Karar/kanıt kaynak PR'ı | Açık kabul niteliği |
+|---|---|---|
+| REQ-01 | #1000; harici #1003 ingress | P0 exact-device journal retrieval; NOT_IMPLEMENTED |
+| REQ-02 | #1000; harici #1003 oturum | P0 no-replay/read-only resume ve revocation sözleşmesi |
+| REQ-03 | #1000 + #998 | Sürüm/bootstrap ve imzalı Windows kanal kararı |
+| REQ-04 | #1000 + #997; harici #1003 | Fiziksel ağ, Cloudflare, staging/soak bütçe ve SLO |
+| REQ-05 | #998 + #997 | Günlük quota/legacy grace iki ayrı politika kararı |
+| REQ-06 | #997 | Legal/provider/catalog/settlement; BILLING_PAUSED |
+| REQ-07 | #997 | Gerçek fiyat/meter kaynağı; UNKNOWN saklanır |
+| REQ-08 | #997 | Koşullu raw-sample export sözleşmesi |
+| REQ-09 | #998 | Gerçek browser/klavye/a11y NOT_RUN |
+| REQ-10 | #998 | Disposable Windows installer NOT_RUN |
+| REQ-11 | #998 | Repair/rollback/removal destek sözleşmesi |
+| REQ-12 | #999 | WAL orphan/stale SHM/#974 kanıtı yok |
+| REQ-13 | #1000 + #998 + #997 + #999 | Dört exact-HEAD CI action_required; P0 gate |
+| REQ-14 | #999 ve diğer üç destek PR'ı | REL-03 bağımsız koordinasyon/nihai kabul açık |
+
+**Kaynak içi tarihsel referans uyarısı:** #1000'ın son `MAIN_TEAM_REQUESTS.md` sürümü 14 talebi korusa da **REQ-07** metnindeki “#997 38/38” daha eski test koşusudur (bu handoff'ta güncel test snapshot'ı 44/44). **REQ-13** içindeki #997/#999/#1000 run ID'leri ve **REQ-14** içindeki dört-PR SHA/uzlaştırma anlatısı da eski snapshot'a aittir. Yeni authoritative SHA→CI eşlemesi yukarıdaki tabloda bulunur; **Köle 1'in dosyası burada değiştirilmedi**.
+
+### Harici CORE/bağlantı, P0 güvenlik ve P1 entegrasyon engelleri
+
+- **Harici [#1002](https://github.com/Naveax/Nexowire/pull/1002)** — Agent journal-owner PID-reuse/lease restart düzeltmesi, exact `bce2dbdfca93d3537657c37e15d9248f17106a8a`; **open/Draft/unmerged**. [CI 41241266700](https://github.com/Naveax/Nexowire/actions/runs/41241266700) ve [Release Readiness 41241267033](https://github.com/Naveax/Nexowire/actions/runs/41241267033) bu SHA'da **success**, ancak ürün merge/kurulum ve R-01 WAL/iki-cihaz kabulü **YOK**. 26 destek görevine katılmaz.
+- **Harici [#1003](https://github.com/Naveax/Nexowire/pull/1003)** — Cloudflare-only MCP ingress ve bağlı Agent oturumunu bounded revalidation, exact `2dc3d999ecae9c81e5706d2be2f0c46d25c7a141`; **open/Draft/unmerged**. [CI 41244224451](https://github.com/Naveax/Nexowire/actions/runs/41244224451) **success**; [Release Readiness 41244224377](https://github.com/Naveax/Nexowire/actions/runs/41244224377) gözlem anında **in_progress**. PR'daki 49/49 hedefli yerel test bildirimi bu incelemede yeniden yürütülmedi; named tunnel/DNS/off-network/two-PC/gerçek OAuth kabulü **NOT_RUN**. 26 destek görevine katılmaz.
+- **P0 harici güvenlik [#989](https://github.com/Naveax/Nexowire/pull/989)** — exact `36be6880c35e47ed1697f55b39b1ec939ec6cfa8`, **open/Draft/unmerged**. [CI 41243745899](https://github.com/Naveax/Nexowire/actions/runs/41243745899) gözlem anında **in_progress** olsa da [Node 24 job 124662799054](https://github.com/Naveax/Nexowire/actions/runs/41243745899/job/124662799054) **failure**: `test/ai08-console-claim.test.ts:135`, beklenen `acceptedEarly:false,stateAfterDeniedReadback:'unknown'` yerine gerçekleşen `acceptedEarly:true,stateAfterDeniedReadback:'succeeded'`. Aynı HEAD'de en az bir P0 adversarial negatif kırmızı; ayrı Draft [#996](https://github.com/Naveax/Nexowire/pull/996) `335a77b2bcae54ef841491b82036eb3e59bb2115` düzeltme kaydı henüz #989 stack'inde birleşik kanıt değil ve kendi CI'sı da **failure**. **CORE production NO_GO**; coordinator/D1 owner'ı exact integrated negatifleri yeniden kanıtlamalı.
+- **P1 harici entegrasyon [#995](https://github.com/Naveax/Nexowire/pull/995)** — exact `9a619c9be694f7be79b3a6d941b7807202dcc205`, **open/Draft/unmerged**. Normal [CI 41243782981](https://github.com/Naveax/Nexowire/actions/runs/41243782981) **success** fakat bağımsız [merge-tree rehearsal 41243782977](https://github.com/Naveax/Nexowire/actions/runs/41243782977) **failure/BLOCKED**: `PR_980_MERGE_TREE_NONZERO_1`; conflict `.github/workflows/ci.yml`, `src/agent/native-agent.ts`, `src/agent/operation-journal.ts`. Normal CI yeşili merge provası/semantik kabulü değildir. Koordinatör conflict-owner kararı ve yeniden yetkili prova gerekli; bu destek teslimi merge yetkisi vermez.
+
+**Ömer'e açık karar listesi:** REQ-01/02 journal ownership ve revoke/no-replay sözleşmesi; REQ-03/09/10/11 release/Windows/browser QA; REQ-04 #1003 named tunnel, sahiplik, OAuth/DNS, bütçe ve iki-PC lab yetkisi; REQ-05–08 policy/billing/veri kaynağı; REQ-12 WAL kapsamı; REQ-13 CI maintainer gate; REQ-14 bağımsız dört-PR entegrasyon onayı; #989 P0 kırmızıyı kapatma ve #995/#980 merge-tree çatışma çözümü. **CI rerun, CORE düzeltmesi, workflow, merge, release, deploy, canlı cihaz/WAL müdahalesi bu görevde yapılmadı ve yetkilendirilmedi.**
+
+
+## 31 Ekim tarihsel snapshot ve sayım
 
 İnceleme: **31 Ekim 2026, yaklaşık 18:55 Europe/Istanbul (15:55 UTC)**. #1000 ve #997 üçüncü tur, #998 ikinci tur commit'leri bu snapshot'ta **görüldü ve yeniden incelendi**. #999'un aşağıdaki SHA'sı bu güncelleme öncesi HEAD'dir; bu handoff düzenlemesinin SHA/CI sonucu commit'ten sonra ayrıca saptanır. İleride gelen yeni commit/test kanıtı otomatik geçerli sayılmaz.
 
@@ -20,7 +69,7 @@ Görev tanımı: `NEXOWIRE_ARKADAS_GOREVLERI_14_GUN(1).md`, belge v1.0, Library 
 | REL | REL-01, REL-02, REL-03 | 3 |
 | Toplam | 26 benzersiz görev | 26 |
 
-## Tek PR listesi ve exact snapshot'lar
+## 31 Ekim tarihsel PR listesi ve exact snapshot'lar
 
 Ortak incelenen base main: `a19a228dc6f19fd484cf935e941a00ea625233f8`. 31 Ekim 2026 salt-okunur `git ls-remote` kontrolünde güncel upstream `main` de aynı SHA'daydı. Tümü fork `SinsiVinci/Nexowire-fork`, base `main`, open/Draft/unmerged. Bu gözlem ileri bir zamanda main'in değişmeyeceği garantisi değildir.
 
@@ -31,7 +80,7 @@ Ortak incelenen base main: `a19a228dc6f19fd484cf935e941a00ea625233f8`. 31 Ekim 2
 | 3 / [#997](https://github.com/Naveax/Nexowire/pull/997) | `docs/delegated-s4-s5-20261031` | `3bdd96f10168850d04e1a0b5483ea7378bb25ac7` | 8 | [41217302958](https://github.com/Naveax/Nexowire/actions/runs/41217302958) completed/action_required |
 | 4 / [#999](https://github.com/Naveax/Nexowire/pull/999) | `docs/delegated-r-rel-20261031` | `abd377657dbc1647416191730f8130fe4a168837` | 8 | [41213416030](https://github.com/Naveax/Nexowire/actions/runs/41213416030) completed/action_required |
 
-Tüm dört exact-head CI sonucu **action_required, PASS değil**; dört run için GitHub Actions API'de `jobs=[]` ayrıca doğrulandı. Önceki main yeşili veya önceki PR commit testleri bu HEAD'lere devredilmez. #999'un bu handoff değişikliğiyle oluşacak yeni SHA'sı ayrıca PR metadata/CI üzerinden doğrulanmalıdır; dosya kendi commit hash'ini önceden bilemez.
+Bu 31 Ekim tarihsel dört exact-head CI sonucu **action_required, PASS değil**; dört run için GitHub Actions API'de `jobs=[]` ayrıca doğrulandı. Önceki main yeşili veya önceki PR commit testleri bu HEAD'lere devredilmez. #999'un bu handoff değişikliğiyle oluşacak yeni SHA'sı ayrıca PR metadata/CI üzerinden doğrulanmalıdır; dosya kendi commit hash'ini önceden bilemez.
 
 ## Her görev için ayrı kanıt ve engel
 
