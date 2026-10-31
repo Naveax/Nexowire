@@ -16,6 +16,7 @@ const required=Object.freeze([
   'wsl2-live','security-operational-live','macos-agent-lifecycle-live',
 ]);
 const unique=(items,code)=>{if(!items.includes(code))items.push(code);};
+const AI_PRS=Object.freeze([986,993,988,987,992,985,990,989]);
 
 // Explicit dependency graph. A CI-green Draft PR is not merge authorization.
 export const STACK=Object.freeze([
@@ -41,6 +42,36 @@ export function evaluateSnapshot(snapshot,{live=false}={}) {
   const nodes=[],findings=[];
   const mainOk=sha40(snapshot?.mainSha);
   if(!mainOk)unique(findings,'MAIN_SHA_INVALID');
+  const fileMap=snapshot?.changedFiles;
+  if(live||fileMap!==undefined){
+    const owners=new Map();
+    for(const number of AI_PRS){
+      const files=fileMap?.[number];
+      if(!Array.isArray(files)||!files.length){
+        unique(findings,'PR_'+number+':CHANGED_FILES_EVIDENCE_MISSING');
+        continue;
+      }
+      const seen=new Set();
+      for(const p of files){
+        if(typeof p!=='string'||!p||p.includes('\\')||
+          p.startsWith('/')||p.split('/').includes('..')||seen.has(p)){
+          unique(findings,'PR_'+number+':CHANGED_FILES_INVALID');
+          continue;
+        }
+        seen.add(p);
+        if(p.startsWith('docs/ai-handoff/AI-'+String(number).padStart(2,'0')+'/'))continue;
+        const own=owners.get(p)??[];
+        own.push(number);
+        owners.set(p,own);
+      }
+    }
+    for(const [file,own] of owners.entries()){
+      if(own.length>1){
+        unique(findings,'SOURCE_FILE_OWNERSHIP_COLLISION:'+
+          file+':PR-'+own.join('-PR-'));
+      }
+    }
+  }
   // GitHub state is not transactional. Refetch the exact HEAD/base at the
   // end of the read-only scan, and refuse source signoff on moving refs.
   const recheck=snapshot?.rechecked;
@@ -155,6 +186,16 @@ async function fetchLiveSnapshot(){
     if(page===6)throw new Error('GitHub PR pages incomplete');
   }
   const selected=prs.filter(p=>STACK.some(s=>s.number===p.number)),runs={};
+  // Compare actual incremental PR file lists, not each stacked branch's tree:
+  // ancestor content is inherited and must not be counted as a direct edit.
+  const changedFiles={};
+  for(const number of AI_PRS){
+    const files=await fetchJson('/pulls/'+number+'/files?per_page=100');
+    if(!Array.isArray(files)||files.length>=100){
+      throw new Error('PR '+number+' changed-file listing incomplete');
+    }
+    changedFiles[number]=files.map(file=>file.filename);
+  }
   for(const pr of selected){
     if(!sha40(pr.head?.sha))continue;
     const batch=await fetchJson('/actions/runs?head_sha='+pr.head.sha+'&per_page=100');
@@ -178,7 +219,7 @@ async function fetchLiveSnapshot(){
   for(const pr of selected){
     finalPrs.push(await fetchJson('/pulls/'+pr.number));
   }
-  return {mainSha:main.sha,prs:selected,runs,
+  return {mainSha:main.sha,prs:selected,runs,changedFiles,
     rechecked:{mainSha:finalMain.sha,prs:finalPrs}};
 }
 
