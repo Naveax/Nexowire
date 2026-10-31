@@ -12,3 +12,25 @@ test('reject unknown unit/schema and reversed time',()=>{const f=fixture();asser
 test('markdown preserves context and never declares capacity',()=>{const s=markdown(fixture());for(const value of ['offline fixture','synthetic','2026-10-31T00:00:00Z','UNKNOWN','ms'])assert.ok(s.includes(value))});
 test('CSV quotes commas, quotes and newlines',()=>{const f=fixture();f.environment='a,"b"\nc';assert.ok(csv(f).includes('"a,""b""\nc"'))});
 test('input order and caller arrays unchanged',()=>{const f=fixture();f.samples.reverse();const before=JSON.stringify(f);assert.equal(summarize(f).p95,95);assert.equal(JSON.stringify(f),before)});
+test('single positive sample gives identical percentiles',()=>{const f=fixture();f.samples=[{ok:true,latency:7}];const r=summarize(f);assert.deepEqual([r.p50,r.p95,r.p99],[7,7,7])});
+test('nearest rank odd and tied distributions',()=>{const f=fixture();f.samples=[9,1,1,5,3].map(latency=>({ok:true,latency}));const r=summarize(f);assert.deepEqual([r.p50,r.p95,r.p99],[3,9,9])});
+test('per-sample seconds cannot silently override milliseconds',()=>{const f=fixture();Object.assign(f.samples[0]!,{unit:'s'});assert.throws(()=>summarize(f))});
+test('impossible dates and noncanonical timestamps rejected',()=>{for(const t of ['2026-02-30T00:00:00Z','2026-10-31Z','2026-10-31T00:00:00+00:00'])assert.throws(()=>summarize({...fixture(),startedAtUtc:t}))});
+test('CSV formula prefixes neutralized including whitespace',()=>{for(const value of ['=1+1','+1','-1','@SUM(1)','\t=1','\r\n=1']){const f=fixture();f.environment=value;assert.ok(csv(f).includes('"\''+value+'"'))}});
+test('CSV preserves embedded CRLF and doubled quotes',()=>{const f=fixture();f.environment='alpha,"beta"\r\ngamma';assert.ok(csv(f).includes('"alpha,""beta""\r\ngamma"'))});
+test('empty percentiles all UNKNOWN and count zero',()=>{const f=fixture();f.samples=[];const r=summarize(f);assert.deepEqual([r.p50,r.p95,r.p99,r.samples,r.success,r.errors],['UNKNOWN','UNKNOWN','UNKNOWN',0,0,0])});
+
+test('invalid local JSON never emits a partial report',async()=>{
+ const {mkdtempSync,writeFileSync,rmSync}=await import('node:fs');
+ const {tmpdir}=await import('node:os');
+ const {join}=await import('node:path');
+ const {spawnSync}=await import('node:child_process');
+ const dir=mkdtempSync(join(tmpdir(),'s5-invalid-cli-'));
+ try{
+  for(const content of ['{"latency":NaN}',JSON.stringify({...fixture(),unit:'s'})]){
+   const file=join(dir,'invalid.json');writeFileSync(file,content);
+   const r=spawnSync(process.execPath,['--import','tsx','scripts/delegated/s5-report-from-json.ts',file],{encoding:'utf8'});
+   assert.equal(r.status,2);assert.equal(r.stdout,'');assert.notEqual(r.stderr,'');
+  }
+ }finally{rmSync(dir,{recursive:true,force:true})}
+});

@@ -95,3 +95,13 @@ Gerçek manuel fiyat nesnesi `amount`, `per`, `source`, `verifiedOn` gerektirir.
 - AGENTS.md: base main dosya envanterinde bulunmadı. Açık PR listesinin ilk 100 girdisinde S4/S5 başlıklı eşleşme bulunmadı; bu tüm açık işlerin yokluğu kanıtı değildir.
 - Görevler #486/#487; güvenlik, provider settlement, fiziksel cihaz, gerçek D1, 24h soak ve kapasite kabulü test edilmedi.
 - Ana ekip talepleri: hukuki/sağlayıcı onayları, eski billing grace ile katı aday semantik arasındaki karar, güncel doğrulanmış fiyat/meter girdisi, yetkili staging bütçesi ve SLO, eski aggregate raporlar için gerekirse ayrı ham örnek export sözleşmesi. Bu talepler MAIN_TEAM_REQUESTS.md'ye koordinatör tarafından aktarılmalı; bu yardımcı dosyaya yazmadı.
+
+## İkinci tur — sınır girdileri incelemesi
+
+Eski uygulama yeni 36 testin 7'sinde başarısız oldu; düzeltme sonrası bu 36 test geçti. Ardından iki CLI regresyon testi eklendi: geçersiz JSON veya semantik girdide exit 2, boş stdout ve hata mesajı beklenir. Yalnız yerel/sentetik veri kullanılır.
+
+Düzeltmeler: sample içinde birim override reddedilir; maliyet fiyatında açık `currency` kök para birimiyle, `unit` ise ilgili metrikle uyuşmalıdır. Workload ve fiyat nesnelerindeki tanımsız anahtarlar reddedilir. `currency=UNKNOWN` yalnız null fiyatlarla kullanılabilir. İmkânsız/kanonik olmayan ölçüm tarihleri reddedilir. CSV metinlerinde formül başlangıcına tek tırnak eklenir; virgül/çift tırnak/CRLF CSV kurallarıyla korunur. Bu nedenle formül benzeri metin CSV'de bilinçli olarak değişir.
+
+Fiyat `unit` alanları: ingressRequests=`requests`, d1Reads/d1Writes=`rows`, cpuMs=`ms`, relayGB=`GB`. Alan yoksa kök currency ve metrik anahtarındaki birim kullanılır; otomatik döviz/birim dönüşümü yoktur. İstatistik nearest-rank; null süreler hariç, boşta UNKNOWN, tek örnekte üç percentile aynı değerdir. Negatif, NaN/Infinity ve taşma girdileri sayısal rapora dönüşmez. Eksik fiyat null ise UNKNOWN; fiyat alanı tamamen yoksa geçersiz şema hatasıdır. Açık doğrulanmış sıfır fiyat geçerlidir.
+
+Sınırlamalar: operatör yanlış etiketli sayıyı doğru birim diye bildirirse araç bunu keşfedemez; kaynak/fiyat doğrulaması yapmaz. CSV savunması yaygın formül başlangıçlarını nötralize eder; tüm spreadsheet import seçenekleri test edilmedi. JavaScript kayan nokta hesabı muhasebe kesinliği sağlamaz. Yerel testler kapasite, provider veya üretim kabulü değildir.

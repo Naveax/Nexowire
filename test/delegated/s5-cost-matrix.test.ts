@@ -13,3 +13,26 @@ test('metadata and price provenance required',()=>{const f=fixture();assert.thro
 test('negative price, zero denominator, future verification rejected',()=>{for(const patch of [{amount:-1},{per:0},{verifiedOn:'2027-01-01'}]){const f=fixture();Object.assign(f.prices.cpuMs!,patch);assert.throws(()=>costMatrix(f))}});
 test('zero price explicitly supplied remains zero',()=>{const f=fixture();for(const m of meters)f.prices[m]!.amount=0;assert.equal(costMatrix(f).scenarios[0]!.modeledVariableTotal,0)});
 test('nonfinite metrics rejected',()=>{const f=fixture();f.workload[0]!.perUser.cpuMs=Infinity;assert.throws(()=>costMatrix(f))});
+test('mixed explicit currency rejected',()=>{const f=fixture();Object.assign(f.prices.cpuMs!,{currency:'EUR'});assert.throws(()=>costMatrix(f))});
+test('mixed price unit rejected',()=>{const f=fixture();Object.assign(f.prices.cpuMs!,{unit:'seconds'});assert.throws(()=>costMatrix(f))});
+test('matching explicit price units and currency accepted',()=>{const f=fixture();Object.assign(f.prices.cpuMs!,{unit:'ms',currency:'TEST'});assert.equal(costMatrix(f).scenarios[0]!.knownSubtotal,210)});
+test('workload unit overrides and unknown metric keys rejected',()=>{const f=fixture();Object.assign(f.workload[0]!.perUser,{cpuSeconds:4});assert.throws(()=>costMatrix(f))});
+test('NaN Infinity negative metrics and prices rejected',()=>{for(const value of [NaN,Infinity,-1]){const f=fixture();f.workload[0]!.perUser.cpuMs=value;assert.throws(()=>costMatrix(f));const g=fixture();g.prices.cpuMs!.amount=value;assert.throws(()=>costMatrix(g))}});
+test('empty workload and absent price rejected rather than invented',()=>{assert.throws(()=>costMatrix({...fixture(),workload:[]}));const f=fixture();delete (f.prices as Partial<CostInput['prices']>).cpuMs;assert.throws(()=>costMatrix(f))});
+test('arithmetic overflow cannot serialize as null',()=>{const f=fixture();f.workload[0]!.perUser.cpuMs=Number.MAX_VALUE;assert.throws(()=>costMatrix(f))});
+test('unknown currency cannot label numeric prices',()=>{assert.throws(()=>costMatrix({...fixture(),currency:'UNKNOWN'}))});
+test('impossible pricing date rejected',()=>{const f=fixture();f.prices.cpuMs!.verifiedOn='2026-02-30';assert.throws(()=>costMatrix(f))});
+
+test('invalid cost CLI emits no misleading JSON',async()=>{
+ const {mkdtempSync,writeFileSync,rmSync}=await import('node:fs');
+ const {tmpdir}=await import('node:os');
+ const {join}=await import('node:path');
+ const {spawnSync}=await import('node:child_process');
+ const dir=mkdtempSync(join(tmpdir(),'s5-invalid-cost-cli-'));
+ try{
+  const f=fixture();Object.assign(f.prices.cpuMs!,{currency:'EUR'});
+  const file=join(dir,'invalid.json');writeFileSync(file,JSON.stringify(f));
+  const r=spawnSync(process.execPath,['--import','tsx','scripts/delegated/s5-cost-matrix.ts',file],{encoding:'utf8'});
+  assert.equal(r.status,2);assert.equal(r.stdout,'');assert.notEqual(r.stderr,'');
+ }finally{rmSync(dir,{recursive:true,force:true})}
+});
