@@ -61,12 +61,15 @@ internal static class Program
         // A public-key blob is a transport input, not a trust anchor by itself.
         // Keep its exact bytes stable for the displayed fingerprint and the
         // independently pinned authority that later verifies challenges.
-        Protocol.Require(encoded is {Length: >0 and <=1024});
+        // Explicit null rejection also gives the compiler a non-null
+        // value; Protocol.Require is deliberately not a flow annotation.
+        var input=encoded ?? throw new InvalidDataException("LOCAL_ENROLLMENT_REJECTED");
+        Protocol.Require(input.Length is >0 and <=1024);
         byte[] der;
-        try { der=Convert.FromBase64String(encoded); }
+        try { der=Convert.FromBase64String(input); }
         catch(FormatException) {throw new InvalidDataException("LOCAL_ENROLLMENT_REJECTED");}
         Protocol.Require(der.Length is >0 and <=512 &&
-            Convert.ToBase64String(der)==encoded);
+            Convert.ToBase64String(der)==input);
         using var authority=ECDsa.Create();
         try { authority.ImportSubjectPublicKeyInfo(der,out var used);
             Protocol.Require(used==der.Length && authority.KeySize==256 &&
