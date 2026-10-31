@@ -126,13 +126,16 @@ function immutableScope(
 ):Readonly<AuthenticatedGrantScope>{
   if(!candidate||typeof candidate!=='object'||Array.isArray(candidate))
     reject('BOUND_CAS_UNVERIFIED_SCOPE');
+  // The preceding runtime guard guarantees an object; keep that narrowing
+  // explicit for Reflect.ownKeys across the TypeScript compiler matrix.
+  const inspected=candidate as object;
   let descriptors:PropertyDescriptorMap;
   let keys:PropertyKey[];
   let prototype:unknown;
   try{
-    descriptors=Object.getOwnPropertyDescriptors(candidate);
-    keys=Reflect.ownKeys(candidate);
-    prototype=Object.getPrototypeOf(candidate);
+    descriptors=Object.getOwnPropertyDescriptors(inspected);
+    keys=Reflect.ownKeys(inspected);
+    prototype=Object.getPrototypeOf(inspected);
   }catch{return reject('BOUND_CAS_UNVERIFIED_SCOPE')}
   const required=['ownerId','deviceId','deviceEpoch','sessionEpoch',
     'expectedGeneration','requiredPrivilege'] as const;
