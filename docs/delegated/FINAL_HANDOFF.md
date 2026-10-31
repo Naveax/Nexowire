@@ -3,7 +3,38 @@
 **REL-03 PARTIAL. Nihai kabul / sürüm hazır / üretim PASS ilan edilmez.** Bu belge dört ayrı Draft PR'ın aşağıdaki exact-SHA snapshot'larını kapsar; branch'ler birleştirilmedi. Kaynak/sentetik belge teslimi ile gerçek ürün kabulü birbirinden ayrılır.
 
 
-## Operasyon Tur 4 — güncel GitHub uzlaştırması (1 Kasım 2026, Europe/Istanbul)
+## Operasyon Tur 5 — Ömer karar snapshot'ı (1 Kasım 2026, Europe/Istanbul)
+
+**Bu tablo tarihli exact-SHA gözlemidir.** Sonraki commit için önceki test/CI otomatik geçerli değildir; kaynakların yeni durumu [#1000](https://github.com/Naveax/Nexowire/pull/1000), [#998](https://github.com/Naveax/Nexowire/pull/998), [#997](https://github.com/Naveax/Nexowire/pull/997), [#999](https://github.com/Naveax/Nexowire/pull/999), [#989](https://github.com/Naveax/Nexowire/pull/989), [#996](https://github.com/Naveax/Nexowire/pull/996), [#995](https://github.com/Naveax/Nexowire/pull/995), [#980](https://github.com/Naveax/Nexowire/pull/980), [#1003](https://github.com/Naveax/Nexowire/pull/1003) bağlantılarından yeniden kontrol edilir. Önceki Tur 4 tablosu **tarihsel** olarak altta kalır. **26 görev** (10 PASS* yalnız destek, 12 PARTIAL, 4 BLOCKED, 0 NOT_STARTED), **31 ayrı dosya** ve **14 açık ana ekip talebi** değiştirilmedi. Ayrı SHA'larda çalıştırılmış 18/18 #998 + 44/44 #997 + 19/19 #999 = **81/81 sentetik**; **birleşik dört-PR test NOT_RUN**.
+
+| Kaynak / exact HEAD | Yeni CI ve bağımsız kaynak logu |
+|---|---|
+| Destek [#1000](https://github.com/Naveax/Nexowire/pull/1000) `10654ce1f17e7aaef5744dcd88996694e06d64d5`, [#998](https://github.com/Naveax/Nexowire/pull/998) `edc283fdbf9664225b71fa774cc95a91b2c0882b`, [#997](https://github.com/Naveax/Nexowire/pull/997) `3bdd96f10168850d04e1a0b5483ea7378bb25ac7`, [#999](https://github.com/Naveax/Nexowire/pull/999) `32a8bef1c673e284e9578b09bf32efbee65746db` | Sırayla [41245745671](https://github.com/Naveax/Nexowire/actions/runs/41245745671), [41213214191](https://github.com/Naveax/Nexowire/actions/runs/41213214191), [41217302958](https://github.com/Naveax/Nexowire/actions/runs/41217302958), [41245903639](https://github.com/Naveax/Nexowire/actions/runs/41245903639): **completed/action_required, jobs=[]**; dört PR **open/Draft/unmerged** |
+| P0 [#989](https://github.com/Naveax/Nexowire/pull/989) `bb14213b43b127724875eadd170b2d9f5f9b28d1` | [CI 41246505285](https://github.com/Naveax/Nexowire/actions/runs/41246505285) **in_progress** gözleminde [Node24 124672088208](https://github.com/Naveax/Nexowire/actions/runs/41246505285/job/124672088208) **FAILURE**: 2823 test, 2466 PASS, **1 FAIL**. `test/ai08-console-claim.test.ts:140` yeni HEAD'de de gerçek kırmızı: beklenen `acceptedEarly:false, stateAfterDeniedReadback:'unknown'`, gerçekleşen `true,'succeeded'`. Önceki `36be6880...` run'ı aktarılmadı; bu **yeni SHA'nın kendi logu** |
+| P0 düzeltme [#996](https://github.com/Naveax/Nexowire/pull/996) `71286f47b11c6ba76ea59309c5a1aba4c3ea82dd` | [CI 41246389410](https://github.com/Naveax/Nexowire/actions/runs/41246389410) **in_progress** gözleminde **Node22/Node24 SUCCESS**, browser-live in_progress. #996 **ayrı Draft**, #980 tabanında; #989'un #984 tabanıyla birlikte P0 negatif PASS yok |
+| Entegrasyon [#995](https://github.com/Naveax/Nexowire/pull/995) `49322471f4157b598fa5bfdc6ef854d5008befa3` | [Normal CI 41246895382](https://github.com/Naveax/Nexowire/actions/runs/41246895382) henüz tamamlanmamış; **[merge-tree rehearsal 41246895384](https://github.com/Naveax/Nexowire/actions/runs/41246895384) FAILURE/BLOCKED**. Son log `PR_1002_MERGE_TREE_NONZERO_1`: **#980 / #1005 / #986 MERGE_TREE_CLEAN**, **#1002 CONFLICT** `src/agent/native-agent.ts` ve `src/agent/operation-journal.ts`. Önceki #995 `9a619c9...` #980 çatışma bulgusu bu HEAD'in sonucu değildir. [#980](https://github.com/Naveax/Nexowire/pull/980) `7e4093c30c1ead3cd22888184450c34aef4737da` kendi CI [41113730982](https://github.com/Naveax/Nexowire/actions/runs/41113730982) SUCCESS olsa da semantik/üretim kabulü değil |
+| Bağlantı [#1003](https://github.com/Naveax/Nexowire/pull/1003) `30a905351c4bb91ad279e1f3532f8416c421ff67` | [CI 41246756343](https://github.com/Naveax/Nexowire/actions/runs/41246756343) **FAILURE**: Windows [browser-live 124671672695](https://github.com/Naveax/Nexowire/actions/runs/41246756343/job/124671672695) “task stop must stop the managed parent” assertion'ı **FAIL**, gerçek disposable process-tree cleanup kabulü açık; diğer altı CI işi SUCCESS. [Readiness 41246756360](https://github.com/Naveax/Nexowire/actions/runs/41246756360) gözlemde **in_progress**. Önceki `2dc3d999...` yeşil CI buraya taşınmaz |
+
+### Ömer'in karar vermesi gereken kapılar
+
+1. **P0 — Dört destek CI:** Repo maintainer `action_required` sebebini, onay yetkisini ve yeni SHA'larda gerçekten çalışmış job sonuçlarını belgelemeli; burada onay/rerun/workflow değişikliği yapılmaz.
+2. **P0 — #989:** AI-06/coordinator native readback bitmeden `complete(succeeded)` kabulünü durable verified-CAS ile engellemeli; #996 kendi Node başarısı **#989 entegre P0 PASS değildir**. Exact birleşik SHA negatif testi ve güvenlik owner onayı beklenir. **CORE production NO_GO**.
+3. **P1 — #995/#980:** #980 son provada kaynak ağacı bakımından temiz, #1002 iki Agent dosyasında çakışıyor. Entegrasyon owner'ı çatışma/sıra/semantik test kararını ve yeniden provayı üstlenmeli; sırf #980 yeşil CI merge onayı değildir.
+4. **P1 — #1003 için aşağıdaki dört koşullu kabul:** Bunlar [#1003 kaynak dokümanındaki](https://github.com/SinsiVinci/Nexowire-fork/blob/30a905351c4bb91ad279e1f3532f8416c421ff67/docs/CONNECTION_CORE_V2_CLOUDFLARE_20261101.md) şartların bu handoff için gruplamasıdır; **yeni görev ID'si veya dört PASS değildir**.
+5. **P1 — Fiziksel test lab'ı:** Yetkili owner, disposable Windows 10/11, gerçek browser/tab/a11y, iki ayrı PC/Agent, hosted OAuth, network-revoke/no-replay, WAL/SHM restart, 24 saat soak için ortam, süre, bütçe/hard-stop, readback ve rollback imzasını belirlemeli. Kanıt yoksa NOT_RUN.
+
+| #1003 dört koşullu P1 | Ömer kararı / eksik kanıt |
+|---|---|
+| **CF-P1-01: Tunnel/DNS** | Gerçek owner Cloudflare named tunnel/hostname/DNS/credential, hash-pinned resmi cloudflared, secret sahibi; gerçek public erişim yok |
+| **CF-P1-02: OAuth/MCP** | Hosted issuer + exact MCP resource eşleşmesi, authenticated ChatGPT tool ve yalnız izinli MCP/metadata routing; `401` public-doctor tek başına tam kabul değil |
+| **CF-P1-03: İkinci cihaz Agent** | Opsiyonel `publishAgentEndpoint` kararı; yalnız `NEXOWIRE_AGENT_REMOTE_AUTH_ONLY=true` + `device-bound-revalidate-v1` + gerçek device credential, revoke/no-replay; socket close geçmiş OS effect'i iptal etmez |
+| **CF-P1-04: Windows yaşam döngüsü** | Yeni HEAD'in kırmızı gerçek disposable task-stop/process-tree testinin düzeltilmesi; Limited AtLogOn, restart/uninstall, iki-PC/off-network/reboot ve kontrollü rollback kanıtı olmadan cutover yok |
+
+**Yazma/yetki sınırı:** Bu tur yalnız #999 `docs/delegated/FINAL_HANDOFF.md` ve ilgili PR açıklaması güncellenebilir. CORE, Agent, CI workflow, diğer PR, main, merge, gerçek cihaz/WAL, release/tag/deploy değiştirilmez. Şu tarihte görülen SHA'lar sonraki commit'in sonuçları diye sunulmaz.
+
+
+
+## Operasyon Tur 4 — tarihsel GitHub uzlaştırması (1 Kasım 2026, Europe/Istanbul)
 
 Bu bölüm **güncel PR metadata/commit-run API okumasıdır**. Alttaki **31 Ekim tarihsel snapshot** ve görev bazındaki eski exact-SHA/test sonuçları silinmedi; yeni commit için eski testler otomatik PASS sayılmaz. Dört PR da `open / Draft / unmerged`, ortak base `a19a228dc6f19fd484cf935e941a00ea625233f8`. Bu dosyayı değiştiren commit'in kendi SHA'sı aynı commit'in içinden önceden yazılamaz; **yeni #999 HEAD/CI, PR açıklamasında ayrıca doğrulanacaktır**.
 
