@@ -27,7 +27,7 @@ Requirement: Git 2.38+ with `git merge-tree --write-tree` support, Node 22+.
 
    ```bash
    git clone --no-checkout https://github.com/Naveax/Nexowire.git /tmp/v108-dryrun-source
-   for id in 980 1005 986 1002 994 981 982 988 983 984 993 989 987 992 985 996 990; do
+   for id in 980 1005 986 1002 994 981 982 988 983 984 993 989 987 992 985 996 1007 990 1004; do
      git -C /tmp/v108-dryrun-source fetch --no-tags origin "pull/$id/head:refs/remotes/origin/coord-pr-$id"
    done
    ```
@@ -45,7 +45,7 @@ PowerShell equivalent for fetching branches in a disposable clone:
 ```powershell
 $source = Join-Path $env:TEMP "v108-dryrun-source"
 git clone --no-checkout https://github.com/Naveax/Nexowire.git $source
-980,1005,986,1002,994,981,982,988,983,984,993,989,987,992,985,996,990 | ForEach-Object {
+980,1005,986,1002,994,981,982,988,983,984,993,989,987,992,985,996,1007,990,1004 | ForEach-Object {
   git -C $source fetch --no-tags origin "pull/$_/head:refs/remotes/origin/coord-pr-$_"
   if ($LASTEXITCODE -ne 0) { throw "PR fetch $_ failed." }
 }
@@ -98,7 +98,7 @@ physical effect-boundary evidence remain missing until independently proven.
   CI workflow and probe path conflicts are visible early. Its green source CI
   is not protected native OS proof.
 
-A 16-PR clean tree is only a Git-level hypothesis. Keep CORE NO-GO, all PRs
+A 19-PR clean tree is only a Git-level hypothesis. Keep CORE NO-GO, all PRs
 Draft, and require independent cross-version tests plus installed acceptance.
 
 ## 2026-11-01: explicit #1005 journal-owner/core composition
@@ -112,3 +112,14 @@ Any Git conflict remains a hard BLOCKED and cannot be resolved with generic
 ours/theirs selection. Even a clean tree requires the combined same-SHA native
 Agent/CORE adversarial suite. AI-07's separate child #1004 remains a review
 handoff and is not automatically counted as already merged.
+
+## Current coordinator child PR coverage (2026-11-01)
+
+The rehearsal includes latest-base child #1007 after #985 and #996, and
+latest-base child #1004 after #990. Both children were refreshed with
+non-destructive two-parent commits so no AI-owned branch was changed.
+Their integration source and negative tests still require new exact-HEAD CI;
+no source result is physical CORE consent or production authorization.
+
+Parent HEAD movement during the snapshot is a BLOCKED signal. Never dispatch
+another workflow when the same exact SHA/workflow/input is already active.

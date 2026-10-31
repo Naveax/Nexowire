@@ -28,8 +28,10 @@ export const DEFAULT_STACK=Object.freeze([
   {number:992,head:'ai/05-cas-executor',parent:980},
   {number:985,head:'ai/06-console-claim',parent:980},
   {number:996,head:'coord/core-claim-verified-ledger-20261031',parent:980},
+  {number:1007,head:'coord/native-claim-same-sha-adversarial-20261101',parent:985},
   {number:990,head:'ai/07-isolation-worker-20261031',
     base:'docs/07-task-os-sandbox-provider-contract-20261024'},
+  {number:1004,head:'coord/ai07-conflict-free-native-probe-20261101',parent:990},
 ]);
 
 const sha40=value=>typeof value==='string'&&/^[a-f0-9]{40}$/.test(value);

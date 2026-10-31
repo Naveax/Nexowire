@@ -24,8 +24,10 @@ const stack=[
   {number:992,head:'ai/05-cas-executor',parent:980},
   {number:985,head:'ai/06-console-claim',parent:980},
   {number:996,head:'coord/core-claim-verified-ledger-20261031',parent:980},
+  {number:1007,head:'coord/native-claim-same-sha-adversarial-20261101',parent:985},
   {number:990,head:'ai/07-isolation-worker-20261031',
     base:'docs/07-task-os-sandbox-provider-contract-20261024'},
+  {number:1004,head:'coord/ai07-conflict-free-native-probe-20261101',parent:990},
 ] as const;
 
 type Pr = {
@@ -117,6 +119,8 @@ test('clean source DAG gets dry-run only and does not change main/workingtree',t
   assert.ok(output.nodes?.some(n=>n.pr===1005));
   assert.ok(output.nodes?.some(n=>n.pr===1002));
   assert.ok(output.nodes?.some(n=>n.pr===994));
+  assert.ok(output.nodes?.some(n=>n.pr===1007));
+  assert.ok(output.nodes?.some(n=>n.pr===1004));
   assert.equal(output.mergeAuthorized,false);
   assert.equal(output.deployAuthorized,false);
   assert.equal(output.sourceWorkingTreeModified,false);
