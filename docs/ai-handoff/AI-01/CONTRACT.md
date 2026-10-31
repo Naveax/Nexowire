@@ -16,3 +16,5 @@
 - A nonempty current-generation frame sequence must terminate in a commit-marked frame. Reject a checksum-valid but uncommitted current-generation suffix because SQLite can ignore it and lose an operation reservation; prior-generation allocated suffix after a complete commit remains accepted.
 
 - During WAL/SHM `lstat → open → handle.stat`, device/inode **and initial size/mtime/ctime metadata** must agree. An in-place pre-open truncate/metadata drift fails closed even if the opened inode remains the same. This still does **not** provide atomic preflight-to-SQLite-open continuity.
+
+- A WAL that is **absent at the first lstat** remains a legitimate no-WAL state, but a WAL or required recycled SHM **observed present and then missing before open** must fail closed with `AgentJournalWalError` / `AGENT_JOURNAL_WAL_CORRUPT`. This preserves the journal startup diagnostic contract while retaining the original absence semantics.

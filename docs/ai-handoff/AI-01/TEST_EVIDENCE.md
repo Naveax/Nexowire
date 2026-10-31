@@ -29,3 +29,8 @@
 - New deterministic isolated test: snapshot WAL initially contains SQLite frames, `fs.open` interception truncates it *before* opening, and preflight must reject with `AGENT_JOURNAL_WAL_CORRUPT`. The test asserts DB and SHM snapshots remain intact.
 - New independent SHM test: after a genuine SQLite RESTART/recycle WAL fixture, `fs.open` interception changes only SHM timestamps, retaining every SHM byte; preflight must reject metadata drift.
 - These new tests are not claimed PASS until this **new exact HEAD** CI succeeds. Earlier CI 41199721229 was 7/7 SUCCESS on `0f6e35e5abbd0bfee006e0757f7477c2f69b2834`, not this commit. No real OS identity/atomic journal-open acceptance is inferred.
+
+## Pending exact-HEAD vanished-path race tests (new commit)
+- **Source-review finding:** a WAL or recycled SHM path disappearing between successful `lstat` and `fs.open` previously surfaced a raw `ENOENT` instead of the journal's stable `AGENT_JOURNAL_WAL_CORRUPT` fail-closed diagnostic. Opening/mutating the journal was already denied, but standard startup diagnostics were not guaranteed.
+- Two deterministic, disposable cross-platform tests intercept only the target `fs.open` call and unlink the observed WAL/SHM after initial `lstat`, asserting `AgentJournalWalError` and unchanged surviving snapshot bytes. No test is skipped; ordinary initial WAL absence still returns normally.
+- Earlier exact-head [CI 41211304023](https://github.com/Naveax/Nexowire/actions/runs/41211304023) succeeded **7/7** on `9b6464f034d67d3ade059585fe8739932733f319`, Node24 **2337 tests / 2045 PASS / 0 FAIL / 292 SKIP**; this new source commit has **no inherited PASS**. Verify new exact-head run separately.

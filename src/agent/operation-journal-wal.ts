@@ -71,7 +71,14 @@ async function readReuseIndex(dbFile:string,walHeader:Buffer,pageSize:number,
   let prior;
   try{prior=await fs.lstat(dbFile+'-shm');}catch{fail();}
   if(!prior.isFile()||prior.isSymbolicLink())fail();
-  const handle=await fs.open(dbFile+'-shm','r');
+  // If the WAL-index disappears between lstat and open, this is an
+  // inconsistent snapshot, not a generic startup I/O failure.
+  let handle:fs.FileHandle;
+  try{handle=await fs.open(dbFile+'-shm','r');}
+  catch(e){
+    if((e as NodeJS.ErrnoException).code==='ENOENT')fail();
+    throw e;
+  }
   try{
     const opened=await handle.stat();
     // Inode identity alone does not catch an in-place SHM rewrite between
@@ -120,7 +127,15 @@ export async function verifyAgentJournalWal(dbFile:string):Promise<void>{
   if(!prior.isFile()||prior.isSymbolicLink()){
     throw new AgentJournalWalError('SQLite WAL path is not a regular file.');
   }
-  const handle=await fs.open(walFile,'r');
+  // An observed WAL that vanishes before open is not the same as a WAL
+  // that was absent at initial lstat. Deny with the journal's fail-closed
+  // diagnostic code rather than leaking a raw filesystem ENOENT.
+  let handle:fs.FileHandle;
+  try{handle=await fs.open(walFile,'r');}
+  catch(e){
+    if((e as NodeJS.ErrnoException).code==='ENOENT')fail();
+    throw e;
+  }
   try{
     const opened=await handle.stat();
     // Verify pre-open metadata, not only the inode. An in-place truncate

@@ -344,3 +344,29 @@ test('recycled WAL detects byte-identical SHM metadata drift before open',async 
   assert.deepEqual(await fs.readFile(shm),f.shm,
     'rejection must be based on metadata drift, not byte corruption');
 });
+
+
+test('observed WAL disappearance before open fails with journal corruption code',async t=>{
+  const f=await fixture(t,false);
+  const wal=f.file+'-wal';
+  assert.ok(f.wal.length>32,'the initial WAL must have pending frames');
+  await atPreOpen(wal,()=>fs.unlink(wal),async()=>{
+    await assert.rejects(verifyAgentJournalWal(f.file),
+      {name:'AgentJournalWalError',code:'AGENT_JOURNAL_WAL_CORRUPT'});
+  });
+  await assert.rejects(fs.stat(wal),{code:'ENOENT'});
+  assert.deepEqual(await fs.readFile(f.file),f.main);
+  assert.deepEqual(await fs.readFile(f.file+'-shm'),f.shm);
+});
+
+test('observed recycled SHM disappearance before open denies journal startup',async t=>{
+  const f=await fixture(t,true);
+  const shm=f.file+'-shm';
+  await atPreOpen(shm,()=>fs.unlink(shm),async()=>{
+    await assert.rejects(verifyAgentJournalWal(f.file),
+      {name:'AgentJournalWalError',code:'AGENT_JOURNAL_WAL_CORRUPT'});
+  });
+  await assert.rejects(fs.stat(shm),{code:'ENOENT'});
+  assert.deepEqual(await fs.readFile(f.file),f.main);
+  assert.deepEqual(await fs.readFile(f.file+'-wal'),f.wal);
+});
