@@ -152,7 +152,8 @@ test('independent native enrollment verifier enforces real TLS transport and sco
   });
 
   await t.test('mTLS adapter bounds response bytes and absolute time, refuses redirects and never retries',async()=>{
-    let kind:'ok'|'redirect'|'large'|'slow'|'bad-type'|'missing-type'|'duplicate-type'='ok',requests=0;
+    let kind:'ok'|'redirect'|'large'|'slow'|'bad-type'|'missing-type'|'duplicate-type'|
+      'gzip'|'duplicate-encoding'|'utf8-charset'|'identity-encoding'='ok',requests=0;
     const serverCert=await readFile(path.join(root,'server.crt'),'utf8');
     const strict=createCoreNativeVerifierServer({keyPem:await readFile(path.join(root,'server.key'),'utf8'),
       certificatePem:serverCert,clientCaPem:ca.toString('utf8'),handler:(_req,res)=>{
@@ -164,8 +165,25 @@ test('independent native enrollment verifier enforces real TLS transport and sco
           res.setHeader('content-type','application/json');
           res.appendHeader('content-type','application/json');res.end('{}');return;
         }
+        if(kind==='gzip'){
+          res.writeHead(200,{'content-type':'application/json','content-encoding':'gzip'});
+          res.end('{}');return;
+        }
+        if(kind==='duplicate-encoding'){
+          res.setHeader('content-type','application/json');
+          res.setHeader('content-encoding','identity');
+          res.appendHeader('content-encoding','identity');res.end('{}');return;
+        }
+        if(kind==='utf8-charset'){
+          res.writeHead(200,{'content-type':'application/json; charset=utf-8'});
+          res.end('{}');return;
+        }
+        if(kind==='identity-encoding'){
+          res.writeHead(200,{'content-type':'application/json','content-encoding':'identity'});
+          res.end('{}');return;
+        }
         res.setHeader('content-type','application/json');
-        if(kind==='large'){res.end('x'.repeat(32769));return}
+        if(kind==='large'{res.end('x'.repeat(32769));return}
         if(kind==='slow'){
           res.writeHead(200);const timer=setInterval(()=>res.write(' '),10);
           res.once('close',()=>clearInterval(timer));return;
@@ -183,7 +201,12 @@ test('independent native enrollment verifier enforces real TLS transport and sco
       'content-type':'application/json'},body:'{}'};
     try{
       assert.equal(await (await transport(origin+'/v1/core-native-consent',options)).text(),'{}');
-      for(const mode of ['redirect','large','slow','bad-type','missing-type','duplicate-type'] as const){
+      for(const mode of ['utf8-charset','identity-encoding'] as const){
+        kind=mode;
+        assert.equal(await (await transport(origin+'/v1/core-native-consent',options)).text(),'{}');
+      }
+      for(const mode of ['redirect','large','slow','bad-type','missing-type','duplicate-type',
+        'gzip','duplicate-encoding'] as const){
         kind=mode;const before=requests;
         await assert.rejects(transport(origin+'/v1/core-native-consent',options),/REQUEST_UNKNOWN/);
         assert.equal(requests,before+1,'one HTTP request, never an automatic retry');
