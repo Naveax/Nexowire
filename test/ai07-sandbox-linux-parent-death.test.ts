@@ -78,8 +78,17 @@ int main(void){
   if(fd<0){result=52;goto cleanup;}
   if(write(ack_pipe[1],"K",1)!=1){result=53;goto cleanup;}
   int status=0;
-  if(waitpid(actor,&status,0)!=actor || !WIFEXITED(status) || WEXITSTATUS(status)!=0){result=54;goto cleanup;}
+  int reaped_actor=0;
+  for(int attempt=0;attempt<150;attempt++){
+    pid_t got=waitpid(actor,&status,WNOHANG);
+    if(got==actor){reaped_actor=1;break;}
+    if(got<0 && errno!=EINTR)break;
+    struct timespec nap={.tv_sec=0,.tv_nsec=20000000L};
+    (void)nanosleep(&nap,NULL);
+  }
+  if(!reaped_actor){result=54;goto cleanup;}
   actor=-1;
+  if(!WIFEXITED(status) || WEXITSTATUS(status)!=0){result=54;goto cleanup;}
   struct pollfd observed={.fd=fd,.events=POLLIN};
   int ok;
   do {ok=poll(&observed,1,1500);} while(ok<0 && errno==EINTR);
@@ -91,9 +100,24 @@ int main(void){
   puts("NW07_ISOLATED_PARENT_DEATH_PIDFD_KERNEL_NEGATIVE_PASS (NOT_TASK_WORKER_ACCEPTANCE)");
 cleanup:
   if(result!=0)fprintf(stderr,"NW07_KERNEL_FIXTURE_BLOCKED=%d\n",result);
-  if(actor>1){(void)kill(actor,SIGKILL);int s=0;while(waitpid(actor,&s,0)<0 && errno==EINTR){} }
+  if(actor>1){
+    (void)kill(actor,SIGKILL); /* only own unreaped test child */
+    int s=0, reaped=0;
+    for(int attempt=0;attempt<150;attempt++){
+      pid_t got=waitpid(actor,&s,WNOHANG);
+      if(got==actor){reaped=1;break;}
+      if(got<0 && errno==ECHILD){reaped=1;break;}
+      if(got<0 && errno!=EINTR)break;
+      struct timespec nap={.tv_sec=0,.tv_nsec=20000000L};
+      (void)nanosleep(&nap,NULL);
+    }
+    if(!reaped)result=58;
+  }
 #ifdef SYS_pidfd_send_signal
   if(fd>=0 && subject>1){(void)syscall(SYS_pidfd_send_signal,fd,SIGKILL,NULL,0);}
+  else if(subject>1){(void)kill(subject,SIGKILL);}
+#else
+  if(subject>1){(void)kill(subject,SIGKILL);}
 #endif
   /* Exact subreaper-owned child only: bounded wait, no arbitrary host PID. */
   if(subject>1){
@@ -106,7 +130,7 @@ cleanup:
       struct timespec nap={.tv_sec=0,.tv_nsec=20000000L};
       (void)nanosleep(&nap,NULL);
     }
-    if(subject>1 && result==0)result=57;
+    if(subject>1)result=57; /* no verified reaping means blocked */
   }
   if(fd>=0)close(fd);
   close(parent_pipe[0]);close(ack_pipe[1]);

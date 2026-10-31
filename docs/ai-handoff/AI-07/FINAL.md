@@ -46,3 +46,6 @@ Conservative combined argv length and targeted negative tests prevent source-onl
 
 ### Isolated OS kernel evidence added
 Added reproducible `test/ai07-sandbox-linux-parent-death.test.ts`: native Linux PIDFD/subreaper parent-death behavior with a deliberate RED control when fence is disabled. Isolated Linux 6.18.57/GCC 14.2 validated positive exit 0 and negative exit 55; exact repository HEAD CI pending. Production worker, Windows MSVC/AppContainer, Linux task namespace/cgroup and descendant revoke remain NO-GO.
+
+### Native test process-cleanup guarantee
+The disposable Linux kernel negative test now avoids unbounded actor `waitpid` and attempts exact-owned PIDFD/fallback cleanup plus subreaper reap on failure paths, marking uncertainty BLOCKED. Still requires exact-head CI and independent worker acceptance.

@@ -62,3 +62,6 @@ Linux diagnostic forced termination no longer abandons direct-child cleanup afte
 ## Disposable parent-death kernel negative test (31 October 2026)
 - New AI-07-owned `test/ai07-sandbox-linux-parent-death.test.ts` compiles a **test-only native fixture** on Linux and observes the exact spawned grandchild via PIDFD after parent exit. The fixture is subreaper-owned and reaped, with 8-second SIGALRM failsafe. A second compile intentionally removes parent-death fencing and requires a **blocked (exit 55)** result. No tasks, services, real users or production Agent are involved.
 - Independently validated in isolated Linux 6.18.57 x86_64 / GCC 14.2 container: source compile `exit 0`, fenced fixture `exit 0` (5 repeated runs), disabled-fence negative control `exit 55`. This only tests **kernel parent-death signaling**, not namespaces/cgroup/WFP, worker privileges or whole process-tree revoke.
+
+## Kernel fixture cleanup hardening (31 Oct 2026)
+- The new disposable parent-death test itself now bounds outer fixture-parent `waitpid` to 3 seconds and fallback cleanup to 3 seconds, then performs PIDFD or exact-owned-child termination and bounded subreaper reaping on every negative/error path. No arbitrary host process IDs are ever signalled. Unreaped exact children produce nonzero BLOCKED status.
