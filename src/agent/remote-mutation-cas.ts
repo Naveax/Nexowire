@@ -69,6 +69,11 @@ function immutableRemoteCasRequest(raw:unknown):Readonly<CasRequest>{
   return Object.freeze(parsed.data);
 }
 
+function casHttpsEndpoint(raw:string):URL{
+  try{return new URL(raw)}
+  catch{return fail('CAS_CONFIG_INVALID')}
+}
+
 /** Production accepts only a trusted HTTPS authority hosted outside rollback domain. */
 export class RemoteMutationCasClient{
   private readonly url:URL;
@@ -79,10 +84,7 @@ export class RemoteMutationCasClient{
     // The owner-enrolled witness scope and credential must not be retargeted
     // after construction by mutating a borrowed configuration object.
     this.settings=Object.freeze({...settings});
-    let endpoint:URL;
-    try{endpoint=new URL(this.settings.endpoint)}
-    catch{return fail('CAS_CONFIG_INVALID')}
-    this.url=endpoint;
+    this.url=casHttpsEndpoint(this.settings.endpoint);
     if(this.url.protocol!=='https:'||this.url.username||this.url.password||
        this.url.search||this.url.hash||this.url.pathname!=='/v1/reservations'||
        typeof this.settings.token!=='string'||this.settings.token.length<16||
