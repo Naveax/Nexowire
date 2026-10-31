@@ -27,7 +27,7 @@ Requirement: Git 2.38+ with `git merge-tree --write-tree` support, Node 22+.
 
    ```bash
    git clone --no-checkout https://github.com/Naveax/Nexowire.git /tmp/v108-dryrun-source
-   for id in 980 1005 986 1002 994 981 982 988 983 984 993 989 987 992 985 996 1007 990 1004; do
+   for id in 980 1005 981 982 988 983 984 993 989 987 992 985 996 1007 990 1004; do
      git -C /tmp/v108-dryrun-source fetch --no-tags origin "pull/$id/head:refs/remotes/origin/coord-pr-$id"
    done
    ```
@@ -45,7 +45,7 @@ PowerShell equivalent for fetching branches in a disposable clone:
 ```powershell
 $source = Join-Path $env:TEMP "v108-dryrun-source"
 git clone --no-checkout https://github.com/Naveax/Nexowire.git $source
-980,1005,986,1002,994,981,982,988,983,984,993,989,987,992,985,996,1007,990,1004 | ForEach-Object {
+980,1005,981,982,988,983,984,993,989,987,992,985,996,1007,990,1004 | ForEach-Object {
   git -C $source fetch --no-tags origin "pull/$_/head:refs/remotes/origin/coord-pr-$_"
   if ($LASTEXITCODE -ne 0) { throw "PR fetch $_ failed." }
 }
@@ -87,31 +87,27 @@ activate CORE. A conflict-free tree only proves Git composition; the AI-06
 native readback, Worker-side exact-identity CAS, signed current session and
 physical effect-boundary evidence remain missing until independently proven.
 
-## Added journal-owner and source integration gates
+## Post-release source merges and revised rehearsal (2026-11-01)
 
-- **#1002** (main-based) fixes the fatal journal-owner restart/PID-incarnation
-  class on a separate candidate branch. It is rehearsed after #986 to expose
-  source overlap with the WAL verification changes. 7/7 source CI and package
-  readiness for its exact SHA do not constitute installed Windows acceptance.
-- **#994** (main-based) provides the exact-head CI/ownership gate and protected
-  Windows WAL namespace probe. It is rehearsed before the CORE #980 stack so
-  CI workflow and probe path conflicts are visible early. Its green source CI
-  is not protected native OS proof.
+The following independently reviewed source PRs have been merged to **main**:
+- **#986** WAL valid-recycle and SHM race checks, merge `ecba7688766563ab02157309bbe9d61db231faa5`.
+- **#1002** journal-owner PID-incarnation/read-only startup, merge `0ddff39707d6c1298fb5788dcc06cf598b7c3bec`.
+- **#994** exact-head CI/ownership checks and Windows namespace diagnostic, merge `93b6df33ef58610dcfdf3584bfe774e5afa7df4d`.
 
-A 19-PR clean tree is only a Git-level hypothesis. Keep CORE NO-GO, all PRs
-Draft, and require independent cross-version tests plus installed acceptance.
+Their already-merged source heads must **not** be independently replayed
+as new merge operations. A previous 19-PR script still attempted these
+three and could report duplicate source conflicts. The revised **16-PR**
+stack starts at the *current* main and tests only open unreleased CORE,
+enrollment, CAS, QA and native sandbox dependencies. #1005 (CORE-side
+journal-owner composition) remains a child of #980 and must still be
+evaluated, because the shared CORE runtime can conflict with the now
+main-integrated Agent behavior.
 
-## 2026-11-01: explicit #1005 journal-owner/core composition
-
-Coordinator Draft [#1005](https://github.com/Naveax/Nexowire/pull/1005) is a direct
-child of #980. It preserves rollback-independent journal authority and remote
-CAS while backporting #1002's PID process-incarnation check and Windows regression.
-The 17-PR rehearsal now composes #980 -> #1005 first, then independently
-attempts #986 WAL, #1002 released-Agent candidate and #994 source evidence.
-Any Git conflict remains a hard BLOCKED and cannot be resolved with generic
-ours/theirs selection. Even a clean tree requires the combined same-SHA native
-Agent/CORE adversarial suite. AI-07's separate child #1004 remains a review
-handoff and is not automatically counted as already merged.
+An isolated Git merge-tree result is never authorization to merge, deploy,
+revoke, install or enable CORE. #974/#1001 remain OPEN until exact installed
+signed Windows acceptance; the published v1.0.8 tag was not rewritten.
+The earliest remaining conflict is a blocker and must be resolved without
+blinding 'ours/theirs' or weakening AI-08 negatives.
 
 ## Current coordinator child PR coverage (2026-11-01)
 

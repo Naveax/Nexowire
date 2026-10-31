@@ -10,9 +10,6 @@ const tool=fileURLToPath(new URL('../../scripts/coord-v108-merge-tree.mjs',impor
 const stack=[
   {number:980,head:'integration/core-after-v108-20261030',base:'main'},
   {number:1005,head:'coord/core-journal-owner-incarnation-20261101',parent:980},
-  {number:986,head:'ai/01-wal-v108',base:'main'},
-  {number:1002,head:'fix/journal-owner-restart-20261031',base:'main'},
-  {number:994,head:'coord/v108-exact-head-integration-gates-20261031',base:'main'},
   {number:981,head:'core/bounded-native-verifier-host-20261030',parent:980},
   {number:982,head:'core/native-verifier-mtls-client-20261031',parent:981},
   {number:988,head:'ai/03-native-verifier-20261031',parent:982},
@@ -78,7 +75,7 @@ function fixture(t:import('node:test').TestContext,conflict=false) {
     run(repo,['switch','--detach','-q',baseSha]);
     run(repo,['switch','-q','-c',spec.head]);
     writeFileSync(path.join(repo,'pr-'+spec.number+'.txt'),'PR '+spec.number+'\n');
-    if(conflict&&(spec.number===986||spec.number===980)){
+    if(conflict&&(spec.number===990||spec.number===980)){
       writeFileSync(path.join(repo,'conflict.txt'),'MODIFIED BY PR '+spec.number+'\n');
     }
     run(repo,['add','.']);
@@ -117,8 +114,7 @@ test('clean source DAG gets dry-run only and does not change main/workingtree',t
   assert.equal(output.status,'CLEAN_DRY_RUN');
   assert.equal(output.nodes?.length,stack.length);
   assert.ok(output.nodes?.some(n=>n.pr===1005));
-  assert.ok(output.nodes?.some(n=>n.pr===1002));
-  assert.ok(output.nodes?.some(n=>n.pr===994));
+  assert.ok(!output.nodes?.some(n=>[986,1002,994].includes(n.pr)));
   assert.ok(output.nodes?.some(n=>n.pr===1007));
   assert.ok(output.nodes?.some(n=>n.pr===1004));
   assert.equal(output.mergeAuthorized,false);
@@ -134,8 +130,8 @@ test('distinct AI PRs changing the same line result in a blocked merge',t=>{
   const {result,output}=f.execute();
   assert.equal(result.status,2,result.stderr);
   assert.equal(output.status,'BLOCKED');
-  assert.ok(output.findings?.some(x=>x.includes('PR_986_MERGE_TREE_NONZERO')));
-  const collision=output.nodes?.find(n=>n.pr===986);
+  assert.ok(output.findings?.some(x=>x.includes('PR_990_MERGE_TREE_NONZERO')));
+  const collision=output.nodes?.find(n=>n.pr===990);
   assert.ok(collision?.conflictFiles?.includes('conflict.txt'),
     'Git merge-tree should report the actual conflicting file');
   assert.equal(output.mergeAuthorized,false);
@@ -163,7 +159,7 @@ test('absent exact commit object cannot be treated as mergeable',t=>{
 
 test('a declared PR head must really descend from its exact base Git commit',t=>{
   const f=fixture(t);
-  const otherHead=f.snapshot.prs.find(p=>p.number===986)!.head.sha;
+  const otherHead=f.snapshot.prs.find(p=>p.number===990)!.head.sha;
   f.snapshot.prs.find(p=>p.number===993)!.head.sha=otherHead;
   const {result,output}=f.execute();
   assert.equal(result.status,2,result.stderr);

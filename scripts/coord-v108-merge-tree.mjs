@@ -14,9 +14,6 @@ import {fileURLToPath} from 'node:url';
 export const DEFAULT_STACK=Object.freeze([
   {number:980,head:'integration/core-after-v108-20261030',base:'main'},
   {number:1005,head:'coord/core-journal-owner-incarnation-20261101',parent:980},
-  {number:986,head:'ai/01-wal-v108',base:'main'},
-  {number:1002,head:'fix/journal-owner-restart-20261031',base:'main'},
-  {number:994,head:'coord/v108-exact-head-integration-gates-20261031',base:'main'},
   {number:981,head:'core/bounded-native-verifier-host-20261030',parent:980},
   {number:982,head:'core/native-verifier-mtls-client-20261031',parent:981},
   {number:988,head:'ai/03-native-verifier-20261031',parent:982},

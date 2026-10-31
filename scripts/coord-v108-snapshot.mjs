@@ -7,7 +7,7 @@
  * Set GITHUB_TOKEN only when extra read-only API rate limit is needed.
  */
 const repo='Naveax/Nexowire';
-const numbers=[980,1005,986,1002,994,981,982,988,983,984,993,989,987,992,985,996,1007,990,1004];
+const numbers=[980,1005,981,982,988,983,984,993,989,987,992,985,996,1007,990,1004];
 
 async function read(endpoint){
   const token=process.env.GITHUB_TOKEN?.trim();
