@@ -28,3 +28,9 @@
 - New `VerifyFailClosedRevocationEntries` uses isolated temp root to reject malformed file or directory-shaped `revoked.json` marker. Production Load does not use ambiguous `File.Exists` for revocation decision.
 - Test command (Windows CI): `dotnet build native/windows-local-enrollment/Nexowire.LocalEnrollment.csproj -c Release -o native/windows-local-enrollment/bin/qa --nologo`; `node --test --import tsx test/windows-local-enrollment-native.test.ts`; `node --test --import tsx test/core-persistent-enrollment-v2.test.ts`.
 - New exact SHA/run/exit codes require a later CI readback. Local container lacks .NET/PowerShell checkout and cannot claim local PASS. These tests do NOT prove physical Windows SCM/owner approval, TPM, restart or two-PC acceptance.
+
+## AI-02 candidate: corrupt record + wrong service principal negative
+
+- New exact-HEAD CI is required for the native `--self-test` malformed StoreConfig JSON matrix and separate non-SYSTEM uninstalled `--service` denial. No protected storage, physical device, service install, UAC or production ACL is used.
+- Expected executable exit code: 1 for non-SYSTEM diagnostic `--service`, with `LOCAL_ENROLLMENT_REJECTED` and no side effects. CNG/SCM actual privileged start/stop/crash remains NOT TESTED.
+- Last observed verified base `97cb3668fe7f37e95c9730912d6637fd0a963c56`, CI #41204589273 Windows native 4/4 PASS; overall CI status must be checked separately before claiming success.

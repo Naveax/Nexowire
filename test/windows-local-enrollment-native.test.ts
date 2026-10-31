@@ -15,7 +15,7 @@ test('actual Windows CNG non-exportable diagnostic key interoperates with v2 ver
   const exe=fileURLToPath(new URL('../native/windows-local-enrollment/bin/qa/Nexowire.LocalEnrollment.exe',import.meta.url));
   const result=spawnSync(exe,['--self-test'],{encoding:'utf8',timeout:45000,maxBuffer:65536,windowsHide:true});
   assert.ifError(result.error);assert.equal(result.status,0,result.stderr);
-  const f=JSON.parse(result.stdout) as {diagnosticOnly:boolean;privateExportDenied:boolean;localConsolePolicyTestsPassed:boolean;revocationFenceDiagnosticPassed:boolean;revokeMarkerFailClosedDiagnosticPassed:boolean;strictWireTextDiagnosticPassed:boolean;spkiBase64:string;
+  const f=JSON.parse(result.stdout) as {diagnosticOnly:boolean;privateExportDenied:boolean;localConsolePolicyTestsPassed:boolean;revocationFenceDiagnosticPassed:boolean;revokeMarkerFailClosedDiagnosticPassed:boolean;strictWireTextDiagnosticPassed:boolean;corruptStoreParserDiagnosticPassed:boolean;spkiBase64:string;
     grant:{payload:PersistentEnrollmentV2;signatureBase64:string};
     session:{payload:PersistentSessionV2;signatureBase64:string}};
   assert.equal(f.diagnosticOnly,true);assert.equal(f.privateExportDenied,true);
@@ -23,6 +23,7 @@ test('actual Windows CNG non-exportable diagnostic key interoperates with v2 ver
   assert.equal(f.revocationFenceDiagnosticPassed,true);
   assert.equal(f.revokeMarkerFailClosedDiagnosticPassed,true);
   assert.equal(f.strictWireTextDiagnosticPassed,true);
+  assert.equal(f.corruptStoreParserDiagnosticPassed,true);
   const p=f.grant.payload,s=f.session.payload;
   // Identical canonical bytes are indirectly checked by signatures from CNG;
   // the service's JSON output alone cannot establish a successful verifier.
@@ -135,4 +136,25 @@ test('Windows opt-in service uninstall defaults to read-only without touching SC
   assert.equal(report.changed,false);
   assert.equal(report.protectedStatePreserved,true);
   assert.equal(report.runtimePreserved,true);
+});
+
+test('Windows native service entry refuses standalone non-SYSTEM invocation',{
+  skip:process.platform!=='win32',timeout:60000,
+},()=>{
+  // This does not register, start, stop or delete any SCM service. It only
+  // verifies that the executable refuses a wrong OS principal before dispatch.
+  const sid=spawnSync('pwsh.exe',['-NoProfile','-NonInteractive','-Command',
+    '[Security.Principal.WindowsIdentity]::GetCurrent().User.Value'],{
+    encoding:'utf8',timeout:30000,maxBuffer:1024,windowsHide:true,
+  });
+  assert.ifError(sid.error);assert.equal(sid.status,0,sid.stderr);
+  assert.match(sid.stdout.trim(),/^S-1-\\d+(?:-\\d+)+$/);
+  assert.notEqual(sid.stdout.trim(),'S-1-5-18',
+    'Diagnostic must not invoke --service from a LocalSystem test process');
+  const exe=fileURLToPath(new URL('../native/windows-local-enrollment/bin/qa/Nexowire.LocalEnrollment.exe',import.meta.url));
+  const result=spawnSync(exe,['--service'],{
+    encoding:'utf8',timeout:15000,maxBuffer:4096,windowsHide:true,
+  });
+  assert.ifError(result.error);assert.equal(result.status,1,result.stderr);
+  assert.match(result.stderr,/LOCAL_ENROLLMENT_REJECTED/);
 });

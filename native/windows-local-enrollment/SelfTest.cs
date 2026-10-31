@@ -69,6 +69,34 @@ internal static class SelfTest
             Protocol.Require(denied);
         }
     }
+    private static void VerifyCorruptedProtectedRecordParser()
+    {
+        // Serializer-only store fixture. Does NOT touch protected ProgramData,
+        // SCM, CNG keys, the real owner's grant or any local approval.
+        var safe=new StoreConfig(1,"S-1-5-21-100-200-300-1001",
+            "11111111-1111-4111-8111-111111111111",
+            "22222222-2222-4222-8222-222222222222",
+            "diagnostic-owner-0001",
+            "Nexowire.LocalEnrollment.33333333-3333-4333-8333-333333333333",
+            "Microsoft Software Key Storage Provider","dGVzdA==");
+        var serialized=JsonSerializer.SerializeToUtf8Bytes(safe,Protocol.Json);
+        Protocol.Require(Protocol.Read<StoreConfig>(serialized)==safe);
+        foreach(var malformed in new byte[][]{
+            Array.Empty<byte>(),
+            new byte[]{0xff,0x00,0x01},
+            new byte[16385],
+            System.Text.Encoding.UTF8.GetBytes("{\"version\":1,\"version\":1}"),
+            System.Text.Encoding.UTF8.GetBytes("{\"version\":1}"),
+            System.Text.Encoding.UTF8.GetBytes("{\"version\":1,\"extra\":true}"),
+            System.Text.Encoding.UTF8.GetBytes("{\"version\":")
+        })
+        {
+            var rejected=false;
+            try{Protocol.Read<StoreConfig>(malformed);}
+            catch(Exception e) when(e is InvalidDataException or JsonException){rejected=true;}
+            Protocol.Require(rejected);
+        }
+    }
     private static void VerifyIpcFraming()
     {
         // Strict parser-only contract tests. No SCM, pipe, grant or consent.
@@ -193,6 +221,7 @@ internal static class SelfTest
     }
     internal static void Run()
     {
+        VerifyCorruptedProtectedRecordParser();
         VerifyFailClosedRevocationEntries();
         VerifyStrictNativeWireText();
         VerifyIpcFraming();
@@ -231,7 +260,7 @@ internal static class SelfTest
             catch(InvalidDataException){duplicateDenied=true;}Protocol.Require(duplicateDenied);
             Console.WriteLine(JsonSerializer.Serialize(new {diagnosticOnly=true,privateExportDenied=denied,
                 localConsolePolicyTestsPassed=true,revocationFenceDiagnosticPassed=true,finalSessionFreshnessTestsPassed=true,
-                revokeMarkerFailClosedDiagnosticPassed=true,strictWireTextDiagnosticPassed=true,
+                revokeMarkerFailClosedDiagnosticPassed=true,strictWireTextDiagnosticPassed=true,corruptStoreParserDiagnosticPassed=true,
                 spkiBase64=Convert.ToBase64String(spki),grant=new SignedGrant(grant,signature),
                 session=new SignedSession(session,sessionSig)},Protocol.Json));
         }

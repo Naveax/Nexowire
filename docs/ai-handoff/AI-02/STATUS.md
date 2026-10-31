@@ -1,17 +1,11 @@
 # AI-02 status | 31 October 2026
 
-- **State:** IN_PROGRESS / source-only / Draft PR [#993](https://github.com/Naveax/Nexowire/pull/993).
-- **Branch:** `ai/02-enrollment-hardening-20261031`, parent Draft #984 `local/persistent-enrollment-v2-20261031`.
-- **Exact #984 parent:** `9d0f35607d4cde87bd031e2da77855cfaf570c31`; do not retarget to main.
-- **Prior AI-02 exact HEAD:** `a847fa10047a738b175ffd71a981791c6cfffab8`, CI [41196792149](https://github.com/Naveax/Nexowire/actions/runs/41196792149) **SUCCESS 8/8**.
-- **Immediate previous HEAD:** `e39cbfe29ac5cdb92a89b7b3abf5a253413c883a`; CI [41198403395](https://github.com/Naveax/Nexowire/actions/runs/41198403395) observed 7/8 SUCCESS, browser-live pending; actual Windows .NET10 build 0 warnings/errors, native 4/4 PASS and package artifact produced. Never transfer this evidence to a newer SHA.
-- **Next source candidate:** Cross-process protected revocation/attestation file-sharing fence; staged as a single child commit. Exact new SHA and workflow run must be confirmed after push.
-- No existing agent branch changed, no merge/rebase/force-push, no live OS/device/service/Agent/Broker/UAC, no private user data.
-- **CORE:** disabled; `mayDispatch=false`; production **NO-GO**. The independent verifier and protected Agent executable/identity trust remain coordinator and AI-03 handoffs.
-- **Next:** exact-HEAD CI and independent AI-08 review, no QA skip. If a platform-specific acceptance test cannot run, mark it NOT TESTED.
-
-## 31 Oct 2026 | additional source review
-
-- Verified prior exact HEAD `0bdf0849d7815e3fad09875516f04521d22e025f`, CI `41200786909` SUCCESS 8/8.
-- Source candidate: C# strict end anchor, ambiguous revoke marker fail-closed, disposable negative regressions; exact new head/run must be recorded after push. No premature PASS.
-- Ownership unchanged, Draft #993 on #984, CORE disabled, no live or merge/deploy action.
+- **State:** IN_PROGRESS / source-only; **production CORE NO-GO**.
+- **Draft PR:** https://github.com/Naveax/Nexowire/pull/993 ; branch `ai/02-enrollment-hardening-20261031`.
+- **Base Draft #984 exact SHA:** `9d0f35607d4cde87bd031e2da77855cfaf570c31`; do not merge or rebase main.
+- **Last verified branch HEAD before this source candidate:** `97cb3668fe7f37e95c9730912d6637fd0a963c56`.
+- **CI:** [run 41204589273](https://github.com/Naveax/Nexowire/actions/runs/41204589273), last observed 7/8 SUCCESS with browser-live IN_PROGRESS; native Windows job SUCCESS 4/4. This exact evidence must not be transferred to a new SHA.
+- **Candidate source:** strict native C# `\\z` end-of-input anchors for grant/session, fail-closed revocation marker enumeration; disposable corrupt-store wire parser and rejected non-SYSTEM uninstalled-service entry test. All negative assertions retained, no bypass or owner approval simulation.
+- **New candidate HEAD:** read live PR metadata after commit; check matching CI run ID before marking code REVIEW. Never initiate a duplicate exact SHA run.
+- **No physical Windows service/PC, actual owner UAC, Agent/Hub/Broker, ACL/DPAPI changes, merge, deploy or release.**
+- **Next:** exact-HEAD C# build, native tests, Node 22/24 and full CI; AI-08 adversarial source review; coordinator/AI-03 external issuer, process trust and revoke integration.

@@ -1,24 +1,29 @@
-# AI-02 | source contract: persistent local Windows enrollment v2
+# AI-02 | Windows persistent local enrollment v2 contract
 
-## Identity and durable enrollment
+## Authority and local consent
 
-- An elevated same-SID owner must explicitly approve a visible enrollment ceremony on the **active local physical console**. Windows WTS active-console ID, protocol type (0 = local), connect state (0 = active) are read from the OS and rechecked after the visible confirmation. Remote/RDP and switched/disconnected sessions fail closed. No UAC automation.
-- CNG ES256-P1363 protected grant contains owner account ID, Windows SID, device UUID, installation UUID, enrollment UUID, machine-binding hash, signer SPKI hash, generation and original consent. `expiresAt=null` is **not** a command permit or an indefinite per-command approval.
-- The C#/TypeScript account grammar is `^[A-Za-z0-9._:@-]{8,128}$`. v1 Ed25519 and v2 P-256 are never interchangeable.
-- Service incarnation and OS console token SID/session/LUID form a fresh witness. `bootId` identifies a service incarnation, not the kernel boot ID. Old/replayed/wrong-session proof denies.
+- An elevated owner must visibly approve enrollment from the OS-reported active local console; prior and final WTS session/protocol/state readback is required. Remote/RDP/disconnected or changed SID/session/LUID fails closed. `bootId` identifies a service incarnation, **not** kernel OS boot.
+- Grant v2 uses ES256-P1363 CNG P-256 with protected machine key, linked owner account ID, Windows SID, device/installation/enrollment UUID, machine-binding SHA-256, issuer SPKI SHA-256, generation, consent timestamp, `expiresAt=null`. This record is a persistent enrollment, **not** per-operation consent or UAC/CORE execution permission.
+- Native canonical text validation requires true end-of-input (`\\z`) for ASCII owner ID, SID, lowercase SHA-256 and logon LUID. JS wire schema independently rejects real trailing newlines. Signed domain prefixes `nexowire.local.enrollment.v2\\0` and `nexowire.local.session.v2\\0` must remain distinct from authority challenge bytes.
+- Invalid/absent protected store, nonce replay, expired challenge, incorrect owner/device/installation or opaque session state deny. A `revoked.json` entry, even malformed or directory-shaped, denies; enumeration errors are not treated as marker absence. This local marker is **not anti-rollback authority**.
 
-## IPC and revocation
+## Native IPC and revoke
 
-- Local-only `\\.\pipe\Nexowire.LocalEnrollment.v2`; maximum request/response 16384 bytes with little-endian length framing.
-- Owner SID and native session/console evidence are necessary, but insufficient to authenticate the calling **Agent executable**. Any trusted client must separately verify issuer pin, signed scope, current external revoke/generation and one-use admission.
-- `status` is diagnostic; a successful `attest` frame requires a witness object; `status` forbids a witness object. Both require `mayDispatch:false`, not the remote permission to execute.
-- Rejected requests return generic bounded denial when the peer remains connected, or no response after disconnect/timeout. The nonce claim remains consumed after a lost ACK.
-- An exclusive file-sharing fence in the protected `ProgramData\NexowireLocalEnrollment` root is held across attestation signing/response and the revoke marker's revalidation/write. A dead/stuck fence times out and denies, never bypasses revocation. A crashed process releases its kernel file handle; the durable revoked marker remains. This does **not** establish local rollback resistance.
-- `scripts/local-enrollment/install.ps1` preflight additionally compares exact device/installation UUID and owner account between request and independent Agent identity; missing fields deny. This does not authenticate a caller-supplied Agent identity file.
-- `scripts/local-enrollment/uninstall.ps1` defaults to read-only, and actual service removal requires existing durable revoke, exact service identity, local elevated interactive operator confirmation. No Agent/Broker deletion, no protected evidence purge.
+- Pipe `\\\\.\\pipe\\Nexowire.LocalEnrollment.v2` is local-only, 4-byte little-endian length, 1..16384 bytes JSON v2. Impersonated owner SID and current native active-console session/LUID are mandatory. Same-user executable trust is not established by SID alone.
+- `status` and `attest` both hold the protected exclusive local revoke fence while reading current state and emitting the bounded response. `attest` additionally requires an independently signed authority challenge and durably consumes the nonce before witness signing. At the last pre-send boundary, native OS session identity, grant/revocation readback, challenge deadline and cancellation are rechecked. Lost ACK never replays a nonce.
+- A successful v2 response has `version:2`, `verified:true`, fixed fields `grant,spkiBase64,keyProvider,evidence,witness,mayDispatch:false`; `status` witness is null, `attest` witness is an object. Duplicate/unknown/missing fields or any `mayDispatch:true` are protocol errors. A generic bounded denial or disconnected peer is **never** a success.
+- `EnrollmentClient.RequireAcceptedFrame` checks shape only; the independent Agent verifier must pin the native issuer key, verify *both* signed grant and witness with explicit scope, and require independent freshness/revocation/CAS proof. Native output alone cannot authorize execution.
 
-## Cross-module handoffs
+## Installer / protected storage
 
-AI-03 owns issuer challenge issuance, pinned mTLS and independent verifier, persistent outside-host grant/revoke generations and replay/CAS history. The coordinator owns authenticated installed Agent identity and process/publisher trust plus shared Agent integration. AI-08 independently audits source and negative tests. AI-02 does not change those owners' files.
+- `scripts/local-enrollment/install.ps1` is opt-in, exact two-device allowlist, manifest/hash/runtime/owner/device/installation preflight, read-only by default (`-PreflightOnly`). Missing Agent identity fields deny. An arbitrary caller-provided `AgentIdentityFile` is not independent trusted installation provenance: coordinator P0 must supply authentication.
+- `scripts/local-enrollment/uninstall.ps1` defaults to read-only; actual service-only removal requires persisted local revoke, exact binary/SCM identity and explicit interactive elevated typed confirmation. It preserves CNG key, nonce ledger, revoke evidence and original Agent/Broker.
+- Host-level SCM start/stop, hostile pipe peer, crash/restart, machine rollback, hardware TPM and owner physical approval **are not proven** by diagnostic tests.
 
-CORE stays disabled, never infer physical/local enrollment from synthetic fixtures. Production **NO-GO** until separate Windows SCM/IPC/TPM/reboot/offline acceptance and independent security review.
+## Independent owner handoffs
+
+- AI-03: pinned mTLS verifier, independent challenge signer, current durable grant/revoke generations, replay/one-use CAS and final dispatch gate. Deny missing freshness or UNKNOWN.
+- Coordinator: authenticated Agent executable/installation identity provenance and OS process trust, signed packaging/real Win32 integration. No arbitrary caller-selected identity JSON accepted as authority.
+- AI-08: independent adversarial QA on **exact PR HEAD**, not borrowed green parent SHA.
+
+**Production verdict: NO-GO; CORE disabled; `mayDispatch=false`.**

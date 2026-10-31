@@ -1,13 +1,11 @@
-# AI-02 | interim handoff, Draft PR #993
+# AI-02 | interim source delivery
 
-- **Verdict:** SOURCE CANDIDATE / TESTING / **PRODUCTION NO-GO**. No physical enrollment or privileged dispatch approval.
-- **Branch:** `ai/02-enrollment-hardening-20261031`, stacked on Draft #984 `local/persistent-enrollment-v2-20261031`; parent exact SHA `9d0f35607d4cde87bd031e2da77855cfaf570c31`.
-- **PR:** https://github.com/Naveax/Nexowire/pull/993 (Draft; not merged).
-- **Changed paths:** only `native/windows-local-enrollment/**`, `scripts/local-enrollment/**`, `src/protocol/core-persistent-enrollment-v2.ts`, `test/core-persistent-enrollment-v2.test.ts`, `test/windows-local-enrollment-native.test.ts`, `docs/ai-handoff/AI-02/**`.
-- **Delivered:** strict C#↔TS account ID canonicalization; bounded IPC denial/operation-sensitive response framing; owner+installation preflight; revoke-first uninstall; active local WTS console gate on visible enrollment/revocation; native signed witness readback; protected cross-process revoke/attest exclusion; disposable negative diagnostics.
-- **Verified prior exact-head:** `a847fa10047a738b175ffd71a981791c6cfffab8`, CI 41196792149 **SUCCESS 8/8**.
-- **Immediate previous exact-head:** `e39cbfe29ac5cdb92a89b7b3abf5a253413c883a`, CI 41198403395 observed 7/8 SUCCESS, browser-live still running at last check; no full PASS claim.
-- **New candidate HEAD/run:** record new exact HEAD and its CI result before review; do not inherit green runs from older SHAs. There was no manual rerun/dispatch of an active identical SHA.
-- **Mock vs real:** Windows runner CNG and file-sharing self-tests operate on disposable test material; no installed Windows SCM service or true owner ceremony, no real TPM or two-PC acceptance.
-- **Open P0:** authentic Agent installation identity provenance, hardened same-user pipe process authentication, independent external revocation/rollback witness, negative real-service crash/offline/hostile-client tests. These belong to integration requests and independent owners.
-- **No merge, deploy, live devices, UAC, ACL, production services, owner journal/database, or CORE flag changes.**
+- **Verdict:** SOURCE CANDIDATE / REVIEW AFTER EXACT-HEAD CI; **PRODUCTION NO-GO**.
+- **Draft PR:** https://github.com/Naveax/Nexowire/pull/993 ; branch `ai/02-enrollment-hardening-20261031`, open, unmerged.
+- **Stack base:** #984 `9d0f35607d4cde87bd031e2da77855cfaf570c31` (parent #983). New source HEAD is the PR's current live SHA; do not infer from parent.
+- **Known previous source HEAD:** `97cb3668fe7f37e95c9730912d6637fd0a963c56`, [run 41204589273](https://github.com/Naveax/Nexowire/actions/runs/41204589273) observed 7/8 SUCCESS with Windows native 4/4 PASS and browser-live pending. This is historical, not green proof for future commits.
+- **Implemented in AI-02-only paths:** C#↔TypeScript canonical v2 signed wire, protected CNG and local-store validation, native active-console and SID/session/LUID readback, bounded IPC denial and fixed `mayDispatch=false`, one-use challenge nonce, revoke/attest exclusive fence, explicit read-only installer identity preflight and revoke-first service-only uninstall, corrupted revoke marker handling, disposable clock/malformed message/ACL/parser tests.
+- **Current staged negatives requiring new exact SHA CI:** malformed protected-record JSON/UTF-8/missing-required/unknown/duplicate/oversized cases; uninstalled Windows `--service` entry must reject non-LocalSystem runner before any SCM operation. All tests remain enforced, not skipped or replaced by synthetic PASS.
+- **Not tested:** actual installed SCM service with start/stop/restart, physical owner UAC approval, host corrupt protected ProgramData, malicious same-user pipe client process trust, real TPM hardware/DPAPI state, offline external CAS revoke/rollback, two production PCs. Disposable CNG/self-test/packaging evidence is not physical acceptance.
+- **External blockers:** coordinator-protected authenticated Agent identity and same-user client executable provenance; AI-03 independent mTLS/issuer pin/revoke ledger/generation/CAS; AI-08 independent adversarial review; disposable Windows service lifecycle and recovery acceptance. See `INTEGRATION_REQUEST.md`.
+- **No merge, deploy, main/workflow/shared file changes, CORE activation, localEnrolled/active forging, live device/Agent/Hub/Broker/UAC/ACL modification.**

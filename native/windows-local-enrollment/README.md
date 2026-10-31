@@ -172,3 +172,14 @@ Both success envelopes must declare `mayDispatch:false` and are **still
 untrusted until independently cryptographically verified and pinned**.
 Disposable self-tests retain positive status/attest controls and explicit
 negative malformed/duplicate/downgrade cases; no enrollment or SCM actions.
+
+## AI-02 disposable negative: protected-record parser and service principal
+
+The native self-test now feeds empty, invalid UTF-8, overlong, duplicate,
+unknown, missing-required and truncated protected-store wire records to the
+bounded strict JSON reader. These must all reject and never be treated as a
+restored enrollment. An independent runner test calls the *uninstalled*
+`--service` entry as a non-LocalSystem principal and verifies it exits with
+a generic denial, without calling SCM or modifying any service, ACL, key or
+owner data. These **do not** test a real installed service restart/recovery;
+independent disposable SCM acceptance is still mandatory.
