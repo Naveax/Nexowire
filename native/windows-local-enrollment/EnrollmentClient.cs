@@ -7,6 +7,19 @@ namespace Nexowire.LocalEnrollment;
 
 internal static class EnrollmentClient
 {
+    // Framing/denial validation is not authorization. A separate Agent verifier
+    // must pin the installed device key and verify signed grant/witness scope.
+    internal static void RequireAcceptedFrame(JsonElement root)
+    {
+        Protocol.Require(root.ValueKind==JsonValueKind.Object &&
+            root.TryGetProperty("version",out var version) &&
+            version.ValueKind==JsonValueKind.Number && version.TryGetInt32(out var v) && v==2 &&
+            root.TryGetProperty("verified",out var verified) && verified.ValueKind==JsonValueKind.True &&
+            root.TryGetProperty("mayDispatch",out var dispatch) && dispatch.ValueKind==JsonValueKind.False &&
+            root.TryGetProperty("grant",out var grant) && grant.ValueKind==JsonValueKind.Object &&
+            root.TryGetProperty("evidence",out var evidence) && evidence.ValueKind==JsonValueKind.Object &&
+            !root.TryGetProperty("error",out _));
+    }
     [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)]
     private static extern SafePipeHandle CreateFileW(string name,uint access,uint share,IntPtr sa,
         uint disposition,uint flags,IntPtr template);
@@ -42,6 +55,7 @@ internal static class EnrollmentClient
         // Wire bytes alone are UNTRUSTED. The Agent/independent verifier must
         // validate the provisioned issuer pin and signed scope before use.
         using var doc=JsonDocument.Parse(response);
+        RequireAcceptedFrame(doc.RootElement);
         Console.WriteLine(doc.RootElement.GetRawText());
     }
 }
