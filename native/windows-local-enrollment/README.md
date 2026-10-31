@@ -107,3 +107,19 @@ The targeted Windows CI tests exercise CNG diagnostics, strict response-frame
 validation and disposable read-only installer/uninstaller preflights. They do
 not prove actual hostile-client IPC containment, service crash recovery,
 installer rollback, TPM trust, unattended reboot operation or two-PC acceptance.
+
+## AI-02 physical-console ceremony fence (Draft only)
+
+The elevated enrollment/revocation UI now requires a live *active local console*
+Windows session. The native WTS console session ID, client protocol type (0 =
+local), and connect state (active) must agree, and the console session ID is
+rechecked after each WTS read. Enrollment checks immediately before displaying
+and again after the user confirms; switching to RDP or disconnecting during the
+ceremony rejects the grant before protected storage is written. The service
+reuses the same native checks for client attestation. Synthetic snapshot policy
+tests are **not physical approval** and do not activate CORE.
+
+The diagnostic `--attest` client additionally refuses a success frame with a
+missing or null witness. The `--status` client refuses an unexpected witness
+object. This is strict response framing only; cryptographic verification and
+fresh independent issuer/revocation state remain external requirements.

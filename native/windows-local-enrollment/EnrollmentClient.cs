@@ -9,8 +9,9 @@ internal static class EnrollmentClient
 {
     // Framing/denial validation is not authorization. A separate Agent verifier
     // must pin the installed device key and verify signed grant/witness scope.
-    internal static void RequireAcceptedFrame(JsonElement root)
+    internal static void RequireAcceptedFrame(JsonElement root,string operation)
     {
+        Protocol.Require(operation is "status" or "attest");
         Protocol.Require(root.ValueKind==JsonValueKind.Object &&
             root.TryGetProperty("version",out var version) &&
             version.ValueKind==JsonValueKind.Number && version.TryGetInt32(out var v) && v==2 &&
@@ -19,6 +20,10 @@ internal static class EnrollmentClient
             root.TryGetProperty("grant",out var grant) && grant.ValueKind==JsonValueKind.Object &&
             root.TryGetProperty("evidence",out var evidence) && evidence.ValueKind==JsonValueKind.Object &&
             !root.TryGetProperty("error",out _));
+        var hasWitness=root.TryGetProperty("witness",out var witness);
+        Protocol.Require(operation=="attest"
+            ? hasWitness && witness.ValueKind==JsonValueKind.Object
+            : !hasWitness || witness.ValueKind==JsonValueKind.Null);
     }
     [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)]
     private static extern SafePipeHandle CreateFileW(string name,uint access,uint share,IntPtr sa,
@@ -55,7 +60,7 @@ internal static class EnrollmentClient
         // Wire bytes alone are UNTRUSTED. The Agent/independent verifier must
         // validate the provisioned issuer pin and signed scope before use.
         using var doc=JsonDocument.Parse(response);
-        RequireAcceptedFrame(doc.RootElement);
+        RequireAcceptedFrame(doc.RootElement,operation);
         Console.WriteLine(doc.RootElement.GetRawText());
     }
 }

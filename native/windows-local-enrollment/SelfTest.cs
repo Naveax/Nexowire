@@ -9,7 +9,9 @@ internal static class SelfTest
     {
         // Disposable parser-only tests: no SCM, pipe, grant or user approval.
         using(var accepted=JsonDocument.Parse("""{"version":2,"verified":true,"mayDispatch":false,"grant":{},"evidence":{}}"""))
-            EnrollmentClient.RequireAcceptedFrame(accepted.RootElement);
+            EnrollmentClient.RequireAcceptedFrame(accepted.RootElement,"status");
+        using(var acceptedAttest=JsonDocument.Parse("""{"version":2,"verified":true,"mayDispatch":false,"grant":{},"evidence":{},"witness":{}}"""))
+            EnrollmentClient.RequireAcceptedFrame(acceptedAttest.RootElement,"attest");
         foreach(var input in new[]{
             """{"version":2,"verified":false,"mayDispatch":false,"grant":{},"evidence":{}}""",
             """{"version":2,"verified":true,"mayDispatch":true,"grant":{},"evidence":{}}""",
@@ -20,10 +22,33 @@ internal static class SelfTest
         {
             using var doc=JsonDocument.Parse(input);
             var denied=false;
-            try{EnrollmentClient.RequireAcceptedFrame(doc.RootElement);}
+            try{EnrollmentClient.RequireAcceptedFrame(doc.RootElement,"status");}
             catch(InvalidDataException){denied=true;}
             Protocol.Require(denied);
         }
+        foreach(var input in new[]{
+            """{"version":2,"verified":true,"mayDispatch":false,"grant":{},"evidence":{},"witness":null}""",
+            """{"version":2,"verified":true,"mayDispatch":false,"grant":{},"evidence":{}}"""
+        })
+        {
+            using var doc=JsonDocument.Parse(input);
+            var denied=false;
+            try{EnrollmentClient.RequireAcceptedFrame(doc.RootElement,"attest");}
+            catch(InvalidDataException){denied=true;}
+            Protocol.Require(denied);
+        }
+    }
+    private static void VerifyConsoleSnapshotPolicy()
+    {
+        // Pure, synthetic facts only; no enrollment, WTS impersonation or
+        // physical owner approval is performed by this self-test.
+        Protocol.Require(WindowsSessionEvidence.ActiveLocalConsoleFacts(4,4u,0,0));
+        foreach(var item in new (int Session,uint Console,short Protocol,int State)[]{
+            (0,4u,0,0),(4,5u,0,0),(4,uint.MaxValue,0,0),
+            (4,4u,2,0),(4,4u,0,4),(4,4u,0,1)
+        })
+            Protocol.Require(!WindowsSessionEvidence.ActiveLocalConsoleFacts(
+                item.Session,item.Console,item.Protocol,item.State));
     }
     internal static void MachineKey()
     {
@@ -49,6 +74,7 @@ internal static class SelfTest
     internal static void Run()
     {
         VerifyIpcFraming();
+        VerifyConsoleSnapshotPolicy();
         // Disposable CURRENT USER diagnostic key only. Never invokes consent,
         // creates a machine grant, changes SCM, or touches ProtectedStore.Root.
         var name="Nexowire.Diagnostic."+Guid.NewGuid().ToString("D");
@@ -80,7 +106,7 @@ internal static class SelfTest
             try{Protocol.Read<Session>(System.Text.Encoding.UTF8.GetBytes("{\"version\":2,\"version\":2}"));}
             catch(InvalidDataException){duplicateDenied=true;}Protocol.Require(duplicateDenied);
             Console.WriteLine(JsonSerializer.Serialize(new {diagnosticOnly=true,privateExportDenied=denied,
-                spkiBase64=Convert.ToBase64String(spki),grant=new SignedGrant(grant,signature),
+                localConsolePolicyTestsPassed=true,spkiBase64=Convert.ToBase64String(spki),grant=new SignedGrant(grant,signature),
                 session=new SignedSession(session,sessionSig)},Protocol.Json));
         }
         finally{key.Delete();}

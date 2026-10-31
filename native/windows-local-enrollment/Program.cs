@@ -33,8 +33,10 @@ internal static class Program
                 ProtectedStore.RequireAdministrator();
                 var (c,g)=ProtectedStore.Load();RequireOwner(c.OwnerSid);
                 Protocol.Require(Environment.UserInteractive && Process.GetCurrentProcess().SessionId>0);
+                WindowsSessionEvidence.RequireActiveLocalConsole(Process.GetCurrentProcess().SessionId);
                 Protocol.Require(MessageBoxW(IntPtr.Zero,"Bu bilgisayardaki kalıcı Nexowire kaydı iptal edilsin mi?\n"+
                     "Yeniden etkinleştirme yeni yerel onay gerektirir.","Nexowire — Kaydı iptal et",0x00010000|0x00000100|0x00000004|0x00000030)==6);
+                WindowsSessionEvidence.RequireActiveLocalConsole(Process.GetCurrentProcess().SessionId);
                 ProtectedStore.WriteNew("revoked.json",new {version=1,enrollmentId=g.Payload.EnrollmentId,
                     generation=g.Payload.Generation,revokedAtMs=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()});
                 return 0;
@@ -54,6 +56,7 @@ internal static class Program
     {
         ProtectedStore.RequireAdministrator();
         Protocol.Require(Environment.UserInteractive && Process.GetCurrentProcess().SessionId>0);
+        WindowsSessionEvidence.RequireActiveLocalConsole(Process.GetCurrentProcess().SessionId);
         var info=new FileInfo(path);Protocol.Require(info.Exists&&info.Length<=16384&&
             (info.Attributes&FileAttributes.ReparsePoint)==0);
         var request=Protocol.Read<EnrollmentRequest>(File.ReadAllBytes(path));RequireOwner(request.OwnerSid);
@@ -83,6 +86,9 @@ internal static class Program
             "Bu kayıt tek başına uzaktan komut yetkisi veya UAC otomasyonu vermez.",
             "Nexowire — Kalıcı yerel kayıt",0x00010000|0x00000100|0x00000004|0x00000030);
         Protocol.Require(approved==6);
+        // An RDP switch or detached/locked console during the visible UI
+        // invalidates this ceremony; no protected grant is created.
+        WindowsSessionEvidence.RequireActiveLocalConsole(Process.GetCurrentProcess().SessionId);
         ProtectedStore.CreateRoot();
         using var key=ProtectedStore.CreateKey(keyName,provider);
         using var signer=new ECDsaCng(key);

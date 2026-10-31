@@ -18,6 +18,31 @@ internal static class WindowsSessionEvidence
     private static extern bool WTSQuerySessionInformationW(IntPtr server,uint session,int informationClass,
         out IntPtr buffer,out uint bytes);
     [DllImport("wtsapi32.dll")] private static extern void WTSFreeMemory(IntPtr buffer);
+    // Pure policy used by diagnostics. This is not OS evidence until all four
+    // facts are obtained from Windows for the same active console session.
+    internal static bool ActiveLocalConsoleFacts(int sessionId,uint consoleId,short protocolType,int state) =>
+        sessionId>0 && consoleId!=uint.MaxValue && (uint)sessionId==consoleId &&
+        protocolType==0 && state==0;
+
+    internal static void RequireActiveLocalConsole(int sessionId)
+    {
+        var consoleId=WTSGetActiveConsoleSessionId();
+        Protocol.Require(sessionId>0 && consoleId!=uint.MaxValue && (uint)sessionId==consoleId);
+        Protocol.Require(WTSQuerySessionInformationW(IntPtr.Zero,consoleId,16,out var protocolBuffer,out var protocolBytes));
+        short protocolType;
+        try {Protocol.Require(protocolBuffer!=IntPtr.Zero && protocolBytes>=2);
+            protocolType=Marshal.ReadInt16(protocolBuffer);}
+        finally {if(protocolBuffer!=IntPtr.Zero)WTSFreeMemory(protocolBuffer);}
+        Protocol.Require(WTSQuerySessionInformationW(IntPtr.Zero,consoleId,8,out var stateBuffer,out var stateBytes));
+        int state;
+        try {Protocol.Require(stateBuffer!=IntPtr.Zero && stateBytes>=4);
+            state=Marshal.ReadInt32(stateBuffer);}
+        finally {if(stateBuffer!=IntPtr.Zero)WTSFreeMemory(stateBuffer);}
+        // Recheck the active console at the end: session switching midway
+        // through native WTS queries must fail closed.
+        Protocol.Require(ActiveLocalConsoleFacts(sessionId,consoleId,protocolType,state) &&
+            WTSGetActiveConsoleSessionId()==consoleId);
+    }
     internal static SessionEvidence CaptureImpersonated(string ownerSid)
     {
         using var identity=WindowsIdentity.GetCurrent(true);
@@ -26,11 +51,8 @@ internal static class WindowsSessionEvidence
         Protocol.Require(GetTokenInformation(identity!.AccessToken,10,stats,(uint)stats.Length,out var count)&&count<=stats.Length);
         Protocol.Require(GetTokenInformation(identity.AccessToken,12,session,4,out count)&&count==4);
         var sessionId=System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(session);
-        Protocol.Require(sessionId>0 && sessionId==WTSGetActiveConsoleSessionId());
-        Protocol.Require(WTSQuerySessionInformationW(IntPtr.Zero,sessionId,16,out var raw,out var bytes));
-        try {Protocol.Require(bytes>=2 && Marshal.ReadInt16(raw)==0);}finally{WTSFreeMemory(raw);}
-        Protocol.Require(WTSQuerySessionInformationW(IntPtr.Zero,sessionId,8,out raw,out bytes));
-        try {Protocol.Require(bytes>=4 && Marshal.ReadInt32(raw)==0);}finally{WTSFreeMemory(raw);}
+        Protocol.Require(sessionId<=int.MaxValue);
+        RequireActiveLocalConsole((int)sessionId);
         var luid=System.Buffers.Binary.BinaryPrimitives.ReadUInt64LittleEndian(stats.AsSpan(8,8));
         Protocol.Require(luid!=0);
         return new SessionEvidence(Incarnation,checked((int)sessionId),ownerSid,luid.ToString("x16"));
