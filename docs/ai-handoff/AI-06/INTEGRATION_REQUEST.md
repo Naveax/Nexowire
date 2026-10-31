@@ -49,3 +49,14 @@ bu migration koordinatör sahipliğindedir; AI-06 onu değiştirmedi.
 Mevcut duplicate-claim winner negatif testlerini gevşeterek veya belirsiz
 işlemleri yeniden kullanarak bu sorun kapatılamaz. Çözüm gelene kadar
 production CORE **NO-GO**.
+
+## Ek AI-06 fail-closed kaynak düzeltmesinin sınırlılığı
+
+`tombstoneDispatched` artık native claim DENY/UNKNOWN sırasında
+`dispatched/succeeded/denied -> unknown` audit fence uygular (yalnız
+`reserved->dispatched` CAS kazananında). Böylece eşzamanlı erken
+`complete(succeeded)` kalıcı yanlış başarı kaydı bırakmaz. Fakat
+premature `complete` **kabulü** hâlâ mümkündür; AI-08
+`acceptedEarly=false` regresyonu hâlâ kırmızı olmalıdır.
+Migration/ledger eksikliğini örtmek için bu iyileştirme kabul kanıtı
+olarak kullanılmamalıdır.

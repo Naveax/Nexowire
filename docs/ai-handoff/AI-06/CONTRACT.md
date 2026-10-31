@@ -88,3 +88,16 @@ aşamaları sonrasında **aktivasyon verilmez**. Bu async aşamalar boyunca
 false olur. Hata halinde kalıcı STOP ve remote revoke tekrar uygulanır.
 Bu işlem korumalı native approval veya fiziksel console kabulünün yerine
 geçmez.
+
+## Native DENY sonrası eşzamanlı erken completion için terminal denetim
+
+D1 `claim` kazananı, native `currentReadback()` sonucunda DENY/UNKNOWN
+alırsa kendisinin `dispatched` kaydını `unknown` yapar. Bu arada başka
+imzalı `complete` isteği `succeeded` veya `denied` yazmışsa, aynı
+`requestId/fingerprint/device` için bu sonuç da **UNKNOWN** olur.
+Duplicate kaybedeni kazananın kaydına dokunamaz.
+
+**Bu yalnız audit/tombstone düzeltmesidir.** Mevcut operasyon şeması
+`complete` isteğinin native readback tamamlanmadan kabul edilmesini
+önleyemez. Protected/native-verified claim CAS işaretleyicisi ve gerçek
+effect-boundary doğrulaması gelene kadar CORE production NO-GO.

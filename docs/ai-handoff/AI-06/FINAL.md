@@ -59,3 +59,13 @@ engellemek üzere `stopSequence` ve nihai kontrol kullanır. İptalde
 persisted STOP/revoke uygulanır. İki sentetik adversarial test eklendi.
 Protected native consent origin, OS-effect atomik revoke ve D1
 claim/complete native-verification marker hâlâ açık P0'dır.
+
+## Premature complete audit-fence takibi
+
+AI-06 sahipli D1 claim catch, native DENY/UNKNOWN sonrası yarışla
+erken tamamlanmış `succeeded`/`denied` satırını `unknown` yapar;
+kazanan/kaybeden ayrımı aynen korunur. Aynı request ID terminal kalır.
+Yeni sentetik negatif test eklendi. **Kritik P0 hâlâ açık:** erken
+`complete` yanıtını reddeden kalıcı native-verified claim marker,
+koordinatörün migration/ledger değişikliğini gerektirir. AI-08 bağımsız
+negatif test gevşetilmemiştir. Production CORE NO-GO.

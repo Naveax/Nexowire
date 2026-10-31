@@ -164,8 +164,15 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
               .bind(r.requestId,r.fingerprint,r.deviceId).run();}catch{}
           };
           const tombstoneDispatched=async()=>{
+            // Only this worker won the reserved->dispatched CAS. A concurrent
+            // completion can currently set 'succeeded' before the independent
+            // native readback returns. A later DENY must not leave that
+            // unverified outcome recorded as trusted success. This is only a
+            // terminal audit fence; a coordinator-owned persisted claim
+            // verification marker is still required to reject early complete.
             try{await this.db.prepare(`UPDATE device_core_console_operations SET state='unknown'
-              WHERE request_id=? AND fingerprint=? AND device_id=? AND state='dispatched'`)
+              WHERE request_id=? AND fingerprint=? AND device_id=?
+                AND state IN ('dispatched','succeeded','denied')`)
               .bind(r.requestId,r.fingerprint,r.deviceId).run();}catch{}
           };
           if(!this.nativeEnrollmentVerifier||!before.installation_id||!before.enrollment_id||

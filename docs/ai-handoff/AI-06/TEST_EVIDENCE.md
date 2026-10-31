@@ -85,3 +85,17 @@ kalıcı STOP ve yeniden oluşturulan provider'da `active=false`
 bekler. Windows fiziksel kullanıcı onayı, üretim D1 ve gerçek mTLS
 bağlantıları kullanılmaz. Bu yeni vakalar exact HEAD CI kanıtı
 gelmeden PASS kabul edilmez.
+
+## Erken complete sonrası native DENY terminal regresyonu
+
+AI-06 D1 fixture'a, henüz bekleyen native readback sırasında ikinci
+imzalı `complete(succeeded)` isteğini yarıştıran regresyon eklendi.
+Native readback DENY sonrasında D1 operasyonu `unknown` kalmalı,
+`claim` ve `complete` aynı UUID ile replay edilememelidir.
+Eski kaynak, erken `succeeded` kaydını terminal başarıda bıraktığı
+için bu negatif regresyondan geçemezdi.
+
+**Kapsam sınırı:** Bu test erken `complete` için `acceptedEarly=false`
+iddia etmez. Bu ayrı bağımsız AI-08 P0 testi (#989, failing QA) ve
+koordinatörün migration/ledger entegrasyonu gelmeden geçmez.
+Yeni AI-06 testi exact HEAD CI tamamlanana kadar PASS sayılmaz.

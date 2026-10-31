@@ -64,11 +64,12 @@ function fixture(){
     currentReadback:async()=>{if(pause)await pause();return nativeReadbackAllowed;},
   });
   const requestId=randomUUID(),fingerprint='a'.repeat(64);
-  const call=async(action:'reserve'|'claim')=>{
+  const call=async(action:'reserve'|'claim'|'complete')=>{
     const request:CoreAuthorityRequest={
       action,deviceId,installationId,nonce:randomUUID(),issuedAtMs:Date.now(),
       requestId,fingerprint,
     };
+    if(action==='complete')request.outcome='succeeded';
     request.signature=sign(null,coreOperationBytes(request),signer.privateKey).toString('base64');
     return authority.handle(credential,request);
   };
@@ -228,5 +229,28 @@ for(const scenario of statusRaces)test('AI-06: deviceStatus cannot publish stale
     const after=await pending;
     assert.equal(after.localEnrolled,false,'post-await owner/readiness change must deny enrollment');
     assert.equal(after.active,false,'stale native session cannot report active CORE');
+  }finally{g.release();f.db.close();}
+});
+
+test('AI-06: denied claim tombstones a concurrent premature completion as UNKNOWN',async()=>{
+  const f=fixture(),g=deferred();
+  try{
+    await f.call('reserve');
+    f.pause(g.wait);
+    const claim=f.call('claim');
+    await g.started;
+    // A second properly signed caller may attempt a premature complete.
+    // Existing D1 schema cannot reject it reliably until coordinator adds
+    // a native-verified claim state/marker. Test the post-denial audit fence
+    // without locking in the vulnerable early-acceptance behaviour.
+    await f.call('complete').catch(()=>{});
+    f.denyNativeReadback();
+    g.release();
+    await assert.rejects(claim,/CORE_NATIVE_CONSENT_SESSION_STALE/);
+    assert.equal(f.state(),'unknown',
+      'a denied, never-ACKed claim cannot retain synthetic succeeded/denied');
+    await assert.rejects(f.call('claim'),'same request ID remains terminal');
+    await assert.rejects(f.call('complete'),'premature completion cannot replay');
+    assert.equal(f.state(),'unknown');
   }finally{g.release();f.db.close();}
 });
