@@ -26,3 +26,8 @@
 
 ## Owner/contract correction
 Current team plan assigns dispatcher/CAS to AI-05, Broker/Job/receipt to AI-04, protected enrollment to AI-02, mTLS to AI-03 and independent native QA to AI-08. The source-only AI-07 executor boundary stays disabled. Updated AI-07 integration request only; no other agents' files touched.
+
+
+## Current AI-07 native diagnostics correction
+- Linux disposable diagnostic now mitigates unshare-created PID namespace init orphaning on timeouts with isolated process group teardown plus `PR_SET_PDEATHSIG`. No arbitrary PID/task is selected; no source-only claim of production cleanup.
+- Windows diagnostic also checks AppContainer SID presence and absence of UIAccess. No native executable permission or runtime dispatch enabled.

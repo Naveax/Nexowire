@@ -159,6 +159,11 @@ static int kernel_child(const char *root,int ready_fd,int resume_fd) {
     while(waitpid(pid,&status,0)<0)if(errno!=EINTR)return 37;
     return WIFEXITED(status)?WEXITSTATUS(status):38;
   }
+  /* Child is PID 1 of the new PID namespace. If its outer forked parent
+   * dies, request kernel termination rather than leaving an orphaned init.
+   * The parent also kills its isolated process group on a timed-out probe.
+   * This is not an OS task cleanup proof for production. */
+  if(prctl(PR_SET_PDEATHSIG,SIGKILL)<0)_exit(55);
   if(chdir(root)<0)_exit(39);
   if(syscall(SYS_pivot_root,".",".old")<0)_exit(40);
   if(chdir("/")<0)_exit(41);
@@ -217,6 +222,14 @@ static ssize_t read_ready_bounded(int fd,char *out) {
   }
 }
 static int terminate_owned_child(pid_t pid,int *status) {
+  if(pid<=1)return -1;
+  /* The direct child creates its own process group before unshare/fork.
+   * On timeout kill its group, so the PID-namespace grandchild is signalled
+   * too. A direct PID-only kill could orphan the nested namespace init.
+   * Check getpgid while the direct child is still our unreaped child. */
+  pid_t pgid=getpgid(pid);
+  if(pgid==pid && kill(-pid,SIGKILL)<0 && errno!=ESRCH)return -1;
+  if(pgid<0 && errno!=ESRCH)return -1;
   if(kill(pid,SIGKILL)<0&&errno!=ESRCH)return -1;
   pid_t got;
   do {got=waitpid(pid,status,0);}while(got<0&&errno==EINTR);
@@ -259,6 +272,9 @@ int main(int argc,char **argv) {
   }
   if(pid==0) {
     (void)close(ready[0]);(void)close(resume[1]);
+    /* Only this disposable diagnostic owns the process group. The parent
+     * never targets arbitrary PIDs, a live Agent or a host task process. */
+    if(setpgid(0,0)<0)_exit(80);
     if(clearenv()!=0)_exit(72);
     int code=kernel_child(root,ready[1],resume[0]);
     _exit(code);

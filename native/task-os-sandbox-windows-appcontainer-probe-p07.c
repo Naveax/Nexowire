@@ -49,10 +49,29 @@ static int read_integrity_rid(HANDLE token, DWORD *rid) {
   (void)HeapFree(GetProcessHeap(), 0, label);
   return valid;
 }
+/* AppContainer boolean alone is not an independently observed SID. The
+ * effective token must expose a real SID and no UIAccess elevation. */
+static int read_appcontainer_sid(HANDLE token) {
+  DWORD needed = 0;
+  TOKEN_APPCONTAINER_INFORMATION *info;
+  int valid = 0;
+  (void)GetTokenInformation(token, TokenAppContainerSid, NULL, 0, &needed);
+  if (needed < sizeof(TOKEN_APPCONTAINER_INFORMATION) ||
+      needed > 65536U) return 0;
+  info = (TOKEN_APPCONTAINER_INFORMATION *)HeapAlloc(
+      GetProcessHeap(), HEAP_ZERO_MEMORY, (SIZE_T)needed);
+  if (!info) return 0;
+  if (GetTokenInformation(token, TokenAppContainerSid, info, needed, &needed) &&
+      info->TokenAppContainer != NULL && IsValidSid(info->TokenAppContainer)) {
+    valid = 1;
+  }
+  (void)HeapFree(GetProcessHeap(), 0, info);
+  return valid;
+}
 static int diagnostic_readback(void) {
   HANDLE token = NULL;
   DWORD elevated = 1, appcontainer = 0, integrity_rid = 0;
-  DWORD token_type = 0;
+  DWORD token_type = 0, uiaccess = 1;
   BOOL in_job = FALSE;
   JOBOBJECT_EXTENDED_LIMIT_INFORMATION job;
   FILETIME created, exited, kernel, user;
@@ -66,6 +85,8 @@ static int diagnostic_readback(void) {
   token_ok = read_dword_token(token, TokenElevation, &elevated) &&
     read_dword_token(token, TokenType, &token_type) &&
     read_dword_token(token, TokenIsAppContainer, &appcontainer) &&
+    read_dword_token(token, TokenUIAccess, &uiaccess) &&
+    read_appcontainer_sid(token) &&
     read_integrity_rid(token, &integrity_rid);
   (void)CloseHandle(token);
   job_ok = IsProcessInJob(GetCurrentProcess(), NULL, &in_job) && in_job &&
@@ -78,7 +99,7 @@ static int diagnostic_readback(void) {
   /* Job presence is NOT confinement. No independent descendant, file,
    * network, handle/ACL, WFP or revoke-and-drain proof exists here. */
   if (!token_ok || elevated != 0 || appcontainer != 1 ||
-      token_type != (DWORD)TokenPrimary ||
+      uiaccess != 0 || token_type != (DWORD)TokenPrimary ||
       integrity_rid > SECURITY_MANDATORY_LOW_RID ||
       !job_ok || !clock_ok ||
       (flags & JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE) == 0 ||

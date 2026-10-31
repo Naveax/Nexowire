@@ -27,10 +27,13 @@ test('AI-07 Windows probe reads effective token/Job/PID and fails closed', () =>
     'IsProcessInJob(', 'QueryInformationJobObject(', 'GetProcessTimes(',
     'JOB_OBJECT_LIMIT_BREAKAWAY_OK', 'JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK',
     'SECURITY_MANDATORY_LOW_RID', 'TokenType', 'TokenPrimary',
+    'TokenAppContainerSid', 'TokenUIAccess', 'read_appcontainer_sid(token)',
     'JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE']) assert.ok(source.includes(api), api);
   assert.match(source, /if\s*\(!token_ok\s*\|\|\s*elevated\s*!=\s*0/);
   assert.match(source, /if\s*\(argc\s*!=\s*2\s*\|\|\s*strcmp/);
   assert.doesNotMatch(source, /NW07_(?:PERMIT|PRODUCTION_READY|EXECUTE_ALLOWED)/);
   assert.match(source, /#pragma comment\(lib, "Advapi32\.lib"\)/);
   assert.match(source, /\(flags & JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE\) == 0/);
+  assert.match(source, /uiaccess != 0/);
+  assert.match(source, /info->TokenAppContainer != NULL && IsValidSid/);
 });

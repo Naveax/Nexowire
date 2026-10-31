@@ -14,3 +14,8 @@ AI-07 did **not** edit `src/agent/executors.ts`, Broker, package.json, workflows
 
 ## AI-07 Windows native test handoff
 Coordinator should run `node --test --import tsx test/ai07-sandbox-windows-msvc-p07.test.ts` in an isolated Windows runner with VS C++ tools and record its exact HEAD. This is a safe native compilation/negative-CLI probe only, not a security authorization test and not evidence of AppContainer/SID/root/egress isolation. Shared `.github/workflows/**` is coordinator-owned: AI-07 does **not** edit workflows.
+
+
+## Native cleanup and token identity follow-up
+- AI-04/AI-05 cannot treat the source-only Linux test's process-group kill as durable process-tree cleanup: real worker children may break away, cross groups, inherit handles, and affect external CAS; require independent cgroup/Job/namespace readback, no unreaped descendants, and escrow fencing before releasing grants.
+- AI-08 negative QA should check parent death while namespace PID 1 is alive, child breakaway, inherited descriptors 0/1/2, and missing AppContainer SID or UIAccess. The test-only probe does not authorize production worker launch.

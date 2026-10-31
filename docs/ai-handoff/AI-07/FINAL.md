@@ -17,3 +17,7 @@ Added bounded Linux probe child lifetime and new Windows-only MSVC native regres
 
 ## Correct owner routing
 Per `NEXOWIRE_AI_TAKIM_PLANI_14_GUN.md`, AI-05 owns executor/CAS dispatch; AI-04 owns Broker-side admission/Job; AI-02 owns enrollment/protected Service; AI-03 owns mTLS/verifier; AI-08 independently validates native negatives. Any earlier handoff naming AI-03 as executor or AI-02 as Broker/CAS was erroneous and has been corrected. No out-of-owner code edited.
+
+
+## Native diagnostic additional hardening
+Linux selftest group termination and nested PID1 parent-death signal; Windows local readback of AppContainer SID and UIAccess. Exact OS acceptance still **NO_GO**, and these diagnostics remain non-executing task probes.

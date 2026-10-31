@@ -36,3 +36,8 @@ executeSandboxRequiredCapability(
 // or OS_TASK_RECONCILIATION_REQUIRED); legacy spawning is forbidden.
 ```
 AI-05 must invoke the above **before** shell, process and nested task effects. AI-04 must independently check Broker-side OS/grant/CAS admission. Neither owner should infer permission from AI-07's synthetic probe status. AI-08's intentionally RED #832 cases remain unsatisfied by an API declaration alone.
+
+
+## Native readback/source-only risk reduction
+- Linux direct diagnostic child creates an isolated process group **before** unshare/fork. Timed-out parent checks exact child process group and kills it, and namespace PID 1 requests `PR_SET_PDEATHSIG`; exit remains nonzero on cleanup uncertainty. This is a bounded *selftest* improvement, **not** verified full descendant cleanup for arbitrary tasks or production grant release.
+- Windows probe now reads effective `TokenAppContainerSid` and rejects missing/invalid SID, plus rejects `TokenUIAccess` even when `TokenIsAppContainer` is asserted. The token/Job checks remain local diagnostics, not independent permission, WFP, file or handle containment evidence.

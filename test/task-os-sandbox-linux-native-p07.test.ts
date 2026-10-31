@@ -39,6 +39,10 @@ test('#07 Linux diagnostic has no arbitrary shell entry point',()=>{
   assert.match(source,/waitpid\(pid,status,WNOHANG\)/);
   assert.match(source,/terminate_owned_child\(pid,status\)/);
   assert.match(source,/if\(waited==-2\)return 78/);
+  assert.match(source,/if\(setpgid\(0,0\)<0\)_exit\(80\)/);
+  assert.match(source,/if\(prctl\(PR_SET_PDEATHSIG,SIGKILL\)<0\)_exit\(55\)/);
+  assert.match(source,/pgid==pid && kill\(-pid,SIGKILL\)/);
+  assert.match(source,/if\(pid<=1\)return -1/);
 });
 
 test('#07 probe seccomp cannot allow task exec, networking, process creation or mount syscalls',()=>{

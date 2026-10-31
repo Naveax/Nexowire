@@ -21,3 +21,9 @@
 - Windows-only `test/ai07-sandbox-windows-msvc-p07.test.ts` attempts actual MSVC /W4 /WX build, tests arbitrary command rejection and expects the ordinary runner's AppContainer/Job readback to return 77. On Linux this OS test reports NOT_RUN/unsupported (not PASS); Windows job in current workflow does **not** run npm test, so independent Windows executor must run the explicit test. No claim of actual Windows native build until such a run is observed.
 
 - Handoff ownership map reviewed against the 31 Oct 2026 team plan: docs-only correction, no executable change or native security acceptance. Latest source test22 on `439523c603840de7b8678b047ef06fb140f3970c` logged 2,257 tests (1,964 pass, 0 fail, 291 skipped, 2 TODO). Windows-only native MSVC case was explicitly SKIP on Linux; not physical evidence. CI 41198275210 was still IN_PROGRESS when observed.
+
+
+## Native PID-namespace orphan and Windows SID negative regression
+- `test/task-os-sandbox-linux-native-p07.test.ts`: new static source assertions for `setpgid`, child `PR_SET_PDEATHSIG`, bounded group termination and PID > 1 guard. Existing Linux C compilation and command rejection remain mandatory on exact-head CI; full namespace selftest not claimed.
+- `test/ai07-sandbox-windows-probe.test.ts`: negative static assertions require real AppContainer SID readback and `TokenUIAccess==0`. Windows MSVC compile remains an independent required native check.
+- Exact head CI results must be read from Actions; no older SHA PASS can be carried forward.
