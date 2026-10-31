@@ -106,3 +106,43 @@ test('AI-05 hostile remote request getter/proxy never reaches credential or CAS'
   assert.equal(proxyTraps,0);
   assert.equal(credentialCalls,0);
 });
+
+test('AI-05 remote HTTPS endpoint and runtime witness configuration cannot be retargeted',async t=>{
+  const client=new RemoteMutationCasClient({
+    endpoint:'https://nexowire-witness.invalid/v1/reservations',
+    token:originalToken,deviceId:ids.device,epoch:ids.epoch,
+    authorityId:ids.authority,
+  });
+  assert.equal(Reflect.get(client,'url'),
+    'https://nexowire-witness.invalid/v1/reservations');
+  assert.equal(Reflect.set(client,'url',new URL(
+    'https://foreign-witness.invalid/v1/reservations')),false);
+  assert.equal(Reflect.set(client,'settings',{
+    endpoint:'https://foreign-witness.invalid/v1/reservations',
+    token:foreignToken,authorityId:ids.foreignAuthority,
+    deviceId:ids.foreignDevice,epoch:ids.epoch,
+  }),false);
+  const witness=new HttpsMonotonicTrustRoot({
+    endpoint:'https://nexowire-witness.invalid/v1/reservations',
+    authorityId:ids.authority,
+    tokenForEnrolledDevice:()=>originalToken,
+  });
+  assert.equal(Reflect.set(witness,'config',{
+    endpoint:'https://foreign-witness.invalid/v1/reservations',
+    authorityId:ids.foreignAuthority,
+    tokenForEnrolledDevice:()=>foreignToken,
+  }),false);
+  let requests=0;
+  t.mock.method(globalThis,'fetch',async (url:URL|Request|string,init?:RequestInit)=>{
+    requests++;
+    assert.equal(String(url),
+      'https://nexowire-witness.invalid/v1/reservations');
+    assert.equal(new Headers(init?.headers).get('authorization'),
+      'Bearer '+originalToken);
+    return new Response(JSON.stringify(validReceipt()),{status:200});
+  });
+  assert.deepEqual(await client.reserve(ids.request,'d'.repeat(64),
+    'windows.registry.set'),validReceipt());
+  assert.deepEqual(await witness.reserve(request()),validReceipt());
+  assert.equal(requests,2);
+});

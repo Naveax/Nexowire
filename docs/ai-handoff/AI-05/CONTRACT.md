@@ -34,3 +34,6 @@ The sandbox and native-effect CORE denial capability lists are exposed through a
 
 ## JSON payload enumerable-data-only boundary
 The executor's recursive canonical snapshot rejects non-enumerable nested object fields and non-enumerable array element indices, as well as accessors, symbols and Proxy wrappers. Otherwise hidden data could be silently promoted into visible JSON during detached copy creation, changing what the caller considered part of the authorized wire input. The snapshot refuses ambiguous hidden values before CAS/Broker dispatch; no fallback or permissive serialization is used.
+
+## Runtime pinning of HTTPS authority and trust-root configuration
+The remote CAS and external grant CAS clients normalize their HTTPS authority to an immutable primitive URL string, rather than expose a mutable `URL` object after constructor validation. Runtime descriptor locks reject JS reassignment of `url`, `endpoint`, `settings` and `config` bindings; the HttpsMonotonicTrustRoot and PostgresBoundGrantCas also reject post-construction `config` reassignment. This protects the checked endpoint/authority/credential resolution from simple post-construction retargeting across CAS awaits. It does not make a same-process compromised JavaScript runtime or external HTTPS server trustworthy. Independent CAS custody and protected Broker remain separate requirements.

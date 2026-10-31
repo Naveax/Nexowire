@@ -104,7 +104,8 @@ function httpOutcomeUncertain(status:number):boolean{
  * have independently proven backup/restore custody.
  */
 export class HttpsExternalGrantCas implements ExternalGrantCas {
-  private readonly endpoint:URL;
+  /** Validated HTTPS authority stored as a non-retargetable URL string. */
+  private readonly endpoint:string;
   constructor(private readonly config:{
     endpoint:string;authorityId:string;timeoutMs?:number;
     /** Credential must come from a verified protected enrollment store. */
@@ -122,8 +123,12 @@ export class HttpsExternalGrantCas implements ExternalGrantCas {
        endpoint.pathname!=='/v1/grant-cas/reserve'||
        !uuid.safeParse(pinned.authorityId).success)
       reject('EXTERNAL_GRANT_URL_INVALID');
-    this.endpoint=endpoint;
+    this.endpoint=endpoint.href;
     this.config=pinned;
+    // Prevent post-construction reassignment through runtime JS (TS private
+    // and readonly annotations alone do not protect authority bindings).
+    Object.defineProperty(this,'endpoint',{writable:false,configurable:false});
+    Object.defineProperty(this,'config',{writable:false,configurable:false});
   }
   async reserveIfCurrent(
     input:CasRequest,authorization:AuthenticatedGrantScope,

@@ -47,3 +47,6 @@ Source-only SHA `ca5f851ddcb5488ab14782ce154247786467cd49`, run [41211445617](ht
 
 ## Hidden nested JSON descriptor negatives
 Two additional source-only executor regressions ensure a hidden nested object property and a hidden array element are denied as `CORE_DISPATCH_INPUT_NOT_CANONICAL` at snapshot preparation. Neither invokes OS/Broker effects. On this new source candidate the AI-05 synthetic test file count is **32** (12 PostgreSQL, 11 executor, 6 HTTPS, 3 remote witness), pending exact-HEAD CI typecheck/test/build confirmation. Do not transfer earlier 30/30 results to this SHA.
+
+## HTTPS endpoint/config runtime retargeting regression candidate
+Two new AI-05 source-only negative cases assert `Reflect.set` cannot replace the validated external authority URL or witness credentials after instantiation. Mock fetch checks HTTPS reserve/revoke/re-pair still target the original authority; a separate witness reserve checks its original token. Added guarded source binding locks; all unrelated fail-closed paths retained. **34 authored AI-05 tests** (12 PG, 11 executor, 7 HTTPS, 4 remote) pending this new exact-head CI. Previous 32/32 on `2c2da9206842894d7d1ca5c006612ec61f1baa3f` remains valid only for that source SHA.

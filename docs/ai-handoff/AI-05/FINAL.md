@@ -36,3 +36,6 @@ Immediate source tip `ca5f851ddcb5488ab14782ce154247786467cd49`: [CI 41211445617
 
 ## Additional executor canonical input closure
 Rejected hidden nested JSON object fields and hidden array indices instead of promoting them to newly enumerable wire payload fields. Added 2 negative source regressions (AI-05 total 32 authored tests). The new exact HEAD must pass CI; CORE remains disabled and all physical/production acceptance remains NO_GO.
+
+## Remote authority retargeting follow-up
+Validated HTTPS CAS authorities are now fixed immutable string routes and runtime config/credential resolver bindings are non-reassignable, closing an in-process post-validation URL retargeting gap. Two source-only adversarial tests increase the authored AI-05 total to 34 (12 PG, 11 executor, 7 HTTPS, 4 remote). This update requires its own exact-HEAD CI result; no source test substitutes for live OS/Broker or physically independent antirollback CAS evidence. Draft / CORE NO-GO.

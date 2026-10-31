@@ -232,3 +232,31 @@ test('AI-05 HTTPS CAS sends admitted immutable wire bytes after credential await
   assert.deepEqual(seen[1]?.data,revoke);
   assert.deepEqual(seen[2]?.data,repair);
 });
+
+test('AI-05 validated external CAS authority and credential resolver cannot be retargeted at runtime',async t=>{
+  const cas=client();
+  assert.equal(Reflect.get(cas,'endpoint'),
+    'https://nexowire-cas.invalid/v1/grant-cas/reserve');
+  assert.equal(Reflect.set(cas,'endpoint',new URL(
+    'https://foreign-cas.invalid/v1/grant-cas/reserve')),false);
+  assert.equal(Reflect.set(cas,'config',{
+    endpoint:'https://foreign-cas.invalid/v1/grant-cas/reserve',
+    authorityId:ids.newOwner,credentialFor:async()=> 'foreign-credential',
+  }),false);
+  const urls:string[]=[];
+  t.mock.method(globalThis,'fetch',async (url:URL|Request|string)=>{
+    urls.push(String(url));
+    return new Response('unknown CAS outcome',{status:503});
+  });
+  await assert.rejects(cas.reserveIfCurrent(operation,grant),
+    code('EXTERNAL_GRANT_TRANSPORT_UNKNOWN'));
+  await assert.rejects(cas.revokeIfCurrent(revoke),
+    code('EXTERNAL_REVOKE_OUTCOME_UNKNOWN'));
+  await assert.rejects(cas.rePairIfCurrent(repair),
+    code('EXTERNAL_REPAIR_OUTCOME_UNKNOWN'));
+  assert.deepEqual(urls,[
+    'https://nexowire-cas.invalid/v1/grant-cas/reserve',
+    'https://nexowire-cas.invalid/v1/grant-cas/revoke',
+    'https://nexowire-cas.invalid/v1/grant-cas/re-pair',
+  ]);
+});

@@ -274,6 +274,7 @@ export class PostgresBoundGrantCas implements MonotonicTrustRoot {
     if(!uuid.safeParse(pinned.authorityId).success)
       reject('BOUND_CAS_AUTHORITY_INVALID');
     this.config=pinned;
+    Object.defineProperty(this,'config',{writable:false,configurable:false});
   }
   private async trusted():Promise<void>{
     let p;

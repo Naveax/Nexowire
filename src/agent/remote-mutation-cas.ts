@@ -76,7 +76,8 @@ function casHttpsEndpoint(raw:string):URL{
 
 /** Production accepts only a trusted HTTPS authority hosted outside rollback domain. */
 export class RemoteMutationCasClient{
-  private readonly url:URL;
+  /** Canonical immutable primitive, never a caller-retargetable URL object. */
+  private readonly url:string;
   constructor(readonly settings:{
     endpoint:string;token:string;deviceId:string;epoch:string;
     authorityId:string;timeoutMs?:number
@@ -84,13 +85,18 @@ export class RemoteMutationCasClient{
     // The owner-enrolled witness scope and credential must not be retargeted
     // after construction by mutating a borrowed configuration object.
     this.settings=Object.freeze({...settings});
-    this.url=casHttpsEndpoint(this.settings.endpoint);
-    if(this.url.protocol!=='https:'||this.url.username||this.url.password||
-       this.url.search||this.url.hash||this.url.pathname!=='/v1/reservations'||
+    const endpoint=casHttpsEndpoint(this.settings.endpoint);
+    if(endpoint.protocol!=='https:'||endpoint.username||endpoint.password||
+       endpoint.search||endpoint.hash||endpoint.pathname!=='/v1/reservations'||
        typeof this.settings.token!=='string'||this.settings.token.length<16||
        !uuid.safeParse(this.settings.deviceId).success||
        !uuid.safeParse(this.settings.epoch).success||
        !uuid.safeParse(this.settings.authorityId).success)fail('CAS_CONFIG_INVALID');
+    this.url=endpoint.href;
+    // TS private/readonly is compile-time only. Harden the runtime properties
+    // so a borrowed client cannot be retargeted after HTTPS validation.
+    Object.defineProperty(this,'url',{writable:false,configurable:false});
+    Object.defineProperty(this,'settings',{writable:false,configurable:false});
   }
   async reserve(requestId:string,fingerprint:string,capability:string):
     Promise<CasReservation>{
@@ -138,6 +144,7 @@ export class HttpsMonotonicTrustRoot implements MonotonicTrustRoot {
     timeoutMs?:number;
   }){
     this.config=Object.freeze({...config});
+    Object.defineProperty(this,'config',{writable:false,configurable:false});
   }
   async reserve(request:CasRequest):Promise<CasReservation>{
     const inputRecord=immutableRemoteCasRequest(request);
