@@ -75,3 +75,7 @@ Added AI-07 test cases with 32768-character single argument, two 20000-character
 
 ### Kernel without pidfd syscall macro (2026-11-01)
 - New Linux native build negative compiles a test-only transformed C diagnostic after undefining `SYS_pidfd_open` immediately before its feature guard; `-Wall -Wextra -Werror` must succeed, and unsupported arbitrary CLI input still exits 64. This is **only a compile/deny negative**, not execution of rootless namespace selftest or real production kernel proof. Exact-head CI required.
+
+### 2026-11-01 independent disposable openat2 negative
+- **Isolated local kernel:** Linux 6.18.57 x86_64, GCC 14.2.0, C11 `-O2 -Wall -Wextra -Werror`. Fixture only operates under a new `/tmp/nw07-openat2-source-XXXXXX` and removes its own files. Four variants: guard flags `exit 0`; no RESOLVE_BENEATH `exit 55`; no RESOLVE_NO_SYMLINKS `exit 56`; missing hardlink-inode warning `exit 57`. 10 repetitions each, **40/40 expected**. Unsupported `openat2` returns BLOCKED 70. The test does NOT prove production OS root confinement. Exact-head CI still required.
+- Repository test command: `node --test --import tsx test/ai07-sandbox-linux-openat2-root.test.ts`. Tests are not run on non-Linux and cannot be counted as physical Windows PASS.

@@ -31,3 +31,6 @@ Run the exact-head `test/ai07-sandbox-linux-fd-seccomp.test.ts` on isolated disp
 
 ### AI-08 independent parent-orphan test
 Run disposable Linux test of direct parent death *before* namespace PID1 installs `PR_SET_PDEATHSIG`. Observe inherited exact-parent pidfd becomes POLLIN and the probe returns BLOCKED (87); do not accept getppid() == 0 as an alive parent. Missing kernel pidfd support must remain UNSUPPORTED/BLOCKED. The current pidfd observation is in an unsigned source-only diagnostic and is **not** a protected verifier, cgroup drain proof or native task permit.
+
+### File-root admission gap: openat2 is not hardlink confinement
+AI-04/05 must not treat `openat2` RESOLVE_* alone, `st_nlink`, a canonical path string, or a synthetic negative fixture as full filesystem isolation. Require trusted root mount/inode identity, durable immutable request binding and an OS-protected file access boundary with hostile link/hardlink/rename/race acceptance. AI-08/coordinator can independently run `test/ai07-sandbox-linux-openat2-root.test.ts` (expected exit 0 / 55 / 56 / 57) on disposable Linux; no tests require a live machine or privileged Agent.

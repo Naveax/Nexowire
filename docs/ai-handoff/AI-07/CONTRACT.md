@@ -75,3 +75,6 @@ The Linux disposable fixture checks actual inherited environment bytes with a **
 
 ### Namespace PID1 early-orphan gap: exact kernel pidfd
 The parent opens its own `pidfd_open` *before* the namespace PID1 fork. PID1 installs `PR_SET_PDEATHSIG(SIGKILL)`, checks the inherited pidfd before and after approval, then closes the pidfd before filesystem pivot and complete `close_range`. This closes the pre-prctl parent-death window without relying on `getppid` inside CLONE_NEWPID. A missing syscall or readable/error pidfd rejects the **test-only** probe; this remains an unsigned local observation, not a trusted native launcher/worker grant.
+
+### Linux openat2 filesystem evidence is bounded, hardlink escape remains open
+The disposable `test/ai07-sandbox-linux-openat2-root.test.ts` tests `RESOLVE_BENEATH`, `RESOLVE_NO_SYMLINKS`, `RESOLVE_NO_MAGICLINKS` and `RESOLVE_NO_XDEV` against fixture-owned `../outside`, in-root symlink and an out-of-root hardlinked inode. The first two can be kernel denied; `openat2` **does not constrain a hardlink to a distinct inode origin**. The test-only `st_nlink>1` probe documents this gap but is not independently protected inode admission, path immutability, mount confinement or a production OS permit. AI-04/05 must not infer task-root confinement from string paths or the fixture.

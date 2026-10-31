@@ -79,3 +79,7 @@ Linux diagnostic forced termination no longer abandons direct-child cleanup afte
 
 ## 2026-11-01 PIDFD early-orphan real kernel regression
 - Added `test/ai07-sandbox-linux-pidfd-orphan.test.ts`. Disposable Linux test forks a parent that exits **before** its subject installs PR_SET_PDEATHSIG; inherited pre-fork self pidfd must report POLLIN. Guarded variant returns 0 with explicit BLOCKED marker; deliberately unguarded variant returns exit 55 and unsafe marker. No native Nexowire task, physical user token or production permission is involved.
+
+## 2026-11-01 genuine Linux path-boundary negative (AI-07)
+- Added `test/ai07-sandbox-linux-openat2-root.test.ts` as an isolated, **test-only** `openat2` Linux fixture. `RESOLVE_BENEATH|RESOLVE_NO_SYMLINKS|RESOLVE_NO_MAGICLINKS|RESOLVE_NO_XDEV` admits a fixture-owned ordinary file, rejects a temporary-root `../outside` traversal with `EXDEV`, and denies a symlink with `ELOOP`. Three deliberate weakened controls return 55/56/57, never PASS.
+- **Critical limitation:** a hardlink from outside the fixture-owned root STILL opens successfully under these `openat2` flags. The fixture detects matching inode/device and `st_nlink>1`, and flags a deliberately missing hardlink check as exit 57. This simple check is not a complete hardlink/inode-integrity or race defense. Real OS filesystem boundary and protected task root remain unproven; production NO-GO.

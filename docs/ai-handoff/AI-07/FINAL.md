@@ -61,3 +61,6 @@ Added pre-fork direct-parent pidfd to close the race where a parent died before 
 
 ### Executable early-orphan test and kernel fallback
 Added `test/ai07-sandbox-linux-pidfd-orphan.test.ts` with an intentionally broken PIDFD-readback control; native source now declares its FD before feature detection so missing SYS_pidfd_open compiles to DENIED 86 instead of referring to an undefined variable. Full task isolation still unavailable, Production NO-GO.
+
+### Linux path root negative (2026-11-01)
+Added isolated `test/ai07-sandbox-linux-openat2-root.test.ts` with real Linux `openat2` traversal/symlink kernel denials and a deliberate hardlink bypass illustration; all four variants matched locally across 40 runs. This expands AI-07 negative OS evidence but DOES NOT establish a production filesystem sandbox or release CORE/UNKNOWN gates. NO_GO persists.
