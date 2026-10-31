@@ -5,6 +5,26 @@ namespace Nexowire.LocalEnrollment;
 
 internal static class SelfTest
 {
+    private static void VerifyIpcFraming()
+    {
+        // Disposable parser-only tests: no SCM, pipe, grant or user approval.
+        using(var accepted=JsonDocument.Parse("""{"version":2,"verified":true,"mayDispatch":false,"grant":{},"evidence":{}}"""))
+            EnrollmentClient.RequireAcceptedFrame(accepted.RootElement);
+        foreach(var input in new[]{
+            """{"version":2,"verified":false,"mayDispatch":false,"grant":{},"evidence":{}}""",
+            """{"version":2,"verified":true,"mayDispatch":true,"grant":{},"evidence":{}}""",
+            """{"version":1,"verified":true,"mayDispatch":false,"grant":{},"evidence":{}}""",
+            """{"version":2,"verified":true,"mayDispatch":false,"grant":{},"evidence":{},"error":"LOCAL_ENROLLMENT_REJECTED"}""",
+            """{"version":2,"verified":true,"mayDispatch":false,"grant":{}}"""
+        })
+        {
+            using var doc=JsonDocument.Parse(input);
+            var denied=false;
+            try{EnrollmentClient.RequireAcceptedFrame(doc.RootElement);}
+            catch(InvalidDataException){denied=true;}
+            Protocol.Require(denied);
+        }
+    }
     internal static void MachineKey()
     {
         ProtectedStore.RequireAdministrator();
@@ -28,6 +48,7 @@ internal static class SelfTest
     }
     internal static void Run()
     {
+        VerifyIpcFraming();
         // Disposable CURRENT USER diagnostic key only. Never invokes consent,
         // creates a machine grant, changes SCM, or touches ProtectedStore.Root.
         var name="Nexowire.Diagnostic."+Guid.NewGuid().ToString("D");
