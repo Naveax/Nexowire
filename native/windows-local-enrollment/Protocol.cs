@@ -66,6 +66,17 @@ internal static partial class Protocol
             s.OwnerSid,s.LogonLuid,s.ObservedAtMs,s.ValidUntilMs
         },Json));
     }
+    // Repeat the OS/session/freshness check after CNG signing and immediately
+    // before emitting an attestation frame. A signer delay may exhaust TTL.
+    internal static void RequireFreshSession(Session s,SessionEvidence expected,
+        SessionEvidence? current,long nowMs)
+    {
+        Require(current is not null && current==expected &&
+            s.BootId==expected.BootId && s.OwnerSid==expected.OwnerSid &&
+            s.WindowsSessionId==expected.WindowsSessionId &&
+            s.LogonLuid==expected.LogonLuid &&
+            s.ObservedAtMs<=nowMs && nowMs<s.ValidUntilMs);
+    }
     internal static byte[] ChallengeBytes(Session s) =>
         Encoding.UTF8.GetBytes("nexowire.local.session.challenge.v2\0").Concat(SessionBytes(s)).ToArray();
     internal static string Hash(byte[] bytes) => Convert.ToHexStringLower(SHA256.HashData(bytes));

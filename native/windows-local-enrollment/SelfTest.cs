@@ -50,6 +50,31 @@ internal static class SelfTest
             Protocol.Require(!WindowsSessionEvidence.ActiveLocalConsoleFacts(
                 item.Session,item.Console,item.Protocol,item.State));
     }
+    private static void VerifyFinalSessionFreshness()
+    {
+        // Deterministic, disposable OS-fact snapshot model. This does NOT
+        // invoke WTS, approve enrollment or exercise a real SCM service.
+        var now=1700000001000L;
+        var original=new SessionEvidence("55555555-5555-4555-8555-555555555555",
+            2,"S-1-5-21-100-200-300-1001","0000000000001234");
+        var request=new Session(2,new string('a',64),"44444444-4444-4444-8444-444444444444",
+            "nexowire.local-enrollment.session",original.BootId,original.WindowsSessionId,
+            original.OwnerSid,original.LogonLuid,now,now+5000);
+        Protocol.RequireFreshSession(request,original,original,now+1);
+        foreach(var (changed,at) in new (SessionEvidence?,long)[]{
+            (null,now+1),(original with { BootId=Guid.NewGuid().ToString("D") },now+1),
+            (original with { WindowsSessionId=3 },now+1),
+            (original with { LogonLuid="0000000000009999" },now+1),
+            (original with { OwnerSid="S-1-5-18" },now+1),
+            (original,now-1),(original,now+5000),(original,now+6000)
+        })
+        {
+            var rejected=false;
+            try{Protocol.RequireFreshSession(request,original,changed,at);}
+            catch(InvalidDataException){rejected=true;}
+            Protocol.Require(rejected);
+        }
+    }
     private static void VerifyDisposableExclusiveFence()
     {
         // Real Windows file sharing against an isolated temp root only.
@@ -102,6 +127,7 @@ internal static class SelfTest
         VerifyIpcFraming();
         VerifyConsoleSnapshotPolicy();
         VerifyDisposableExclusiveFence();
+        VerifyFinalSessionFreshness();
         // Disposable CURRENT USER diagnostic key only. Never invokes consent,
         // creates a machine grant, changes SCM, or touches ProtectedStore.Root.
         var name="Nexowire.Diagnostic."+Guid.NewGuid().ToString("D");
@@ -133,7 +159,8 @@ internal static class SelfTest
             try{Protocol.Read<Session>(System.Text.Encoding.UTF8.GetBytes("{\"version\":2,\"version\":2}"));}
             catch(InvalidDataException){duplicateDenied=true;}Protocol.Require(duplicateDenied);
             Console.WriteLine(JsonSerializer.Serialize(new {diagnosticOnly=true,privateExportDenied=denied,
-                localConsolePolicyTestsPassed=true,revocationFenceDiagnosticPassed=true,spkiBase64=Convert.ToBase64String(spki),grant=new SignedGrant(grant,signature),
+                localConsolePolicyTestsPassed=true,revocationFenceDiagnosticPassed=true,finalSessionFreshnessTestsPassed=true,
+                spkiBase64=Convert.ToBase64String(spki),grant=new SignedGrant(grant,signature),
                 session=new SignedSession(session,sessionSig)},Protocol.Json));
         }
         finally{key.Delete();}

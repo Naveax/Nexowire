@@ -136,3 +136,18 @@ as approval. The diagnostic self-test proves only Windows temp-file exclusion,
 timeout/cancellation and reopening, not real SCM crash/restart or actual owner
 revocation. A response already delivered before revocation is still subject to
 independent verifier expiry and current external revoke checks.
+
+## AI-02 status / attest final admission fence
+
+Both local IPC operations now acquire the same protected revoke/attestation
+file-sharing fence before loading current signed grant state; status is still
+read-only and `mayDispatch=false`. For attest, the native service rechecks
+live console SID/session/LUID, unchanged protected grant/revocation state,
+challenge TTL and cancellation **after signing, immediately before sending**.
+Both success replies must fit the bounded 16384-byte protocol frame. A stale
+session or expired challenge fails closed, while any already consumed nonce
+remains consumed after a lost ACK. This is source-side narrowing of a race, not
+an atomic OS-to-remote-dispatch guarantee: AI-03 must independently enforce
+current external revoke/generation/one-use admission at the last execution
+boundary. Synthetic self-test exercises late-expiry and changed-session
+rejections; it is not an installed Windows Service or physical consent test.
