@@ -60,3 +60,6 @@ The rootless probe's inner namespace PID1 is reaped with finite monotonic `waitp
 
 ### Direct diagnostic child parent-death fence
 The forked pre-unshare Linux diagnostic child installs `PR_SET_PDEATHSIG(SIGKILL)` and verifies its creator's exact `getppid()` before `setpgid`, `clearenv` or `unshare`. This limits the case where the outer observer dies after a kernel handshake but before reaping. PID1 installs a separate parent-death fence before its inner gate. Both are kernel process-lifetime safeguards, **not** whole-descendant/cgroup cleanup evidence and never an execution permit.
+
+### Conservative source-only aggregate command envelope
+`boundedArgs` rejects sparse/accessor/proxy-invalid arrays, embedded NUL, individual strings above 32767 UTF-16 code units, **and combined argv lengths plus separators above 32767 units**. This is source preflight against truncation/oversize and never proves a Windows native command-line or Linux argv encoding. AI-05 must sign/compare exact immutable argument bytes before Broker dispatch; no fallback to legacy spawn is allowed.

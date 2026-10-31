@@ -82,10 +82,18 @@ function boundedArgs(value: unknown): boolean {
         Object.getPrototypeOf(value) !== Array.prototype) return false;
     const length: unknown = Object.getOwnPropertyDescriptor(value, 'length')?.value;
     if (!Number.isSafeInteger(length) || (length as number) > 256) return false;
+    // Individual limits are insufficient: 256 x 32K strings would let
+    // untrusted callers force a huge serialized payload before OS admission.
+    // Keep the combined argument envelope conservatively under the Windows
+    // 32767 UTF-16 command-line ceiling. Native quoting/argv rules must still
+    // be verified independently and this check never grants execution.
+    let totalUnits = 0;
     for (let i = 0; i < (length as number); i++) {
       const item = Object.getOwnPropertyDescriptor(value, String(i));
       if (!item || !('value' in item) || typeof item.value !== 'string' ||
-          item.value.length > 32768 || item.value.includes('\0')) return false;
+          item.value.length > 32767 || item.value.includes('\0')) return false;
+      totalUnits += item.value.length + 1;
+      if (totalUnits > 32767) return false;
     }
     return true;
   } catch { return false; }

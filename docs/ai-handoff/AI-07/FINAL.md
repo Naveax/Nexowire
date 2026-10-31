@@ -40,3 +40,6 @@ Eliminated inner Linux PID1 unbounded wait on both rejection and success paths; 
 
 ### Direct diagnostic child orphan-fencing
 Added pre-unshare parent-death signal + original parent PID race guard on the **disposable selftest** child only. No native worker launch or permission gate opened; OS-kernel independent verification, descendant drain and platform integration remain production NO-GO.
+
+### Aggregate input-boundary restriction
+Conservative combined argv length and targeted negative tests prevent source-only requests with excessive or NUL-truncated command parameters being mistaken for valid input. Real OS native request binding, independent caller authorization and kernel isolation remain **NO_GO**.

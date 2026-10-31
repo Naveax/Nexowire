@@ -48,3 +48,6 @@ Linux source regression now checks `PR_SET_PDEATHSIG` occurs before the PID1 sec
 
 ### Parent-death negative regression
 - `test/task-os-sandbox-linux-native-p07.test.ts` now checks direct-child `PR_SET_PDEATHSIG`, recorded original parent PID and fork-to-prctl race guard ordering before `setpgid` and `unshare`. The existing native `cc -Werror` build/deny-only CLI regression remains intact. Exact-head CI required; opt-in physical Linux namespace acceptance still **NOT_RUN** unless separately recorded.
+
+### Aggregate argv negative cases
+Added AI-07 test cases with 32768-character single argument, two 20000-character arguments, NUL-bearing string, NUL task root and oversized root. All explicitly assert `INVALID_TASK_INTENT`, `BLOCKED` and a rejected executor promise. This is Node source-level test evidence only; exact-head CI results must be checked on the new commit before claiming PASS.

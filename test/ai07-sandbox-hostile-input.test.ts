@@ -128,3 +128,24 @@ test('AI-07 revoked Proxy objects and arrays fail closed without uncaught errors
   assert.equal(reportAssessment.status, 'RECONCILE_REQUIRED');
   assert.equal(reportAssessment.mayReplayOriginalMutation, false);
 });
+
+test('AI-07 aggregate argv and NUL native-truncation inputs are explicit INVALID_TASK_INTENT', async () => {
+  const malformed = [
+    { ...valid(), args: ['x'.repeat(32768)] },
+    { ...valid(), args: ['x'.repeat(20000), 'y'.repeat(20000)] },
+    { ...valid(), args: ['x', 'evil\\0suffix'] },
+    { ...valid(), taskRoot: { ...valid().taskRoot, canonicalPath: 'C:\\\\safe\\0other' } },
+    { ...valid(), taskRoot: { ...valid().taskRoot, canonicalPath: 'x'.repeat(32768) } },
+  ];
+  for (const task of malformed) {
+    const assessment = assessTaskSandboxSourceOnly(task);
+    assert.equal(assessment.status, 'BLOCKED');
+    assert.equal(assessment.dispatchAllowed, false);
+    assert.equal(assessment.mayReplayOriginalMutation, false);
+    assert.ok(assessment.blockers.includes('INVALID_TASK_INTENT'),
+      'invalid argv/path must be classified, not merely denied for missing native provider');
+    await assert.rejects(executeTaskWithOsSandbox(task),
+      (e: unknown) => e instanceof OsTaskSandboxBlockedError &&
+        e.safeBlueprint.assessment.blockers.includes('INVALID_TASK_INTENT'));
+  }
+});

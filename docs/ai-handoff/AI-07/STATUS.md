@@ -54,3 +54,7 @@ Linux diagnostic forced termination no longer abandons direct-child cleanup afte
 ## Parent-death fallback (31 Oct 2026)
 - Direct disposable Linux diagnostic child now installs `PR_SET_PDEATHSIG(SIGKILL)` immediately after fork, before namespace setup, and compares `getppid()` with its recorded creator PID to close fork-to-prctl orphan races. This complements the separate PID1 parent-death signal. The test PID/group remain owned by the disposable probe, with no real Agent process, user task or privilege changes.
 - Added source regression verifying parent identity and required ordering. Independent PID/cgroup kernel drain and real task containment are still NO-GO.
+
+## Source argument-envelope negative (31 Oct 2026)
+- AI-07 input-shape validator now bounds the **aggregate** `args` budget to 32767 UTF-16 code units with one separator per argument, rather than allowing 256 individually large strings. This conservatively rejects oversized Windows-style command-line input; native argv quoting/serialization still requires an independently verified frozen request digest and OS authorization, and cannot be inferred from JavaScript strings.
+- Added targeted explicit `INVALID_TASK_INTENT` assertions for oversized single/multiple args, NUL argv and invalid task root. Not a replacement for kernel containment or a positive execution proof.
