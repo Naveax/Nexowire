@@ -14,3 +14,9 @@ CAS tombstone'nin broker restart/failover/lost ACK altında kalıcılığı; pri
 
 ## Koordinatör
 Mevcut `npm test` / CI matrisi testleri otomatik keşfetmiyorsa değişikliği yalnız koordinatör üstlenir. AI-08 `.github/workflows/**`, `package*.json` veya `src/**` değiştiremez.
+
+
+## 31 Ekim 2026 bağımsız koordinasyon notu
+AI-08 `9feb149e1b2723bb4609d21e4167824e400e9b85` kaynağında 32 yeni negatif PASS bulunur; bu testler **#984 bazında** yürüdü. AI-01 #986 WAL path/header TOCTOU, AI-03 #988 mTLS response parsing, AI-04 #987 Broker readback snapshot, AI-05 #992 CAS scoped reservation, AI-06 #985 D1 signing-key rotation ve AI-07 #990 sandbox hostile-reflection değişiklikleri kendi Draft HEAD'lerindedir. Bu PR'ların **başarı sonuçları birbirinin combined runtime'ı değildir**. Koordinatör bunları doğru bağımlılık sırasıyla ayrı entegrasyon HEAD'inde birleştirip 32 AI-08 negatif ile Node22/24 + Windows/source CI'ı yeniden çalıştırmalıdır; tarihsel RED kayıtları korunmalıdır.
+
+Son AI-08 ek testleri yalnızca kaynakta DB owner/grant/revoke ve Windows logon scope race'lerini doğrular. D1 claim sonrası gerçek OS effect boundary, signer public-key change (#985), broker native HIGH token readback, gerçek multi-process CAS failover/replay, kernel handle-env-child-network izolasyonu ve rollback/24h fiziksel kabul AI-08 üzerinde **kanıtlanmadı**. Bunlar kaynak sahiplerine ve owner test ortamına açık handoff olarak kalır. Testi skip/gevşetmek bu engelleri kapatmaz.

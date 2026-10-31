@@ -56,3 +56,14 @@ npm run build
 **Doğrudan elde edilmiş Node test exit code:** 0 (17 testli `44f18...` HEAD). Yeni D1 test ve nihai PR HEAD sonuçlarını ayrı exact SHA/run ile doğrula. Shell wildcard expansion platformu farklıysa `npm test` CI doğrulanmış alternatifidir.
 
 **NO_GO:** `SYNTHETIC_UNIT`, disposable SQLite, localhost TLS, hosted Windows runner sonucu gerçek Windows owner-consent/TPM/mTLS production, native sandbox kernel isolation veya 2-PC physical acceptance değildir. #974 WAL P0, #539 reliability açık kalır.
+
+
+## 31 Ekim 2026 · exact-SHA AI-08 güncellemesi (önceki pending notlarını geçersiz kılar)
+
+- **Test kodu HEAD:** `9feb149e1b2723bb4609d21e4167824e400e9b85` (parent `21ea657db668ed90157ea42605b7c8de87563c8b`). Draft PR [#989](https://github.com/Naveax/Nexowire/pull/989), base #984 `9d0f35607d4cde87bd031e2da77855cfaf570c31`.
+- **Exact CI:** [#41196966679](https://github.com/Naveax/Nexowire/actions/runs/41196966679). Node 22 job `124525116348`: **SUCCESS**, independent AI-08 32/32 PASS; Node 24 job `124525116481`: **SUCCESS**, independent AI-08 32/32 PASS. İkisinde de `npm run typecheck`, `npm test`, `npm run build` exit 0.
+- **İki Node suite:** her biri 2.802 test, 2.446 PASS, **0 FAIL**, 354 SKIP, 2 TODO. Bu 354 SKIP eski suite toplamıdır, yeni 32 AI-08 testi skip edilmedi.
+- **On adet yeni negatif:** D1 claim'in async native readback penceresinde owner epoch, grant generation, revoke epoch, enrollment ID, native receipt ID, Windows SID, session ID, logon LUID, Windows session epoch ve SAFE erişim moduna geçiş. Her senaryoda claim `CORE_NATIVE_CONSENT_SESSION_CHANGED` ile reddedilir, tüketilmiş request ID `unknown` terminal kalır ve tekrarlı claim doğrulayıcıyı ikinci kez çalıştırmaz. Kod: `test/ai08-console-claim.test.ts`.
+- **Windows browser-live:** son tam sorguda workflow hâlâ `in_progress` idi; bağımsız Windows işinin final sonucu doğrulanana kadar workflow geneli SUCCESS sayılmaz. Bu dokümanları güncelleyen yeni commit için CI ayrıca **yeni exact HEAD** üzerinde ölçülmelidir.
+- **Kanıt sınıfı:** D1 testleri SYNTHETIC_SQLITE (gerçek ürünün source-level D1 API'si, sentetik native readback), WAL DISPOSABLE_SQLITE, mTLS LOCAL_TLS_LOOPBACK, diğerleri SYNTHETIC_UNIT. **Gerçek OS sandbox isolation / native owner UAC / kalıcı fiziksel enrollment / iki-PC 24h kabulü BLOCKED; CORE production NO_GO.**
+- **CI tekrar politikası:** mevcut active `(workflow, SHA, inputs)` run'ını yeniden dispatch etme; her rapor aynı exact SHA/run'a bağlanır. Eski iptal edilmiş run'lar FAILURE diye yeniden sınıflandırılmaz.
