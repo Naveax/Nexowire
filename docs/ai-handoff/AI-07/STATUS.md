@@ -39,3 +39,6 @@ Linux diagnostic forced termination no longer abandons direct-child cleanup afte
 ## Linux PID namespace external-readback gap fixed (31 Oct 2026)
 - The disposable probe's outer parent now observes **pid_for_children** namespace identity, not just user/mnt/net/ipc/uts. CLONE_NEWPID does not move the unshare caller into the new PID namespace; the child-of-unshare must be checked separately. The group leader must match the exact unreaped child PID before successful parent attestation.
 - Probe runs a post-seccomp `openat` and requires **EPERM**, rejecting misleading ENOENT from an empty pivoted root. Group mismatch is not accepted as verified forced cleanup. Source-only worker status remains BLOCKED.
+
+## Double-barrier fix for Linux pid_for_children (31 Oct 2026)
+- Corrected a proposed single-barrier readback: the Linux `pid_for_children` namespace link is empty until the first child is created. Direct probe now forks disposable PID 1 but the PID1 child blocks on a private gate; direct probe announces `P` to the outer observer. The observer then reads `/proc/<pid>/ns/pid_for_children` and releases the PID1 gate only on an independently observed distinct namespace. Any unavailable kernel evidence denies; still no task execution.

@@ -35,3 +35,6 @@ The Linux source negative test now checks that group signal errors do not short-
 ### Additional native regression gates
 - Linux native C and `test/task-os-sandbox-linux-native-p07.test.ts`: assert parent `pid_for_children` kernel namespace identity, exact isolated process group, and post-seccomp syscall `openat` explicit `EPERM`. Requires current exact-HEAD Node22/24 CI run after commit; no local host namespace execution or installed Agent permission.
 - Linux C source-only compile/negative CLI success is insufficient evidence for an actual namespace+seccomp kernel PASS, because selftest is opt-in and may return BLOCKED on runners without unprivileged user namespace support.
+
+### Kernel namespace witness ordering
+- Source negative test checks that `pid_for_children` is read from the outer parent **after** the first fork and **before** PID1's gate release. Prior one-stage check was invalid because the link is empty until a child is created (Linux pid_namespaces(7)). Exact-head CI and optional isolated Linux namespace selftest remain separate evidence; unsupported kernels must return BLOCKED.

@@ -99,7 +99,7 @@ static int observe_kernel_namespaces(pid_t child,uid_t outer_uid) {
   /* Direct unshare(CLONE_NEWPID) changes only the namespace for *future*
    * children. /proc/<pid>/ns/pid would still show the host PID namespace.
    * Read the actual kernel pid_for_children namespace from outside instead. */
-  const char *names[]={"user","mnt","net","ipc","uts","pid_for_children"};
+  const char *names[]={"user","mnt","net","ipc","uts"};
   for(size_t i=0;i<sizeof(names)/sizeof(names[0]);++i) {
     char path[96];
     struct stat observed, host;
@@ -128,6 +128,18 @@ static int observe_kernel_namespaces(pid_t child,uid_t outer_uid) {
   return 0;
 }
 
+/* CLONE_NEWPID applies to future forks, and pid_for_children can remain
+ * empty until the first child exists. Observe only after a second signal from
+ * the direct child *after* it forks disposable namespace PID 1. */
+static int observe_child_pid_namespace(pid_t child) {
+  struct stat observed, host;
+  char path[96];
+  int n=snprintf(path,sizeof(path),"/proc/%ld/ns/pid_for_children",(long)child);
+  if(n<0 || (size_t)n>=sizeof(path) || stat(path,&observed)<0)return -1;
+  if(stat("/proc/self/ns/pid_for_children",&host)<0)return -1;
+  return (host.st_dev!=observed.st_dev || host.st_ino!=observed.st_ino)?0:-1;
+}
+
 static int kernel_child(const char *root,int ready_fd,int resume_fd) {
   /* Self-observed namespace inode difference: NOT an independent attester. */
   struct stat user_before, net_before, user_after, net_after;
@@ -150,7 +162,9 @@ static int kernel_child(const char *root,int ready_fd,int resume_fd) {
   char approval=0;
   if(write(ready_fd,&announced,1)!=1 ||
      read(resume_fd,&approval,1)!=1 || approval!='Y')return 61;
-  if(close(ready_fd)<0||close(resume_fd)<0)return 62;
+  /* Keep the two trusted synchronization pipe descriptors alive until a
+   * second parent readback after the new PID namespace has its first child.
+   * No task code or post-fork diagnostic begins before the second approval. */
   if(mount(NULL,"/",NULL,MS_REC|MS_PRIVATE,NULL)<0)return 32;
   if(mount("tmpfs",root,"tmpfs",MS_NODEV|MS_NOSUID|MS_NOEXEC,
            "size=2m,mode=0700")<0)return 33;
@@ -158,13 +172,39 @@ static int kernel_child(const char *root,int ready_fd,int resume_fd) {
   if(snprintf(oldroot,sizeof(oldroot),"%s/.old",root)>=(int)sizeof(oldroot))
     return 34;
   if(mkdir(oldroot,0700)<0)return 35;
+  int gate[2];
+  if(pipe2(gate,O_CLOEXEC)<0)return 63;
   pid_t pid=fork();
-  if(pid<0)return 36;
+  if(pid<0) {
+    (void)close(gate[0]);(void)close(gate[1]);
+    return 36;
+  }
   if(pid>0) {
+    (void)close(gate[0]);
+    const char pid_ready='P';
+    char pid_approved=0;
+    int accepted=write(ready_fd,&pid_ready,1)==1 &&
+      read(resume_fd,&pid_approved,1)==1 && pid_approved=='Y';
+    (void)close(ready_fd);(void)close(resume_fd);
+    if(!accepted || write(gate[1],"Y",1)!=1) {
+      (void)close(gate[1]);
+      /* The only PID targeted is the disposable child just forked here.
+       * A missing/invalid parent OS witness cannot start the selftest. */
+      (void)kill(pid,SIGKILL);
+      int blocked_status=0;
+      while(waitpid(pid,&blocked_status,0)<0)if(errno!=EINTR)break;
+      return 61;
+    }
+    (void)close(gate[1]);
     int status=0;
     while(waitpid(pid,&status,0)<0)if(errno!=EINTR)return 37;
     return WIFEXITED(status)?WEXITSTATUS(status):38;
   }
+  (void)close(gate[1]);
+  (void)close(ready_fd);(void)close(resume_fd);
+  char child_approved=0;
+  if(read(gate[0],&child_approved,1)!=1 || child_approved!='Y')_exit(61);
+  if(close(gate[0])<0)_exit(62);
   /* Child is PID 1 of the new PID namespace. If its outer forked parent
    * dies, request kernel termination rather than leaving an orphaned init.
    * The parent also kills its isolated process group on a timed-out probe.
@@ -308,7 +348,6 @@ int main(int argc,char **argv) {
   ssize_t bytes=read_ready_bounded(ready[0],&announcement);
   int independently_observed=(bytes==1 && announcement=='R' &&
     observe_kernel_namespaces(pid,outer_uid)==0);
-  (void)close(ready[0]);
   const char approval=independently_observed?'Y':'N';
   if(bytes==1 && announcement=='R') {
     /* An early child exit must never kill the parent via SIGPIPE, leak the
@@ -316,7 +355,18 @@ int main(int argc,char **argv) {
     if(signal(SIGPIPE,SIG_IGN)==SIG_ERR ||
        write(resume[1],&approval,1)!=1)independently_observed=0;
   }
-  (void)close(resume[1]);
+  if(independently_observed) {
+    /* Caller has already forked PID 1 but PID 1 is waiting on a private
+     * gate; now verify pid_for_children from the external /proc kernel view
+     * before permitting ANY post-fork selftest effect. */
+    char pid_ready=0;
+    ssize_t second=read_ready_bounded(ready[0],&pid_ready);
+    independently_observed=second==1 && pid_ready=='P' &&
+      observe_child_pid_namespace(pid)==0;
+    const char second_approval=independently_observed?'Y':'N';
+    if(write(resume[1],&second_approval,1)!=1)independently_observed=0;
+  }
+  (void)close(ready[0]);(void)close(resume[1]);
   int status=0;
   int waited=wait_child_bounded(pid,&status);
   if(rmdir(root)<0)return 73;

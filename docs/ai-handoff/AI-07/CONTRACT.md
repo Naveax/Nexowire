@@ -48,3 +48,6 @@ A failure to signal the disposable Linux process group still attempts terminatio
 
 ### PID namespace / process-group diagnostic semantics
 The outer source-only diagnostic requires `/proc/<probe-pid>/ns/pid_for_children` to differ from the host observer namespace, because unshare(CLONE_NEWPID) applies to subsequently forked children; the caller's `/proc/<pid>/ns/pid` is not sufficient. Parent also checks `getpgid(probe-pid)==probe-pid` before releasing the selftest barrier; a mismatch never permits signalling arbitrary host process groups. A post-seccomp `openat` must return `EPERM` (not mere ENOENT), independently of the mounted empty test root. These are unsigned test-program observations, not a secured OS grant or production worker identity.
+
+### Correct two-stage namespace witness
+`unshare(CLONE_NEWPID)` changes the namespace for future children only, and the kernel `pid_for_children` link may be empty until the first child exists. Therefore the separate `P` checkpoint only occurs **after** the disposable PID1 is forked. PID1 blocks on an O_CLOEXEC pipe gate until the external parent reads kernel namespace differences and replies `Y`; denial/EOF rejects the probe. Both readiness reads have bounded monotonic waits. This is a selftest-only unsigned parent/child handshake, not trusted production admission.

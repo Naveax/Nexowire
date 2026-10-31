@@ -28,3 +28,6 @@ A group kill is not a certified descendant-drain mechanism for an arbitrary task
 
 ### Additional Linux evidence gate (31 Oct)
 The unshare caller's future-child PID namespace is now directly checked via `pid_for_children` and parent-owned process group identity. Post-seccomp file open attempts must fail with `EPERM`. No native task runner is enabled, and all external physical acceptance remains NO-GO.
+
+### Two-stage PID namespace witness
+A second bounded outer-parent kernel readback now precedes the gate for the test-only namespace PID 1. This corrects early `pid_for_children` inspection, keeps task execution disabled, and does not establish any release-ready OS sandbox.

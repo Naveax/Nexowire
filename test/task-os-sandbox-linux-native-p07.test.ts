@@ -44,7 +44,11 @@ test('#07 Linux diagnostic has no arbitrary shell entry point',()=>{
   assert.match(source,/if\(pgid==pid\)/);
   assert.match(source,/kill\(-pid,SIGKILL\)/);
   assert.match(source,/if\(getpgid\(child\)!=child\)return -1/);
-  assert.match(source,/"pid_for_children"/);
+  assert.match(source,/observe_child_pid_namespace\(pid\)==0/);
+  assert.match(source,/second==1 && pid_ready=='P'/);
+  assert.match(source,/if\(pipe2\(gate,O_CLOEXEC\)<0\)return 63/);
+  assert.match(source,/if\(read\(gate\[0\],&child_approved,1\)!=1/);
+  assert.match(source,/if\(close\(gate\[0\]\)<0\)_exit\(62\)/);
   assert.match(source,/signals_ok=0;/);
   assert.match(source,/if\(pid<=1\)return -1/);
   // Group kill failure cannot bypass direct-child kill or wait verification.
@@ -63,6 +67,8 @@ test('#07 probe seccomp cannot allow task exec, networking, process creation or 
   assert.match(source,/filefd=openat\(AT_FDCWD,"\/etc\/passwd",O_RDONLY\|O_CLOEXEC\)/);
   assert.match(source,/if\(filefd!=-1 \|\| errno!=EPERM\)_exit\(56\)/);
   assert.match(source,/observe_kernel_namespaces\(pid,outer_uid\)/);
+  assert.match(source,/stat\("\/proc\/self\/ns\/pid_for_children",&host\)/);
+  assert.match(source,/stat\(path,&observed\)<0\)return -1/);
   for(const denied of [
     'execve','execveat','socket','connect','sendmsg','recvmsg',
     'clone','clone3','fork','vfork','mount','umount2','open','openat',
