@@ -195,3 +195,25 @@ test('AI-05 CORE denial lists are runtime immutable, not just readonly TS types'
     mismatch('CORE_NATIVE_EFFECT_ADMISSION_REQUIRED'));
   assert.equal(CORE_EXECUTOR_DISPATCH_ENABLED,false);
 });
+
+test('AI-05 hidden nested JSON fields are rejected before Broker snapshot',()=>{
+  const nested={visible:'approved'};
+  Object.defineProperty(nested,'secret',{
+    enumerable:false,configurable:true,value:'not-approved',
+  });
+  assert.throws(
+    ()=>prepareCoreWindowsMutation(capability,{nested}),
+    mismatch('CORE_DISPATCH_INPUT_NOT_CANONICAL'));
+  assert.equal(CORE_EXECUTOR_DISPATCH_ENABLED,false);
+});
+
+test('AI-05 hidden array elements are rejected rather than re-emitted as approved wire bytes',()=>{
+  const entries=['first','second'];
+  Object.defineProperty(entries,'0',{
+    enumerable:false,configurable:true,value:'first',
+  });
+  assert.throws(
+    ()=>prepareCoreWindowsMutation(capability,{entries}),
+    mismatch('CORE_DISPATCH_INPUT_NOT_CANONICAL'));
+  assert.equal(CORE_EXECUTOR_DISPATCH_ENABLED,false);
+});

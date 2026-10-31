@@ -62,7 +62,7 @@ function canonical(value:unknown,ancestors=new Set<object>()):string {
       const items:string[]=[];
       for(let i=0;i<value.length;i++){
         const item=descriptors[String(i)];
-        if(!item||!('value' in item))
+        if(!item||!('value' in item)||item.enumerable!==true)
           deny('CORE_DISPATCH_INPUT_NOT_CANONICAL');
         items.push(canonical(item.value,ancestors));
       }
@@ -70,7 +70,7 @@ function canonical(value:unknown,ancestors=new Set<object>()):string {
     }
     return '{'+(keys as string[]).sort().map(key=>{
       const item=descriptors[key];
-      if(!item||!('value' in item))
+      if(!item||!('value' in item)||item.enumerable!==true)
         deny('CORE_DISPATCH_INPUT_NOT_CANONICAL');
       return JSON.stringify(key)+':'+canonical(item.value,ancestors);
     }).join(',')+'}';

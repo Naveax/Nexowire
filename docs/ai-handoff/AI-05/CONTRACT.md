@@ -31,3 +31,6 @@ This is a **structural** input contract only. The separate Broker `BrokerExterna
 
 ## Runtime immutable CORE denial capability collections
 The sandbox and native-effect CORE denial capability lists are exposed through a frozen `ReadonlySet<string>` façade with a private backing Set. Merely annotating a publicly exported `new Set(...)` as `ReadonlySet` does not prevent JavaScript callers from invoking `.clear()`, `.delete()` or `Set.prototype.clear.call(...)`. The façade preserves `has`, iteration and `forEach` without exposing any mutating Set target. This is defense-in-depth; it does not replace signed Broker/native OS admission or change the default `CORE_EXECUTOR_DISPATCH_ENABLED=false`.
+
+## JSON payload enumerable-data-only boundary
+The executor's recursive canonical snapshot rejects non-enumerable nested object fields and non-enumerable array element indices, as well as accessors, symbols and Proxy wrappers. Otherwise hidden data could be silently promoted into visible JSON during detached copy creation, changing what the caller considered part of the authorized wire input. The snapshot refuses ambiguous hidden values before CAS/Broker dispatch; no fallback or permissive serialization is used.
