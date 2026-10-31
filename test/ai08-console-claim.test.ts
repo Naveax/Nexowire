@@ -84,6 +84,18 @@ for(const scenario of [
   {name:'privilege downgrade',sql:"UPDATE devices SET privilege_mode='direct'"},
   {name:'platform substitution',sql:"UPDATE devices SET platform='linux'"},
   {name:'CORE disabled',sql:'UPDATE device_maintenance_preferences SET enabled=0'},
+  // The outer claim has already consumed its request ID when native readback
+  // waits. Any changed authoritative scope must tombstone, never replay.
+  {name:'owner epoch rotated',sql:'UPDATE device_core_console_authority SET owner_epoch=owner_epoch+1'},
+  {name:'grant generation rotated',sql:'UPDATE device_core_console_authority SET grant_generation=grant_generation+1'},
+  {name:'revoke epoch advanced',sql:'UPDATE device_core_console_authority SET revoke_epoch=revoke_epoch+1'},
+  {name:'enrollment replaced',sql:"UPDATE device_core_console_authority SET enrollment_id='00000000-0000-4000-8000-000000000801'"},
+  {name:'native receipt replaced',sql:"UPDATE device_core_console_authority SET native_consent_receipt_id='00000000-0000-4000-8000-000000000802'"},
+  {name:'Windows user SID rotated',sql:"UPDATE device_core_console_authority SET windows_user_sid='S-1-5-21-100-200-300-2002'"},
+  {name:'Windows session changed',sql:'UPDATE device_core_console_authority SET windows_session_id=windows_session_id+1'},
+  {name:'Windows logon LUID changed',sql:"UPDATE device_core_console_authority SET windows_logon_luid='0000000000000002'"},
+  {name:'Windows session epoch changed',sql:"UPDATE device_core_console_authority SET windows_logon_session_epoch='00000000-0000-4000-8000-000000000803'"},
+  {name:'SAFE access mode',sql:"UPDATE devices SET access_mode='safe'"},
 ]){
   test('AI-08: D1 claim after native readback rejects '+scenario.name,async()=>{
     const f=fixture();
