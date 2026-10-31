@@ -132,3 +132,52 @@ test('replaced WAL pathname cannot borrow verification of the previous inode',as
   });
   assert.deepEqual(await fs.readFile(walPath),replacement);
 });
+
+test('recycled WAL rejects a physically truncated retained allocation frame',async t=>{
+  const f=await fixture(t,true);
+  const damaged=f.wal.subarray(0,f.wal.length-17);
+  await fs.writeFile(f.file+'-wal',damaged);
+  await assert.rejects(verifyAgentJournalWal(f.file),
+    {code:'AGENT_JOURNAL_WAL_CORRUPT'});
+  assert.deepEqual(await fs.readFile(f.file+'-wal'),damaged);
+  assert.deepEqual(await fs.readFile(f.file+'-shm'),f.shm);
+});
+
+test('recycled WAL rejects a partial appended physical frame',async t=>{
+  const f=await fixture(t,true);
+  const damaged=Buffer.concat([f.wal,Buffer.from([0x57,0x41,0x4c])]);
+  await fs.writeFile(f.file+'-wal',damaged);
+  await assert.rejects(verifyAgentJournalWal(f.file),
+    {code:'AGENT_JOURNAL_WAL_CORRUPT'});
+  assert.deepEqual(await fs.readFile(f.file+'-wal'),damaged);
+  assert.deepEqual(await fs.readFile(f.file+'-shm'),f.shm);
+});
+
+test('current-generation salt tampering in recycled WAL remains fail closed',async t=>{
+  const f=await fixture(t,true);
+  const damaged=Buffer.from(f.wal);
+  damaged[32+8]=(damaged[32+8]??0)^0x40;
+  await fs.writeFile(f.file+'-wal',damaged);
+  await assert.rejects(verifyAgentJournalWal(f.file),
+    {code:'AGENT_JOURNAL_WAL_CORRUPT'});
+  assert.deepEqual(await fs.readFile(f.file+'-wal'),damaged);
+  assert.deepEqual(await fs.readFile(f.file+'-shm'),f.shm);
+});
+
+test('recycled WAL preflight preserves WAL-only UNKNOWN on disposable SQLite reopen',async t=>{
+  const f=await fixture(t,true);
+  await verifyAgentJournalWal(f.file);
+  const db=new DatabaseSync(f.file);
+  try{
+    const integrity=db.prepare('PRAGMA integrity_check').get() as
+      {integrity_check?:string}|undefined;
+    assert.equal(integrity?.integrity_check,'ok');
+    const row=db.prepare('SELECT state FROM operations WHERE id=?')
+      .get('new-unknown') as {state:string}|undefined;
+    assert.equal(row?.state,'unknown');
+    assert.equal(db.prepare('SELECT count(*) AS count FROM operations')
+      .get()!.count,65);
+    assert.throws(()=>db.prepare('INSERT INTO operations VALUES(?,?)')
+      .run('new-unknown','committed'),/UNIQUE constraint failed/);
+  }finally{db.close();}
+});
