@@ -121,7 +121,12 @@ export async function verifyAgentJournalWal(dbFile:string):Promise<void>{
     const opened=await handle.stat();
     if(!opened.isFile()||opened.dev!==prior.dev||
        opened.ino!==prior.ino)fail();
-    if(opened.size===0)return;
+    // An empty WAL is legitimate, but it must still resolve to the opened
+    // inode. Do not let the short-circuit omit the namespace readback.
+    if(opened.size===0){
+      await assertStablePath(walFile,opened);
+      return;
+    }
     if(opened.size<32)fail();
     const header=Buffer.alloc(32);
     await readExactly(handle,header,32,0);

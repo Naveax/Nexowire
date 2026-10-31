@@ -1,15 +1,12 @@
-# AI-01 | WAL v1.0.8 source hardening
+# AI-01 / FINAL (source-only, conditional)
 
-- Base: `a19a228dc6f19fd484cf935e941a00ea625233f8` (`main`, verified 2026-10-31).
-- Branch: `ai/01-wal-v108`.
-- Scope: `src/agent/operation-journal-wal.ts`, a new `test/ai01-wal-*.test.ts`, and own handoff folder only.
-- No live database, Agent, Windows device, deployment, CORE or credentials were used.
-- Isolation note: GitHub API branch operations were used; the sandbox's DNS blocked a full local clone, so a local `git status` / `git diff` / full `npm ci` is **not** asserted.
-
-## Delivery gate
-
-Status: **NO_GO pending exact-head hosted CI and coordinator integration**.
-
-New coverage: stable hot/recycled WAL, late in-place WAL header mutation, late SHM index mutation, and POSIX WAL-path swap. Existing recycled-WAL tests/negatives remain unchanged.
-
-No physical Windows/restart/24-hour soak on an owned machine was performed. Core/production authorization is outside AI-01 and remains NO-GO.
+- Verdict: **NO_GO for production; REVIEW pending own exact-head CI + coordinator/AI-08 review**.
+- Base SHA: `a19a228dc6f19fd484cf935e941a00ea625233f8`; branch `ai/01-wal-v108`.
+- Draft PR: https://github.com/Naveax/Nexowire/pull/986
+- Production source changed: only `src/agent/operation-journal-wal.ts`.
+- Test added: `test/ai01-wal-snapshot-races.test.ts`. Existing negative tests retained, no skip introduced except explicitly OS-dependent POSIX rename cases.
+- Handoff documents: `docs/ai-handoff/AI-01/{STATUS,CONTRACT,TEST_EVIDENCE,INTEGRATION_REQUEST,FINAL}.md`.
+- Positive: normal hot, recycled, zero WAL. Negative: late WAL/SHM in-place changes, inode swap, checksum/salt, truncated/partial frame. UNKNOWN on real disposable SQLite reopen remains preserved.
+- Known limitation: `AgentOperationJournal.initialize()` validates asynchronously and opens SQLite by path later. No atomic verify-to-open continuity; coordination/API request is tracked in `INTEGRATION_REQUEST.md`, not silently bypassed.
+- Exact-head current CI: **pending**; prior committed CI evidence in `TEST_EVIDENCE.md` belongs only to its exact SHA.
+- Real device physical reboots/soak, independently rollback-resistant authority, full CORE are not proven by this AI's source-only tests. No merge/deploy authorization.

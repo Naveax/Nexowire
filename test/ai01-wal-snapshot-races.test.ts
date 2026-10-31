@@ -181,3 +181,54 @@ test('recycled WAL preflight preserves WAL-only UNKNOWN on disposable SQLite reo
       .run('new-unknown','committed'),/UNIQUE constraint failed/);
   }finally{db.close();}
 });
+
+test('stable empty WAL is accepted without writing or creating a database',async t=>{
+  const dir=await fs.mkdtemp(path.join(os.tmpdir(),'nw-ai01-wal-empty-'));
+  t.after(()=>fs.rm(dir,{force:true,recursive:true}));
+  const db=path.join(dir,'unused.sqlite');
+  const wal=db+'-wal';
+  await fs.writeFile(wal,Buffer.alloc(0));
+  await verifyAgentJournalWal(db);
+  assert.equal((await fs.stat(wal)).size,0);
+  await assert.rejects(fs.stat(db),{code:'ENOENT'});
+});
+
+test('empty WAL cannot silently change pathname identity during early return',async t=>{
+  if(process.platform==='win32'){
+    t.skip('open-file rename sharing differs on Windows; the positive empty-WAL and in-place races still run');
+    return;
+  }
+  const dir=await fs.mkdtemp(path.join(os.tmpdir(),'nw-ai01-wal-empty-swap-'));
+  t.after(()=>fs.rm(dir,{force:true,recursive:true}));
+  const db=path.join(dir,'unused.sqlite');
+  const wal=db+'-wal';
+  await fs.writeFile(wal,Buffer.alloc(0));
+  await fs.writeFile(wal+'.swap',Buffer.alloc(0));
+  await atWalStat(wal,1,async()=>{
+    await fs.rename(wal,wal+'.old');
+    await fs.rename(wal+'.swap',wal);
+  },async()=>{
+    await assert.rejects(verifyAgentJournalWal(db),
+      {code:'AGENT_JOURNAL_WAL_CORRUPT'});
+  });
+  assert.equal((await fs.stat(wal)).size,0);
+});
+
+test('byte-identical WAL pathname replacement is rejected by inode identity',async t=>{
+  if(process.platform==='win32'){
+    t.skip('open-file rename sharing differs on Windows; existing in-place mutation negatives execute');
+    return;
+  }
+  const f=await fixture(t,true);
+  const wal=f.file+'-wal';
+  await fs.writeFile(wal+'.swap',f.wal);
+  await atWalStat(wal,2,async()=>{
+    await fs.rename(wal,wal+'.old');
+    await fs.rename(wal+'.swap',wal);
+  },async()=>{
+    await assert.rejects(verifyAgentJournalWal(f.file),
+      {code:'AGENT_JOURNAL_WAL_CORRUPT'});
+  });
+  assert.deepEqual(await fs.readFile(wal),f.wal,
+    'denial must be based on identity, not merely byte differences');
+});
