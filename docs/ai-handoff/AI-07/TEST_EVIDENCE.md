@@ -27,3 +27,7 @@
 - `test/task-os-sandbox-linux-native-p07.test.ts`: new static source assertions for `setpgid`, child `PR_SET_PDEATHSIG`, bounded group termination and PID > 1 guard. Existing Linux C compilation and command rejection remain mandatory on exact-head CI; full namespace selftest not claimed.
 - `test/ai07-sandbox-windows-probe.test.ts`: negative static assertions require real AppContainer SID readback and `TokenUIAccess==0`. Windows MSVC compile remains an independent required native check.
 - Exact head CI results must be read from Actions; no older SHA PASS can be carried forward.
+
+
+### Forced cleanup negative regression
+The Linux source negative test now checks that group signal errors do not short-circuit direct child SIGKILL; that forced waitpid is bounded, and success is contingent on observed reap. CI Linux compilation/negative CLI and full Node tests must be confirmed on this exact SHA. No lab cgroup, physical Windows native or installed Agent acceptance is implied.

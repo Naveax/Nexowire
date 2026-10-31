@@ -21,3 +21,7 @@ Per `NEXOWIRE_AI_TAKIM_PLANI_14_GUN.md`, AI-05 owns executor/CAS dispatch; AI-04
 
 ## Native diagnostic additional hardening
 Linux selftest group termination and nested PID1 parent-death signal; Windows local readback of AppContainer SID and UIAccess. Exact OS acceptance still **NO_GO**, and these diagnostics remain non-executing task probes.
+
+
+### Forced teardown caveat
+A group kill is not a certified descendant-drain mechanism for an arbitrary task. Timeout cleanup failure is explicitly non-PASS; kernel-signed Job/cgroup readback, identity-fenced cancellation and external CAS remain P0.

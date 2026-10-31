@@ -41,3 +41,7 @@ AI-05 must invoke the above **before** shell, process and nested task effects. A
 ## Native readback/source-only risk reduction
 - Linux direct diagnostic child creates an isolated process group **before** unshare/fork. Timed-out parent checks exact child process group and kills it, and namespace PID 1 requests `PR_SET_PDEATHSIG`; exit remains nonzero on cleanup uncertainty. This is a bounded *selftest* improvement, **not** verified full descendant cleanup for arbitrary tasks or production grant release.
 - Windows probe now reads effective `TokenAppContainerSid` and rejects missing/invalid SID, plus rejects `TokenUIAccess` even when `TokenIsAppContainer` is asserted. The token/Job checks remain local diagnostics, not independent permission, WFP, file or handle containment evidence.
+
+
+### Bounded forced cleanup cannot claim completion on signal failure
+A failure to signal the disposable Linux process group still attempts termination of its exact direct child. A bounded `waitpid(WNOHANG)` poll (5 seconds) is used after SIGKILL. An unobserved reap, group signal failure or child termination error produces BLOCKED and never authorizes revoke, quota release or execution.

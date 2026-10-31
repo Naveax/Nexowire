@@ -43,6 +43,12 @@ test('#07 Linux diagnostic has no arbitrary shell entry point',()=>{
   assert.match(source,/if\(prctl\(PR_SET_PDEATHSIG,SIGKILL\)<0\)_exit\(55\)/);
   assert.match(source,/pgid==pid && kill\(-pid,SIGKILL\)/);
   assert.match(source,/if\(pid<=1\)return -1/);
+  // Group kill failure cannot bypass direct-child kill or wait verification.
+  assert.match(source,/if\(kill\(pid,SIGKILL\)<0 && errno!=ESRCH\)signals_ok=0/);
+  assert.match(source,/if\(got==pid\)return signals_ok\?-2:-1/);
+  assert.match(source,/now-start>=5000LL/);
+  assert.doesNotMatch(source,/waitpid\(pid,status,0\)/);
+
 });
 
 test('#07 probe seccomp cannot allow task exec, networking, process creation or mount syscalls',()=>{

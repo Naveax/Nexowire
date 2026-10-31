@@ -223,17 +223,25 @@ static ssize_t read_ready_bounded(int fd,char *out) {
 }
 static int terminate_owned_child(pid_t pid,int *status) {
   if(pid<=1)return -1;
-  /* The direct child creates its own process group before unshare/fork.
-   * On timeout kill its group, so the PID-namespace grandchild is signalled
-   * too. A direct PID-only kill could orphan the nested namespace init.
-   * Check getpgid while the direct child is still our unreaped child. */
+  /* Kill only the own unreaped diagnostic child and verified process group.
+   * A group-signal failure must NOT prevent attempting direct-child cleanup. */
+  int signals_ok=1;
   pid_t pgid=getpgid(pid);
-  if(pgid==pid && kill(-pid,SIGKILL)<0 && errno!=ESRCH)return -1;
-  if(pgid<0 && errno!=ESRCH)return -1;
-  if(kill(pid,SIGKILL)<0&&errno!=ESRCH)return -1;
-  pid_t got;
-  do {got=waitpid(pid,status,0);}while(got<0&&errno==EINTR);
-  return got==pid?-2:-1;
+  if(pgid==pid && kill(-pid,SIGKILL)<0 && errno!=ESRCH)signals_ok=0;
+  if(pgid<0 && errno!=ESRCH)signals_ok=0;
+  if(kill(pid,SIGKILL)<0 && errno!=ESRCH)signals_ok=0;
+  /* SIGKILL itself is not a verified reaping receipt: bounded WNOHANG
+   * prevents a stuck child from hanging the diagnostic indefinitely. */
+  long long start,now;
+  if(monotonic_ms(&start)<0)return -1;
+  for(;;) {
+    pid_t got=waitpid(pid,status,WNOHANG);
+    if(got==pid)return signals_ok?-2:-1;
+    if(got<0&&errno!=EINTR)return -1;
+    if(monotonic_ms(&now)<0||now-start>=5000LL)return -1;
+    const struct timespec pause={.tv_sec=0,.tv_nsec=20000000L};
+    (void)nanosleep(&pause,NULL);
+  }
 }
 static int wait_child_bounded(pid_t pid,int *status) {
   long long start,now;
