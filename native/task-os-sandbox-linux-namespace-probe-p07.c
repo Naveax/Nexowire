@@ -5,13 +5,15 @@
  *
  * The probe demonstrates a narrow rootless Linux user/mount/PID/net isolation
  * feasibility check, not task containment. It has no resource cgroup,
- * independent attester, trusted publisher, seccomp policy or revoke drain.
+ * independent attester, trusted publisher, task-capable seccomp policy or revoke drain.
  * Build: cc -std=c11 -O2 -Wall -Wextra -Werror FILE.c -o PROBE
  */
 #define _GNU_SOURCE
 #include <errno.h>
 #include <signal.h>
 #include <stddef.h>
+#include <poll.h>
+#include <time.h>
 #include <linux/audit.h>
 #include <linux/filter.h>
 #include <linux/seccomp.h>
@@ -70,12 +72,11 @@ static int install_probe_seccomp(void) {
     BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K,NW07_SECCOMP_ARCH,1,0),
     BPF_STMT(BPF_RET|BPF_K,SECCOMP_RET_KILL_PROCESS),
     BPF_STMT(BPF_LD|BPF_W|BPF_ABS,(unsigned)offsetof(struct seccomp_data,nr)),
-    NW07_SC_ALLOW(write),
+    /* No inherited outputs remain after close_range(0,...), so even write
+     * is unnecessary. Only termination and signal return are permitted. */
     NW07_SC_ALLOW(exit),
     NW07_SC_ALLOW(exit_group),
     NW07_SC_ALLOW(rt_sigreturn),
-    NW07_SC_ALLOW(getpid),
-    NW07_SC_ALLOW(getuid),
     BPF_STMT(BPF_RET|BPF_K,SECCOMP_RET_ERRNO|EPERM),
   };
   const struct sock_fprog program = {
@@ -92,6 +93,12 @@ static int install_probe_seccomp(void) {
  * hence is NOT a trusted production verifier or protected principal.
  */
 static int observe_kernel_namespaces(pid_t child,uid_t outer_uid) {
+  /* Readiness is emitted after setpgid(0,0). If that invariant is missing,
+   * the outer parent cannot safely signal only its own isolated probe group. */
+  if(getpgid(child)!=child)return -1;
+  /* Direct unshare(CLONE_NEWPID) changes only the namespace for *future*
+   * children. /proc/<pid>/ns/pid would still show the host PID namespace.
+   * Read the actual kernel pid_for_children namespace from outside instead. */
   const char *names[]={"user","mnt","net","ipc","uts"};
   for(size_t i=0;i<sizeof(names)/sizeof(names[0]);++i) {
     char path[96];
@@ -121,6 +128,44 @@ static int observe_kernel_namespaces(pid_t child,uid_t outer_uid) {
   return 0;
 }
 
+/* CLONE_NEWPID applies to future forks, and pid_for_children can remain
+ * empty until the first child exists. Observe only after a second signal from
+ * the direct child *after* it forks disposable namespace PID 1. */
+static int observe_child_pid_namespace(pid_t child) {
+  struct stat observed, host;
+  char path[96];
+  int n=snprintf(path,sizeof(path),"/proc/%ld/ns/pid_for_children",(long)child);
+  if(n<0 || (size_t)n>=sizeof(path) || stat(path,&observed)<0)return -1;
+  if(stat("/proc/self/ns/pid_for_children",&host)<0)return -1;
+  return (host.st_dev!=observed.st_dev || host.st_ino!=observed.st_ino)?0:-1;
+}
+
+/* Direct-child-only reap: only the test-owned namespace PID1 just forked
+ * by this process is eligible. Both natural and forced waits are bounded.
+ * No host PID or caller-supplied identifier can reach this helper.
+ * Return 0 for natural exit, 1 for kill+reap, -1 for uncertain cleanup. */
+static int monotonic_ms(long long *out);
+static int reap_disposable_pid1(pid_t pid,int *status,int force_kill) {
+  if(pid<=1)return -1;
+  long long start,now;
+  int killed=force_kill;
+  if(force_kill && kill(pid,SIGKILL)<0 && errno!=ESRCH)return -1;
+  if(monotonic_ms(&start)<0)return -1;
+  for(;;) {
+    pid_t got=waitpid(pid,status,WNOHANG);
+    if(got==pid)return killed?1:0;
+    if(got<0 && errno!=EINTR)return -1;
+    if(monotonic_ms(&now)<0)return -1;
+    if(!killed && now-start>=6500LL) {
+      if(kill(pid,SIGKILL)<0 && errno!=ESRCH)return -1;
+      killed=1;
+    }
+    if(now-start>=9000LL)return -1;
+    const struct timespec pause={.tv_sec=0,.tv_nsec=20000000L};
+    (void)nanosleep(&pause,NULL);
+  }
+}
+
 static int kernel_child(const char *root,int ready_fd,int resume_fd) {
   /* Self-observed namespace inode difference: NOT an independent attester. */
   struct stat user_before, net_before, user_after, net_after;
@@ -143,7 +188,9 @@ static int kernel_child(const char *root,int ready_fd,int resume_fd) {
   char approval=0;
   if(write(ready_fd,&announced,1)!=1 ||
      read(resume_fd,&approval,1)!=1 || approval!='Y')return 61;
-  if(close(ready_fd)<0||close(resume_fd)<0)return 62;
+  /* Keep the two trusted synchronization pipe descriptors alive until a
+   * second parent readback after the new PID namespace has its first child.
+   * No task code or post-fork diagnostic begins before the second approval. */
   if(mount(NULL,"/",NULL,MS_REC|MS_PRIVATE,NULL)<0)return 32;
   if(mount("tmpfs",root,"tmpfs",MS_NODEV|MS_NOSUID|MS_NOEXEC,
            "size=2m,mode=0700")<0)return 33;
@@ -151,24 +198,67 @@ static int kernel_child(const char *root,int ready_fd,int resume_fd) {
   if(snprintf(oldroot,sizeof(oldroot),"%s/.old",root)>=(int)sizeof(oldroot))
     return 34;
   if(mkdir(oldroot,0700)<0)return 35;
+  int gate[2];
+  if(pipe2(gate,O_CLOEXEC)<0)return 63;
   pid_t pid=fork();
-  if(pid<0)return 36;
+  if(pid<0) {
+    (void)close(gate[0]);(void)close(gate[1]);
+    return 36;
+  }
   if(pid>0) {
+    (void)close(gate[0]);
+    const char pid_ready='P';
+    char pid_approved=0;
+    /* A dead PID1 must yield EPIPE, never async SIGPIPE process death
+     * before the exact owned PID is signalled and reaped. */
+    int accepted=signal(SIGPIPE,SIG_IGN)!=SIG_ERR &&
+      write(ready_fd,&pid_ready,1)==1 &&
+      read(resume_fd,&pid_approved,1)==1 && pid_approved=='Y';
+    (void)close(ready_fd);(void)close(resume_fd);
+    if(!accepted || write(gate[1],"Y",1)!=1) {
+      (void)close(gate[1]);
+      /* A missing/invalid parent OS witness cannot start the selftest.
+       * Kill and confirm reap of only this freshly forked PID1, within
+       * a monotonic deadline; uncertainty always stays non-success. */
+      int blocked_status=0;
+      return reap_disposable_pid1(pid,&blocked_status,1)==1?61:83;
+    }
+    (void)close(gate[1]);
     int status=0;
-    while(waitpid(pid,&status,0)<0)if(errno!=EINTR)return 37;
+    int waited=reap_disposable_pid1(pid,&status,0);
+    if(waited==1)return 81; /* timed-out PID1 killed, not a PASS */
+    if(waited!=0)return 84; /* uncertain PID1 cleanup */
     return WIFEXITED(status)?WEXITSTATUS(status):38;
   }
+  (void)close(gate[1]);
+  (void)close(ready_fd);(void)close(resume_fd);
+  /* Install the kernel parent-death signal BEFORE the blocking PID1 gate.
+   * If the direct fork parent disappears during outer readback, the nested
+   * namespace init must not wait indefinitely on a pipe from a dead parent.
+   * This is still unsigned selftest evidence, not production revoke proof. */
+  if(prctl(PR_SET_PDEATHSIG,SIGKILL)<0)_exit(55);
+  char child_approved=0;
+  if(read(gate[0],&child_approved,1)!=1 || child_approved!='Y')_exit(61);
+  if(close(gate[0])<0)_exit(62);
   if(chdir(root)<0)_exit(39);
   if(syscall(SYS_pivot_root,".",".old")<0)_exit(40);
   if(chdir("/")<0)_exit(41);
   if(umount2("/.old",MNT_DETACH)<0||rmdir("/.old")<0)_exit(42);
-  /* Keep only diagnostic stdout/stderr, not ambient inherited handles. */
+  /* An inherited stdin/stdout/stderr can itself be a Broker IPC socket or
+   * credential-bearing open file. Close *all* descriptors, including 0/1/2,
+   * rather than claiming that they are harmless terminal streams. Parent
+   * prints the static selftest marker after observing our final exit status.
+   */
 #ifdef SYS_close_range
-  if(syscall(SYS_close_range,3U,~0U,0U)<0)_exit(43);
+  if(syscall(SYS_close_range,0U,~0U,0U)<0)_exit(43);
 #else
   /* Never accept a finite-FD-loop as proof that all handles were closed. */
   _exit(43);
 #endif
+  for(int fd=0;fd<=2;++fd) {
+    errno=0;
+    if(fcntl(fd,F_GETFD)!=-1 || errno!=EBADF)_exit(54);
+  }
   if(prctl(PR_SET_NO_NEW_PRIVS,1,0,0,0)<0)_exit(44);
   struct stat st;
   if(getpid()!=1||getuid()!=0)_exit(45);
@@ -179,12 +269,80 @@ static int kernel_child(const char *root,int ready_fd,int resume_fd) {
   errno=0;
   int s=socket(AF_INET,SOCK_STREAM|SOCK_CLOEXEC,0);
   if(s!=-1 || errno!=EPERM)_exit(52);
-  const char marker[]=
-    "NW07_NAMESPACE_SECCOMP_SOURCE_SELFTEST_OK (NOT_RUNTIME_OR_PHYSICAL_ACCEPTANCE)\n";
-  if(write(STDOUT_FILENO,marker,sizeof(marker)-1)!=(ssize_t)(sizeof(marker)-1))
-    _exit(53);
+  /* Verify a real kernel denial of openat, not merely an ENOENT result due
+   * to the empty tmpfs root. This probe has no arbitrary file operation. */
+  errno=0;
+  int filefd=openat(AT_FDCWD,"/etc/passwd",O_RDONLY|O_CLOEXEC);
+  if(filefd!=-1 || errno!=EPERM)_exit(56);
+  /* No stdout, stderr, inherited socket or host file remains here. */
   _exit(0);
 }
+/* Bound both readiness and final reaping. The only process we may signal
+ * is the direct child forked by this disposable diagnostic. Never target a
+ * caller-supplied PID, task or real Agent process. */
+static int monotonic_ms(long long *out) {
+  struct timespec now;
+  if(clock_gettime(CLOCK_MONOTONIC,&now)<0)return -1;
+  *out=(long long)now.tv_sec*1000LL+(long long)now.tv_nsec/1000000LL;
+  return 0;
+}
+static ssize_t read_ready_bounded(int fd,char *out) {
+  long long start,now;
+  if(monotonic_ms(&start)<0)return -1;
+  for(;;) {
+    if(monotonic_ms(&now)<0)return -1;
+    long long remaining=5000LL-(now-start);
+    if(remaining<=0)return -1;
+    struct pollfd pfd={.fd=fd,.events=POLLIN|POLLHUP,.revents=0};
+    int ready=poll(&pfd,1,(int)remaining);
+    if(ready<0&&errno==EINTR)continue;
+    if(ready<=0)return -1;
+    ssize_t n=read(fd,out,1);
+    if(n<0&&errno==EINTR)continue;
+    return n;
+  }
+}
+static int terminate_owned_child(pid_t pid,int *status) {
+  if(pid<=1)return -1;
+  /* Kill only the own unreaped diagnostic child and verified process group.
+   * A group-signal failure must NOT prevent attempting direct-child cleanup. */
+  int signals_ok=1;
+  pid_t pgid=getpgid(pid);
+  if(pgid==pid) {
+    if(kill(-pid,SIGKILL)<0 && errno!=ESRCH)signals_ok=0;
+  } else {
+    /* Either child exited or never established its own group. No group
+     * signal may be sent in this case, and cleanup cannot be certified. */
+    signals_ok=0;
+  }
+  if(kill(pid,SIGKILL)<0 && errno!=ESRCH)signals_ok=0;
+  /* SIGKILL itself is not a verified reaping receipt: bounded WNOHANG
+   * prevents a stuck child from hanging the diagnostic indefinitely. */
+  long long start,now;
+  if(monotonic_ms(&start)<0)return -1;
+  for(;;) {
+    pid_t got=waitpid(pid,status,WNOHANG);
+    if(got==pid)return signals_ok?-2:-1;
+    if(got<0&&errno!=EINTR)return -1;
+    if(monotonic_ms(&now)<0||now-start>=5000LL)return -1;
+    const struct timespec pause={.tv_sec=0,.tv_nsec=20000000L};
+    (void)nanosleep(&pause,NULL);
+  }
+}
+static int wait_child_bounded(pid_t pid,int *status) {
+  long long start,now;
+  if(monotonic_ms(&start)<0)return terminate_owned_child(pid,status);
+  for(;;) {
+    pid_t got=waitpid(pid,status,WNOHANG);
+    if(got==pid)return 0;
+    if(got<0&&errno!=EINTR)return -1;
+    if(monotonic_ms(&now)<0||now-start>=12000LL)
+      return terminate_owned_child(pid,status);
+    const struct timespec pause={.tv_sec=0,.tv_nsec=20000000L};
+    (void)nanosleep(&pause,NULL);
+  }
+}
+
 int main(int argc,char **argv) {
   if(argc!=2||strcmp(argv[1],"--selftest-only")!=0) {
     fputs("NW07_SOURCE_ONLY_NO_TASK_EXEC\n",stderr);
@@ -200,6 +358,9 @@ int main(int argc,char **argv) {
     (void)rmdir(root);return 76;
   }
   uid_t outer_uid=getuid();
+  /* Capture the creator PID before fork, while both processes are in the
+   * original PID namespace. The direct child must not survive a dead owner. */
+  pid_t outer_parent_pid=getpid();
   pid_t pid=fork();
   if(pid<0) {
     (void)close(ready[0]);(void)close(ready[1]);
@@ -208,18 +369,26 @@ int main(int argc,char **argv) {
   }
   if(pid==0) {
     (void)close(ready[0]);(void)close(resume[1]);
+    /* PR_SET_PDEATHSIG is cleared on fork. Arm it in the direct diagnostic
+     * child, before ANY namespace setup or blocking kernel handshake.
+     * getppid() closes the fork-to-prctl race: if our specific creator died
+     * just before prctl, it must be a denied probe, not an orphan worker.
+     * This check is deliberately BEFORE unshare(CLONE_NEWPID), when the
+     * parent PID is still meaningful in the same namespace. */
+    if(prctl(PR_SET_PDEATHSIG,SIGKILL)<0)_exit(82);
+    if(getppid()!=outer_parent_pid)_exit(85);
+    /* Only this disposable diagnostic owns the process group. The parent
+     * never targets arbitrary PIDs, a live Agent or a host task process. */
+    if(setpgid(0,0)<0)_exit(80);
     if(clearenv()!=0)_exit(72);
     int code=kernel_child(root,ready[1],resume[0]);
     _exit(code);
   }
   (void)close(ready[1]);(void)close(resume[0]);
   char announcement=0;
-  ssize_t bytes;
-  do {bytes=read(ready[0],&announcement,1);}
-    while(bytes<0&&errno==EINTR);
+  ssize_t bytes=read_ready_bounded(ready[0],&announcement);
   int independently_observed=(bytes==1 && announcement=='R' &&
     observe_kernel_namespaces(pid,outer_uid)==0);
-  (void)close(ready[0]);
   const char approval=independently_observed?'Y':'N';
   if(bytes==1 && announcement=='R') {
     /* An early child exit must never kill the parent via SIGPIPE, leak the
@@ -227,14 +396,26 @@ int main(int argc,char **argv) {
     if(signal(SIGPIPE,SIG_IGN)==SIG_ERR ||
        write(resume[1],&approval,1)!=1)independently_observed=0;
   }
-  (void)close(resume[1]);
+  if(independently_observed) {
+    /* Caller has already forked PID 1 but PID 1 is waiting on a private
+     * gate; now verify pid_for_children from the external /proc kernel view
+     * before permitting ANY post-fork selftest effect. */
+    char pid_ready=0;
+    ssize_t second=read_ready_bounded(ready[0],&pid_ready);
+    independently_observed=second==1 && pid_ready=='P' &&
+      observe_child_pid_namespace(pid)==0;
+    const char second_approval=independently_observed?'Y':'N';
+    if(write(resume[1],&second_approval,1)!=1)independently_observed=0;
+  }
+  (void)close(ready[0]);(void)close(resume[1]);
   int status=0;
-  pid_t got;
-  do {got=waitpid(pid,&status,0);}while(got<0&&errno==EINTR);
+  int waited=wait_child_bounded(pid,&status);
   if(rmdir(root)<0)return 73;
-  if(got<0||!WIFEXITED(status))return 74;
+  if(waited==-2)return 78; /* Timed out: child killed, never PASS. */
+  if(waited!=0||!WIFEXITED(status))return 74;
   if(!independently_observed)return 77;
   int rc=WEXITSTATUS(status);
   if(rc!=0)fprintf(stderr,"NW07_NAMESPACE_PROBE_BLOCKED stage=%d\n",rc);
+  else puts("NW07_NAMESPACE_SECCOMP_SOURCE_SELFTEST_OK (NOT_RUNTIME_OR_PHYSICAL_ACCEPTANCE)");
   return rc;
 }
