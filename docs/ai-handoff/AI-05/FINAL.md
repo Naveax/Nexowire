@@ -39,3 +39,7 @@ Rejected hidden nested JSON object fields and hidden array indices instead of pr
 
 ## Remote authority retargeting follow-up
 Validated HTTPS CAS authorities are now fixed immutable string routes and runtime config/credential resolver bindings are non-reassignable, closing an in-process post-validation URL retargeting gap. Two source-only adversarial tests increase the authored AI-05 total to 34 (12 PG, 11 executor, 7 HTTPS, 4 remote). This update requires its own exact-HEAD CI result; no source test substitutes for live OS/Broker or physically independent antirollback CAS evidence. Draft / CORE NO-GO.
+
+## Source CAS constructor snapshot hardening follow-up
+
+Configuration getter/Proxy execution at construction is now denied before the binding of HTTPS authority, witness token provider and PostgreSQL CAS dependencies. Three additional source-only negative tests bring the candidate to 37 AI-05 cases. Production CORE remains disabled. Source acceptance requires matching exact HEAD CI evidence; prior failures outside AI-05 are unchanged. No live device, deploy or merge.

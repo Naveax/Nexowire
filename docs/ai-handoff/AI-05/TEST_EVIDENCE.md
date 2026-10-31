@@ -50,3 +50,7 @@ Two additional source-only executor regressions ensure a hidden nested object pr
 
 ## HTTPS endpoint/config runtime retargeting regression candidate
 Two new AI-05 source-only negative cases assert `Reflect.set` cannot replace the validated external authority URL or witness credentials after instantiation. Mock fetch checks HTTPS reserve/revoke/re-pair still target the original authority; a separate witness reserve checks its original token. Added guarded source binding locks; all unrelated fail-closed paths retained. **34 authored AI-05 tests** (12 PG, 11 executor, 7 HTTPS, 4 remote) pending this new exact-head CI. Previous 32/32 on `2c2da9206842894d7d1ca5c006612ec61f1baa3f` remains valid only for that source SHA.
+
+## Adversarial constructor config snapshots
+
+Three additional source-only negative tests reject Proxy/getter/hidden/extra constructor configuration for RemoteMutationCasClient, HttpsMonotonicTrustRoot, HttpsExternalGrantCas and PostgresBoundGrantCas before any getter/trap or credential callback executes. Expected new AI-05 authored count: **37 (13 PostgreSQL, 11 executor, 8 HTTPS, 5 remote)**. New source SHA and exact CI TypeScript/test/build must be verified; prior 34-case PASS at SHA `7e402e4efc3d82166a9f26721983b7bb61aa01aa` does not apply to this patch. Linux PostgreSQL 57P03 and Windows WAL 30s worker timeout remain coordinator-owned red results from prior CI.

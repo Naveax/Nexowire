@@ -260,3 +260,33 @@ test('AI-05 validated external CAS authority and credential resolver cannot be r
     'https://nexowire-cas.invalid/v1/grant-cas/re-pair',
   ]);
 });
+
+test('AI-05 grant CAS constructor rejects getter and Proxy configuration without side effects',()=>{
+  const normal={
+    endpoint:'https://nexowire-cas.invalid/v1/grant-cas/reserve',
+    authorityId:ids.authority,
+    credentialFor:async()=> 'test-only-not-an-authority-credential',
+  };
+  let getters=0,traps=0;
+  const hostile=Object.defineProperty({...normal},'credentialFor',{
+    configurable:true,enumerable:true,
+    get(){getters++;return normal.credentialFor},
+  });
+  assert.throws(()=>new HttpsExternalGrantCas(hostile),
+    code('EXTERNAL_GRANT_CONFIG_INVALID'));
+  const proxied=new Proxy(normal,{
+    ownKeys(target){traps++;return Reflect.ownKeys(target)},
+    getOwnPropertyDescriptor(target,key){
+      traps++;return Reflect.getOwnPropertyDescriptor(target,key);
+    },
+  });
+  assert.throws(()=>new HttpsExternalGrantCas(proxied),
+    code('EXTERNAL_GRANT_CONFIG_INVALID'));
+  const hidden=Object.defineProperty({...normal},'authorityId',{
+    value:ids.authority,enumerable:false,configurable:true,
+  });
+  assert.throws(()=>new HttpsExternalGrantCas(hidden),
+    code('EXTERNAL_GRANT_CONFIG_INVALID'));
+  assert.equal(getters,0);
+  assert.equal(traps,0);
+});

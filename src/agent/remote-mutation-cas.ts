@@ -74,6 +74,36 @@ function casHttpsEndpoint(raw:string):URL{
   catch{return fail('CAS_CONFIG_INVALID')}
 }
 
+
+/** Snapshot trusted configuration without executing caller-owned getters.
+ * Functions and provider objects remain dependencies, not verified authority.
+ */
+function immutableCasConfig<T extends object>(
+  raw:T,required:readonly string[],optional:readonly string[],
+  code:string,
+):Readonly<T>{
+  if(!raw||typeof raw!=='object'||Array.isArray(raw)||nodeTypes.isProxy(raw))
+    return fail(code);
+  let descriptors:PropertyDescriptorMap;
+  let keys:PropertyKey[];
+  let proto:unknown;
+  try{
+    descriptors=Object.getOwnPropertyDescriptors(raw);
+    keys=Reflect.ownKeys(raw);
+    proto=Object.getPrototypeOf(raw);
+  }catch{return fail(code)}
+  const accepted=new Set([...required,...optional]);
+  if((proto!==Object.prototype&&proto!==null)||
+     required.some(key=>!keys.includes(key))||
+     keys.some(key=>typeof key!=='string'||!accepted.has(key)||
+       !Object.prototype.hasOwnProperty.call(descriptors,key)||
+       !('value' in descriptors[key]!)||
+       descriptors[key]!.enumerable!==true))
+    return fail(code);
+  return Object.freeze(Object.fromEntries((keys as string[]).map(
+    key=>[key,descriptors[key]!.value]))) as Readonly<T>;
+}
+
 /** Production accepts only a trusted HTTPS authority hosted outside rollback domain. */
 export class RemoteMutationCasClient{
   /** Canonical immutable primitive, never a caller-retargetable URL object. */
@@ -84,7 +114,11 @@ export class RemoteMutationCasClient{
   }){
     // The owner-enrolled witness scope and credential must not be retargeted
     // after construction by mutating a borrowed configuration object.
-    this.settings=Object.freeze({...settings});
+    this.settings=immutableCasConfig(settings,
+      ['endpoint','token','deviceId','epoch','authorityId'],
+      ['timeoutMs'],'CAS_CONFIG_INVALID');
+    if(typeof this.settings.endpoint!=='string')
+      fail('CAS_CONFIG_INVALID');
     const endpoint=casHttpsEndpoint(this.settings.endpoint);
     if(endpoint.protocol!=='https:'||endpoint.username||endpoint.password||
        endpoint.search||endpoint.hash||endpoint.pathname!=='/v1/reservations'||
@@ -143,7 +177,13 @@ export class HttpsMonotonicTrustRoot implements MonotonicTrustRoot {
     tokenForEnrolledDevice:(deviceId:string,epoch:string)=>string|undefined;
     timeoutMs?:number;
   }){
-    this.config=Object.freeze({...config});
+    this.config=immutableCasConfig(config,
+      ['endpoint','authorityId','tokenForEnrolledDevice'],
+      ['timeoutMs'],'CAS_CONFIG_INVALID');
+    if(typeof this.config.endpoint!=='string'||
+       !uuid.safeParse(this.config.authorityId).success||
+       typeof this.config.tokenForEnrolledDevice!=='function')
+      fail('CAS_CONFIG_INVALID');
     Object.defineProperty(this,'config',{writable:false,configurable:false});
   }
   async reserve(request:CasRequest):Promise<CasReservation>{

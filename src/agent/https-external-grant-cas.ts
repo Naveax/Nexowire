@@ -83,6 +83,33 @@ function plainCasRecordSnapshot(
 }
 
 
+
+/** Reject Proxy/accessor/symbol/hidden configuration before binding HTTPS. */
+function immutableExternalConfig<T extends object>(raw:T):Readonly<T>{
+  const invalid=()=>reject('EXTERNAL_GRANT_CONFIG_INVALID');
+  if(!raw||typeof raw!=='object'||Array.isArray(raw)||nodeTypes.isProxy(raw))
+    return invalid();
+  let descriptors:PropertyDescriptorMap;
+  let keys:PropertyKey[];
+  let proto:unknown;
+  try{
+    descriptors=Object.getOwnPropertyDescriptors(raw);
+    keys=Reflect.ownKeys(raw);
+    proto=Object.getPrototypeOf(raw);
+  }catch{return invalid()}
+  const required=['endpoint','authorityId','credentialFor'];
+  const allowed=new Set([...required,'timeoutMs']);
+  if((proto!==Object.prototype&&proto!==null)||
+     required.some(key=>!keys.includes(key))||
+     keys.some(key=>typeof key!=='string'||!allowed.has(key)||
+       !Object.prototype.hasOwnProperty.call(descriptors,key)||
+       !('value' in descriptors[key]!)||
+       descriptors[key]!.enumerable!==true))
+    return invalid();
+  return Object.freeze(Object.fromEntries((keys as string[]).map(
+    key=>[key,descriptors[key]!.value]))) as Readonly<T>;
+}
+
 /**
  * A server may commit a one-use CAS mutation and still return a timeout,
  * overload response or 5xx. Such HTTP results MUST NOT be interpreted as a
@@ -114,7 +141,10 @@ export class HttpsExternalGrantCas implements ExternalGrantCas {
   }){
     // Do not retain the caller's mutable configuration across async
     // credential acquisition or HTTP response verification.
-    const pinned=Object.freeze({...config});
+    const pinned=immutableExternalConfig(config);
+    if(typeof pinned.endpoint!=='string'||
+       typeof pinned.credentialFor!=='function')
+      reject('EXTERNAL_GRANT_CONFIG_INVALID');
     let endpoint:URL;
     try{endpoint=new URL(pinned.endpoint)}
     catch{throw new ExternalGrantTransportError('EXTERNAL_GRANT_URL_INVALID')}

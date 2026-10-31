@@ -146,3 +146,45 @@ test('AI-05 remote HTTPS endpoint and runtime witness configuration cannot be re
   assert.deepEqual(await witness.reserve(request()),validReceipt());
   assert.equal(requests,2);
 });
+
+test('AI-05 CAS constructors reject borrowed accessor and Proxy configuration before running traps',()=>{
+  let getters=0,traps=0,credentials=0;
+  const settings={
+    endpoint:'https://nexowire-witness.invalid/v1/reservations',
+    token:originalToken,deviceId:ids.device,epoch:ids.epoch,
+    authorityId:ids.authority,
+  };
+  const hostile=Object.defineProperty({...settings},'endpoint',{
+    enumerable:true,configurable:true,get(){getters++;return settings.endpoint},
+  });
+  assert.throws(()=>new RemoteMutationCasClient(hostile),
+    errorCode('CAS_CONFIG_INVALID'));
+  const proxied=new Proxy(settings,{
+    ownKeys(target){traps++;return Reflect.ownKeys(target)},
+    getOwnPropertyDescriptor(target,key){
+      traps++;return Reflect.getOwnPropertyDescriptor(target,key);
+    },
+  });
+  assert.throws(()=>new RemoteMutationCasClient(proxied),
+    errorCode('CAS_CONFIG_INVALID'));
+  const resolver=()=>{
+    credentials++;return originalToken;
+  };
+  const config={
+    endpoint:settings.endpoint,authorityId:ids.authority,
+    tokenForEnrolledDevice:resolver,
+  };
+  const stolen=Object.defineProperty({...config},'tokenForEnrolledDevice',{
+    enumerable:true,configurable:true,get(){getters++;return resolver},
+  });
+  assert.throws(()=>new HttpsMonotonicTrustRoot(stolen),
+    errorCode('CAS_CONFIG_INVALID'));
+  assert.throws(()=>new HttpsMonotonicTrustRoot(new Proxy(config,{
+    getOwnPropertyDescriptor(target,key){
+      traps++;return Reflect.getOwnPropertyDescriptor(target,key);
+    },
+  })),errorCode('CAS_CONFIG_INVALID'));
+  assert.equal(getters,0);
+  assert.equal(traps,0);
+  assert.equal(credentials,0);
+});

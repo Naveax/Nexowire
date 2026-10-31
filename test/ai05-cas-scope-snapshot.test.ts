@@ -380,3 +380,27 @@ test('AI-05 Proxy-backed request/scope/receipt rejected without invoking traps',
   assert.ok(proof.evidence.queries.includes('ROLLBACK'));
   assert.equal(traps,0);
 });
+
+test('AI-05 PostgreSQL CAS constructor rejects accessor and Proxy provider config before side effects',()=>{
+  const base=fixture({resolve:async()=>scope()}).settings;
+  let getters=0,traps=0;
+  const hostile=Object.defineProperty({...base},'externalCas',{
+    enumerable:true,configurable:true,
+    get(){getters++;return base.externalCas},
+  });
+  assert.throws(()=>new PostgresBoundGrantCas(hostile),
+    hasCode('BOUND_CAS_AUTHORITY_INVALID'));
+  const proxied=new Proxy(base,{
+    ownKeys(target){traps++;return Reflect.ownKeys(target)},
+    getOwnPropertyDescriptor(target,key){
+      traps++;return Reflect.getOwnPropertyDescriptor(target,key);
+    },
+  });
+  assert.throws(()=>new PostgresBoundGrantCas(proxied),
+    hasCode('BOUND_CAS_AUTHORITY_INVALID'));
+  const extra={...base,unexpected:'override'};
+  assert.throws(()=>new PostgresBoundGrantCas(extra),
+    hasCode('BOUND_CAS_AUTHORITY_INVALID'));
+  assert.equal(getters,0);
+  assert.equal(traps,0);
+});

@@ -37,3 +37,7 @@ The executor's recursive canonical snapshot rejects non-enumerable nested object
 
 ## Runtime pinning of HTTPS authority and trust-root configuration
 The remote CAS and external grant CAS clients normalize their HTTPS authority to an immutable primitive URL string, rather than expose a mutable `URL` object after constructor validation. Runtime descriptor locks reject JS reassignment of `url`, `endpoint`, `settings` and `config` bindings; the HttpsMonotonicTrustRoot and PostgresBoundGrantCas also reject post-construction `config` reassignment. This protects the checked endpoint/authority/credential resolution from simple post-construction retargeting across CAS awaits. It does not make a same-process compromised JavaScript runtime or external HTTPS server trustworthy. Independent CAS custody and protected Broker remain separate requirements.
+
+## Descriptor-only CAS constructor binding
+
+The four AI-05 CAS authority constructors now capture configuration using descriptor-only own enumerable fields before validation. Proxy-backed configs, getter-backed endpoint/token/authority/provider inputs, inherited/hidden fields, symbol keys and unknown fields are rejected rather than executing caller-owned getter/trap code during `{...config}` spread. The original endpoint and resolver remain runtime-pinned and immutable across awaits. This narrows JavaScript-source trust boundary only; external credentials, protected Broker and physical CAS provenance are separate and required.

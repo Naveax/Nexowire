@@ -243,6 +243,36 @@ function immutableExternalReceipt(
   return Object.freeze(accepted);
 }
 
+
+/** Select only own enumerable data fields before binding CAS providers.
+ * A borrowed config's accessor must never execute during constructor setup.
+ */
+function immutablePgConfig<T extends object>(raw:T):Readonly<T>{
+  const invalid=()=>reject('BOUND_CAS_AUTHORITY_INVALID');
+  if(!raw||typeof raw!=='object'||Array.isArray(raw)||nodeTypes.isProxy(raw))
+    return invalid();
+  let descriptors:PropertyDescriptorMap;
+  let keys:PropertyKey[];
+  let proto:unknown;
+  try{
+    descriptors=Object.getOwnPropertyDescriptors(raw);
+    keys=Reflect.ownKeys(raw);
+    proto=Object.getPrototypeOf(raw);
+  }catch{return invalid()}
+  const required=['pool','authorityId','verifyProvenance',
+    'resolveAuthenticatedScope','externalCas'];
+  if((proto!==Object.prototype&&proto!==null)||
+     keys.length!==required.length||
+     required.some(key=>!keys.includes(key))||
+     keys.some(key=>typeof key!=='string'||
+       !Object.prototype.hasOwnProperty.call(descriptors,key)||
+       !('value' in descriptors[key]!)||
+       descriptors[key]!.enumerable!==true))
+    return invalid();
+  return Object.freeze(Object.fromEntries((keys as string[]).map(
+    key=>[key,descriptors[key]!.value]))) as Readonly<T>;
+}
+
 /**
  * Real PostgreSQL source integration for a remote witness CAS.
  *
@@ -270,8 +300,13 @@ export class PostgresBoundGrantCas implements MonotonicTrustRoot {
   }){
     // Pin independently selected authority, pool, identity resolver and CAS
     // implementation before any async provenance or SQL boundary.
-    const pinned=Object.freeze({...config});
-    if(!uuid.safeParse(pinned.authorityId).success)
+    const pinned=immutablePgConfig(config);
+    if(!uuid.safeParse(pinned.authorityId).success||
+       typeof pinned.verifyProvenance!=='function'||
+       typeof pinned.resolveAuthenticatedScope!=='function')
+      reject('BOUND_CAS_AUTHORITY_INVALID');
+    if(!pinned.pool||!pinned.externalCas)
+
       reject('BOUND_CAS_AUTHORITY_INVALID');
     this.config=pinned;
     Object.defineProperty(this,'config',{writable:false,configurable:false});
