@@ -50,6 +50,32 @@ internal static class SelfTest
             Protocol.Require(!WindowsSessionEvidence.ActiveLocalConsoleFacts(
                 item.Session,item.Console,item.Protocol,item.State));
     }
+    private static void VerifyDisposableExclusiveFence()
+    {
+        // Real Windows file sharing against an isolated temp root only.
+        // No protected enrollment files, native service, UAC or owner grant.
+        var root=Path.Combine(Path.GetTempPath(),"nexowire-ai02-fence-"+Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var path=Path.Combine(root,"fence.lock");
+            using(var first=ProtectedStore.OpenExclusiveFence(path,CancellationToken.None))
+            {
+                using var cancelled=new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+                var denied=false;
+                try
+                {
+                    using var second=ProtectedStore.OpenExclusiveFence(path,cancelled.Token);
+                }
+                catch(OperationCanceledException){denied=true;}
+                Protocol.Require(denied);
+            }
+            // Closing the handle, including a crashed process, releases the
+            // kernel sharing constraint without deleting the durable marker.
+            using var reopened=ProtectedStore.OpenExclusiveFence(path,CancellationToken.None);
+        }
+        finally{Directory.Delete(root,true);}
+    }
     internal static void MachineKey()
     {
         ProtectedStore.RequireAdministrator();
@@ -75,6 +101,7 @@ internal static class SelfTest
     {
         VerifyIpcFraming();
         VerifyConsoleSnapshotPolicy();
+        VerifyDisposableExclusiveFence();
         // Disposable CURRENT USER diagnostic key only. Never invokes consent,
         // creates a machine grant, changes SCM, or touches ProtectedStore.Root.
         var name="Nexowire.Diagnostic."+Guid.NewGuid().ToString("D");
@@ -106,7 +133,7 @@ internal static class SelfTest
             try{Protocol.Read<Session>(System.Text.Encoding.UTF8.GetBytes("{\"version\":2,\"version\":2}"));}
             catch(InvalidDataException){duplicateDenied=true;}Protocol.Require(duplicateDenied);
             Console.WriteLine(JsonSerializer.Serialize(new {diagnosticOnly=true,privateExportDenied=denied,
-                localConsolePolicyTestsPassed=true,spkiBase64=Convert.ToBase64String(spki),grant=new SignedGrant(grant,signature),
+                localConsolePolicyTestsPassed=true,revocationFenceDiagnosticPassed=true,spkiBase64=Convert.ToBase64String(spki),grant=new SignedGrant(grant,signature),
                 session=new SignedSession(session,sessionSig)},Protocol.Json));
         }
         finally{key.Delete();}

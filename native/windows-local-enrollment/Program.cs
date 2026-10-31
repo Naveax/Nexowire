@@ -37,6 +37,10 @@ internal static class Program
                 Protocol.Require(MessageBoxW(IntPtr.Zero,"Bu bilgisayardaki kalıcı Nexowire kaydı iptal edilsin mi?\n"+
                     "Yeniden etkinleştirme yeni yerel onay gerektirir.","Nexowire — Kaydı iptal et",0x00010000|0x00000100|0x00000004|0x00000030)==6);
                 WindowsSessionEvidence.RequireActiveLocalConsole(Process.GetCurrentProcess().SessionId);
+                // Serialize a visible local revoke against any in-flight
+                // attestation sign/reply, then revalidate protected state.
+                using var fence=ProtectedStore.AcquireRevocationFence(CancellationToken.None);
+                Protocol.Require(ProtectedStore.Load()==(c,g));
                 ProtectedStore.WriteNew("revoked.json",new {version=1,enrollmentId=g.Payload.EnrollmentId,
                     generation=g.Payload.Generation,revokedAtMs=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()});
                 return 0;

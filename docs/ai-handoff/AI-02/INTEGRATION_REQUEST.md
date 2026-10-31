@@ -1,25 +1,18 @@
-# AI-02 | integration requests to coordinator / AI-03
+# AI-02 | integration requests (source-owner boundaries)
 
-## INT-02-01 (P0): authentic Agent-installation provenance
+## P0-01: independently authenticated installed Agent identity
+`scripts/local-enrollment/install.ps1` validates exact owner account, device ID and installation UUID but currently consumes an operator-provided `AgentIdentityFile`. Arbitrary caller-selected matching JSON is **not** an independent identity proof. Coordinator must define a protected, authenticated installation export and readback (with owner SID, agent binary provenance, device UUID, installation UUID, generation and trusted scope), without allowing `native-agent.ts` edits from AI-02.
 
-The installer now compares device UUID, installation UUID and owner account ID but still reads `-AgentIdentityFile` supplied at the command line. An attacker-controlled file can trivially assert the same values. Coordinator must define a protected, independently authenticated read-only identity export (including SID/owner/device/installation/generation and source path/signature/ACL provenance). AI-02 must not edit `native-agent.ts` or change the installer into a false production PASS.
+## P0-02: named-pipe caller executable identity
+The native pipe impersonates a same-owner active console and verifies an independent signed challenge. Same-user untrusted processes may still attempt status calls, relay challenges or exhaust nonce storage. Coordinator must provide a race-safe process/file-ID/publisher/launch-identity boundary and independent native hostile-client tests. No grant or CNG key by itself is a remote dispatch authority.
 
-## INT-02-02 (P0): authenticated pipe caller process
+## P0-03: independent reversible/irreversible revocation custody
+The AI-02 local marker and file-sharing fence order native revoke vs attest, but do **not** prevent old protected JSON/key state restoration after rollback nor revoke already issued remote permits. AI-03 must require current independent externally durable grant generation and revocation, mTLS peer binding, one-use challenge and exactly-once CAS. Missing remote freshness remains deny-only.
 
-`EnrollmentPipe` validates impersonated owner SID, console session and logon LUID, plus an independent signed challenge; it does not attest the precise installed Agent client executable. Determine a process-handle/file-ID/publisher/launch trust API with race-resistant verification, and test same-user hostile client, challenge relay and nonce exhaustion before real admission. Same Windows SID alone is not authenticated application identity.
+## P1-04: real Windows SCM/IPC/installer/recovery test facility
+Provide approved, disposable Windows environment for service start/stop/crash/reboot, actual active console session/user consent, changed SID/session, hostile pipe peer, ACL/key checks, interrupted install/rollback and offline revoke. The CI `--self-test` diagnostics are not a substitute for physical owner acceptance; do not target Naveax or Work-PC without separate authorization.
 
-## INT-02-03 (P0): external revoke and restore custody
+## P1-05: operational error reporting
+The pipe returns bounded generic denials without leaking keys or SID, while timeout/disconnect can close the pipe without a response. Coordinator should define protected redacted log/incident instrumentation before integration; do not expose enrollment secret or user telemetry in logs.
 
-Local `revoked.json`, ACL and a software CNG key cannot establish rollback resistance. AI-03 must make remote acceptance dependent on current independently durable grant generation/revocation and consumed external CAS. Offline command admission remains denied without accepted freshness evidence. No fake owner confirmation or grant restoration.
-
-## INT-02-04 (P1): generic error visibility
-
-Native pipe now attempts a bounded, generic denial frame, and client rejects it. Distinguish protocol rejection from peer disconnect/timeout in protected operational logs once a verified source and privacy policy exist. Do not expose SID, signing key, challenge or protected configuration in errors.
-
-## INT-02-05 (P1): acceptance and rollback
-
-New source-only `uninstall.ps1` unregisters only the owned opt-in service after local revoke, preserving runtime/key/nonce/revoke evidence. No actual SCM install/remove/restart tests yet. Coordinator must provide approved disposable Windows acceptance, upgrade recovery, signed binary provenance and evidence requirements. Real devices explicitly out of scope of this Draft.
-
-## Contract owner
-
-AI-02 owns native service/local scripts/v2 protocol tests only. AI-03 owns independent verifier/mTLS. Coordinator alone owns Agent, release, workflow, top-level shared files and deployment decision. CORE remains disabled.
+**Ownership:** AI-02 `native/windows-local-enrollment/**`, `scripts/local-enrollment/**`, v2 protocol/test and own handoff only; AI-03 verifier/mTLS, coordinator shared Agent/CI/release, AI-08 independent QA. Never change somebody else's files. CORE remains disabled.

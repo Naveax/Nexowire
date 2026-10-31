@@ -58,6 +58,11 @@ internal static class EnrollmentPipe
                 Protocol.Require(sid==config.OwnerSid && evidence is not null);
                 var r=Protocol.Read<Request>(bytes);
                 Protocol.Require(r.Version==2 && r.Operation is "status" or "attest");
+                // Hold an exclusive, protected cross-process fence through the
+                // attestation response. Revoke cannot claim success while a
+                // previously approved local witness is still being emitted.
+                using var fence=r.Operation=="attest"
+                    ? ProtectedStore.AcquireRevocationFence(deadline.Token) : null;
                 var (fresh,g)=ProtectedStore.Load();
                 Protocol.Require(fresh==config);
                 using var key=ProtectedStore.OpenKey(config);using var signer=new ECDsaCng(key);

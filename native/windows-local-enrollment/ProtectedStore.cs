@@ -142,6 +142,33 @@ internal static class ProtectedStore
         }
         Protocol.Require(found.Count==2);
     }
+    // A process-crash-safe kernel file-sharing fence for the local revoke
+    // marker and an in-flight attestation. No secret or approval is stored in
+    // the lock file. Only SYSTEM/Administrators can open it in production.
+    internal static FileStream OpenExclusiveFence(string path,CancellationToken stop)
+    {
+        var elapsed=System.Diagnostics.Stopwatch.StartNew();
+        while(true)
+        {
+            stop.ThrowIfCancellationRequested();
+            try{return new FileStream(path,FileMode.OpenOrCreate,FileAccess.ReadWrite,
+                FileShare.None,4096,FileOptions.WriteThrough);}
+            catch(IOException) when(elapsed.Elapsed<TimeSpan.FromSeconds(5))
+            {
+                // Bounded, monotonic wait. A stuck or contested fence denies
+                // admission; it never ignores a previous revoke.
+                if(stop.WaitHandle.WaitOne(25))stop.ThrowIfCancellationRequested();
+            }
+        }
+    }
+    internal static FileStream AcquireRevocationFence(CancellationToken stop)
+    {
+        AssertPath(Root);
+        var path=FileName("revocation-fence.lock");
+        var handle=OpenExclusiveFence(path,stop);
+        try{AssertFile(path);return handle;}
+        catch{handle.Dispose();throw;}
+    }
     internal static (StoreConfig Config,SignedGrant Grant) Load()
     {
         AssertPath(Root);

@@ -123,3 +123,16 @@ The diagnostic `--attest` client additionally refuses a success frame with a
 missing or null witness. The `--status` client refuses an unexpected witness
 object. This is strict response framing only; cryptographic verification and
 fresh independent issuer/revocation state remain external requirements.
+
+## AI-02 local revoke/attestation serialization fence (Draft only)
+
+Attestation now holds an exclusive kernel file-share handle in the protected
+ProgramData root through its response. Visible local revocation acquires the
+same fence after confirmation, revalidates the signed grant under the fence and
+persists the revoke marker before reporting completion. A crash drops the kernel
+handle; an existing marker still blocks startup/signing. Lock acquisition is
+bounded by a monotonic clock and cancellation and **never** treats contention
+as approval. The diagnostic self-test proves only Windows temp-file exclusion,
+timeout/cancellation and reopening, not real SCM crash/restart or actual owner
+revocation. A response already delivered before revocation is still subject to
+independent verifier expiry and current external revoke checks.

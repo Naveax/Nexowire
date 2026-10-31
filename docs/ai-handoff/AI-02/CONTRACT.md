@@ -1,23 +1,24 @@
-# AI-02 | v2 local enrollment service contract
+# AI-02 | source contract: persistent local Windows enrollment v2
 
-## Native boundary
+## Identity and durable enrollment
 
-- Native .NET 10 Windows service `NexowireLocalEnrollment`; same-owner elevated *visible* local enrollment is the only grant-provisioning path.
-- Grant persists until explicitly revoked; signed ES256-P1363 domain `nexowire.local.enrollment.v2\0`, linked to owner account, Windows SID, device/installation/enrollment UUID, machine binding, SPKI hash, generation and original consent time. `expiresAt=null` does not mean remote operations remain authorized.
-- Owner-account identifier grammar must be the same in C# and TS: `^[A-Za-z0-9._:@-]{8,128}$`. Noncanonical Unicode/whitespace is rejected *before* verification.
-- Status/attest IPC: Windows local-only named pipe `\\.\pipe\Nexowire.LocalEnrollment.v2`; 4-byte little-endian length, 1..16384 bytes JSON v2. Peer SID/session/LUID/active console is read from native OS. Only signed independently issued and scoped challenges can request a witness.
-- On rejected operations where the peer can still receive data, server sends a bounded `{version:2,verified:false,error:"LOCAL_ENROLLMENT_REJECTED",mayDispatch:false}` frame. IO timeout/disconnect can still produce no response. Both paths are denial, never an ACK.
-- The diagnostic client requires version 2, `verified:true`, `mayDispatch:false`, a grant and session evidence object, and no error field. This checks frame *shape only*. The Agent must perform independent SPKI pin, grant/witness signatures, current owner/device/installation, revocation and CAS admission.
-- Attest consumes its nonce durably before signing and rechecks protected state; lost ACK is not retried with the same nonce. `mayDispatch=false` remains invariant.
+- An elevated same-SID owner must explicitly approve a visible enrollment ceremony on the **active local physical console**. Windows WTS active-console ID, protocol type (0 = local), connect state (0 = active) are read from the OS and rechecked after the visible confirmation. Remote/RDP and switched/disconnected sessions fail closed. No UAC automation.
+- CNG ES256-P1363 protected grant contains owner account ID, Windows SID, device UUID, installation UUID, enrollment UUID, machine-binding hash, signer SPKI hash, generation and original consent. `expiresAt=null` is **not** a command permit or an indefinite per-command approval.
+- The C#/TypeScript account grammar is `^[A-Za-z0-9._:@-]{8,128}$`. v1 Ed25519 and v2 P-256 are never interchangeable.
+- Service incarnation and OS console token SID/session/LUID form a fresh witness. `bootId` identifies a service incarnation, not the kernel boot ID. Old/replayed/wrong-session proof denies.
 
-## Installer and uninstall
+## IPC and revocation
 
-- Opt-in installer is an elevated local-only explicit user action. Read-only preflight requires exact device UUID, installation UUID and owner account equality between request and independent Agent identity; missing identity fields reject. An untrusted caller-selected Agent identity JSON is **not** proof of authentic installed identity.
-- New `scripts/local-enrollment/uninstall.ps1` defaults to read-only preflight. `-Execute` additionally requires exact service path/device, pre-existing persisted local revocation, interactive elevated operator confirmation, and unregisters only this named SCM service. Protected runtime, nonce ledger, keys and revocation state remain for independent recovery/review.
-- No default installer, update pipeline, release or broad CORE dispatch change.
+- Local-only `\\.\pipe\Nexowire.LocalEnrollment.v2`; maximum request/response 16384 bytes with little-endian length framing.
+- Owner SID and native session/console evidence are necessary, but insufficient to authenticate the calling **Agent executable**. Any trusted client must separately verify issuer pin, signed scope, current external revoke/generation and one-use admission.
+- `status` is diagnostic; a successful `attest` frame requires a witness object; `status` forbids a witness object. Both require `mayDispatch:false`, not the remote permission to execute.
+- Rejected requests return generic bounded denial when the peer remains connected, or no response after disconnect/timeout. The nonce claim remains consumed after a lost ACK.
+- An exclusive file-sharing fence in the protected `ProgramData\NexowireLocalEnrollment` root is held across attestation signing/response and the revoke marker's revalidation/write. A dead/stuck fence times out and denies, never bypasses revocation. A crashed process releases its kernel file handle; the durable revoked marker remains. This does **not** establish local rollback resistance.
+- `scripts/local-enrollment/install.ps1` preflight additionally compares exact device/installation UUID and owner account between request and independent Agent identity; missing fields deny. This does not authenticate a caller-supplied Agent identity file.
+- `scripts/local-enrollment/uninstall.ps1` defaults to read-only, and actual service removal requires existing durable revoke, exact service identity, local elevated interactive operator confirmation. No Agent/Broker deletion, no protected evidence purge.
 
-## AI-03 and coordinator handoff
+## Cross-module handoffs
 
-AI-03 independently issues and validates expiring authority challenges, pins v2 ES256 device SPKI, authenticates mTLS client role and current owner/device/session/installation, consumes external admission once, checks current monotonic revocation/generation and denies stale/UNKNOWN. The coordinator supplies authenticated Agent-installation identity provenance and process-level named-pipe caller trust; no untrusted user-selected path is an authority. v1 Ed25519 and v2 P-256 stay explicitly versioned. See `INTEGRATION_REQUEST.md`.
+AI-03 owns issuer challenge issuance, pinned mTLS and independent verifier, persistent outside-host grant/revoke generations and replay/CAS history. The coordinator owns authenticated installed Agent identity and process/publisher trust plus shared Agent integration. AI-08 independently audits source and negative tests. AI-02 does not change those owners' files.
 
-All current code and tests are staged sources, not physical acceptance.
+CORE stays disabled, never infer physical/local enrollment from synthetic fixtures. Production **NO-GO** until separate Windows SCM/IPC/TPM/reboot/offline acceptance and independent security review.
