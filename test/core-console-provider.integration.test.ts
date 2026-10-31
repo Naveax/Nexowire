@@ -92,8 +92,11 @@ function fixture(){
   let forgedNativeReceipt:((value:NativeCoreConsentProof)=>NativeCoreConsentProof)|undefined;
   let onNative:(()=>Promise<void>)|undefined;
   let beforeBlockedRead:(()=>void)|undefined;
+  let beforeClearStop:(()=>void)|undefined;
   const store:CoreProfileStore={stopFile:'fixture-only-STOP',load:async()=>structuredClone(record),
-    save:async p=>{record=structuredClone(p);},stop:async()=>{stopped=true;},clearStop:async()=>{stopped=false;},stopped:async()=>stopped,
+    save:async p=>{record=structuredClone(p);},stop:async()=>{stopped=true;},
+    clearStop:async()=>{const hook=beforeClearStop;beforeClearStop=undefined;hook?.();stopped=false;},
+    stopped:async()=>stopped,
     block:async()=>{blocked=true;},clearBlock:async()=>{blocked=false;},
     blocked:async()=>{const hook=beforeBlockedRead;beforeBlockedRead=undefined;hook?.();return blocked;}};
   const options={deviceId,authority:client,store,
@@ -137,6 +140,7 @@ function fixture(){
     duringNativeReadback:(cb:()=>void)=>{beforeNativeReadback=cb;},
     afterLocalReadback:(cb:()=>void)=>{afterLocalNativeReadback=cb;},
     beforeBlockedRead:(cb:()=>void)=>{beforeBlockedRead=cb;},
+    beforeClearStop:(cb:()=>void)=>{beforeClearStop=cb;},
     pauseNextAuthorityReadback:()=>{
       let entered!:()=>void,release!:()=>void;
       const enteredPromise=new Promise<void>(resolve=>{entered=resolve;});
@@ -528,6 +532,49 @@ test('AI-06: abort during remote completion ACK never returns stale native succe
       'provider reconstruction must not resurrect the cancelled grant');
     await assert.rejects(f.client.call(profile,'claim',{requestId,fingerprint}),
       'already consumed request ID must never be replayable');
+  }finally{f.db.close();}
+});
+
+test('AI-06: cancellation after remote enrollment registration must retain STOP',async()=>{
+  const f=fixture();
+  try{
+    const {provider}=await f.make();
+    const controller=new AbortController();
+    let cancelledAtRegister=false;
+    f.before(body=>{
+      if(body.action==='enroll'){
+        cancelledAtRegister=true;
+        controller.abort();
+      }
+    });
+    await assert.rejects(provider.enroll(controller.signal),
+      /CORE_ENROLLMENT_CANCELLED_BEFORE_ACTIVATION/);
+    assert.equal(cancelledAtRegister,true,'registration race hook must run');
+    assert.equal(await f.store.stopped(),true,'cancelled enrollment must preserve durable STOP');
+    const row=f.db.prepare('SELECT enrollment_id FROM device_core_console_authority WHERE device_id=?')
+      .get(deviceId);
+    assert.equal(row?.enrollment_id,null,'cancelled registration must be revoked remotely');
+    assert.equal((await (await f.make()).controller.status('full')).active,false,
+      'restarted provider must not resurrect a cancelled native enrollment');
+    assert.equal(f.effects(),0);
+  }finally{f.db.close();}
+});
+
+test('AI-06: concurrent revoke during clearStop cannot reopen enrollment',async()=>{
+  const f=fixture();
+  try{
+    const {provider}=await f.make();
+    let revokedDuringActivation=false;
+    f.beforeClearStop(()=>{
+      revokedDuringActivation=true;
+      void provider.revoke().catch(()=>{});
+    });
+    await assert.rejects(provider.enroll(new AbortController().signal),
+      /CORE_ENROLLMENT_CANCELLED_BEFORE_ACTIVATION/);
+    assert.equal(revokedDuringActivation,true,'revoke must race the final unblocking step');
+    assert.equal(await f.store.stopped(),true);
+    assert.equal((await (await f.make()).controller.status('full')).active,false);
+    assert.equal(f.effects(),0);
   }finally{f.db.close();}
 });
 

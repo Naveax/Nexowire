@@ -50,3 +50,12 @@ değişen durum yeniden denetlenir. Tamamlanma ACK anında iptal testi
 Uzak D1 `succeeded` yazmış olabileceği için sonuç terminal UNKNOWN
 olarak yerelden fence edilir; gerçek OS-native effect atomikliği veya
 koordinatör migration'ı sağlanmış değildir. Production CORE NO-GO.
+
+## Enrollment aktivasyonu için nesil-fence düzeltmesi
+
+`WindowsCoreConsoleProvider.enroll` uzaktan gelen geç kayıt ACK'sinin
+iptal veya eşzamanlı revoke sonrasında `revoked=false` yapmasını
+engellemek üzere `stopSequence` ve nihai kontrol kullanır. İptalde
+persisted STOP/revoke uygulanır. İki sentetik adversarial test eklendi.
+Protected native consent origin, OS-effect atomik revoke ve D1
+claim/complete native-verification marker hâlâ açık P0'dır.

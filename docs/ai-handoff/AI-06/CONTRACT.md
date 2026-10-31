@@ -76,3 +76,15 @@ eski bir `succeeded` cevabı çıkarılmaz. Kalıcı yerel STOP,
 gerçekleşmiş olabilir; bu durum sahte `denied` olarak sunulmaz.
 Uzak D1 tamamlanma ACK'sinin iptal ile yarışı protected effect-boundary
 CAS/generation gereksinimini ortadan kaldırmaz.
+
+## Enroll ACK ile iptal/revoke nesil kontrolü
+
+`WindowsCoreConsoleProvider.enroll()`, kendi kontrollü pre-enrollment
+`revoke()` çağrısından **sonra** monoton `stopSequence` değerini yakalar.
+Bu esnada başka bir STOP, harici revoke, cancellation veya close oluşursa
+onay uzaktan kaydedilmiş olsa bile `clearStop/clearBlock/startMonitor`
+aşamaları sonrasında **aktivasyon verilmez**. Bu async aşamalar boyunca
+`revoked` true tutulur; yalnız son nesil/iptal kontrolü geçtiğinde
+false olur. Hata halinde kalıcı STOP ve remote revoke tekrar uygulanır.
+Bu işlem korumalı native approval veya fiziksel console kabulünün yerine
+geçmez.

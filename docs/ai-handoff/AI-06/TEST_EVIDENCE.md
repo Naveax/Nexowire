@@ -74,3 +74,14 @@ olabilir (`effects=1`), fakat uygulama geç iptalden sonra eski
 başarı ACK'sini kullanıcıya döndürmemeli; STOP kalıcı olmalı,
 yeniden kurulan provider aktif sayılmamalı ve request replay edilememeli.
 Bu test yeni exact HEAD'in CI sonucu gelmeden PASS sayılmaz.
+
+## Enrollment ACK / revoke yarışları
+
+`test/core-console-provider.integration.test.ts` iki yeni sentetik
+negatif vaka içerir: `enroll` HTTPS isteği sırasında AbortSignal
+iptali, ve `clearStop` aşamasına eşzamanlı `revoke` girilmesi.
+İkisi de `CORE_ENROLLMENT_CANCELLED_BEFORE_ACTIVATION`, yerel
+kalıcı STOP ve yeniden oluşturulan provider'da `active=false`
+bekler. Windows fiziksel kullanıcı onayı, üretim D1 ve gerçek mTLS
+bağlantıları kullanılmaz. Bu yeni vakalar exact HEAD CI kanıtı
+gelmeden PASS kabul edilmez.

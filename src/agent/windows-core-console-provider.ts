@@ -257,6 +257,9 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
   private readonly lifetime=new AbortController();
   private revoking?:Promise<void>;
   private inFlightDispatch?:{requestId:string;fingerprint:string};
+  /** Monotonic local STOP sequence; an in-flight enrollment must not undo a
+   * concurrent revoke even when the protected authority enroll ACK arrives. */
+  private stopSequence=0;
   private initialization?:Promise<void>;
   onEnrollmentRequested?:()=>Promise<void>;
   constructor(private readonly options:WindowsCoreProviderOptions){}
@@ -461,6 +464,7 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
       // must bind epochs after this monotonic revoke, not before it.
       await this.revoke();
       await this.tail;
+      const enrollmentStopSequence=this.stopSequence;
       const fresh=await this.options.authority.call(this.profile,'read',{},signal);
       if(!fresh.coreEnabled||fresh.accessMode!=='full'||!fresh.deviceOnline||
         !fresh.bridgeVerified||fresh.ownerAccountId!==state.ownerAccountId||
@@ -506,10 +510,28 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
         registered.windowsLogonLuid!==proof.windowsLogonLuid||
         registered.windowsLogonSessionEpoch!==proof.windowsLogonSessionEpoch)
         throw new Error('CORE_NATIVE_CONSENT_AUTHORITY_BINDING_REQUIRED');
-      this.binding={ownerAccountId:challenge.ownerAccountId,deviceId:challenge.deviceId,
-        installationId:challenge.installationId};
-      this.revoked=false;await this.options.store.clearStop();
-      await this.options.store.clearBlock?.();await this.startMonitor();return true;
+      // A delayed enrollment ACK may arrive after the user cancels or another
+      // task revokes the grant. Keep revoked=true until *all* async local
+      // unblocking steps finish, and check the monotonic STOP generation.
+      try{
+        const enrollmentCancelled=()=>this.closed||signal.aborted||
+          this.stopSequence!==enrollmentStopSequence;
+        if(enrollmentCancelled())throw new Error('CORE_ENROLLMENT_CANCELLED_BEFORE_ACTIVATION');
+        this.binding={ownerAccountId:challenge.ownerAccountId,deviceId:challenge.deviceId,
+          installationId:challenge.installationId};
+        await this.options.store.clearStop();
+        await this.options.store.clearBlock?.();
+        await this.startMonitor();
+        if(enrollmentCancelled())throw new Error('CORE_ENROLLMENT_CANCELLED_BEFORE_ACTIVATION');
+        this.revoked=false;
+        return true;
+      }catch(error){
+        // The certificate may already have been registered remotely. Preserve
+        // local STOP and revoke its generation rather than publishing an
+        // enrollment that was cancelled during the final async steps.
+        await this.revoke().catch(()=>{});
+        throw error;
+      }
     }finally{this.pending=false;}
   }
   execute(request:CoreConsoleDispatch,signal:AbortSignal):Promise<CoreConsoleReceipt>{
@@ -627,6 +649,7 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
     this.tail=work.catch(()=>{});return work;
   }
   private latchLocalStop():void{
+    this.stopSequence++;
     this.revoked=true;const monitor=this.monitor;this.monitor=undefined;this.desktop=false;monitor?.kill();
   }
   private async persistLocalStop():Promise<void>{
