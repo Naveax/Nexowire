@@ -31,8 +31,10 @@ function insert(db:DatabaseSync,id:string,state:CoreOpState='reserved'){
     .run(id,'device','install','enroll',1,1,0,'a'.repeat(64),state,1000);
 }
 function row(db:DatabaseSync,id:string){
-  return db.prepare('SELECT state,native_claim_verified AS nativeClaimVerified FROM device_core_console_operations WHERE request_id=?')
+  // node:sqlite produces a null-prototype record. Normalize for strict assertions.
+  const found=db.prepare('SELECT state,native_claim_verified AS nativeClaimVerified FROM device_core_console_operations WHERE request_id=?')
     .get(id);
+  return found?{...found}:undefined;
 }
 function advance(db:DatabaseSync,id:string,state:CoreOpState){
   return db.prepare('UPDATE device_core_console_operations SET state=? WHERE request_id=?')
