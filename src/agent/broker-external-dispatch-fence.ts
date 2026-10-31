@@ -329,6 +329,19 @@ export class BrokerExternalDispatchFence {
     const identity=await this.config.verifyIdentity(request).catch(()=>false);
     if(identity!==true)deny('DISPATCH_IDENTITY_UNVERIFIED');
     const broker=await this.verifyBrokerFor(request);
+    // Reattest owner/device/session after external CAS awaits; a single early
+    // readback is not authority for an effect if enrollment has since changed.
+    // Source-only checks cannot replace an atomic external revoke/effect fence.
+    const requireCurrentIdentity=async(brokerId:string,dispatchId:string):Promise<void>=>{
+      const current=await this.config.verifyIdentity(request).catch(()=>false);
+      if(current===true && !this.locallyFenced.has(device))return;
+      this.locallyFenced.add(device);
+      // Release only the exact immutable reservation, retaining a durable
+      // tombstone at the external authority. Lost ACK is terminal locally.
+      try{await this.config.authority.release({brokerId,dispatchId,request})}
+      catch{/* UNKNOWN must remain fenced. */}
+      deny(current!==true?'DISPATCH_IDENTITY_UNVERIFIED':'DISPATCH_REVOKE_PENDING');
+    };
     // Fresh random challenge prevents an old *validly signed* claim copied
     // from a rolled-back WAL from being accepted by a new Broker process.
     let beginStartedNs:bigint;
@@ -371,6 +384,9 @@ export class BrokerExternalDispatchFence {
         brokerId:commitBroker.brokerId,request})}catch{this.locallyFenced.add(device)}
       deny('DISPATCH_REVOKE_PENDING');
     }
+    // Reservation CAS and native Broker verification may have outlived the
+    // protected identity scope. Reject before remote effect admission.
+    await requireCurrentIdentity(commitBroker.brokerId,proof.dispatchId);
     // A native readback can itself block. Never commit a reservation whose
     // signed lifetime ended during re-attestation; a remote authority must
     // enforce this too. UNKNOWN or expiry must not retry the OS effect.
@@ -419,6 +435,10 @@ export class BrokerExternalDispatchFence {
         brokerId:commitBroker.brokerId,request})}catch{}
       deny('DISPATCH_REVOKE_PENDING');
     }
+    // Even a correctly signed commit cannot authorize stale owner/session
+    // identity after asynchronous CAS. This check precedes the FINAL native
+    // HIGH readback, which must remain the last asynchronous trust boundary.
+    await requireCurrentIdentity(commitBroker.brokerId,proof.dispatchId);
     // A valid remote commit receipt cannot prove the OS token stayed HIGH
     // while CAS I/O was pending. Refresh immediately before any effect callback.
     try{await this.verifyBrokerFor(request,commitBroker.brokerId)}
