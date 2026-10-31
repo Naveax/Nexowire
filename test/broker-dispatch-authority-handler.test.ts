@@ -253,6 +253,29 @@ test('dispatch wire adapter enforces identity, protected readback and signed rec
     assert.equal(backend.active.size,0);
   });
 
+  await t.test('server refuses validly signed noncanonical Broker receipt',async()=>{
+    const op=operation();
+    const original=backend.beginIfCurrent.bind(backend);
+    let dispatchId:string|undefined;
+    backend.beginIfCurrent=async(...args)=>{
+      const receipt=await original(...args);
+      const json=Buffer.from(receipt.payload,'base64url').toString('utf8');
+      dispatchId=(JSON.parse(json) as {dispatchId:string}).dispatchId;
+      const bytes=Buffer.from(' '+json,'utf8');
+      return {payload:bytes.toString('base64url'),
+        signature:sign(null,bytes,authorityKey.privateKey).toString('base64url')};
+    };
+    try{
+      const response=await post('begin',{request:op,broker:effective(),
+        challengeNonce:'4'.repeat(64)});
+      assert.equal(response.status,503);
+      assert.ok(dispatchId);
+    }finally{
+      backend.beginIfCurrent=original;
+      if(dispatchId)await remote.release({dispatchId,brokerId,request:op});
+    }
+  });
+
   await t.test('owner revoke needs a real signature and a matching drained receipt',async()=>{
     const intent={kind:'revoke',authorityId,deviceId,ownerId,epoch:deviceEpoch,
       sessionEpoch,generation:7};

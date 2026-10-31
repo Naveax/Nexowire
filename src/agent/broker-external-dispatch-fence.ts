@@ -116,6 +116,39 @@ type Permit=z.infer<typeof permit>;
 type Commit=z.infer<typeof committed>;
 type RevokeProof=z.infer<typeof revoked>;
 function deny(code:string):never{throw new WitnessAuthorityError(code)}
+/**
+ * The native witness boundary may supply an object whose property getters,
+ * prototype or references change between validation and a remote CAS await.
+ * Read a fixed set of own DATA descriptors exactly once and freeze primitives
+ * before checking any security field. This is a source-side TOCTOU fence,
+ * NOT proof of an independently protected Windows token or process.
+ */
+function snapshotProtectedBrokerEvidence(raw:unknown):ProtectedBrokerEvidence {
+  if(!raw || typeof raw!=='object' || Array.isArray(raw))
+    deny('DISPATCH_HIGH_TOKEN_UNVERIFIED');
+  try {
+    const prototype=Object.getPrototypeOf(raw);
+    if(prototype!==Object.prototype && prototype!==null)
+      deny('DISPATCH_HIGH_TOKEN_UNVERIFIED');
+    const descriptors=Object.getOwnPropertyDescriptors(raw);
+    const fields=[
+      'verified','brokerId','ownerEpoch','grantGeneration',
+      'highIntegrityToken','signedProtectedImage','protectedParentAndImports',
+    ] as const;
+    const snapshot:Record<string,unknown>=Object.create(null);
+    for(const key of fields) {
+      const descriptor=descriptors[key];
+      if(!descriptor || !Object.hasOwn(descriptor,'value') ||
+         descriptor.enumerable!==true)
+        deny('DISPATCH_HIGH_TOKEN_UNVERIFIED');
+      snapshot[key]=descriptor.value;
+    }
+    return Object.freeze(snapshot) as unknown as ProtectedBrokerEvidence;
+  }catch{
+    return deny('DISPATCH_HIGH_TOKEN_UNVERIFIED');
+  }
+}
+
 /** Source gate: does not modify #03/#04 Broker/Access owner implementation. */
 export class BrokerExternalDispatchFence {
   private readonly publicKey:KeyObject;
@@ -186,9 +219,11 @@ export class BrokerExternalDispatchFence {
   /** Refresh native Broker evidence after every remote CAS await before effect admission. */
   private async verifyBrokerFor(request:BrokerDispatchRequest,
     expectedBrokerId?:string):Promise<ProtectedBrokerEvidence>{
-    let broker:ProtectedBrokerEvidence;
-    try{broker=await this.config.verifyEffectiveBroker()}
+    let raw:ProtectedBrokerEvidence;
+    try{raw=await this.config.verifyEffectiveBroker()}
     catch{return deny('DISPATCH_EFFECTIVE_BROKER_UNAVAILABLE')}
+    // Never retain a provider-owned live object across the next await.
+    const broker=snapshotProtectedBrokerEvidence(raw);
     if(!broker||broker.verified!==true||
        !uuid.safeParse(broker.brokerId).success||
        broker.highIntegrityToken!==true||
@@ -214,7 +249,14 @@ export class BrokerExternalDispatchFence {
          signature.length!==64||
          !verify(null,bytes,this.publicKey,signature))
         deny('DISPATCH_SIGNATURE_UNTRUSTED');
-      return JSON.parse(bytes.toString('utf8')) as unknown;
+      // A valid signature over ambiguous JSON is not an authorization.
+      // JSON.parse accepts duplicate keys, UTF-8 replacement and equivalent
+      // escape sequences that other parsers may interpret differently.
+      const parsed=JSON.parse(bytes.toString('utf8')) as unknown;
+      const canonical=JSON.stringify(parsed);
+      if(!canonical || !Buffer.from(canonical,'utf8').equals(bytes))
+        deny('DISPATCH_SIGNATURE_UNTRUSTED');
+      return parsed;
     }catch{return deny('DISPATCH_SIGNATURE_UNTRUSTED')}
   }
   private checkPermit(value:unknown,req:BrokerDispatchRequest,
@@ -287,6 +329,19 @@ export class BrokerExternalDispatchFence {
     const identity=await this.config.verifyIdentity(request).catch(()=>false);
     if(identity!==true)deny('DISPATCH_IDENTITY_UNVERIFIED');
     const broker=await this.verifyBrokerFor(request);
+    // Reattest owner/device/session after external CAS awaits; a single early
+    // readback is not authority for an effect if enrollment has since changed.
+    // Source-only checks cannot replace an atomic external revoke/effect fence.
+    const requireCurrentIdentity=async(brokerId:string,dispatchId:string):Promise<void>=>{
+      const current=await this.config.verifyIdentity(request).catch(()=>false);
+      if(current===true && !this.locallyFenced.has(device))return;
+      this.locallyFenced.add(device);
+      // Release only the exact immutable reservation, retaining a durable
+      // tombstone at the external authority. Lost ACK is terminal locally.
+      try{await this.config.authority.release({brokerId,dispatchId,request})}
+      catch{/* UNKNOWN must remain fenced. */}
+      deny(current!==true?'DISPATCH_IDENTITY_UNVERIFIED':'DISPATCH_REVOKE_PENDING');
+    };
     // Fresh random challenge prevents an old *validly signed* claim copied
     // from a rolled-back WAL from being accepted by a new Broker process.
     let beginStartedNs:bigint;
@@ -329,6 +384,9 @@ export class BrokerExternalDispatchFence {
         brokerId:commitBroker.brokerId,request})}catch{this.locallyFenced.add(device)}
       deny('DISPATCH_REVOKE_PENDING');
     }
+    // Reservation CAS and native Broker verification may have outlived the
+    // protected identity scope. Reject before remote effect admission.
+    await requireCurrentIdentity(commitBroker.brokerId,proof.dispatchId);
     // A native readback can itself block. Never commit a reservation whose
     // signed lifetime ended during re-attestation; a remote authority must
     // enforce this too. UNKNOWN or expiry must not retry the OS effect.
@@ -377,6 +435,10 @@ export class BrokerExternalDispatchFence {
         brokerId:commitBroker.brokerId,request})}catch{}
       deny('DISPATCH_REVOKE_PENDING');
     }
+    // Even a correctly signed commit cannot authorize stale owner/session
+    // identity after asynchronous CAS. This check precedes the FINAL native
+    // HIGH readback, which must remain the last asynchronous trust boundary.
+    await requireCurrentIdentity(commitBroker.brokerId,proof.dispatchId);
     // A valid remote commit receipt cannot prove the OS token stayed HIGH
     // while CAS I/O was pending. Refresh immediately before any effect callback.
     try{await this.verifyBrokerFor(request,commitBroker.brokerId)}
