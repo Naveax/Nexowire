@@ -42,3 +42,7 @@ Wait for exact HEAD typecheck, Node 22/24 tests, build and the full 7-job CI mat
 
 ## 2026-10-31 final source-only test inventory correction
 Verified on source HEAD `ca5f851ddcb5488ab14782ce154247786467cd49`: **30 AI-05 tests, not 27 or 28**. Exact counts from the four files: PostgreSQL scope 12, executor snapshot 9, HTTPS outcome 6, remote witness 3. All 30 appeared PASS in both Node 22 and Node 24 logs from run 41211445617; Node22 summary 2,769 tests / 2,415 PASS / 0 FAIL / 352 SKIP / 2 TODO. Source CI was 6/7 SUCCESS with Windows browser-live in progress at that observation. The latest docs-inclusive HEAD must have a separate exact-run verdict. CORE remains false; Draft source-ready only, physical production NO_GO.
+
+## AI-05 next source candidate (2026-11-01)
+
+One 200-response-body ACK-loss negative case added in AI-05 HTTPS test path and corresponding source outcome classification hardened: reserve, revoke, re-pair all UNKNOWN on unreadable successful response bodies. Four owned handoff/evidence/status/final documents updated; no external provider or physical CAS guarantee. Previous exact HEAD `618988d1ae3dc5cb3f8731d98ac8ea52dee7801a` CI `41247307084` 7/7 SUCCESS remains historical. **New exact HEAD and CI result pending verification.** Draft, source-only, CORE NO-GO.

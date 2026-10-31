@@ -47,3 +47,7 @@ Configuration getter/Proxy execution at construction is now denied before the bi
 ## Immutable original provider-method boundary
 
 The PostgreSQL witness adapter now binds the originally enrolled pool connect and independent CAS reserve methods before any asynchronous readbacks; two negative tests block swapping borrowed provider methods across awaited authorization. **39 source-only AI-05 regression cases** are authored. Await new exact-HEAD CI. This does not authorize actual physical CORE dispatch or remove the Broker/CAS/sandbox NO-GO constraints.
+
+## 2026-11-01 CAS body-loss and Broker handoff delta
+
+Retained AI-05 Draft PR #992 and its branch. Hardened `src/agent/https-external-grant-cas.ts` 200 body stream loss to UNKNOWN for all three remote mutations, with an isolated synthetic test asserting a single HTTP attempt each. Documented exact immutable Broker callback identity, canonical input wire bytes and SHA-256 digest for AI-04/coordinator. Real durable CAS receipts, native physical owner readback, independent sandbox and two-device OS evidence remain missing; **BLOCKED / CORE NO-GO**. Latest commit CI must be verified on exact SHA before READY_FOR_REVIEW.

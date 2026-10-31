@@ -290,3 +290,33 @@ test('AI-05 grant CAS constructor rejects getter and Proxy configuration without
   assert.equal(getters,0);
   assert.equal(traps,0);
 });
+
+test('AI-05 successful HTTP headers with lost response body remain UNKNOWN, one attempt each',async t=>{
+  // The independent authority may have committed reserve/revoke/re-pair
+  // before the client loses its 200 response body. Never claim a safe refusal.
+  let fetches=0;
+  const urls:string[]=[];
+  t.mock.method(globalThis,'fetch',async (url:URL|Request|string)=>{
+    fetches++;
+    urls.push(String(url));
+    const broken=new ReadableStream<Uint8Array>({
+      start(controller){controller.error(new Error('synthetic body ACK loss after commit'))},
+    });
+    return new Response(broken,{status:200});
+  });
+  const cas=client();
+  await assert.rejects(cas.reserveIfCurrent(operation,grant),
+    code('EXTERNAL_GRANT_TRANSPORT_UNKNOWN'));
+  assert.equal(fetches,1,'lost reserve receipt cannot trigger automatic retry');
+  await assert.rejects(cas.revokeIfCurrent(revoke),
+    code('EXTERNAL_REVOKE_OUTCOME_UNKNOWN'));
+  assert.equal(fetches,2,'lost revoke receipt cannot trigger automatic retry');
+  await assert.rejects(cas.rePairIfCurrent(repair),
+    code('EXTERNAL_REPAIR_OUTCOME_UNKNOWN'));
+  assert.equal(fetches,3,'lost re-pair receipt cannot trigger automatic retry');
+  assert.deepEqual(urls,[
+    'https://nexowire-cas.invalid/v1/grant-cas/reserve',
+    'https://nexowire-cas.invalid/v1/grant-cas/revoke',
+    'https://nexowire-cas.invalid/v1/grant-cas/re-pair',
+  ]);
+});

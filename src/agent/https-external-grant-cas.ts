@@ -193,7 +193,9 @@ export class HttpsExternalGrantCas implements ExternalGrantCas {
       ?'EXTERNAL_GRANT_TRANSPORT_UNKNOWN':'EXTERNAL_GRANT_AUTHORITY_REFUSED');
     let payload:string;
     try{payload=await response.text()}
-    catch{return reject('EXTERNAL_GRANT_PROOF_INVALID')}
+    // A 2xx header may arrive AFTER the authority commits the one-use CAS.
+    // Losing the body is an unknown mutation outcome, never safe to replay.
+    catch{return reject('EXTERNAL_GRANT_TRANSPORT_UNKNOWN')}
     if(payload.length>2048)return reject('EXTERNAL_GRANT_PROOF_INVALID');
     let decoded:unknown;
     try{decoded=JSON.parse(payload)}
@@ -237,7 +239,8 @@ export class HttpsExternalGrantCas implements ExternalGrantCas {
       ?'EXTERNAL_REVOKE_OUTCOME_UNKNOWN':'EXTERNAL_REVOKE_AUTHORITY_REFUSED');
     let payload:string;
     try{payload=await response.text()}
-    catch{return reject('EXTERNAL_REVOKE_PROOF_INVALID')}
+    // A successful status without a readable receipt is NOT an undo/deny ACK.
+    catch{return reject('EXTERNAL_REVOKE_OUTCOME_UNKNOWN')}
     if(payload.length>2048)return reject('EXTERNAL_REVOKE_PROOF_INVALID');
     let decoded:unknown;
     try{decoded=JSON.parse(payload)}
@@ -281,7 +284,8 @@ export class HttpsExternalGrantCas implements ExternalGrantCas {
       ?'EXTERNAL_REPAIR_OUTCOME_UNKNOWN':'EXTERNAL_REPAIR_AUTHORITY_REFUSED');
     let payload:string;
     try{payload=await response.text()}
-    catch{return reject('EXTERNAL_REPAIR_PROOF_INVALID')}
+    // Re-pair may already be durable; never retry on a lost response body.
+    catch{return reject('EXTERNAL_REPAIR_OUTCOME_UNKNOWN')}
     if(payload.length>2048)return reject('EXTERNAL_REPAIR_PROOF_INVALID');
     let parsed:unknown;
     try{parsed=JSON.parse(payload)}

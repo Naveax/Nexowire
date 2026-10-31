@@ -58,3 +58,7 @@ Three additional source-only negative tests reject Proxy/getter/hidden/extra con
 ## Provider method substitution after awaited authorization
 
 Two additional negative regressions mutate `externalCas.reserveIfCurrent` during the clock query and `pool.connect` during authenticated owner resolution. They assert that only constructor-bound original methods are called, exactly one original external reservation occurs and the committed receipt retains the original request ID. New source-authored AI-05 count: **39 (15 PG, 11 executor, 8 HTTPS, 5 remote)**. This SHA requires matching Node22/24 typecheck/test/build and all CI jobs; previous-run PASS or cross-owner RED must not be transferred.
+
+## AI-05 2026-11-01 after-200 body loss test candidate
+
+Added `AI-05 successful HTTP headers with lost response body remain UNKNOWN, one attempt each` in `test/ai05-cas-http-outcome.test.ts`. The three mock 200 response bodies fail while streaming. Expected outcomes: reserve `EXTERNAL_GRANT_TRANSPORT_UNKNOWN`, revoke `EXTERNAL_REVOKE_OUTCOME_UNKNOWN`, re-pair `EXTERNAL_REPAIR_OUTCOME_UNKNOWN`, with exactly three total mock fetches and zero automatic retries. No real network, CAS ledger, signed Broker receipt or physical effect is claimed. **Do not record PASS until this exact new commit's CI run and test log are verified.** Earlier HEAD `618988d1ae3dc5cb3f8731d98ac8ea52dee7801a` CI `41247307084` was 7/7 SUCCESS; that evidence does not apply to the new commit. Expected new AI-05 named source-only test count: **40** (15 PostgreSQL, 11 executor, 9 HTTPS, 5 remote).
