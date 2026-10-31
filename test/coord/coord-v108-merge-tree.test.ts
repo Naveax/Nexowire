@@ -145,3 +145,14 @@ test('absent exact commit object cannot be treated as mergeable',t=>{
   assert.ok(output.findings?.some(x=>x.includes('COMMIT_OBJECT_MISSING_')));
   assert.equal(output.nodes?.length,0);
 });
+
+test('a declared PR head must really descend from its exact base Git commit',t=>{
+  const f=fixture(t);
+  const otherHead=f.snapshot.prs.find(p=>p.number===986)!.head.sha;
+  f.snapshot.prs.find(p=>p.number===993)!.head.sha=otherHead;
+  const {result,output}=f.execute();
+  assert.equal(result.status,2,result.stderr);
+  assert.equal(output.status,'BLOCKED');
+  assert.ok(output.findings?.some(x=>x.includes('PR_993_BASE_NOT_ANCESTOR')));
+  assert.equal(output.mergeAuthorized,false);
+});
