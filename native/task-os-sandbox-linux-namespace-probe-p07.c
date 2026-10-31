@@ -358,6 +358,9 @@ int main(int argc,char **argv) {
     (void)rmdir(root);return 76;
   }
   uid_t outer_uid=getuid();
+  /* Capture the creator PID before fork, while both processes are in the
+   * original PID namespace. The direct child must not survive a dead owner. */
+  pid_t outer_parent_pid=getpid();
   pid_t pid=fork();
   if(pid<0) {
     (void)close(ready[0]);(void)close(ready[1]);
@@ -366,6 +369,14 @@ int main(int argc,char **argv) {
   }
   if(pid==0) {
     (void)close(ready[0]);(void)close(resume[1]);
+    /* PR_SET_PDEATHSIG is cleared on fork. Arm it in the direct diagnostic
+     * child, before ANY namespace setup or blocking kernel handshake.
+     * getppid() closes the fork-to-prctl race: if our specific creator died
+     * just before prctl, it must be a denied probe, not an orphan worker.
+     * This check is deliberately BEFORE unshare(CLONE_NEWPID), when the
+     * parent PID is still meaningful in the same namespace. */
+    if(prctl(PR_SET_PDEATHSIG,SIGKILL)<0)_exit(82);
+    if(getppid()!=outer_parent_pid)_exit(85);
     /* Only this disposable diagnostic owns the process group. The parent
      * never targets arbitrary PIDs, a live Agent or a host task process. */
     if(setpgid(0,0)<0)_exit(80);

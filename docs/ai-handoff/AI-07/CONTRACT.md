@@ -57,3 +57,6 @@ The disposable namespace init calls `prctl(PR_SET_PDEATHSIG, SIGKILL)` before wa
 
 ### Inner child bounded wait and NUL truncation
 The rootless probe's inner namespace PID1 is reaped with finite monotonic `waitpid(...,WNOHANG)` windows after both allow and reject gates. A timeout attempts exact-owned PID1 SIGKILL; no observed reap implies blocked exit, not simulated descendant cleanup. The source-only sandbox policy rejects embedded NUL argv/root strings and root paths beyond 32767 UTF-16 code units, but an OS provider must revalidate canonical native file identity and exact serialization separately.
+
+### Direct diagnostic child parent-death fence
+The forked pre-unshare Linux diagnostic child installs `PR_SET_PDEATHSIG(SIGKILL)` and verifies its creator's exact `getppid()` before `setpgid`, `clearenv` or `unshare`. This limits the case where the outer observer dies after a kernel handshake but before reaping. PID1 installs a separate parent-death fence before its inner gate. Both are kernel process-lifetime safeguards, **not** whole-descendant/cgroup cleanup evidence and never an execution permit.

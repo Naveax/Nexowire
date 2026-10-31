@@ -37,3 +37,6 @@ Addressed premature direct-parent SIGPIPE termination and late PR_SET_PDEATHSIG 
 
 ### Additional denial/teardown hardening
 Eliminated inner Linux PID1 unbounded wait on both rejection and success paths; strict source-level NUL/length checks for task argv/path. Real OS kernel witness, Job/cgroup descendant drain and protected worker identity are still absent, therefore **NO_GO**.
+
+### Direct diagnostic child orphan-fencing
+Added pre-unshare parent-death signal + original parent PID race guard on the **disposable selftest** child only. No native worker launch or permission gate opened; OS-kernel independent verification, descendant drain and platform integration remain production NO-GO.

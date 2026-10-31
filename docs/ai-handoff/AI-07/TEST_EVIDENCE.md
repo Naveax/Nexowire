@@ -45,3 +45,6 @@ Linux source regression now checks `PR_SET_PDEATHSIG` occurs before the PID1 sec
 ### Additional isolated regressions (2026-10-31)
 - Linux native source assertions: both inner success/error PID1 waits are monotonic and bounded; all ambiguous reap/forced-kill outcomes are nonzero and never reported as native physical acceptance. Exact-head CI must confirm C compilation and test suite; no opt-in physical namespace test claimed.
 - Hostile-input Node test now includes NUL-embedded argv, NUL-embedded task-root and oversized task-root; all must include `INVALID_TASK_INTENT`, no getter evaluation or execution. No other owner's test is weakened.
+
+### Parent-death negative regression
+- `test/task-os-sandbox-linux-native-p07.test.ts` now checks direct-child `PR_SET_PDEATHSIG`, recorded original parent PID and fork-to-prctl race guard ordering before `setpgid` and `unshare`. The existing native `cc -Werror` build/deny-only CLI regression remains intact. Exact-head CI required; opt-in physical Linux namespace acceptance still **NOT_RUN** unless separately recorded.

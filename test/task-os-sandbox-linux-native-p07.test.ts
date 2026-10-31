@@ -40,6 +40,14 @@ test('#07 Linux diagnostic has no arbitrary shell entry point',()=>{
   assert.match(source,/terminate_owned_child\(pid,status\)/);
   assert.match(source,/if\(waited==-2\)return 78/);
   assert.match(source,/if\(setpgid\(0,0\)<0\)_exit\(80\)/);
+  // The outer parent death must kill its own direct diagnostic child,
+  // even when the first/second namespace handshake has already completed.
+  // Verify the parent PID while both share the pre-unshare PID namespace.
+  assert.match(source,/pid_t outer_parent_pid=getpid\(\)/);
+  assert.match(source,/if\(prctl\(PR_SET_PDEATHSIG,SIGKILL\)<0\)_exit\(82\)/);
+  assert.match(source,/if\(getppid\(\)!=outer_parent_pid\)_exit\(85\)/);
+  assert.match(source,/if\(pid==0\) \{[\s\S]*?if\(prctl\(PR_SET_PDEATHSIG,SIGKILL\)<0\)_exit\(82\);[\s\S]*?if\(getppid\(\)!=outer_parent_pid\)_exit\(85\);[\s\S]*?if\(setpgid\(0,0\)<0\)_exit\(80\)/);
+
   assert.match(source,/if\(prctl\(PR_SET_PDEATHSIG,SIGKILL\)<0\)_exit\(55\)/);
   // Before PID1's private approval read, install its parent-death fence.
   assert.ok(source.indexOf('if(prctl(PR_SET_PDEATHSIG,SIGKILL)<0)_exit(55);') <

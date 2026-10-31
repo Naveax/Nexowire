@@ -50,3 +50,7 @@ Linux diagnostic forced termination no longer abandons direct-child cleanup afte
 ## 2026-10-31 extra fail-closed source work
 - The disposable Linux PID namespace helper now uses monotonic WNOHANG polling in BOTH normal and rejected gate paths; it kills/reaps **only its freshly forked test PID1** within 9s. A killed or unobserved child returns blocked (81/83/84), never success. The test PID1 cannot be a task worker.
 - Source intent rejects embedded NUL in argv/task-root strings and bounds root path length. This is input-shape defense only, not Windows/Linux canonical file identity, symlink containment, or a native security permit.
+
+## Parent-death fallback (31 Oct 2026)
+- Direct disposable Linux diagnostic child now installs `PR_SET_PDEATHSIG(SIGKILL)` immediately after fork, before namespace setup, and compares `getppid()` with its recorded creator PID to close fork-to-prctl orphan races. This complements the separate PID1 parent-death signal. The test PID/group remain owned by the disposable probe, with no real Agent process, user task or privilege changes.
+- Added source regression verifying parent identity and required ordering. Independent PID/cgroup kernel drain and real task containment are still NO-GO.
