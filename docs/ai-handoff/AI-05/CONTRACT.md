@@ -3,6 +3,8 @@
 ## Authority and trust boundary
 The caller-provided `CasRequest` (UUID, fingerprint, capability and device epoch) is validated, **cloned and frozen synchronously** when `PostgresBoundGrantCas.reserve` starts. The resolver's returned `AuthenticatedGrantScope` (ownerId, deviceId, deviceEpoch, sessionEpoch, expectedGeneration, requiredPrivilege) is not retained as a borrowed reference. It is examined by property descriptors without invoking getters, structurally validated, copied and frozen **before** any SQL BEGIN/FOR UPDATE or external CAS call.
 
+An `ExternalGrantCasReceipt` is separately checked for plain own data descriptors, fully schema-validated, detached and frozen before the next SQL await. In particular `created:false` and sequence cannot be rotated by a retained provider object after validation.
+
 The local PostgreSQL device/delegation row locks do not replace the independently operated, rollback-resistant external reserve/commit gate. The external `reserveIfCurrent` provider must bind the identical immutable request and scope to an atomic current grant/revoke generation and global UUID tombstone. `created:false` is a replay-denial/readback result, **never** a new execution permit. If external reservation may have committed but its acknowledgement was lost, the result is UNKNOWN, no silent retry or local fallback.
 
 ## Invariants tested
@@ -10,7 +12,8 @@ The local PostgreSQL device/delegation row locks do not replace the independentl
 - Original caller request UUID/fingerprint can mutate during SQL awaits without rotating the reserved identity.
 - Accessor-backed scope inputs fail closed without invoking a user getter.
 - Lost external acknowledgement triggers one external attempt and database rollback, not a second mutation.
-- Previously tombstoned global UUID remains `created:false`, with no fresh insert.
+- Previously tombstoned global UUID remains `created:false`, with no fresh insert, even if the borrowed external receipt is changed after its initial proof check.
+- Accessor-backed external proof is rejected without running a getter.
 
 ## Integration boundaries
 AI-04 owns Broker admission, signed effect receipts, Job/kernel readback, and the existing `broker-external-dispatch-fence.ts`. AI-05 owns the CAS and executor modules only. The coordinator owns `native-agent.ts`, `operation-journal.ts`, shared CI and production integration. AI-07 owns OS sandbox provider; no worker is authorized by this source-only change.
