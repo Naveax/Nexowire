@@ -45,7 +45,7 @@ export function evaluateSnapshot(snapshot,{live=false}={}) {
   // end of the read-only scan, and refuse source signoff on moving refs.
   const recheck=snapshot?.rechecked;
   const recheckPrs=Array.isArray(recheck?.prs)?new Map(recheck.prs.map(p=>[p?.number,p])):null;
-  if(live){
+  if(live||recheck!==undefined){
     if(!recheckPrs||!sha40(recheck?.mainSha)){
       unique(findings,'FINAL_HEAD_RECHECK_MISSING');
     }else if(recheck.mainSha!==snapshot.mainSha){
@@ -68,7 +68,7 @@ export function evaluateSnapshot(snapshot,{live=false}={}) {
         unique(errors,'BASE_MAIN_SHA_MISMATCH');
       }
       if(pr.draft!==true)unique(errors,'DRAFT_STATE_CHANGED_REVIEW');
-      if(live){
+      if(live||recheck!==undefined){
         const refreshed=recheckPrs?.get(spec.number);
         if(!refreshed||refreshed.state!=='open'){
           unique(errors,'PR_GONE_DURING_AUDIT');
