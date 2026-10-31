@@ -47,12 +47,26 @@ async function readExactly(handle:fs.FileHandle,buf:Buffer,length:number,at:numb
   }
 }
 
+// Re-check the pathname, not merely the opened file handle. A replaced WAL
+// or SHM pathname may otherwise pass validation against the previous inode.
+// These checks do not replace native-singleton ownership or an atomic SQLite
+// open/verify handoff in the journal owner.
+type FileSnapshot={dev:number;ino:number;size:number;mtimeMs:number;ctimeMs:number};
+async function assertStablePath(file:string,opened:FileSnapshot):Promise<void>{
+  let current;
+  try{current=await fs.lstat(file)}catch{fail();}
+  if(!current.isFile()||current.isSymbolicLink()||
+     current.dev!==opened.dev||current.ino!==opened.ino||
+     current.size!==opened.size||current.mtimeMs!==opened.mtimeMs||
+     current.ctimeMs!==opened.ctimeMs)fail();
+}
+
 // SQLite reuses WAL allocation after RESTART without truncating old frames.
 // The volatile WAL-index only corroborates a clean current commit boundary.
 // It is NOT an authenticity/rollback witness or a replacement for external CAS.
 async function readReuseIndex(dbFile:string,walHeader:Buffer,pageSize:number,
   currentFrames:number,commitPages:number,digest:Checksum):Promise<{
-    bytes:Buffer;dev:number;ino:number;size:number;mtimeMs:number;
+    bytes:Buffer;dev:number;ino:number;size:number;mtimeMs:number;ctimeMs:number;
   }>{
   let prior;
   try{prior=await fs.lstat(dbFile+'-shm');}catch{fail();}
@@ -78,8 +92,11 @@ async function readReuseIndex(dbFile:string,walHeader:Buffer,pageSize:number,
        u32(40)!==checksum.s0||u32(44)!==checksum.s1||
        u32(96)>currentFrames||u32(128)>currentFrames)fail();
     const after=await handle.stat();
-    if(after.size!==opened.size||after.mtimeMs!==opened.mtimeMs)fail();
-    return {bytes,dev:opened.dev,ino:opened.ino,size:opened.size,mtimeMs:opened.mtimeMs};
+    if(after.size!==opened.size||after.mtimeMs!==opened.mtimeMs||
+       after.ctimeMs!==opened.ctimeMs)fail();
+    await assertStablePath(dbFile+'-shm',opened);
+    return {bytes,dev:opened.dev,ino:opened.ino,size:opened.size,
+      mtimeMs:opened.mtimeMs,ctimeMs:opened.ctimeMs};
   }finally{await handle.close();}
 }
 
@@ -158,15 +175,36 @@ export async function verifyAgentJournalWal(dbFile:string):Promise<void>{
       lastCommitPages=frame.readUInt32BE(4);
     }
     const after=await handle.stat();
-    if(after.size!==opened.size||after.mtimeMs!==opened.mtimeMs)fail();
+    if(after.size!==opened.size||after.mtimeMs!==opened.mtimeMs||
+       after.ctimeMs!==opened.ctimeMs)fail();
     if(reuseIndex){
       const checked=await readReuseIndex(dbFile,header,pageSize,
         currentFrames,lastCommitPages,digest);
       if(checked.dev!==reuseIndex.dev||checked.ino!==reuseIndex.ino||
          checked.size!==reuseIndex.size||checked.mtimeMs!==reuseIndex.mtimeMs||
+         checked.ctimeMs!==reuseIndex.ctimeMs||
          !checked.bytes.equals(reuseIndex.bytes))fail();
       const stable=await handle.stat();
-      if(stable.size!==opened.size||stable.mtimeMs!==opened.mtimeMs)fail();
+      if(stable.size!==opened.size||stable.mtimeMs!==opened.mtimeMs||
+         stable.ctimeMs!==opened.ctimeMs)fail();
+    }
+    // Read back after the scan. This detects a late in-place header rewrite
+    // and checks that the path still resolves to the validated inode.
+    const finalHeader=Buffer.alloc(32);
+    await readExactly(handle,finalHeader,32,0);
+    if(!finalHeader.equals(header))fail();
+    const finalStat=await handle.stat();
+    if(finalStat.size!==opened.size||finalStat.mtimeMs!==opened.mtimeMs||
+       finalStat.ctimeMs!==opened.ctimeMs)fail();
+    await assertStablePath(walFile,opened);
+    if(reuseIndex){
+      const finalIndex=await readReuseIndex(dbFile,header,pageSize,
+        currentFrames,lastCommitPages,digest);
+      if(finalIndex.dev!==reuseIndex.dev||finalIndex.ino!==reuseIndex.ino||
+         finalIndex.size!==reuseIndex.size||
+         finalIndex.mtimeMs!==reuseIndex.mtimeMs||
+         finalIndex.ctimeMs!==reuseIndex.ctimeMs||
+         !finalIndex.bytes.equals(reuseIndex.bytes))fail();
     }
   }finally{
     await handle.close();
