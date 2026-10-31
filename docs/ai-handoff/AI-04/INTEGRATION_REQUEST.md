@@ -1,22 +1,10 @@
-# AI-04 -> Coordinator / AI-05 / AI-07 / AI-08
+# AI-04 INTEGRATION REQUEST | coordinator / AI-05 / AI-07 / AI-08
 
-## Required security handoff (no cross-agent source edits)
-1. AI-05: wrap every separate irreversible Windows effect with an independently validated Broker admission. Use a stable original operation UUID per effect, with exact immutable input digest and owner/device/session/generation scope. Do not treat one outer `executor` admission as multiple effect CAS acknowledgements. Integration in `src/agent/executors.ts` belongs to AI-05, not AI-04.
-2. Independent Broker authority owner/coordinator: implement real pinned `verifyReceipt(receipt,signedPayloadUtf8)` that checks **the exact argument bytes** and a durable one-use reservation/commit/UNKNOWN/revoke backend. Test verifiers returning true are not installation evidence.
-3. AI-07/coordinator: require real OS token/handle/publisher readback for installed Broker and Job worker. Hosted Windows 2025 evidence in CI run `41194719016` explicitly blocks equal-HIGH acceptance because SeDebugPrivilege was enabled and the linked Medium token could not be issued. The pre-seal duplicated Job-handle window remains independently OPEN. Treat UNKNOWN as deny, not success.
-4. AI-08: independently assess #987 negative tests, Windows Job blocked cases, MSVC C4133 behavior, and compare exact HEAD CI evidence. A successful fixture run is **not** physical release acceptance.
-5. Coordinator only: if Windows CI needs new isolated test setup, own the workflow change. Do not weaken source negatives, suppress C4133, alter physical gates, or treat a hosted token as the owner's PC.
- 
-## Proposed minimum contract
-- Admission input: `{ operationId: UUID, capability, inputSha256, binding: { authorityId, ownerId, deviceId, sessionId, ownerEpoch, deviceEpoch, sessionEpoch, generation, highTokenProofId, protectedBrokerProofId, expiresAtMs } }`.
-- `readVerifiedBinding()` and `readVerifiedBindingNow()` return plain own-data witness snapshots or null (fail closed). Their source-side snapshots provide NO independent OS proof.
-- `begin(request, nonce)` and `commit(request, ticket, nonce)` must return independently signed RESERVED/COMMITTED exact-byte receipts. Lost ACK => sticky UNKNOWN. No mutation callback on UNKNOWN, revoke, mismatched binding, expired budget or token uncertainty.
-- Release gate remains **NO_GO** until OS and independent authority contracts are installed and separately verified on authorized hardware.
+1. **AI-05**: every *separate* real Windows effect must obtain independent Broker-side per-effect `operationId` admission on the exact frozen input SHA-256, device/owner/session epochs, durable reserve and one-time commit. Lost ACK/UNKNOWN must be terminal and never re-execute. AI-04 does not edit `src/agent/executors.ts`.
+2. **Independent CAS owner / coordinator**: supply pinned, OS-protected verifier for `verifyReceipt(receipt,signedPayloadUtf8)`; prove durable tombstone, generation/revoke and one-use commit across restarts. Fake receipts and a JS boolean are not acceptable.
+3. **Signed-wire producer contract**: dispatch receipt bytes must be exact compact `JSON.stringify` UTF-8. JS roundtrip equality is required by both fence and handler. Non-JS producers need test vectors for field order, character escapes, number formats, duplicate keys, UTF-8 validity and Ed25519 signature bytes before integration. Do not loosen negatives to admit pretty JSON.
+4. **AI-07 + coordinator**: real isolated lower-privilege worker, per-principal service SID/ACL and protected IPC/handle boundary are needed to resolve initial guardian Job pre-seal duplicate-handle window, equal-HIGH/SeDebug and UAC-linked Medium attack paths. Current Job kernel membership/limits or provisional DACL is insufficient physical evidence.
+5. **AI-08**: independently review Draft #987 source + 26 AI-04 incremental tests; replay/ABA/accessor, canonical signed wire, Job inherited handle, warning C4133 and Windows negative SKIP/BLOCKED truth. Diff compare exact parent/base and verify active CI exact SHA; mocks must not be promoted to PASS.
+6. **Coordinator only**: own any shared `.github/workflows/**`, installer/manifest/trusted helper signing and inter-agent integrations. No AI-04 change to those files. Authoritative 7/7 CI and two-device physical enrollment remain distinct gates.
 
-## Newly identified handle-inheritance boundary
-- AI-04 owns a narrow change to `native/windows-job-owner.c` that replaces broad `CreateProcessW(..., TRUE, ...)` inheritance with an explicit `PROC_THREAD_ATTRIBUTE_HANDLE_LIST` containing only deliberately duplicated standard IO handles.
-- AI-07 still owns the complete worker token/handle/environment policy. AI-08 should verify the Windows native build + Job launch with this change at the new exact commit. Existing equal-HIGH, pre-seal and UAC-linked kernel proof blockers are independent.
-
-## AI-05 and verifier witness scope addendum
-- Source-only `broker-external-dispatch-fence.ts` now snapshots its native Broker witness. AI-05 must never reinterpret this snapshot as physical protected process evidence; the independent provider must authenticate the real HIGH token, image, owner epoch and session at each readback.
-- AI-08: add external negative review for native Broker evidence getter ABA and mutation while begin/commit await. Verify post-commit readback cannot silently substitute Broker identity.
+**CORE execution/release: NO_GO until authentic external CAS and independent OS principal/token + Job handle/descendant proof are installed and independently accepted.** No merge/deploy/live device activity authorized.

@@ -1,19 +1,13 @@
-# AI-04 STATUS — 31 October 2026
+# AI-04 STATUS | 2026-10-31
 
-- Status: **REVIEW** (source-only). Physical/production CORE: **NO_GO**.
-- Branch: `ai/04-broker-admission-20261031`. Draft PR: https://github.com/Naveax/Nexowire/pull/987.
-- Verified source HEAD: `c5fb0e424cc30e2adaaa2dec9235d62eb6a4ce4d`.
-- Parent integration/base: `7e4093c30c1ead3cd22888184450c34aef4737da` (#980 Draft).
-- Source-head workflow: `CI`, run `41194719016`, **SUCCESS 7/7** for `c5fb0e424cc30e2adaaa2dec9235d62eb6a4ce4d`.
-- This evidence-documentation commit is not included in that run; its exact commit SHA and CI must be read from the live PR/runs. Do not transfer source-head CI to another SHA as an exact-head result.
-- Changed implementation: `src/agent/privileged-broker-effect-admission.ts`; new tests: `test/ai04-broker-binding-snapshot.test.ts`.
-- Independent Windows Job risk: SeDebugPrivilege enabled on hosted Windows runner; HIGH peer denial and UAC-linked MEDIUM→HIGH probe BLOCKED. They are not PASS.
-- Next independent work: have AI-08 validate exact SHA/negative fixtures and request genuine isolated OS token/handle evidence from coordinator. No physical admission, merge or deployment.
-
-## Additional in-scope hardening
-- Native Windows Job guardian now limits `CreateProcessW` inheritance to duplicated standard IO handles through `PROC_THREAD_ATTRIBUTE_HANDLE_LIST`; unexpected inheritable handles cannot be passed by the unbounded `TRUE` flag alone.
-- Additional new static regressions: `test/ai04-broker-job-handle-inheritance.test.ts` (2 tests). This C change is NOT covered by the earlier `c5fb...` successful run; require a new exact-HEAD Windows MSVC build and runtime regression before declaring source REVIEW complete.
-
-## Current exact-head CI and new in-scope work
-- Native handle inheritance source HEAD `62f73e1ddfa4c7fc8ebadcd7b7499393a66cc380`: CI `41196171288` completed SUCCESS **7/7**, including hosted Windows MSVC guardian compile and Windows Job regression step. The prior evidence snapshot is preserved in TEST_EVIDENCE.
-- New source-only hardening in `src/agent/broker-external-dispatch-fence.ts`: null-prototype frozen native Broker evidence snapshot before verifying/forwarding it to remote CAS. Reject inherited, accessor and throwing proxy properties. New `test/ai04-broker-protected-witness-snapshot.test.ts` (9 tests) targets initial and post-await native witness drift. This follow-up commit has its own exact SHA/CI and MUST NOT inherit `41196171288` result.
+- **Kaynak durumu:** REVIEW (source-only). **CORE üretim/fiziksel kabul:** NO_GO.
+- **Draft PR:** https://github.com/Naveax/Nexowire/pull/987
+- **Branch:** `ai/04-broker-admission-20261031`
+- **Parent/base:** `7e4093c30c1ead3cd22888184450c34aef4737da` (Draft #980)
+- **Doğrulanmış son kaynak commit:** `b4b1cbf57d40b2f16926f132b435837a527d5e07`
+- **Bu kaynak için GitHub Actions CI:** https://github.com/Naveax/Nexowire/actions/runs/41200010652 . Kaynak SHA için koşu tamamlandı, 7/7 SUCCESS. Bu belge commit'inin exact-head CI sonucu ayrı doğrulanmalıdır.
+- Daha önceki aday `84845566bde5b4def4cb58bec90296fb011793c5` CI `41198157070` tamamlandı 7/7 SUCCESS. Bunu yeni commitin exact-head sonucu sayma.
+- **Kaynak değişiklikleri:** immutable Broker owner/session witness; immutable protected HIGH readback; Windows Job child stdio-only handle inheritance; canonical Ed25519 receipt JSON UTF-8 on client + handler.
+- **Test değişiklikleri:** 4 yeni `test/ai04-broker-*.test.ts` ve 1 handler entegrasyon negatif testi. Yeni AI-04 testleri: 26 (25 standalone + 1 nested integration).
+- **Açık engeller:** gerçek equal-HIGH/SeDebug ve UAC-linked Medium negatifleri BLOCKED; pre-seal Job-handle theft penceresi; kurulu Broker, gerçek owner/CAS/ACL ve gerçek iki cihaz kabulü yok. Hiçbir source CI sonucu fiziksel CORE PASS değildir.
+- **Takip:** AI-08 bağımsız negatif QA; AI-05 per-effect CAS; AI-07 izole worker/OS sınırı; koordinatör signed-wire sözleşmesi ve ayrı fiziksel kabul altyapısı.
