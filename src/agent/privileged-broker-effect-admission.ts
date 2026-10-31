@@ -1,4 +1,5 @@
 import {createHash,randomBytes} from 'node:crypto';
+import {types as nodeUtilTypes} from 'node:util';
 
 /**
  * Broker #02 source contract ONLY. No physical or production provider is
@@ -90,7 +91,8 @@ function deny(): never {throw new BrokerEffectAdmissionDenied();}
  */
 function snapshotBinding(raw:BrokerVerifiedEffectBinding|null|undefined):
   BrokerVerifiedEffectBinding|null {
-  if(!raw || typeof raw!=='object' || Array.isArray(raw))return null;
+  if(!raw || typeof raw!=='object' || nodeUtilTypes.isProxy(raw) ||
+     Array.isArray(raw))return null;
   try {
     const prototype=Object.getPrototypeOf(raw);
     if(prototype!==Object.prototype && prototype!==null)return null;
@@ -100,6 +102,7 @@ function snapshotBinding(raw:BrokerVerifiedEffectBinding|null|undefined):
       'ownerEpoch','deviceEpoch','sessionEpoch','generation',
       'highTokenProofId','protectedBrokerProofId','expiresAtMs',
     ] as const;
+    if(Reflect.ownKeys(descriptors).length!==fields.length)return null;
     const snapshot:Record<string,unknown>=Object.create(null);
     for(const key of fields){
       const descriptor=descriptors[key];
@@ -167,37 +170,52 @@ function receiptMatches(receipt:BrokerEffectReceipt|null,
     sameBinding(req.binding,receipt.binding);
 }
 
-/**
- * Capture an untrusted transport receipt ONCE before any signature-verification
- * await. Copy via JSON round-trip to discard attacker-owned references,
- * prototypes, getters and nested object identities. Deep-freeze every object
- * (not just the top-level receipt) so a verifier cannot mutate its own input.
- *
- * The verifier must sign-check `signedPayloadUtf8`; it is derived from this
- * *same* snapshot and is a primitive string, immutable across awaits.
- * No field of the raw transport response is ever read again.
- */
+/** Exactly-once, getter-free copy of a provider-owned signed receipt.
+ * This rejects hostile JS object shape; it is NOT a native OS/CAS witness. */
+const effectReceiptKeys=['state','operationId','capability','inputSha256',
+  'challengeNonce','ticket','binding','proof'] as const;
+const effectBindingKeys=['authorityId','ownerId','deviceId','sessionId',
+  'ownerEpoch','deviceEpoch','sessionEpoch','generation','highTokenProofId',
+  'protectedBrokerProofId','expiresAtMs'] as const;
+const effectNumericKeys=new Set<string>([
+  'ownerEpoch','deviceEpoch','sessionEpoch','generation','expiresAtMs',
+]);
+function strictEffectData(raw:unknown,fields:readonly string[]):Record<string,unknown>{
+  if(!raw||typeof raw!=='object'||nodeUtilTypes.isProxy(raw))deny();
+  try {
+    if(Array.isArray(raw))deny();
+    const prototype=Object.getPrototypeOf(raw);
+    if(prototype!==Object.prototype&&prototype!==null)deny();
+    const descriptors=Object.getOwnPropertyDescriptors(raw);
+    const names=Reflect.ownKeys(descriptors);
+    if(names.length!==fields.length)deny();
+    const copy:Record<string,unknown>=Object.create(null);
+    for(const key of names){
+      if(typeof key!=='string'||!fields.includes(key))deny();
+      const d=descriptors[key];
+      if(!d||!Object.hasOwn(d,'value')||d.enumerable!==true)deny();
+      copy[key]=d.value;
+    }
+    // Preserve original insertion order for the exact signed UTF-8 bytes.
+    return copy;
+  }catch{deny()}
+}
 function snapshotReceipt(raw:BrokerEffectReceipt|null):
   {readonly receipt:BrokerEffectReceipt;readonly signedPayloadUtf8:string} {
-  if(!raw || typeof raw!=='object')deny();
-  let rawJson:string|undefined;
-  try{rawJson=JSON.stringify(raw)}catch{deny()}
-  if(!rawJson || Buffer.byteLength(rawJson,'utf8')>16*1024)deny();
-  let parsed:unknown;
-  try{parsed=JSON.parse(rawJson)}catch{deny()}
-  if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))deny();
-  const deepFreeze=(value:unknown,depth:number):void=>{
-    if(depth>32)deny();
-    if(value && typeof value==='object'){
-      for(const child of Object.values(value))deepFreeze(child,depth+1);
-      Object.freeze(value);
-    }
-  };
-  deepFreeze(parsed,0);
-  const receipt=parsed as BrokerEffectReceipt;
-  // The receipt interface is a payload plus an opaque proof. The exact bytes
-  // sent to the verifier are the same frozen fields later read by the gate.
-  const {proof: _proof,...signedPayload}=receipt;
+  const data=strictEffectData(raw,effectReceiptKeys);
+  const binding=strictEffectData(data.binding,effectBindingKeys);
+  for(const key of effectBindingKeys){
+    if(typeof binding[key]!==(effectNumericKeys.has(key)?'number':'string'))deny();
+  }
+  for(const key of effectReceiptKeys){
+    if(key!=='binding'&&typeof data[key]!=='string')deny();
+  }
+  data.binding=Object.freeze(binding);
+  const receipt=Object.freeze(data) as unknown as BrokerEffectReceipt;
+  let originalUtf8:string|undefined;
+  try{originalUtf8=JSON.stringify(receipt)}catch{deny()}
+  if(!originalUtf8||Buffer.byteLength(originalUtf8,'utf8')>16*1024)deny();
+  const {proof:_proof,...signedPayload}=receipt;
   let signedPayloadUtf8:string|undefined;
   try{signedPayloadUtf8=JSON.stringify(signedPayload)}catch{deny()}
   if(!signedPayloadUtf8)deny();

@@ -53,3 +53,14 @@
 - `test/ai04-broker-request-snapshot.test.ts` adds 12 source-only cases: valid dispatch and revoke reach the independent deny-only gates; top-level and nested getters, nested symbols/hidden values, inherited root/scope, Proxy root/scope and hostile owner approval/Proxy revoke reject without effects or invoking malicious traps.
 - Important boundary: `node:util.types.isProxy` is a JavaScript runtime guard and the frozen snapshot remains source-only; only the installed protected Broker and independent owner authority can certify real owner/device/OS execution. Cross-agent physical acceptance/CORE remain NO-GO.
 - Prior exact HEAD `81fbfedbff4d03093e9b0a4aef6487a7b76967aa` [CI #41247119812](https://github.com/Naveax/Nexowire/actions/runs/41247119812) completed SUCCESS 7/7; this follow-up requires a separate exact HEAD CI. No earlier PASS is transferred.
+
+## AI-04 per-effect signed Broker receipt object ownership
+
+- `invokeBrokerEffectOnce` formerly used `JSON.stringify(raw)` on an untrusted provider-owned receipt. That could execute an arbitrary receipt or nested binding getter/Proxy before signed snapshot verification. Now both levels require exact own enumerable data descriptors, plain/null prototypes, no symbols/extra keys, primitive fields and a detached frozen snapshot. Original insertion order is retained for the exact signed UTF-8 bytes verified by `verifyReceipt(receipt,signedPayloadUtf8)`; negative outcomes remain terminal.
+- `test/ai04-broker-effect-receipt-snapshot.test.ts` adds 1 valid Ed25519 fixture and 12 getter/Proxy/extra-field negatives at reserve and commit. The negative cases require no callback, no getter/Proxy trap execution and no extra signature-verification calls. This does NOT authorize a real native effect or independent authority.
+- Previous exact HEAD `c6b1e62f0369dfc2813ba4280fd0fb0f64c1f210`, CI `41248585309`, last observation six jobs SUCCESS and Windows browser-live in_progress. New HEAD requires its own CI; do not inherit prior results. Native HIGH/owner, Job handle/descendant, durable CAS, UAC-linked medium and physical two-PC acceptance remain BLOCKED; CORE production NO_GO.
+
+## AI-04 protected Broker witness strict shape follow-up
+
+- `snapshotBinding` now rejects Proxy objects before calling `getPrototypeOf`/`getOwnPropertyDescriptors`; expected protected witness keys are exactly the documented 11 own enumerable data fields, so extra hidden/symbol keys cannot smuggle stale or foreign scope. All values are copied into a detached frozen witness before owner/CAS comparisons.
+- Three additional negative tests are appended to `test/ai04-broker-binding-snapshot.test.ts`: Proxy prototype/descriptor trap untouched, non-enumerable extra field and symbol scope field refused before remote CAS. Coupled with the new 13 receipt cases, this handoff adds **16 test cases** to prior exact source. Fixture-only status remains mandatory; no privileged mutation or OS-side guard is claimed.

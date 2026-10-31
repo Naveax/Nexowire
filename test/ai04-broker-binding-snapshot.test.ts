@@ -108,3 +108,43 @@ test('AI-04 refuse a throwing witness proxy without native effect',async()=>{
   assert.equal(called,0);
   assert.equal(f.callbackCount,0);
 });
+
+test('AI-04 witness Proxy rejects before getter/prototype reflection',async()=>{
+  const scope=binding();let traps=0,callbacks=0;
+  const hostile=new Proxy(scope,{
+    getPrototypeOf(){traps++;throw Error('HOSTILE_PROXY_PROTOTYPE')},
+    getOwnPropertyDescriptor(){traps++;throw Error('HOSTILE_PROXY_DESCRIPTOR')},
+  });
+  const provider:BrokerExternalEffectAdmission={
+    readVerifiedBinding:async()=>hostile,
+    begin:async()=>{assert.fail('CAS must not be invoked')},
+    commit:async()=>{assert.fail('commit must not be invoked')},
+    verifyReceipt:async()=>{assert.fail('receipt must not be checked')},
+    readVerifiedBindingNow:()=>scope,
+  };
+  await assert.rejects(invokeBrokerEffectOnce(provider,operationId,
+    'windows.ai04.fixture.effect',{value:'fixture'},
+    ()=>{callbacks++;return true},()=>true),denied);
+  assert.equal(traps,0,'Proxy reflection hooks must not run');
+  assert.equal(callbacks,0);
+});
+
+for(const variant of ['hidden','symbol'] as const){
+  test('AI-04 reject unexpected '+variant+' protected witness key',async()=>{
+    const original=binding();let callbacks=0;
+    if(variant==='hidden')Object.defineProperty(original,'hidden',{
+      value:'foreign',enumerable:false});
+    else Object.assign(original,{[Symbol('hiddenScope')]:true});
+    const provider:BrokerExternalEffectAdmission={
+      readVerifiedBinding:async()=>original,
+      begin:async()=>{assert.fail('CAS must not be invoked')},
+      commit:async()=>{assert.fail('commit must not be invoked')},
+      verifyReceipt:async()=>{assert.fail('receipt must not be checked')},
+      readVerifiedBindingNow:()=>binding(),
+    };
+    await assert.rejects(invokeBrokerEffectOnce(provider,operationId,
+      'windows.ai04.fixture.effect',{value:'fixture'},
+      ()=>{callbacks++;return true},()=>true),denied);
+    assert.equal(callbacks,0);
+  });
+}
