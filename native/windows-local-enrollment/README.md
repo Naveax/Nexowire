@@ -70,3 +70,40 @@ adapter and #982 mTLS/verifier composition; real machine-key ACL/TPM/SCM/pipe
 acceptance (including hostile owner clients); two-device visible enrollment,
 reboot, reconnect, interruption and offline revoke testing. Local service source
 compilation/CNG diagnostics must pass before presenting any installation UAC.
+
+## AI-02 hardening candidate (Draft only)
+
+The native pipe now sends a bounded, non-sensitive v2 denial frame for rejected
+operations when the client remains connected. The diagnostic client refuses
+denials, wrong protocol versions and frames that claim dispatch permission.
+It still does **not** cryptographically validate raw pipe output: only an
+independently pinned Agent verifier may use signed proof, and no proof activates
+CORE by itself. A consumed challenge nonce cannot be replayed after a lost ACK.
+
+The opt-in installer preflight additionally requires that the **device UUID,
+installation UUID and owner account ID** match the independently supplied Agent
+identity. Incomplete identity fields fail closed. This comparison does **not**
+authenticate that identity file's provenance. The coordinator must supply
+an independently protected and authenticated Agent identity export before
+installation acceptance; simply copying matching attacker-controlled JSON
+is insufficient. The current installer is not approved for production.
+
+The read-only opt-in service-removal preflight is:
+
+```powershell
+.\scripts\local-enrollment\uninstall.ps1 -ExpectedManifestSha256 '<pinned-sha256>' -ExpectedDeviceId '<device-uuid>'
+```
+
+Actual SCM removal requires `-Execute`, a local elevated interactive console,
+the installed service's exact path and device match, a previously committed
+local `revoked.json` marker and a typed, device-specific operator confirmation.
+It removes only the service registration, preserving runtime files, CNG keys,
+nonce history and revocation evidence for manual review. It does **not** remove
+the original Agent/Broker, reinstate revoked grants, reset state or assert
+successful final SCM deletion while Windows may still be finalizing it.
+Run only in an authorized disposable Windows test environment until accepted.
+
+The targeted Windows CI tests exercise CNG diagnostics, strict response-frame
+validation and disposable read-only installer/uninstaller preflights. They do
+not prove actual hostile-client IPC containment, service crash recovery,
+installer rollback, TPM trust, unattended reboot operation or two-PC acceptance.
