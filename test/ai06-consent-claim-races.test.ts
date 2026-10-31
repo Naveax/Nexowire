@@ -323,10 +323,12 @@ for(const change of [
     const owner='ai06-owner-repaired-after-readback';
     f.db.prepare('INSERT INTO accounts VALUES(?)').run(owner);
     f.db.prepare('UPDATE devices SET owner_account_id=?').run(owner);
-    f.db.prepare('INSERT INTO device_maintenance_preferences VALUES(?,?,?,?)')
-      .run('ai06-device-0001',owner,1,'2026-11-01');
-    f.db.prepare('INSERT INTO device_bridge_preferences VALUES(?,?,?,?)')
-      .run('ai06-device-0001',owner,'auto','2026-11-01');
+    // Both tables have device_id PRIMARY KEY. Re-pair the *existing*
+    // preference rows so the new owner remains READY at the second CAS.
+    f.db.prepare('UPDATE device_maintenance_preferences SET owner_account_id=?,enabled=1 WHERE device_id=?')
+      .run(owner,'ai06-device-0001');
+    f.db.prepare("UPDATE device_bridge_preferences SET owner_account_id=?,desired_mode='auto' WHERE device_id=?")
+      .run(owner,'ai06-device-0001');
   }},
   {name:'Windows logon epoch rotated',apply:(f:ReturnType<typeof fixture>)=>{
     f.db.exec("UPDATE device_core_console_authority SET windows_logon_session_epoch='ai06-new-logon-after-readback'");
