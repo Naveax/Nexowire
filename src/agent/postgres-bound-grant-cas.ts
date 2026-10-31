@@ -264,8 +264,12 @@ export class PostgresBoundGrantCas implements MonotonicTrustRoot {
       Promise<AuthenticatedGrantScope|undefined>;
     externalCas:ExternalGrantCas;
   }){
-    if(!uuid.safeParse(config.authorityId).success)
+    // Pin independently selected authority, pool, identity resolver and CAS
+    // implementation before any async provenance or SQL boundary.
+    const pinned=Object.freeze({...config});
+    if(!uuid.safeParse(pinned.authorityId).success)
       reject('BOUND_CAS_AUTHORITY_INVALID');
+    this.config=pinned;
   }
   private async trusted():Promise<void>{
     let p;

@@ -85,3 +85,47 @@ test('AI-05 verified terminal HTTP 403/409 remains refusal, not an execution per
   }
   assert.equal(callCount,6);
 });
+
+test('AI-05 authorityId cannot be retargeted after constructor before signed proof',async t=>{
+  const foreign='00000000-0000-4000-8000-000000000299';
+  const mutable={
+    endpoint:'https://nexowire-cas.invalid/v1/grant-cas/reserve',
+    authorityId:ids.authority,
+    credentialFor:async()=> 'synthetic-credential-not-for-production',
+  };
+  const cas=new HttpsExternalGrantCas(mutable);
+  // Previously, verification referenced this mutable object rather than the
+  // pinned constructor authority. A foreign but well-shaped proof could pass.
+  mutable.authorityId=foreign;
+  let requested=0;
+  t.mock.method(globalThis,'fetch',async (input:URL|Request|string)=>{
+    requested++;
+    const endpoint=String(input);
+    if(endpoint.endsWith('/reserve')){
+      return new Response(JSON.stringify({
+        authorityId:foreign,deviceId:ids.device,epoch:ids.epoch,
+        requestId:ids.request,ownerId:ids.owner,sessionEpoch:ids.session,
+        grantGeneration:4,fingerprint:'a'.repeat(64),
+        capability:'windows.registry.set',created:true,sequence:9,
+      }),{status:200});
+    }
+    const common={
+      authorityId:foreign,deviceId:ids.device,ownerId:ids.owner,
+      deviceEpoch:ids.epoch,sessionEpoch:ids.session,
+      previousGeneration:4,generation:5,revoked:true,
+    };
+    if(endpoint.endsWith('/revoke'))
+      return new Response(JSON.stringify(common),{status:200});
+    return new Response(JSON.stringify({
+      ...common,newOwnerId:ids.newOwner,newDeviceEpoch:ids.newEpoch,
+      newSessionEpoch:ids.newSession,coreCleared:true,
+    }),{status:200});
+  });
+  await assert.rejects(cas.reserveIfCurrent(operation,grant),
+    code('EXTERNAL_GRANT_PROOF_SCOPE_MISMATCH'));
+  await assert.rejects(cas.revokeIfCurrent(revoke),
+    code('EXTERNAL_REVOKE_PROOF_SCOPE_MISMATCH'));
+  await assert.rejects(cas.rePairIfCurrent(repair),
+    code('EXTERNAL_REPAIR_PROOF_SCOPE_MISMATCH'));
+  assert.equal(requested,3,'no unexpected retry of foreign authority proof');
+});

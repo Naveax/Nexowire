@@ -77,15 +77,19 @@ export class HttpsExternalGrantCas implements ExternalGrantCas {
     credentialFor:(deviceId:string,deviceEpoch:string,sessionEpoch:string)=>
       Promise<string|undefined>;
   }){
+    // Do not retain the caller's mutable configuration across async
+    // credential acquisition or HTTP response verification.
+    const pinned=Object.freeze({...config});
     let endpoint:URL;
-    try{endpoint=new URL(config.endpoint)}
+    try{endpoint=new URL(pinned.endpoint)}
     catch{throw new ExternalGrantTransportError('EXTERNAL_GRANT_URL_INVALID')}
     if(endpoint.protocol!=='https:'||endpoint.username||endpoint.password||
        endpoint.hash||endpoint.search||
        endpoint.pathname!=='/v1/grant-cas/reserve'||
-       !uuid.safeParse(config.authorityId).success)
+       !uuid.safeParse(pinned.authorityId).success)
       reject('EXTERNAL_GRANT_URL_INVALID');
     this.endpoint=endpoint;
+    this.config=pinned;
   }
   async reserveIfCurrent(
     input:CasRequest,authorization:AuthenticatedGrantScope,

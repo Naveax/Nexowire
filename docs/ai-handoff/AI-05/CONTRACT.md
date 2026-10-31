@@ -25,3 +25,6 @@ AI-04 owns Broker admission, signed effect receipts, Job/kernel readback, and th
 
 ## HTTPS ambiguous HTTP outcome boundary
 The external CAS HTTP adapter must preserve uncertainty after dispatch. HTTP 408, 425, 429 and any 5xx may mean that a one-use reserve, revoke or re-pair committed before the response was generated. These outcomes map to the operation-specific UNKNOWN/transport-unknown denial code, never to a definitive refusal. The client does not retry internally. Explicit authority 403/409 responses remain refusals only under the independent authority's no-side-effect rejection contract. Neither code is a permit. Transport UNKNOWN requires independent reconciliation before any new mutation.
+
+## Constructor authority invariance
+The HTTPS grant transport and PostgreSQL-bound CAS each shallow-copy and freeze their trusted dependency configuration on construction. The root authority ID, credential resolver, external CAS provider and pool cannot be switched by later mutation of the caller's original settings object across async identity/SQL/HTTP awaits. The nested provider implementation and actual durable external grant custody still require separate independent verification.

@@ -17,3 +17,6 @@ The source/test child `caadd1db53fb4993402a0abd06f3b8f2abb7c883` adds two cases:
 
 ## HTTPS post-dispatch uncertainty regression
 Added `test/ai05-cas-http-outcome.test.ts` with 2 deterministic tests: synthetic HTTP 408, 425, 429, 500, 503, 504 returned for reserve/revoke/re-pair (18 distinct requests, no internal retry; all denied as UNKNOWN) and explicit 403/409 responses (6 distinct requests, denied as refusal). Source-only fake fetch responses, not a real remote CAS service. CI exit codes for the new SHA are PENDING and must not inherit previous 9-case SHA results.
+
+## Constructor configuration mutation regressions
+3 additional synthetic tests: (1) mutable HTTPS authorityId swapped to a foreign authority before valid-shaped success receipt, all reserve/revoke/re-pair paths reject; (2) mutated PostgreSQL CAS authority config does not retarget the signed trust anchor; (3) external CAS provider replacement while the SQL clock await is in progress cannot substitute the original pinned provider. Their new exact-SHA CI result is pending. These cases do NOT attest remote service authenticity.

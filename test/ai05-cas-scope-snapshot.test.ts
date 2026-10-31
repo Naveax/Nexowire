@@ -99,14 +99,15 @@ function fixture(config:{
     async revokeIfCurrent(){throw new Error('No live revoke fixture')},
     async rePairIfCurrent(){throw new Error('No live re-pair fixture')},
   };
-  const cas=new PostgresBoundGrantCas({
+  const settings={
     authorityId:ids.authority,pool,externalCas,
     verifyProvenance:async()=>({
       verified:true,authorityId:ids.authority,validUntil:Date.now()+60_000,
     }),
     resolveAuthenticatedScope:async()=>config.resolve(),
-  });
-  return {cas,evidence};
+  };
+  const cas=new PostgresBoundGrantCas(settings);
+  return {cas,evidence,settings};
 }
 
 test('AI-05 SQL awaits cannot swap validated owner/session or original UUID',async()=>{
@@ -305,4 +306,39 @@ test('AI-05 hidden non-enumerable authorization fields fail closed',async()=>{
   assert.equal(third.evidence.externalCalls,1);
   assert.equal(third.evidence.insert,null);
   assert.ok(third.evidence.queries.includes('ROLLBACK'));
+});
+
+test('AI-05 authority configuration is pinned before independent provenance',async()=>{
+  const f=fixture({resolve:async()=>scope()});
+  const foreign='00000000-0000-4000-8000-000000000299';
+  f.settings.authorityId=foreign;
+  const result=await f.cas.reserve(request());
+  assert.equal(result.authorityId,ids.authority);
+  assert.equal(result.created,true);
+  assert.equal(f.evidence.externalCalls,1);
+  assert.equal(f.evidence.queries.at(-1),'COMMIT');
+});
+
+test('AI-05 external CAS provider cannot be swapped during SQL await',async()=>{
+  let unauthorizedCalls=0;
+  let swap:()=>void=()=>{};
+  const f=fixture({
+    resolve:async()=>scope(),
+    onClock:()=>swap(),
+  });
+  swap=()=>{
+    f.settings.externalCas={
+      ...f.settings.externalCas,
+      reserveIfCurrent:async()=>{
+        unauthorizedCalls++;
+        throw new Error('Untrusted provider substitution after grant checks');
+      },
+    };
+  };
+  const result=await f.cas.reserve(request());
+  assert.equal(result.created,true);
+  assert.equal(result.authorityId,ids.authority);
+  assert.equal(f.evidence.externalCalls,1);
+  assert.equal(unauthorizedCalls,0);
+  assert.equal(f.evidence.queries.at(-1),'COMMIT');
 });

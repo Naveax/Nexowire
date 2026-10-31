@@ -20,3 +20,6 @@ The prior six-test handoff was extended to nine targeted AI-05 synthetic negativ
 
 ## Additional AI-05 HTTP transport hardening
 Three one-use external grant actions (reserve/revoke/re-pair) now keep HTTP 408/425/429/5xx in UNKNOWN state to prevent treating an already-committed mutation as safe to retry. Two negative test cases cover uncertainty vs explicit 403/409 refusal. These are source-only and require exact-HEAD CI and external authority contract verification. Physical/production NO_GO unchanged.
+
+## Constructor binding delta
+Replaced borrowed CAS transport and PostgreSQL authority settings with detached frozen copies at initialization. Added adversarial forged-authority and provider-swap tests. Release stays NO_GO: a frozen JavaScript object is not external physical trust provenance.
