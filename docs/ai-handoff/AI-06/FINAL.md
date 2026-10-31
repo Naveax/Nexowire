@@ -114,3 +114,7 @@ atomikliğini çözmez. CORE NO-GO.
 ## AI-06 P0 source handoff: verified D1 claim
 
 Owned D1 source now requires an atomic second native-verified claim CAS after current independent native session readback. Premature `complete` cannot accept `succeeded/denied` with marker 0, even if signed. Missing coordinator #996 schema fails closed instead of silently treating legacy `dispatched` as verified. Three isolated regression cases were added; exact CI evidence must be recorded for the new HEAD. This remains a **Draft source integration**; coordinator #996 migration, AI-08 independent P0 check and physical Windows effect-boundary readback remain blocking. Production CORE NO-GO.
+
+## Final completion admission regressions
+
+Four source-only, in-memory tests check the transition `native_claim_verified=1` to `complete(succeeded)` against late changes to owner, device platform, Broker readiness and Windows logon LUID. The D1 SQL final CAS already binds current state; test coverage is added without weakening it. This is not physical Windows effect proof. Exact new HEAD/CI and integration with coordinator #996 and AI-08 acceptance remain pending. Draft + CORE NO-GO.

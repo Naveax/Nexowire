@@ -174,3 +174,7 @@ could be re-paired between that await and SQL compare-and-swap, with new
 maintenance preferences enabled. The owner, credential, platform, READY,
 native session and generations must still match **inside the same SQL UPDATE**.
 This remains a source-level guard, not a native OS effect permit.
+
+## Verified claim != permission to ignore final D1 state
+
+The persistent `native_claim_verified=1` proves a winning D1 claim followed an independent native readback; it does **not** certify a later OS effect, and it is not an unconditional right to complete. A separately signed `complete(succeeded|denied)` is still a current-state CAS bound to the original owner, current Windows platform, Broker readiness, original device key and native logon SID/session/LUID/epoch. A change between initial signed complete verification and its SQL UPDATE must fail closed and cannot create a terminal success. No verified D1 marker substitutes for a protected native effect-boundary receipt.

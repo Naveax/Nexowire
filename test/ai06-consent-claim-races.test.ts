@@ -66,9 +66,13 @@ function fixture(withClaimMarker=true){
   // Deterministic point between latest D1 readback and the second claim CAS.
   // Source-level race only; not a real Windows event or a D1 production hook.
   let beforeMarkerCas:(()=>void)|undefined;
+  let beforeCompleteCas:(()=>void)|undefined;
   const d1:D1DatabaseLike={prepare:sql=>{
     if(sql.includes('SET native_claim_verified=1')){
       const cb=beforeMarkerCas;beforeMarkerCas=undefined;cb?.();
+    }
+    if(sql.includes('UPDATE device_core_console_operations SET state=?')){
+      const cb=beforeCompleteCas;beforeCompleteCas=undefined;cb?.();
     }
     return new Statement(db.prepare(sql));
   },
@@ -100,6 +104,7 @@ function fixture(withClaimMarker=true){
       .get(requestId)?.native_claim_verified:null;
   return {db,call,state,marker,
     beforeMark:(cb:()=>void)=>{beforeMarkerCas=cb;},
+    beforeComplete:(cb:()=>void)=>{beforeCompleteCas=cb;},
     deviceStatus:()=>authority.deviceStatus(deviceId,ownerAccountId),
     pause:(work:()=>Promise<void>)=>{pause=work;},
     denyNativeReadback:()=>{nativeReadbackAllowed=false;}};
@@ -346,5 +351,36 @@ for(const change of [
     assert.equal(f.state(),'unknown','winning claim can only quarantine');
     assert.equal(f.marker(),0,'denied stale claim cannot mark verified');
     await assert.rejects(f.call('claim'),'same UUID must remain non-replayable');
+  }finally{f.db.close();}
+});
+
+for(const scenario of [
+  {name:'Broker readiness lost',apply:(f:ReturnType<typeof fixture>)=>{
+    f.db.exec('UPDATE devices SET admin_bridge_ready=0');
+  }},
+  {name:'Windows logon LUID changed',apply:(f:ReturnType<typeof fixture>)=>{
+    f.db.exec("UPDATE device_core_console_authority SET windows_logon_luid='0000000000000007'");
+  }},
+  {name:'platform re-paired to Linux',apply:(f:ReturnType<typeof fixture>)=>{
+    f.db.exec("UPDATE devices SET platform='linux'");
+  }},
+  {name:'owner account re-paired',apply:(f:ReturnType<typeof fixture>)=>{
+    f.db.exec("UPDATE devices SET owner_account_id='ai06-other-owner-during-complete'");
+  }},
+])test('AI-06: verified claim completion rejects last-moment '+scenario.name,async()=>{
+  const f=fixture();
+  try{
+    await f.call('reserve');
+    await f.call('claim');
+    assert.equal(f.state(),'dispatched');
+    assert.equal(f.marker(),1,'claim was independently native-verified');
+    // In-memory hook fires AFTER signed completion passes initial row
+    // authentication but BEFORE its SQL UPDATE. No real OS effect exists.
+    f.beforeComplete(()=>scenario.apply(f));
+    await assert.rejects(f.call('complete'),/CORE_REVOKED_REPLAY_OR_CONFLICT/,
+      'verified marker must not bypass final D1 owner/session/READY CAS');
+    assert.equal(f.state(),'dispatched','no unaudited success/denial is written');
+    assert.equal(f.marker(),1,'verification state is not retroactively forged');
+    await assert.rejects(f.call('claim'),'consumed request ID stays non-replayable');
   }finally{f.db.close();}
 });

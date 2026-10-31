@@ -172,3 +172,7 @@ All must produce terminal UNKNOWN, keep marker 0, and deny same-UUID replay.
 The hook exists only in AI-06's in-memory `D1DatabaseLike` fixture.
 **Expected 48 AI-06 cases** after these three additions; no PASS claim
 until matching exact new SHA and test log are checked.
+
+## Late completion current-state fence (additional AI-06 tests)
+
+Four synthetic in-memory D1 negatives introduce a race **after** a successful independently read-back claim and `native_claim_verified=1`, then immediately **before** signed `complete(succeeded)` SQL UPDATE: Broker readiness loss, logon LUID rotation, platform switch away from Windows, and owner re-pair. The expected result is signed completion rejection, operation remaining non-replayable in `dispatched`, and no false `succeeded` record. The fixture hook only intercepts its own D1DatabaseLike; it does not modify a production DB or claim physical native proof. **Expected 52 AI-06 cases; exact new-head CI verification required before PASS.**
