@@ -54,18 +54,36 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Preserve the fail-closed exit status while emitting sanitized reason codes.
+          set +e
           node scripts/coord-v108-merge-tree.mjs \
             --repo "$RUNNER_TEMP/v108-dryrun-source" \
             --snapshot "$RUNNER_TEMP/v108-snapshot-before.json" \
             > "$RUNNER_TEMP/v108-merge-result.json"
+          merge_exit=$?
+          set -e
+          if [[ ! -s "$RUNNER_TEMP/v108-merge-result.json" ]]; then
+            echo "BLOCKED: no structured dry-run report (exit $merge_exit)"
+            exit 2
+          fi
           node --input-type=module -e '
             import {readFileSync} from "node:fs";
             const result = JSON.parse(readFileSync(process.env.RUNNER_TEMP + "/v108-merge-result.json", "utf8"));
+            // Only fixed reason codes and PR numbers; never print file contents.
+            console.log("V108_REHEARSAL_STATUS:", result.status);
+            console.log("V108_REHEARSAL_FINDINGS:", JSON.stringify(result.findings?.slice(0,12) ?? []));
+            console.log("V108_REHEARSAL_PR_STATES:", JSON.stringify(
+              (result.nodes ?? []).map(({pr,result:state})=>({pr,state})).slice(0,20)
+            ));
             if (result.status !== "CLEAN_DRY_RUN" ||
                 result.mergeAuthorized !== false || result.productionCore !== "NO_GO" ||
                 result.deployAuthorized !== false) process.exit(2);
-            console.log("Dry-run only; no merge/deploy/CORE authority. Checked PR count:", result.nodes.length);
+            console.log("Source-only dry-run clean; never a merge/CORE approval.");
           '
+          if [[ "$merge_exit" -ne 0 ]]; then
+            echo "BLOCKED: dry-run exit code $merge_exit"
+            exit 2
+          fi
       - name: Recheck PR head and main SHA after the rehearsal
         shell: bash
         env:
