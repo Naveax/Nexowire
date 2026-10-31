@@ -75,7 +75,7 @@ test('rechecked moving head cannot count as a consistent proof',()=>{
 
 test('duplicate PR identity is fail closed',()=>{
   const data=fixture();
-  data.prs.push({...data.prs[0]});
+  data.prs.push({...data.prs[0]!});
   const {code,output}=check(data);
   assert.equal(code,2);
   assert.ok(output.findings.includes('DUPLICATE_PR_990'));
