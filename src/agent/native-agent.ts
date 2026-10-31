@@ -561,6 +561,9 @@ export async function runNativeAgent(
                     fingerprint,
                     request.data.capability,
                   );
+                  // OS incarnation readback can await a native helper. A lost
+                  // socket during that wait must never admit a late mutation.
+                  requestLifetime.signal.throwIfAborted();
                   if (!begun.created) {
                     return {
                       type: 'response' as const,
@@ -583,6 +586,7 @@ export async function runNativeAgent(
                   await operationJournal.markDispatched(
                     request.data.requestId,fingerprint,
                   );
+                  requestLifetime.signal.throwIfAborted();
                 }
                 let outcome: AgentResponse;
                 try {
