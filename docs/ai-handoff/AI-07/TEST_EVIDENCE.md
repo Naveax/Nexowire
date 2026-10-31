@@ -72,3 +72,6 @@ Added AI-07 test cases with 32768-character single argument, two 20000-character
 
 ### Early-orphan PIDFD: independent real Linux kernel test
 - Local isolated Linux 6.18.57 x86_64 / GCC 14.2, `cc -O2 -Wall -Wextra -Werror`. Prior standalone fixture verified 4 protected `exit 0` and 4 intentionally disabled guard `exit 55`; both require subreaper and bounded wait. The new repository test reproduces this scenario and must pass exact-HEAD CI; no assumption that this proves native OS worker identity or descendant drain.
+
+### Kernel without pidfd syscall macro (2026-11-01)
+- New Linux native build negative compiles a test-only transformed C diagnostic after undefining `SYS_pidfd_open` immediately before its feature guard; `-Wall -Wextra -Werror` must succeed, and unsupported arbitrary CLI input still exits 64. This is **only a compile/deny negative**, not execution of rootless namespace selftest or real production kernel proof. Exact-head CI required.

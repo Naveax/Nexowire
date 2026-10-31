@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {readFileSync,mkdtempSync,rmSync} from 'node:fs';
+import {readFileSync,writeFileSync,mkdtempSync,rmSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -138,5 +138,31 @@ test('#07 native probe compiles and refuses arbitrary command',{
         'OS_NAMESPACE_DIAGNOSTIC_BLOCKED: '+checked.stderr);
       assert.match(checked.stdout,/NW07_NAMESPACE_SECCOMP_SOURCE_SELFTEST_OK/);
     }
+  }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
+test('#07 unsupported pidfd build remains fail-closed instead of requiring a missing syscall macro',{
+  skip:process.platform!=='linux'?'Linux-only native build negative; NOT_RUN':false,
+},()=>{
+  const dir=mkdtempSync(path.join(os.tmpdir(),'nw07-no-pidfd-'));
+  try {
+    const unsupported=path.join(dir,'probe-no-pidfd.c');
+    const marker='#ifdef SYS_pidfd_open';
+    assert.equal(source.split(marker).length-1,1,'source pidfd feature guard drift');
+    // Simulate headers lacking SYS_pidfd_open after all system #includes.
+    // The diagnostic must still compile and refuse arbitrary task inputs.
+    writeFileSync(unsupported,source.replace(marker,
+      '#undef SYS_pidfd_open\n'+marker),{mode:0o600});
+    const exe=path.join(dir,'probe');
+    const compiled=spawnSync('cc',['-std=c11','-O2','-Wall','-Wextra','-Werror',
+      unsupported,'-o',exe],{encoding:'utf8',timeout:20000,
+      env:{PATH:'/usr/bin:/bin'}});
+    assert.equal(compiled.status,0,
+      'Unsupported pidfd must compile as BLOCKED: '+String(compiled.stderr||compiled.error));
+    const forbidden=spawnSync(exe,['--run','sh','-c','id'],{
+      encoding:'utf8',timeout:5000,env:{PATH:'/usr/bin:/bin'}});
+    assert.equal(forbidden.status,64,String(forbidden.stderr||forbidden.error));
+    assert.match(forbidden.stderr,/NW07_SOURCE_ONLY_NO_TASK_EXEC/);
+    // Do not claim the opt-in rootless namespace selftest ran on this kernel.
   }finally{rmSync(dir,{recursive:true,force:true});}
 });
