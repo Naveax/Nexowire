@@ -115,3 +115,40 @@ test('source CI RED blocks with no merge or deploy action',()=>{
   assert.match(result.stdout,/EXACT_HEAD_CI_NOT_GREEN/);
   assert.match(result.stdout,/No merge, CI dispatch, deployment or live device operations performed/);
 });
+
+test('moving PR HEAD during long CI inspection must fail closed',()=>{
+  const original=makeFixture();
+  const snapshot={...original,rechecked:{
+    mainSha:original.mainSha,
+    prs:original.prs.map(p=>({
+      ...p,head:{...p.head,sha:p.number===992?'a'.repeat(40):p.head.sha},
+      base:{...p.base},
+    })),
+  }};
+  const result=check(snapshot);
+  assert.equal(result.status,2,result.stderr);
+  assert.match(result.stdout,/PR_MOVED_DURING_AUDIT/);
+});
+
+test('moving main during live source audit must fail closed',()=>{
+  const original=makeFixture();
+  const snapshot={...original,rechecked:{
+    mainSha:'a'.repeat(40),
+    prs:original.prs.map(p=>({...p,head:{...p.head},base:{...p.base}})),
+  }};
+  const result=check(snapshot);
+  assert.equal(result.status,2,result.stderr);
+  assert.match(result.stdout,/MAIN_MOVED_DURING_AUDIT/);
+});
+
+test('an active exact-SHA run blocks even when another run is green',()=>{
+  const f=makeFixture();
+  const completed=f.runs['986']![0]!;
+  f.runs['986']!.push({
+    ...completed,id:888888,status:'in_progress',conclusion:null,
+    created_at:'2026-10-31T10:59:00Z',
+  });
+  const result=check(f);
+  assert.equal(result.status,2,result.stderr);
+  assert.match(result.stdout,/EXACT_HEAD_CI_ACTIVE/);
+});
