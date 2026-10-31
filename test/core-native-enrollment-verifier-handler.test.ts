@@ -45,10 +45,12 @@ test('independent native enrollment verifier enforces real TLS transport and sco
   run(['req','-x509','-newkey','ec','-pkeyopt','ec_paramgen_curve:P-256','-nodes','-keyout','ca.key',
     '-out','ca.crt','-days','1','-subj','/CN=Nexowire Disposable Verifier CA',
     '-addext','basicConstraints=critical,CA:TRUE','-addext','keyUsage=critical,keyCertSign,cRLSign']);
-  for(const name of ['server','client','server-rotated','client-alternate','server-expired']){
+  for(const name of ['server','client','server-rotated','server-wrong-host','client-alternate','server-expired']){
     await writeFile(path.join(root,name+'.ext'),'basicConstraints=critical,CA:FALSE\n'+
       'keyUsage=critical,digitalSignature\nextendedKeyUsage='+
-      (name.startsWith('server')?'serverAuth\nsubjectAltName=DNS:localhost,IP:127.0.0.1\n':'clientAuth\n'));
+      (name.startsWith('server')?'serverAuth\nsubjectAltName='+
+      (name==='server-wrong-host'?'DNS:untrusted.invalid\n':
+        'DNS:localhost,IP:127.0.0.1\n'):'clientAuth\n'));
     run(['req','-new','-newkey','ec','-pkeyopt','ec_paramgen_curve:P-256','-nodes',
       '-keyout',name+'.key','-out',name+'.csr','-subj','/CN=Disposable '+name]);
     run(['x509','-req','-in',name+'.csr','-CA','ca.crt','-CAkey','ca.key','-CAcreateserial',
@@ -221,6 +223,37 @@ test('independent native enrollment verifier enforces real TLS transport and sco
     }finally{strict.closeAllConnections();await new Promise<void>(r=>strict.close(()=>r()))}
   });
 
+  await t.test('a trusted CA and matching SPKI do not bypass the server hostname',async()=>{
+    reset();
+    // Real disposable TLS1.3 peer with an otherwise valid same-CA chain and
+    // the EXACT SPKI pin. Only its SAN omits the requested 127.0.0.1 origin.
+    const wrongCert=await readFile(path.join(root,'server-wrong-host.crt'),'utf8');
+    const wrongKey=await readFile(path.join(root,'server-wrong-host.key'),'utf8');
+    const strict=createCoreNativeVerifierServer({keyPem:wrongKey,certificatePem:wrongCert,
+      clientCaPem:ca.toString('utf8'),handler});
+    await new Promise<void>(resolve=>strict.listen(0,'127.0.0.1',resolve));
+    const address=strict.address();assert.ok(address&&typeof address!=='string');
+    const wrongOrigin='https://127.0.0.1:'+address.port;
+    const exactSpki=createHash('sha256').update(new X509Certificate(wrongCert).publicKey
+      .export({type:'spki',format:'der'})).digest('hex');
+    const transport=createCoreNativeMtlsFetch({origin:wrongOrigin,
+      keyPem:clientKey.toString('utf8'),certificatePem:clientCert.toString('utf8'),
+      serverCaPem:ca.toString('utf8'),serverSpkiSha256:exactSpki,timeoutMs:1500});
+    try{
+      const beforeAuth=authentications,beforeConsumes=consumes,beforeReads=reads;
+      await assert.rejects(transport(wrongOrigin+'/v1/core-native-consent',{
+        method:'POST',redirect:'error',headers:{authorization:'Bearer '+credential,
+          'content-type':'application/json'},body:JSON.stringify(consume())}),
+        /CORE_MTLS_REQUEST_UNKNOWN/);
+      assert.equal(authentications,beforeAuth,'wrong hostname must not authenticate');
+      assert.equal(consumes,beforeConsumes,'wrong hostname must not consume');
+      assert.equal(reads,beforeReads,'wrong hostname must not reach ledger readback');
+    }finally{
+      strict.closeAllConnections();await new Promise<void>(resolve=>strict.close(()=>resolve()));
+      reset();
+    }
+  });
+
   await t.test('server certificate rotation requires an explicit new SPKI pin',async()=>{
     reset();
     const previousCert=await readFile(path.join(root,'server.crt'),'utf8');
@@ -337,10 +370,30 @@ test('independent native enrollment verifier enforces real TLS transport and sco
     assert.equal((await post(wire('verify-and-consume',{proof:{...p,ownerAccountId:'other-owner-fixture'},
       expected:{...expected(p),ownerAccountId:'other-owner-fixture'}}))).status,403);
     assert.equal((await post(wire('verify-and-consume',{proof:p,expected:{...expected(p),grantGeneration:99}}))).status,403);
+    // Signed native receipt cannot be rebound to an independently higher
+    // owner epoch, grant generation, revoke epoch or other installation.
+    for(const [field,value] of Object.entries({
+      ownerEpoch:p.ownerEpoch+1,grantGeneration:p.grantGeneration+1,
+      revokeEpoch:p.revokeEpoch+1,installationId:randomUUID(),
+      enrollmentId:randomUUID(),approvedLocallyAtMs:p.approvedAtMs+1,
+    })){
+      const denied=await post(wire('verify-and-consume',{
+        proof:p,expected:{...expected(p),[field]:value}}));
+      assert.equal(denied.status,403,field+' must fail before one-use SQL consumption');
+    }
     assert.equal(consumes,before);
     // The fixture ledger compares the actual binding supplied by the handler.
     // A mismatch cannot return a signed successful proof.
-    assert.notEqual((await post(wire('current-readback',{...readback(p),windowsLogonSessionEpoch:randomUUID()}))).status,200);
+    for(const [field,value] of Object.entries({
+      windowsUserSid:'S-1-5-18',windowsSessionId:p.windowsSessionId+1,
+      windowsLogonLuid:'000000000000b202',
+      windowsLogonSessionEpoch:randomUUID(),ownerEpoch:p.ownerEpoch+1,
+      grantGeneration:p.grantGeneration+1,revokeEpoch:p.revokeEpoch+1,
+    })){
+      const denied=await post(wire('current-readback',{...readback(p),[field]:value}));
+      assert.notEqual(denied.status,200,field+' cannot rebind a consumed witness');
+    }
+    assert.equal(consumes,before,'readback substitution never consumes anew');
   });
   await t.test('approval creation, raw receipt-only readback and oversized/ambiguous payloads are refused',async()=>{
     const before=consumes;

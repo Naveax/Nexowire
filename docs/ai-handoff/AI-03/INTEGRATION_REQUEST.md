@@ -27,3 +27,7 @@
 ## P0 | Independent issuer field in protected native readback (new AI-03 gate)
 - For every enrollment `verify-and-consume` / `current-readback`, the protected callback `readProtectedNativeBinding(expected,signal)` must return `issuerSpkiSha256` from separately verified local v2 issuer custody. Missing, mismatching, substituted or rotated issuer fails `CORE_APPROVAL_ISSUER_UNVERIFIED`, before handoff consume or after COMMIT readback. Do not forward caller-supplied `expected.issuerSpkiSha256` as readback; the callback receives only current `CoreApprovalBinding`, not an issuer to echo.
 - AI-02 must provide a signed, versioned v2 CNG ES256 local grant and stable protected issuer-key proof to the independent verifier, and define revocation/rollback-resistant readback. This narrowed source gate is not a substitute for independently cryptographic v2-to-v1 bridging and physical test evidence.
+
+## Required versioned AI-02 → AI-03 trust boundary
+
+See [`AI02_ES256_TO_ED25519_BRIDGE_V1.md`](./AI02_ES256_TO_ED25519_BRIDGE_V1.md). Coordinator/AI-02 must separately pin the device CNG P-256 signer and authority P-256 issuer, verify distinct grant/witness/challenge signing domains, supply trusted current `ownerEpoch`, `revokeEpoch`, `windowsLogonSessionEpoch` and durable one-use issuance/restore CAS, then make a separately protected Ed25519 v1 response. **Do not cast P1363 ECDSA into Ed25519** or equate persistent enrollment consent with per-command owner approval. Still blocked until physically tested and independently reviewed.

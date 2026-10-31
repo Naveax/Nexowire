@@ -13,3 +13,10 @@
 - **Local project commands:** NOT RUN (no checked-out dependency tree), exit N/A. GitHub CI evidence must not be represented as local execution.
 - **This change:** documentation synchronization only, after verified source SHA `7ee900583eaf103603ea8534460a6708cd6b0465`. The new docs-only commit has a distinct exact HEAD and must have its own CI checked. Previous source CI is not automatically that commit's verdict.
 - **Next:** monitor docs-only exact-HEAD CI without duplicate dispatch/rerun; await independent AI-08 security review and protected production provenance integration. Keep PR Draft and CORE NO_GO.
+
+## 2026-11-01 AI-03 continued work candidate
+
+- Baseline **exact HEAD** `5915eb1980ca92430401e79d0bed410a94d0cfce`, [CI #41249314952](https://github.com/Naveax/Nexowire/actions/runs/41249314952) last observed **6/7 SUCCESS**, Windows `browser-live` **in_progress**, overall result **not concluded**. Current PR HEAD after this candidate commit must be fetched again and its own CI verified.
+- Negative fixture additions: correct same-CA and correctly pinned server SPKI with wrong SAN/hostname must reject before verifier/ledger; independently changed `ownerEpoch`, `revokeEpoch`, `grantGeneration`, installation/enrollment identity and WTS session/SID/LUID epoch must not rebind a signed consume or current readback.
+- New [AI-02 ES256 → AI-03 Ed25519 bridge v1 contract](./AI02_ES256_TO_ED25519_BRIDGE_V1.md): independent device and authority SPKI custody and protected epoch allocation are **P0 external dependencies**, not automatically supplied by a local v2 signed grant.
+- Source-only test/doc candidate; **not** production PKI or physical owner acceptance. No merge/deploy/real devices. CORE `NO_GO`.

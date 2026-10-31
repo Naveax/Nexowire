@@ -19,3 +19,9 @@
 - **Current external P0 blockers:** AI-02 independently verified and signed v2 CNG ES256 issuer/grant binding to v1 proof; independent bearer/client-certificate principal resolver; protected mTLS credential/pin custody and production transport composition; fresh Windows owner/SID/logon session/LUID/grant/revoke generations; rollback-resistant independent restore gate; AI-08 adversarial review of exact AI-03 HEAD and two real Windows devices with reboot/revoke/session-switch/offline acceptance.
 - **Critical SHA caveat:** This synchronization is a docs-only child commit, not `7ee900583eaf103603ea8534460a6708cd6b0465`. Its own exact SHA/run must be checked independently after publication. Historical `7ee900583eaf103603ea8534460a6708cd6b0465` success cannot be copied into the child until CI completes.
 - **No merge, rebase, deploy, release, real UAC/ACL/TPM/DPAPI, live device/service or other agent file changes.** See `CONTRACT.md`, `TEST_EVIDENCE.md` and `INTEGRATION_REQUEST.md`.
+
+## Candidate round 2026-11-01, not yet independently accepted
+
+- Task file `04_AI_03_MTLS.md` negative coverage adds disposable **CA-verified, SPKI-pinned but wrong-hostname** TLS failure, exact ownerEpoch/revokeEpoch/grantGeneration and protected live session mismatch rejection in the existing handler test. This candidate still requires fresh CI on its own exact SHA.
+- Versioned bridge handoff: [`AI02_ES256_TO_ED25519_BRIDGE_V1.md`](./AI02_ES256_TO_ED25519_BRIDGE_V1.md) defines separated device CNG ES256 grant, authority-signed challenge, CNG witness, independently signed Ed25519 verifier response and all missing protected custody/generation/CAS fields. It is **design only**, not a production API.
+- Parent `5915eb1980ca92430401e79d0bed410a94d0cfce` run #41249314952 last observed 6/7 successful, browser-live in progress; no inherited PASS claim. CORE production `NO_GO`, Draft and no device/SCM/UAC/secret action.
