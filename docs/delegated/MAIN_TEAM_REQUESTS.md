@@ -30,14 +30,20 @@ Bu bir karar/kanıt bekleme listesidir; kod düzeltmesi, test yürütme veya ür
 
 Bu dört sonuç GitHub commit-run ve job listesi üzerinden salt-okunur doğrulandı. Bu doküman commit'i daha sonra yeni SHA/CI üretebilir; önceki çalışmanın sonucu yeni HEAD'e aktarılmaz. action_required'ın kök nedeni hâlâ UNKNOWN; tahmin edilen fork approval mekanizması kesin teşhis değildir. Manual rerun/dispatch yapılmadı.
 
+## Tur 4 — #1003 Cloudflare-only MCP ingress etkisi (2026-11-01)
+
+Kaynak: [#1003](https://github.com/Naveax/Nexowire/pull/1003) Draft / unmerged; incelenen exact SHA `2dc3d999ecae9c81e5706d2be2f0c46d25c7a141`. `src/mcp/local-first-cloudflare.ts` mevcut, çalışan yerel Hub'a yalnız `/mcp` ve protected-resource metadata için loopback origin + hash-pinned `cloudflared` named tunnel ekliyor; `/agent`, admin ve keyfi yollar tunnel ingress'te izinli değil. `src/hub/agent-websocket.ts` açık Agent bağlantılarını varsayılan 60 saniyede, 5 saniyelik deadline ile yeniden denetliyor; başarısız/remap olmuş yetki socket'i kapatıyor. Bu yeni **opsiyonel** yol ana dal `a19a228...` üzerindeki hosted/Agent/relay kaynak akışını silmiyor; eski S1 diyagram ve 13/30 planı fiziksel kabul olarak yorumlanamaz. #1003 Cloudflare gerçek named tunnel, DNS, OAuth, user-logon veya off-network iki-PC testi yapıldığını iddia etmiyor.
+
+**Ayırıcı sınır:** Tunnel/MCP yanıt kaybı ile Agent ACK kaybı farklı aşamalardır; Hub'a ulaşmış mutation sonuç dönmeden yürümüş olabilir. Cloudflare yeniden bağlanması, yeni ChatGPT isteği veya Agent socket revalidasyonu mutation'ı yeniden gönderme yetkisi vermez. Agent credential revocation, ChatGPT OAuth grant revocation ve daha önce dispatch edilmiş OS effect birbirinin yerine geçmez. `src/core/agent-broker.ts` ve `src/operations/agent-connection-journal-reconciliation.ts` #1003 diff'inde değişmedi; source-only no-replay/UNKNOWN, `automaticallyRetryable=false` ve `externalSideEffectProven=false` kabul sınırları korunuyor; bir Agent metadata success kaydı dış OS etkisini kanıtlamaz. #1003'ün tüm CI/gerçek cihaz/production kabulü bu metinle PASS ilan edilmez.
+
 ## Talepler
 
 ### K-S1-REQ-01 — Güvenilir exact-device journal retrieval
 
 - **Öncelik:** P0.
 - **Karar sahibi:** Ana ekip MCP/authorization + exact-device journal entegrasyon owner'ı (atanacak).
-- **Kaynak PR:** [#1000](https://github.com/Naveax/Nexowire/pull/1000), ilk tur kaynak incelemesi; issue #483.
-- **İlgili dosya:** src/operations/agent-connection-journal-reconciliation.ts (reconcileConnectionBoundAgentOperation); çağıran product/MCP endpoint'i henüz bu talepte belirlenmedi.
+- **Kaynak PR:** [#1000](https://github.com/Naveax/Nexowire/pull/1000), ilk tur kaynak incelemesi; [#1003](https://github.com/Naveax/Nexowire/pull/1003) `2dc3d999...` Cloudflare-only alternatifini ekliyor ancak journal retrieval kompozisyonunu teslim etmiyor; issue #483.
+- **İlgili dosya:** src/operations/agent-connection-journal-reconciliation.ts (reconcileConnectionBoundAgentOperation); çağıran product/MCP endpoint'i henüz bu talepte belirlenmedi. #1003 dosyası src/mcp/local-first-cloudflare.ts yalnız ingress/transport tarafında.
 - **Gereken karar:** Ana ekip trusted authenticatedDeviceId sağlayan yetkili salt-okunur retrieval kompozisyonunun owner'ını ve entegrasyon sınırını belirlesin. Helper'ın canlı retrieval yapmaması tek başına güvenlik hatası olarak sunulmuyor.
 - **Kabul kanıtı:** Main `a19a228...` `reconcileConnectionBoundAgentOperation` kaynakta trusted `authenticatedDeviceId` + Hub provenance ve ayrı Hub/Agent fingerprint sözleşmesini denetliyor; canlı journal retrieval yapmıyor. Yetkili entegrasyonda yanlış owner/device, alias değişimi, eksik provenance, farklı fingerprint, offline/ACK kaybı negatifleri; Hub UNKNOWN, `automaticallyRetryable=false`, `externalSideEffectProven=false` ve sıfır mutation redispatch exact-SHA test/readback'i gerekir.
 - **Engellenen görev:** S1-03'ün uçtan uca yetkili journal uzlaştırma kabulü; plan belgesi tamam.
@@ -47,10 +53,10 @@ Bu dört sonuç GitHub commit-run ve job listesi üzerinden salt-okunur doğrula
 
 - **Öncelik:** P0.
 - **Karar sahibi:** Ana ekip kanonik dokümantasyon owner'ı, Broker davranış owner'ıyla birlikte (atanacak).
-- **Kaynak PR:** [#1000](https://github.com/Naveax/Nexowire/pull/1000), ilk tur kaynak incelemesi; issue #483.
-- **İlgili dosya:** HANDOFF.md, docs/CONTINUATION.md; davranış kaynağı src/core/agent-broker.ts:resumePending ve test/native-session-continuity.test.ts.
-- **Gereken karar:** Doküman owner'ı same-process continuity anlatımında mutation no-replay ile sınırlı read-only resume ayrımını açıklaştırsın. Burada canonical dosyalara yazılmadı.
-- **Kabul kanıtı:** Main `a19a228...` `src/core/agent-broker.ts:resumePending` kaynakta aynı instance mutation için `MUTATION_STATE_UNKNOWN`, yeni instance için `AGENT_INSTANCE_CHANGED` döndürüyor ve replay etmiyor; read-only ise aynı requestId, capability ve bounded budget ile ayrı. `test/native-session-continuity.test.ts` negatifleri kaynakta var; bu tur çalıştırılmadı. Canonical belgelerin bu farkı açık anlatması ve sonraki exact-SHA test/CI kanıtı gerekiyor.
+- **Kaynak PR:** [#1000](https://github.com/Naveax/Nexowire/pull/1000) ve [#1003](https://github.com/Naveax/Nexowire/pull/1003) `2dc3d999ecae9c81e5706d2be2f0c46d25c7a141`; issue #483.
+- **İlgili dosya:** HANDOFF.md, docs/CONTINUATION.md; davranış kaynağı src/core/agent-broker.ts:resumePending ve test/native-session-continuity.test.ts; yeni socket revalidation src/hub/agent-websocket.ts ve test/connection-active-authorization.test.ts.
+- **Gereken karar:** Doküman owner'ı same-process continuity anlatımında mutation no-replay ile sınırlı read-only resume ayrımını açıklaştırsın. Ömer/connection owner ayrıca `#1003` Agent credential revalidation/socket close ile ChatGPT OAuth/session revoke ve **in-flight effect cancellation** arasındaki güven sınırını sürümlü sözleşmeyle kesinleştirsin; iptal edilmiş Agent socket, önceden dispatch edilmiş işi geri almaz. Canonical dosyalara burada yazılmadı.
+- **Kabul kanıtı:** Main `a19a228...` `src/core/agent-broker.ts:resumePending` kaynakta aynı instance mutation için `MUTATION_STATE_UNKNOWN`, yeni instance için `AGENT_INSTANCE_CHANGED` döndürüyor ve replay etmiyor; read-only ise aynı requestId, capability ve bounded budget ile ayrı. `test/native-session-continuity.test.ts` negatifleri kaynakta var; bu tur çalıştırılmadı. #1003'te persisted/remote credential revoke, remap, verifier outage/timeout ve geç doğrulama negatifleri test kaynağında var; PR açıklamasındaki 49/49 yerel sonuç bağımsız bu tur yürütülmedi. Güncel exact-SHA CI ve yetkili uçtan uca: revoke olmuş Agent/ChatGPT oturumu, eski socket ACK, tunnel koparken dispatch edilmiş mutation, no replay, Hub UNKNOWN ve effect cancel olmaması ayrı ayrı kanıtlanmalı.
 - **Engellenen görev:** K02/S1-01 canonical teslim açıklığının son incelemesi; runtime hatası tespiti veya uygulanmış düzeltme değil.
 - **Durum:** DOCUMENTATION_REVIEW_REQUIRED.
 
@@ -69,11 +75,11 @@ Bu dört sonuç GitHub commit-run ve job listesi üzerinden salt-okunur doğrula
 
 - **Öncelik:** P1.
 - **Karar sahibi:** Koordinatör atamasıyla ağ QA owner'ı (S1) **ve ayrı** S5 performans/finans ölçüm owner'ı; tek izin iki bağımsız kabulü otomatik kapsamaz.
-- **Kaynak PR:** [#1000](https://github.com/Naveax/Nexowire/pull/1000) + [#997](https://github.com/Naveax/Nexowire/pull/997); issue #483/#487. Ağ lab kanıtı ile staging budget/SLO talebi ortak owner/izin kapısında birleştirildi.
-- **İlgili dosya:** docs/delegated/S1_NETWORK_MATRIX.md, docs/delegated/S1_RECONNECT_CASES.md, docs/delegated/S5_FAILURE_AND_SOAK_PLAN.md; metrik sınırı docs/SCALE_V2_S1_METRICS.md.
-- **Gereken karar:** Koordinatör QA owner'ı, ayrı atılabilir lab/staging ortamı, hedef iş yükü, bütçe/hard-stop, süre/SLO eşikleri ve abort kriterlerini belirlesin; canlı test yetkisi bu belgeyle verilmez.
-- **Kabul kanıtı:** Exact SHA+OS+izinli ortamda NAT/proxy/TLS/DNS/relay satırları, iki hedefin ayrı readback'i, sıfır mutation replay; S5 için örnek hacmi/p50/p95/p99, 24h gerçek süre gerekiyorsa elapsed kayıt, provider sayaçları ve limit gözlemi. Process-local byte/counter cloud faturası değildir.
-- **Engellenen görev:** S1-02/S1-03 fiziksel ağ kabulü; S5-01/S5-04 staging/load/soak kabulü. Mevcut plan/indeks çıktıları tamamlanmış olabilir.
+- **Kaynak PR:** [#1000](https://github.com/Naveax/Nexowire/pull/1000) + [#997](https://github.com/Naveax/Nexowire/pull/997) + [#1003](https://github.com/Naveax/Nexowire/pull/1003) `2dc3d999ecae9c81e5706d2be2f0c46d25c7a141`; issue #482/#483/#487. Ağ lab kanıtı ile staging budget/SLO talebi ortak owner/izin kapısında birleştirildi.
+- **İlgili dosya:** docs/delegated/S1_NETWORK_MATRIX.md, docs/delegated/S1_RECONNECT_CASES.md, docs/delegated/S5_FAILURE_AND_SOAK_PLAN.md; metrik sınırı docs/SCALE_V2_S1_METRICS.md. #1003 ekleri docs/CONNECTION_CORE_V2_CLOUDFLARE_20261101.md, src/mcp/local-first-cloudflare.ts, src/mcp/local-first-ingress.ts, src/hub/agent-websocket.ts ve test/local-first-cloudflare.test.ts.
+- **Gereken karar:** Koordinatör QA owner'ı, ayrı atılabilir lab/staging ortamı, hedef iş yükü, bütçe/hard-stop, süre/SLO eşikleri ve abort kriterlerini belirlesin. **Ömer'in #1003 için kararı:** Owner PC'de Cloudflare named tunnel yolu dağıtım adayı mı; gerçek hostname/DNS/tunnel credential ve OAuth resource/authorization server eşleşmesini kim sağlayacak; user-logon startup, bağlantı kesintisinde fail-closed davranış ve önceki çalışan rotaya kontrollü rollback'in owner'ı kim; Cloudflare provider limiti/bütçesi ne? Bu belge canlı ağ, DNS veya credential değişikliğine yetki vermez.
+- **Kabul kanıtı:** Exact SHA+OS+izinli ortamda NAT/proxy/TLS/DNS/relay satırları, iki hedefin ayrı readback'i, sıfır mutation replay; S5 için örnek hacmi/p50/p95/p99, 24h gerçek süre gerekiyorsa elapsed kayıt, provider sayaçları ve limit gözlemi. **#1003 özel kabulü:** hash-pinned resmi `cloudflared` ve gerçek provision edilmiş named tunnel/hostname/DNS; Hub `/mcp` OAuth resource readback'i; yalnız `/mcp` ve metadata erişimi, `/agent`/admin deny; PC yeniden giriş/reboot sonrası startup; off-network ChatGPT tool erişimi; tunnel kapatma/yeniden açma, DNS/proxy/TLS kesintisi, yanlış owner/device, revoke olmuş Agent vs ChatGPT oturumu, sonradan gelen ACK ve iki-PC yönlendirme; özellikle kopan MCP cevabı için Hub UNKNOWN/zero redispatch kanıtı. Bütün cloudflared parser/loopback testleri gerçek public bağlantı değildir. Process-local byte/counter cloud faturası değildir.
+- **Engellenen görev:** S1-02/S1-03 fiziksel ağ kabulü ve #1003 Cloudflare-only public route kabulü; S5-01/S5-04 staging/load/soak kabulü. Mevcut plan/indeks çıktıları tamamlanmış olabilir.
 - **Durum:** AUTHORIZATION_AND_EVIDENCE_REQUIRED; fiziksel kapasite ve SLO UNKNOWN.
 
 ### K-S1-REQ-05 — Gelecek kota sayımı ve legacy grace geçiş sözleşmesi
