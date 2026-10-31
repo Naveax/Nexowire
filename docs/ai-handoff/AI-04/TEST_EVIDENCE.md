@@ -26,3 +26,8 @@
 - #952 source HEAD `c6383530364ae7765982a988aed54d3c9a093752`, no PR-triggered run returned when inspected. Do not claim success for #952 exact head.
 - #980 integration HEAD `7e4093c30c1ead3cd22888184450c34aef4737da`, run `41113730982` SUCCESS; its receipt source/test and Windows Job C/test blob hashes matched #950 and #952 respectively.
 - A later docs-only HEAD must receive its own independent CI check; no rerun of the same SHA/workflow/inputs while active.
+
+## New head pending after Windows handle-inheritance hardening
+- New source: `native/windows-job-owner.c` restricts child inheritance to an explicit standard IO allowlist; new `test/ai04-broker-job-handle-inheritance.test.ts` has 2 source-only static negative tests.
+- The previous 7/7 run applies ONLY to `c5fb0e424cc30e2adaaa2dec9235d62eb6a4ce4d`, not the new C changes. A new Windows native compile + Job launch/regression step on the new exact commit is mandatory; its results are pending at documentation authoring time.
+- Even if compilation and Job tests succeed, equal-HIGH and medium-token physical evidence remain BLOCKED without independent kernel proof.

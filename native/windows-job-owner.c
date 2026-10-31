@@ -277,17 +277,73 @@ int main(void){
        &limit,sizeof(limit))){
     diagnostic(L"set_limit");CloseHandle(job);free(cmd);return 70;
   }
-  STARTUPINFOW si={0};si.cb=sizeof(si);
-  si.dwFlags=STARTF_USESTDHANDLES;
-  si.hStdInput=GetStdHandle(STD_INPUT_HANDLE);
-  si.hStdOutput=GetStdHandle(STD_OUTPUT_HANDLE);
-  si.hStdError=GetStdHandle(STD_ERROR_HANDLE);
+  // Do NOT allow CreateProcessW(TRUE) to leak unrelated inheritable guardian
+  // handles into the target. Duplicate only the three expected standard IO
+  // handles as inheritable, then restrict inheritance to that exact allowlist.
+  // A missing standard handle or attribute-list failure is terminal: the
+  // suspended root must never start with an unrestricted inheritance fallback.
+  HANDLE originalStdio[3]={
+    GetStdHandle(STD_INPUT_HANDLE),
+    GetStdHandle(STD_OUTPUT_HANDLE),
+    GetStdHandle(STD_ERROR_HANDLE)
+  };
+  HANDLE inheritedStdio[3]={NULL,NULL,NULL};
+  STARTUPINFOEXW si={0};
   PROCESS_INFORMATION pi={0};
-  // Inherited stdout/stderr/stdin are Node's pipes to this helper.
-  BOOL created=CreateProcessW(NULL,cmd,NULL,NULL,TRUE,
-    CREATE_SUSPENDED|CREATE_NO_WINDOW,NULL,cwd,&si,&pi);
+  LPPROC_THREAD_ATTRIBUTE_LIST attrs=NULL;
+  SIZE_T attrsSize=0;
+  BOOL attrsReady=FALSE;
+  BOOL canLaunch=TRUE;
+  for(int i=0;i<3;i++){
+    if(!originalStdio[i] || originalStdio[i]==INVALID_HANDLE_VALUE ||
+       !DuplicateHandle(GetCurrentProcess(),originalStdio[i],
+         GetCurrentProcess(),&inheritedStdio[i],0,TRUE,DUPLICATE_SAME_ACCESS)){
+      canLaunch=FALSE;
+      break;
+    }
+  }
+  if(canLaunch){
+    // First call obtains the required size and normally reports
+    // ERROR_INSUFFICIENT_BUFFER; only a zero size is an error here.
+    InitializeProcThreadAttributeList(NULL,1,0,&attrsSize);
+    if(attrsSize==0)canLaunch=FALSE;
+  }
+  if(canLaunch){
+    attrs=(LPPROC_THREAD_ATTRIBUTE_LIST)HeapAlloc(GetProcessHeap(),0,attrsSize);
+    if(!attrs || !InitializeProcThreadAttributeList(attrs,1,0,&attrsSize)){
+      canLaunch=FALSE;
+    } else {
+      attrsReady=TRUE;
+    }
+  }
+  if(canLaunch && !UpdateProcThreadAttribute(attrs,0,
+      PROC_THREAD_ATTRIBUTE_HANDLE_LIST,inheritedStdio,
+      sizeof(inheritedStdio),NULL,NULL)){
+    canLaunch=FALSE;
+  }
+  si.StartupInfo.cb=sizeof(si);
+  si.StartupInfo.dwFlags=STARTF_USESTDHANDLES;
+  si.StartupInfo.hStdInput=inheritedStdio[0];
+  si.StartupInfo.hStdOutput=inheritedStdio[1];
+  si.StartupInfo.hStdError=inheritedStdio[2];
+  si.lpAttributeList=attrs;
+  BOOL created=FALSE;
+  if(canLaunch){
+    created=CreateProcessW(NULL,cmd,NULL,NULL,TRUE,
+      CREATE_SUSPENDED|CREATE_NO_WINDOW|EXTENDED_STARTUPINFO_PRESENT,
+      NULL,cwd,&si.StartupInfo,&pi);
+  }
+  // No source handle is made inheritable; close temporary duplicates even
+  // if CreateProcessW failed. The Job kernel handle remains guardian-only.
+  if(attrsReady)DeleteProcThreadAttributeList(attrs);
+  if(attrs)HeapFree(GetProcessHeap(),0,attrs);
+  for(int i=0;i<3;i++)if(inheritedStdio[i])CloseHandle(inheritedStdio[i]);
   free(cmd);
-  if(!created){diagnostic(L"create_process");CloseHandle(job);return 70;}
+  if(!created){
+    diagnostic(L"create_process_restricted_inheritance");
+    CloseHandle(job);
+    return 70;
+  }
   if(!AssignProcessToJobObject(job,pi.hProcess)){
     diagnostic(L"assign_job");
     TerminateProcess(pi.hProcess,71);

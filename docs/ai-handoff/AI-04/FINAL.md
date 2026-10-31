@@ -19,3 +19,7 @@
 - No production flags, live Windows devices, permanent enrollment, UAC/ACL/service/Hub operations, merge, tag, release or deploy.
 
 **If all source CI turns green, that still does not grant physical CORE authority.**
+
+## Additional AI-04 implementation in review
+- Native Job root inheritance allowlist: `native/windows-job-owner.c` restricts child handles to duplicated standard IO; no unrestricted fallback. `test/ai04-broker-job-handle-inheritance.test.ts` adds 2 static regression assertions.
+- Previous successful run `41194719016` predates this native change. New exact-head CI must be checked, including Windows Job guardian build and physical fixture steps. Production remains NO_GO regardless of fixture success.

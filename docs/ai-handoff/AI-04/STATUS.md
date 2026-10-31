@@ -9,3 +9,7 @@
 - Changed implementation: `src/agent/privileged-broker-effect-admission.ts`; new tests: `test/ai04-broker-binding-snapshot.test.ts`.
 - Independent Windows Job risk: SeDebugPrivilege enabled on hosted Windows runner; HIGH peer denial and UAC-linked MEDIUM→HIGH probe BLOCKED. They are not PASS.
 - Next independent work: have AI-08 validate exact SHA/negative fixtures and request genuine isolated OS token/handle evidence from coordinator. No physical admission, merge or deployment.
+
+## Additional in-scope hardening
+- Native Windows Job guardian now limits `CreateProcessW` inheritance to duplicated standard IO handles through `PROC_THREAD_ATTRIBUTE_HANDLE_LIST`; unexpected inheritable handles cannot be passed by the unbounded `TRUE` flag alone.
+- Additional new static regressions: `test/ai04-broker-job-handle-inheritance.test.ts` (2 tests). This C change is NOT covered by the earlier `c5fb...` successful run; require a new exact-HEAD Windows MSVC build and runtime regression before declaring source REVIEW complete.

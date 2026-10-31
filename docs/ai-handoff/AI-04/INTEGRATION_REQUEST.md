@@ -12,3 +12,7 @@
 - `readVerifiedBinding()` and `readVerifiedBindingNow()` return plain own-data witness snapshots or null (fail closed). Their source-side snapshots provide NO independent OS proof.
 - `begin(request, nonce)` and `commit(request, ticket, nonce)` must return independently signed RESERVED/COMMITTED exact-byte receipts. Lost ACK => sticky UNKNOWN. No mutation callback on UNKNOWN, revoke, mismatched binding, expired budget or token uncertainty.
 - Release gate remains **NO_GO** until OS and independent authority contracts are installed and separately verified on authorized hardware.
+
+## Newly identified handle-inheritance boundary
+- AI-04 owns a narrow change to `native/windows-job-owner.c` that replaces broad `CreateProcessW(..., TRUE, ...)` inheritance with an explicit `PROC_THREAD_ATTRIBUTE_HANDLE_LIST` containing only deliberately duplicated standard IO handles.
+- AI-07 still owns the complete worker token/handle/environment policy. AI-08 should verify the Windows native build + Job launch with this change at the new exact commit. Existing equal-HIGH, pre-seal and UAC-linked kernel proof blockers are independent.
