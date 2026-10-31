@@ -11,6 +11,14 @@ const request=z.object({
   fingerprint:z.string().regex(/^[a-f0-9]{64}$/),
   capability:z.string().min(1).max(128),
 }).strict();
+const externalReceiptSchema=z.object({
+  authorityId:uuid,deviceId:uuid,epoch:uuid,requestId:uuid,
+  ownerId:uuid,sessionEpoch:uuid,
+  grantGeneration:z.number().int().positive().safe(),
+  fingerprint:z.string().regex(/^[a-f0-9]{64}$/),
+  capability:z.string().min(1).max(128),
+  created:z.boolean(),sequence:z.number().int().positive().safe(),
+}).strict();
 export type RequiredPrivilege='NORMAL'|'CORE'|'ROOT';
 /**
  * A protected identity provider MUST derive this from the authenticated
@@ -157,6 +165,43 @@ function immutableScope(
 }
 
 /**
+ * External CAS returns an untrusted, potentially borrowed object. Never keep
+ * its created/sequence/identity fields across the next awaited SQL query:
+ * an adapter with a retained reference could flip created:false to true and
+ * turn a replayed request into a fresh local insert. Copy only own data
+ * descriptors; do not invoke a provider-supplied getter.
+ */
+function immutableExternalReceipt(
+  value:unknown,
+):Readonly<ExternalGrantCasReceipt>{
+  if(!value||typeof value!=='object'||Array.isArray(value))
+    reject('BOUND_CAS_EXTERNAL_PROOF_MISMATCH');
+  const inspected=value as object;
+  let descriptors:PropertyDescriptorMap;
+  let keys:PropertyKey[];
+  let prototype:unknown;
+  try{
+    descriptors=Object.getOwnPropertyDescriptors(inspected);
+    keys=Reflect.ownKeys(inspected);
+    prototype=Object.getPrototypeOf(inspected);
+  }catch{return reject('BOUND_CAS_EXTERNAL_PROOF_MISMATCH')}
+  const required=['authorityId','deviceId','epoch','requestId','ownerId',
+    'sessionEpoch','grantGeneration','fingerprint','capability','created',
+    'sequence'] as const;
+  if((prototype!==Object.prototype&&prototype!==null)||
+     keys.length!==required.length||
+     required.some(key=>!Object.prototype.hasOwnProperty.call(descriptors,key)||
+       !('value' in descriptors[key]!)))
+    reject('BOUND_CAS_EXTERNAL_PROOF_MISMATCH');
+  const detached=Object.fromEntries(
+    required.map(key=>[key,descriptors[key]!.value]),
+  );
+  const parsed=externalReceiptSchema.safeParse(detached);
+  if(!parsed.success)reject('BOUND_CAS_EXTERNAL_PROOF_MISMATCH');
+  return Object.freeze(parsed.data);
+}
+
+/**
  * Real PostgreSQL source integration for a remote witness CAS.
  *
  * The device row AND delegation row are locked in the SAME transaction as
@@ -204,17 +249,19 @@ export class PostgresBoundGrantCas implements MonotonicTrustRoot {
     let proof:ExternalGrantCasReceipt;
     try{proof=await this.config.externalCas.reserveIfCurrent(input,scope)}
     catch{return reject('BOUND_CAS_EXTERNAL_RESERVATION_UNKNOWN')}
-    if(!proof||proof.authorityId!==this.config.authorityId||
-       proof.deviceId!==input.deviceId||proof.epoch!==input.epoch||
-       proof.requestId!==input.requestId||proof.ownerId!==scope.ownerId||
-       proof.sessionEpoch!==scope.sessionEpoch||
-       proof.grantGeneration!==scope.expectedGeneration||
-       proof.fingerprint!==input.fingerprint||
-       proof.capability!==input.capability||
-       typeof proof.created!=='boolean'||
-       !Number.isSafeInteger(proof.sequence)||proof.sequence<1)
+    // Detached before the next awaited PostgreSQL read. Never let a
+    // provider mutate a validated created:false into a fresh reservation.
+    const immutable=immutableExternalReceipt(proof);
+    if(!immutable||immutable.authorityId!==this.config.authorityId||
+       immutable.deviceId!==input.deviceId||immutable.epoch!==input.epoch||
+       immutable.requestId!==input.requestId||
+       immutable.ownerId!==scope.ownerId||
+       immutable.sessionEpoch!==scope.sessionEpoch||
+       immutable.grantGeneration!==scope.expectedGeneration||
+       immutable.fingerprint!==input.fingerprint||
+       immutable.capability!==input.capability)
       reject('BOUND_CAS_EXTERNAL_PROOF_MISMATCH');
-    return proof;
+    return immutable;
   }
   private async transaction<T>(fn:(db:WitnessPgConnection)=>Promise<T>):Promise<T>{
     let db:WitnessPgConnection;
