@@ -92,3 +92,19 @@
 - Pre-candidate source `4c2b379dd12c4b704d19e5804d83afae44dc10a7` has native 5/5 PASS and 7/8 overall jobs
   success in CI #41246829570 at last verified read; new HEAD requires new
   exact workflow result. No synthetic result or parent SHA transferred.
+
+## Digest-pinned malicious manifest negatives (read-only candidate)
+
+- The Windows preflight test now re-pins the **exact SHA-256 digest of each
+  intentionally invalid fixture manifest**, so a wrong manifest digest cannot
+  accidentally satisfy a semantic malformed-input negative.
+- Five additional no-install negative cases: empty manifest files, parent
+  traversal `../`, case-insensitive duplicate runtime entry, wrong pinned
+  runtime SHA-256, and over-limit individual runtime entry length.
+- Every invocation remains `-PreflightOnly`; the fixture executable is
+  deliberately non-executable and no `-Execute`, UAC, CNG, SCM, owner consent
+  or service writes occur. Both original owner/installation mismatch negatives
+  and the no-`-Execute`/conflicting-mode negatives stay enforced.
+- This candidate requires its **own exact-HEAD** Windows CI result; previous
+  workflow #41248725949 may be superseded by the new SHA and must not be
+  labeled full SUCCESS unless its final result explicitly says success.

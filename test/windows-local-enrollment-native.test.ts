@@ -86,7 +86,9 @@ test('Windows installer read-only preflight rejects owner and installation ident
     const identity={id:deviceId,installationId,ownerAccountId};
     const request={deviceId,installationId,ownerAccountId,ownerSid,authoritySpkiBase64:'fixture-only'};
     const commandBase="$ErrorActionPreference='Stop'; $ids=[Guid[]]@([Guid]::Parse($env:AI02_DEVICE),[Guid]::Parse($env:AI02_OTHER)); & $env:AI02_SCRIPT -BundleDirectory $env:AI02_BUNDLE -ExpectedManifestSha256 $env:AI02_HASH -EnrollmentRequestFile $env:AI02_REQUEST -AgentIdentityFile $env:AI02_IDENTITY -ExpectedDeviceId ([Guid]::Parse($env:AI02_DEVICE)) -AllowedDeviceIds $ids";
-    const execute=(id:unknown,req:unknown,mode:'preflight'|'without-opt-in'|'conflict'='preflight')=>{
+    const execute=(id:unknown,req:unknown,
+      mode:'preflight'|'without-opt-in'|'conflict'='preflight',
+      pinnedManifestHash=manifestHash)=>{
       const command=commandBase+(mode==='preflight'?' -PreflightOnly':
         mode==='conflict'?' -PreflightOnly -Execute':'');
       writeFileSync(identityPath,JSON.stringify(id));
@@ -96,7 +98,7 @@ test('Windows installer read-only preflight rejects owner and installation ident
       return spawnSync('pwsh.exe',['-NoProfile','-NonInteractive','-Command',command],{
         encoding:'utf8',timeout:10000,maxBuffer:16384,windowsHide:true,
         env:{...process.env,AI02_DEVICE:deviceId,AI02_OTHER:otherDeviceId,
-          AI02_SCRIPT:script,AI02_BUNDLE:bundle,AI02_HASH:manifestHash,
+          AI02_SCRIPT:script,AI02_BUNDLE:bundle,AI02_HASH:pinnedManifestHash,
           AI02_REQUEST:requestPath,AI02_IDENTITY:identityPath},
       });
     };
@@ -124,6 +126,29 @@ test('Windows installer read-only preflight rejects owner and installation ident
       assert.ifError(rejected.error);
       assert.notEqual(rejected.status,0,rejected.stdout);
       assert.match(rejected.stderr,new RegExp(error));
+    }
+    // Pin the SHA256 of *each* deliberately malformed manifest. Otherwise
+    // a hash mismatch would conceal a missing path/digest validation.
+    // All calls stay read-only -PreflightOnly on a non-executable fixture.
+    for(const [entries,error] of [
+      [[], 'INVALID_MANIFEST'],
+      [[{...manifest.files[0],path:'../Nexowire.LocalEnrollment.exe'}],
+        'INVALID_MANIFEST_ENTRY'],
+      [[manifest.files[0],{...manifest.files[0],path:'nexowire.localenrollment.exe'}],
+        'INVALID_MANIFEST_ENTRY'],
+      [[{...manifest.files[0],sha256:'f'.repeat(64)}],
+        'RUNTIME_HASH_MISMATCH'],
+      [[{...manifest.files[0],bytes:134217729}],
+        'INVALID_MANIFEST_ENTRY'],
+    ] as const){
+      const alteredManifest={...manifest,files:entries};
+      const bytes=Buffer.from(JSON.stringify(alteredManifest));
+      writeFileSync(join(bundle,'manifest.json'),bytes);
+      const pinnedHash=createHash('sha256').update(bytes).digest('hex');
+      const denied=execute(identity,request,'preflight',pinnedHash);
+      assert.ifError(denied.error);
+      assert.notEqual(denied.status,0,denied.stdout);
+      assert.match(denied.stderr,new RegExp(error));
     }
   }finally{rmSync(root,{recursive:true,force:true});}
 });

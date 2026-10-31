@@ -9,3 +9,11 @@
 - **This candidate:** explicit `install.ps1 -Execute` required to reach mutation; `-PreflightOnly` stays read-only; missing or both switches fail with distinct diagnostic errors. Disposable Windows negative tests call neither actual `-Execute` nor SCM.
 - **External P0:** verified signed Agent installation identity/executable trust and same-owner hostile pipe peer, AI-03 independently pinned issuer/mTLS/monotonic external revoke+generation/CAS, AI-08 exact combined-head QA, disposable Windows SCM/TPM/owner consent/reboot/offline revoke acceptance.
 - **No UAC automation, physical enrollment, live device/service/SCM changes, production CORE activation, merge or deploy.**
+
+## In-scope additional CI fixture verification
+
+The next commit extends read-only Windows installer negatives against
+malformed manifests **whose exact manifest SHA-256 is itself correctly
+re-pinned**. This is separate from source-signer authenticity. Actual
+production installation is still blocked by independently authenticated
+installed Agent identity, pin custody, physical console and real SCM acceptance.
