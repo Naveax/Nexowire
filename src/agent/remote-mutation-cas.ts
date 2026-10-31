@@ -79,8 +79,10 @@ export class RemoteMutationCasClient{
     // The owner-enrolled witness scope and credential must not be retargeted
     // after construction by mutating a borrowed configuration object.
     this.settings=Object.freeze({...settings});
-    try{this.url=new URL(this.settings.endpoint)}
+    let endpoint:URL;
+    try{endpoint=new URL(this.settings.endpoint)}
     catch{return fail('CAS_CONFIG_INVALID')}
+    this.url=endpoint;
     if(this.url.protocol!=='https:'||this.url.username||this.url.password||
        this.url.search||this.url.hash||this.url.pathname!=='/v1/reservations'||
        typeof this.settings.token!=='string'||this.settings.token.length<16||
