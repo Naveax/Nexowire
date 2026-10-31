@@ -133,8 +133,8 @@ test('AI-07 aggregate argv and NUL native-truncation inputs are explicit INVALID
   const malformed = [
     { ...valid(), args: ['x'.repeat(32768)] },
     { ...valid(), args: ['x'.repeat(20000), 'y'.repeat(20000)] },
-    { ...valid(), args: ['x', 'evil\\0suffix'] },
-    { ...valid(), taskRoot: { ...valid().taskRoot, canonicalPath: 'C:\\\\safe\\0other' } },
+    { ...valid(), args: ['x', 'evil' + String.fromCharCode(0) + 'suffix'] },
+    { ...valid(), taskRoot: { ...valid().taskRoot, canonicalPath: 'root' + String.fromCharCode(0) + 'other' } },
     { ...valid(), taskRoot: { ...valid().taskRoot, canonicalPath: 'x'.repeat(32768) } },
   ];
   for (const task of malformed) {
