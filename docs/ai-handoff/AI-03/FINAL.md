@@ -1,15 +1,10 @@
-# AI-03 | FINAL (source handoff; pending exact-head CI)
+# AI-03 | FINAL (source handoff, exact-head CI in progress)
 
-- Decision: `REVIEW` for source changes, `NO_GO` for production CORE/physical enrollment.
-- Branch: `ai/03-native-verifier-20261031`; Draft PR [#988](https://github.com/Naveax/Nexowire/pull/988).
-- Exact base: `5e52b756cc6959ffacb7bcd25f2fc1ad2beccc39` (#982). Last independently checked prior candidate HEAD: `6834137294da72a981df90d1164019a1e3faee7e`.
-- Existing candidate run: [CI 41194736068](https://github.com/Naveax/Nexowire/actions/runs/41194736068) for `6834137294da72a981df90d1164019a1e3faee7e`. At inspection six jobs SUCCESS, browser-live in progress. New follow-up HEAD requires its own CI; do not reuse these results.
-- Changed against base: `src/security/core-native-mtls-fetch.ts`, `test/core-native-enrollment-verifier-handler.test.ts`, `test/core-native-verifier-server.test.ts`, `docs/ai-handoff/AI-03/**`.
-- Implementation: fail-closed verified JSON response metadata in the pinned mTLS adapter. Negative source regressions exercise missing/duplicated/non-JSON type, nonidentity/duplicated encoding, expired client certificate, server SPKI rotation with stale pin, and no automatic retry. Explicit valid UTF-8 JSON and identity encoding cases added without weakening existing tests.
-- Evidence: Node 22/24 and Linux native SUCCESS for previous exact HEAD; actual disposable PostgreSQL handoff/replay/revoke/expiry and disposable TLS socket cases, not production physical evidence. See `TEST_EVIDENCE.md`.
-- Local project tests: NOT RUN (no accessible repository clone/dependency tree); exit N/A, not disguised as PASS.
-- Outstanding: new HEAD exact CI, independent AI-08 review, AI-02 protected Windows local consent service and versioned ES256-v2 bridge, real issuer/restore witness and protected signer/PKI custody, deployment endpoint/Worker integration, independent Windows SID/LUID/reboot/revoke/two-device acceptance.
-- Integration contract and requests: `CONTRACT.md` and `INTEGRATION_REQUEST.md`.
-- No live Agent/Broker, Windows service, real user credential, UAC, CORE activation, merge, release, deploy or `main` push.
-
-- Additional regression: alternate CA-valid client with a reused bearer is denied by an explicitly certificate-bound test resolver; expired server TLS must be denied even when the client has the matching server SPKI pin. Production protected resolver provisioning and v2 issuer proof remain coordinator/AI-02 dependencies. Verify fresh exact-head CI before source acceptance.
+- Verdict: `READY_FOR_REVIEW` for source pending this commit's exact CI; **NO_GO** for production CORE.
+- Draft PR [#988](https://github.com/Naveax/Nexowire/pull/988), branch `ai/03-native-verifier-20261031`, base `5e52b756cc6959ffacb7bcd25f2fc1ad2beccc39`.
+- Prior candidate `a1cea7e58a853d9e598477e0f2efd64a65c361f5` CI run [41197111450](https://github.com/Naveax/Nexowire/actions/runs/41197111450): 6/7 SUCCESS while browser-live still running; Node 22/24 each 2399 PASS, 0 FAIL, 352 SKIP, 2 TODO. **Not proof for the follow-up HEAD.**
+- New work: `src/protocol/core-native-consent-transport.ts` now requires explicit protected `fetchImpl`; no global fetch fallback; rejects ambiguous signed JSON HTTP metadata. `test/core-native-consent-transport.test.ts` adds associated denial/positive cases.
+- Existing AI-03 work: `src/security/core-native-mtls-fetch.ts` strict pinned TLS1.3 client and metadata, `test/core-native-verifier-server.test.ts`, `test/core-native-enrollment-verifier-handler.test.ts` expired cert, CA-valid alternate client credential binding, explicit SPKI rotation, replay, owner/session/nonce bounds, timeout/size and bad response negatives.
+- Changed paths limited to allowed AI-03 files. All changes remain on the same Draft PR; no merge/deploy/live device/production keys.
+- New exact commit SHA and its new exact-SHA CI are to be read from GitHub PR once published. Local repository tests NOT RUN, exit N/A (no clone/dependencies); no physical acceptance claimed.
+- Blockers: coordinator production protected transport composition, AI-02 signed v2 grant issuer provenance and restore witness, protected cert/bearer resolver, real Windows kernel readback, independent AI-08 review, physical two-device session/revoke/reboot acceptance. `CONTRACT.md` / `INTEGRATION_REQUEST.md` specify external interfaces; CORE remains disabled.

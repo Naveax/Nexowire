@@ -132,6 +132,52 @@ test('insecure origin, absent trust bootstrap and unresponsive verifier never au
     .currentReadback(binding(p)),false);
 });
 
+test('omitted protected transport refuses global fetch fallback before exposing bearer',async()=>{
+  const p=proofFor(challenge()),wire:CoreNativeWireRequest={version:1,operation:'current-readback',
+    nonce:randomUUID(),expected:{receiptId:p.receiptId}};
+  const trust={origin:'https://protected-native-verifier.example',
+    credential:'fixture-valid-bearer-only',pinnedSpkiBase64:pin};
+  await assert.rejects(callProtectedCoreNativeAuthority(trust,wire),
+    /CORE_NATIVE_PROTECTED_TRANSPORT_REQUIRED/);
+  const verifier=new RemoteTrustedNativeCoreEnrollmentVerifier(trust);
+  assert.equal(await verifier.currentReadback(binding(p)),false,
+    'missing transport must fail closed, not silently use global fetch');
+});
+
+test('shared authority transport rejects ambiguous HTTP media metadata even with a valid signature',async()=>{
+  const p=proofFor(challenge()),wire:CoreNativeWireRequest={version:1,
+    operation:'current-readback',nonce:randomUUID(),expected:{receiptId:p.receiptId}};
+  const trust={origin:'https://127.0.0.1:18764',credential:'fixture-valid-bearer-only',
+    pinnedSpkiBase64:pin};
+  const response=(contentType:string,contentEncoding?:string):typeof fetch=>
+    (async(_url,init)=>{
+      const incoming=JSON.parse(String(init?.body)) as CoreNativeWireRequest;
+      return new Response(JSON.stringify(signed(incoming,p)),{status:200,headers:{
+        'content-type':contentType,...(contentEncoding?{'content-encoding':contentEncoding}:{})
+      }});
+    }) as typeof fetch;
+  for(const [kind,contentType,contentEncoding] of [
+    ['html', 'text/html',undefined],
+    ['json-substring', 'text/plain; application/json',undefined],
+    ['duplicate', 'application/json, application/json',undefined],
+    ['wrong-charset','application/json; charset=iso-8859-1',undefined],
+    ['gzip','application/json','gzip'],
+    ['duplicate-encoding','application/json','identity, identity'],
+  ] as const){
+    await assert.rejects(callProtectedCoreNativeAuthority({...trust,
+      fetchImpl:response(contentType,contentEncoding)},wire),/CORE_NATIVE_RESPONSE_NOT_JSON/,
+    kind);
+  }
+  for(const [contentType,contentEncoding] of [
+    ['application/json',undefined],
+    ['application/json; charset=UTF-8','identity'],
+  ] as const){
+    const value=await callProtectedCoreNativeAuthority({...trust,
+      fetchImpl:response(contentType,contentEncoding)},wire);
+    assert.deepEqual(value.proof,p);
+  }
+});
+
 test('approval response cannot follow a caller owner/session change during transport await',async()=>{
   const c=challenge(),original={...c};
   const forged=proofFor({...c,ownerAccountId:'other-owner-account',grantGeneration:22});

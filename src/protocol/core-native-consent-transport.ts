@@ -118,13 +118,23 @@ export async function callProtectedCoreNativeAuthority(
   if(signerDer.length!==44||signerDer.toString('base64')!==pinnedSpkiBase64||
     createPublicKey({key:signerDer,format:'der',type:'spki'}).asymmetricKeyType!=='ed25519')
     throw new Error('CORE_NATIVE_SIGNER_NOT_PINNED');
-  const response=await (fetchImpl??fetch)(url.origin+'/v1/core-native-consent',{
+  // Never fall back to global fetch: it cannot prove client-certificate custody,
+  // server CA/hostname verification *and* the exact server SPKI pin. In particular,
+  // an accidental omission must not send a protected bearer to an unpinned host.
+  if(typeof fetchImpl!=='function')throw new Error('CORE_NATIVE_PROTECTED_TRANSPORT_REQUIRED');
+  const response=await fetchImpl(url.origin+'/v1/core-native-consent',{
     method:'POST',cache:'no-store',redirect:'error',
     headers:{'content-type':'application/json','authorization':'Bearer '+credential},
     body:JSON.stringify(original),signal:abort,
   });
   if(!response.ok||response.redirected)throw new Error('CORE_NATIVE_AUTHORITY_UNAVAILABLE');
-  if(!response.headers.get('content-type')?.toLowerCase().includes('application/json'))
+  // Defense in depth: reject malformed media type/encoding even if a custom
+  // transport wrongly treats that HTTP 200 as trusted. Headers normalizes repeated
+  // fields to comma-separated values, which must also fail this exact match.
+  const contentType=response.headers.get('content-type');
+  const contentEncoding=response.headers.get('content-encoding');
+  if(!/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(contentType??'')||
+    (contentEncoding!==null&&contentEncoding.toLowerCase()!=='identity'))
     throw new Error('CORE_NATIVE_RESPONSE_NOT_JSON');
   const reader=response.body?.getReader();
   if(!reader)throw new Error('CORE_NATIVE_RESPONSE_EMPTY');
