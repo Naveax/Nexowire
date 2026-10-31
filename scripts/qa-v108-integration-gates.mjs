@@ -16,7 +16,9 @@ const required=Object.freeze([
   'wsl2-live','security-operational-live','macos-agent-lifecycle-live',
 ]);
 const unique=(items,code)=>{if(!items.includes(code))items.push(code);};
-const AI_PRS=Object.freeze([986,993,988,987,992,985,990,989]);
+const AI_OWNER=Object.freeze({986:'01',993:'02',988:'03',987:'04',
+  992:'05',985:'06',990:'07',989:'08'});
+const AI_PRS=Object.freeze(Object.keys(AI_OWNER).map(Number));
 
 // Explicit dependency graph. A CI-green Draft PR is not merge authorization.
 export const STACK=Object.freeze([
@@ -59,7 +61,12 @@ export function evaluateSnapshot(snapshot,{live=false}={}) {
           continue;
         }
         seen.add(p);
-        if(p.startsWith('docs/ai-handoff/AI-'+String(number).padStart(2,'0')+'/'))continue;
+        if(p.startsWith('docs/ai-handoff/')){
+          if(!p.startsWith('docs/ai-handoff/AI-'+AI_OWNER[number]+'/')){
+            unique(findings,'PR_'+number+':CROSS_AGENT_HANDOFF_WRITE');
+          }
+          continue;
+        }
         const own=owners.get(p)??[];
         own.push(number);
         owners.set(p,own);
