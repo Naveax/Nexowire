@@ -126,6 +126,17 @@ export function simulateMerges({repository,snapshot,specs=DEFAULT_STACK}) {
         return provenance('BLOCKED',['COMMIT_OBJECT_MISSING_'+sha.slice(0,12)],nodes);
       }
     }
+    // PR metadata alone cannot prove that head SHA descends from the stated
+    // exact base SHA. Validate real Git object ancestry before simulating.
+    for(const step of checked.plan){
+      const ancestor=callGit(['merge-base','--is-ancestor',
+        step.baseSha,step.headSha],{cwd:isolated});
+      if(ancestor.code!==0){
+        return provenance('BLOCKED',[
+          'PR_'+step.number+'_BASE_NOT_ANCESTOR_OR_GIT_ERROR',
+        ],nodes);
+      }
+    }
     let simulatedTip=checked.mainSha;
     const identity={
       GIT_AUTHOR_NAME:'Nexowire dry-run',
