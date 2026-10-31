@@ -46,7 +46,7 @@ jobs:
           source="$RUNNER_TEMP/v108-dryrun-source"
           git -c protocol.version=2 clone --quiet --no-checkout --single-branch --branch main \
             https://github.com/Naveax/Nexowire.git "$source"
-          for id in 986 980 981 982 988 983 984 993 989 987 992 985 996 990; do
+          for id in 986 1002 994 980 981 982 988 983 984 993 989 987 992 985 996 990; do
             git -C "$source" fetch --quiet --no-tags origin \
               "pull/$id/head:refs/remotes/origin/coord-pr-$id"
           done

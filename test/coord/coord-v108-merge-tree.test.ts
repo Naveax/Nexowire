@@ -9,6 +9,8 @@ import {fileURLToPath} from 'node:url';
 const tool=fileURLToPath(new URL('../../scripts/coord-v108-merge-tree.mjs',import.meta.url));
 const stack=[
   {number:986,head:'ai/01-wal-v108',base:'main'},
+  {number:1002,head:'fix/journal-owner-restart-20261031',base:'main'},
+  {number:994,head:'coord/v108-exact-head-integration-gates-20261031',base:'main'},
   {number:980,head:'integration/core-after-v108-20261030',base:'main'},
   {number:981,head:'core/bounded-native-verifier-host-20261030',parent:980},
   {number:982,head:'core/native-verifier-mtls-client-20261031',parent:981},
@@ -111,6 +113,8 @@ test('clean source DAG gets dry-run only and does not change main/workingtree',t
   assert.equal(result.status,0,result.stderr);
   assert.equal(output.status,'CLEAN_DRY_RUN');
   assert.equal(output.nodes?.length,stack.length);
+  assert.ok(output.nodes?.some(n=>n.pr===1002));
+  assert.ok(output.nodes?.some(n=>n.pr===994));
   assert.equal(output.mergeAuthorized,false);
   assert.equal(output.deployAuthorized,false);
   assert.equal(output.sourceWorkingTreeModified,false);

@@ -2,7 +2,7 @@
 
 **Status: NON-DESTRUCTIVE SOURCE SIMULATION. NEVER A MERGE OR RELEASE PERMIT.**
 
-This coordinator-owned tool checks whether the current **14-PR dependency DAG**
+This coordinator-owned tool checks whether the current **16-PR dependency DAG**
 can be combined in the intended order without ordinary three-way Git tree conflicts.
 It is deliberately separate from the exact-SHA CI and physical acceptance gates in
 coordinator PR #994.
@@ -27,7 +27,7 @@ Requirement: Git 2.38+ with `git merge-tree --write-tree` support, Node 22+.
 
    ```bash
    git clone --no-checkout https://github.com/Naveax/Nexowire.git /tmp/v108-dryrun-source
-   for id in 986 980 981 982 988 983 984 993 989 987 992 985 996 990; do
+   for id in 986 1002 994 980 981 982 988 983 984 993 989 987 992 985 996 990; do
      git -C /tmp/v108-dryrun-source fetch --no-tags origin "pull/$id/head:refs/remotes/origin/coord-pr-$id"
    done
    ```
@@ -45,7 +45,7 @@ PowerShell equivalent for fetching branches in a disposable clone:
 ```powershell
 $source = Join-Path $env:TEMP "v108-dryrun-source"
 git clone --no-checkout https://github.com/Naveax/Nexowire.git $source
-986,980,981,982,988,983,984,993,989,987,992,985,996,990 | ForEach-Object {
+986,1002,994,980,981,982,988,983,984,993,989,987,992,985,996,990 | ForEach-Object {
   git -C $source fetch --no-tags origin "pull/$_/head:refs/remotes/origin/coord-pr-$_"
   if ($LASTEXITCODE -ne 0) { throw "PR fetch $_ failed." }
 }
@@ -86,3 +86,17 @@ Coordinator Draft #996 is based on #980 and is rehearsed after #985 but before
 activate CORE. A conflict-free tree only proves Git composition; the AI-06
 native readback, Worker-side exact-identity CAS, signed current session and
 physical effect-boundary evidence remain missing until independently proven.
+
+## Added journal-owner and source integration gates
+
+- **#1002** (main-based) fixes the fatal journal-owner restart/PID-incarnation
+  class on a separate candidate branch. It is rehearsed after #986 to expose
+  source overlap with the WAL verification changes. 7/7 source CI and package
+  readiness for its exact SHA do not constitute installed Windows acceptance.
+- **#994** (main-based) provides the exact-head CI/ownership gate and protected
+  Windows WAL namespace probe. It is rehearsed before the CORE #980 stack so
+  CI workflow and probe path conflicts are visible early. Its green source CI
+  is not protected native OS proof.
+
+A 16-PR clean tree is only a Git-level hypothesis. Keep CORE NO-GO, all PRs
+Draft, and require independent cross-version tests plus installed acceptance.
