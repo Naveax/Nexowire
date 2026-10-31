@@ -63,7 +63,15 @@ function fixture(withClaimMarker=true){
     windows_user_sid=?,windows_session_id=?,windows_logon_luid=?,windows_logon_session_epoch=?
     WHERE device_id=?`).run(installationId,enrollmentId,publicKeySpki,receiptId,
       'S-1-5-21-101-202-303-1001',1,'0000000000000001',windowsLogonSessionEpoch,deviceId);
-  const d1:D1DatabaseLike={prepare:sql=>new Statement(db.prepare(sql)),
+  // Deterministic point between latest D1 readback and the second claim CAS.
+  // Source-level race only; not a real Windows event or a D1 production hook.
+  let beforeMarkerCas:(()=>void)|undefined;
+  const d1:D1DatabaseLike={prepare:sql=>{
+    if(sql.includes('SET native_claim_verified=1')){
+      const cb=beforeMarkerCas;beforeMarkerCas=undefined;cb?.();
+    }
+    return new Statement(db.prepare(sql));
+  },
     batch:async statements=>{
       db.exec('BEGIN');
       try{const result=await Promise.all(statements.map(s=>s.run()));db.exec('COMMIT');return result;}
@@ -90,7 +98,9 @@ function fixture(withClaimMarker=true){
   const marker=()=>withClaimMarker
     ?db.prepare('SELECT native_claim_verified FROM device_core_console_operations WHERE request_id=?')
       .get(requestId)?.native_claim_verified:null;
-  return {db,call,state,marker,deviceStatus:()=>authority.deviceStatus(deviceId,ownerAccountId),
+  return {db,call,state,marker,
+    beforeMark:(cb:()=>void)=>{beforeMarkerCas=cb;},
+    deviceStatus:()=>authority.deviceStatus(deviceId,ownerAccountId),
     pause:(work:()=>Promise<void>)=>{pause=work;},
     denyNativeReadback:()=>{nativeReadbackAllowed=false;}};
 }
@@ -305,5 +315,34 @@ test('AI-06: missing coordinator claim-marker migration fails closed',async()=>{
     await assert.rejects(f.call('claim'),/native_claim_verified|no such column/i);
     assert.equal(f.state(),'unknown','no unsigned legacy fallback');
     await assert.rejects(f.call('complete'),/native_claim_verified|no such column/i);
+  }finally{f.db.close();}
+});
+
+for(const change of [
+  {name:'owner re-pair with new CORE preference enabled',apply:(f:ReturnType<typeof fixture>)=>{
+    const owner='ai06-owner-repaired-after-readback';
+    f.db.prepare('INSERT INTO accounts VALUES(?)').run(owner);
+    f.db.prepare('UPDATE devices SET owner_account_id=?').run(owner);
+    f.db.prepare('INSERT INTO device_maintenance_preferences VALUES(?,?,?,?)')
+      .run('ai06-device-0001',owner,1,'2026-11-01');
+    f.db.prepare('INSERT INTO device_bridge_preferences VALUES(?,?,?,?)')
+      .run('ai06-device-0001',owner,'auto','2026-11-01');
+  }},
+  {name:'Windows logon epoch rotated',apply:(f:ReturnType<typeof fixture>)=>{
+    f.db.exec("UPDATE device_core_console_authority SET windows_logon_session_epoch='ai06-new-logon-after-readback'");
+  }},
+  {name:'Broker privilege lost',apply:(f:ReturnType<typeof fixture>)=>{
+    f.db.exec("UPDATE devices SET privilege_mode='direct'");
+  }},
+])test('AI-06: post-readback native marker CAS denies '+change.name,async()=>{
+  const f=fixture();
+  try{
+    await f.call('reserve');
+    f.beforeMark(()=>change.apply(f));
+    await assert.rejects(f.call('claim'),/CORE_REVOKED_REPLAY_OR_CONFLICT/,
+      'second CAS must fail on changed current owner/session/READY scope');
+    assert.equal(f.state(),'unknown','winning claim can only quarantine');
+    assert.equal(f.marker(),0,'denied stale claim cannot mark verified');
+    await assert.rejects(f.call('claim'),'same UUID must remain non-replayable');
   }finally{f.db.close();}
 });

@@ -77,10 +77,13 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
     // longer pass the database-clock predicate. Operation IDs are NEVER pruned.
     await this.db.prepare(`DELETE FROM device_core_console_nonces WHERE observed_at_ms<${DB_NOW}-60000`).run();
     }
-    const currentPredicate=`c.device_id=? AND d.credential_hash=? AND ${READY}
+    // Owner must be fenced INSIDE every current-state SQL CAS, not merely
+    // compared in a preceding async readback. An owner re-pair can otherwise
+    // occur after latest-row inspection while the new owner has CORE enabled.
+    const currentPredicate=`c.device_id=? AND d.credential_hash=? AND d.owner_account_id=? AND ${READY}
       AND c.installation_id=? AND c.enrollment_id=? AND c.public_key_spki=?
       AND c.owner_epoch=? AND c.grant_generation=? AND c.revoke_epoch=?`;
-    const currentArgs=[r.deviceId,hash,r.installationId,before.enrollment_id,
+    const currentArgs=[r.deviceId,hash,before.owner_account_id,r.installationId,before.enrollment_id,
       before.public_key_spki,before.owner_epoch,before.grant_generation,before.revoke_epoch];
     const changed=async(sql:string,args:unknown[])=>{
       const result=await this.db.prepare(sql).bind(...args).run();

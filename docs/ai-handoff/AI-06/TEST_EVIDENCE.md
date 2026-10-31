@@ -161,3 +161,14 @@ taşınmaz. Gerçek Windows OS readback/effect kanıtı yoktur.
 The owned `test/ai06-consent-claim-races.test.ts` adds three cases: signed `complete(succeeded)` is denied while native claim readback is pending and marker 0; winner's independent verification sets marker 1, allowing exactly one terminal completion; DENY leaves marker 0 / terminal UNKNOWN; and missing coordinator schema denies claim and complete without a legacy fallback. The three owned in-memory fixture paths add the minimal marker/trigger; they DO NOT import the #996 migration from the separate Draft or prove physical OS authority.
 
 **Expected AI-06 named regression count:** 45 (previous exact HEAD `b120183fca21076390c41aedfa79af93393149db` was 42/42 PASS). New commit result must be checked by exact SHA, Node 22/24 and Windows jobs. Do not reuse previous CI evidence.
+
+## Additional independent owner/session/READY CAS interleavings
+
+Three new in-memory AI-06 negatives deterministically mutate D1 state
+**after** the final row read and **before** the `native_claim_verified=1`
+SQL CAS: (1) an owner re-pair whose new owner has its own CORE preference
+enabled, (2) a Windows logon epoch swap, and (3) Broker privilege loss.
+All must produce terminal UNKNOWN, keep marker 0, and deny same-UUID replay.
+The hook exists only in AI-06's in-memory `D1DatabaseLike` fixture.
+**Expected 48 AI-06 cases** after these three additions; no PASS claim
+until matching exact new SHA and test log are checked.

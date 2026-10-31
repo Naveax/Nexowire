@@ -164,3 +164,13 @@ consent/effect-boundary provider hâlâ entegrasyon şartıdır.
 The sole winning claim first consumes `reserved -> dispatched` before asynchronous native `currentReadback`. After the independent result and fresh owner/device/platform/Broker/session/readiness D1 verification, it must perform a **separate** `native_claim_verified=0 -> 1` CAS with exactly one affected row. Both CAS and signed `complete` bind the immutable requestId, fingerprint, installation, enrollment and owner/grant/revoke epoch, current native receipt, SID, session ID, logon LUID and session epoch. The `complete` operation requires marker 1 for `succeeded/denied`; `unknown` can terminally quarantine an unverified dispatched operation.
 
 Coordinator #996 migration is REQUIRED in the runtime schema. Its absence causes SQL error and fail-closed claim/complete (no permissive fallback). Source-only isolated tests mimic the minimum additive marker and completion trigger **in-memory**, not the production migration. Actual protected Win32 consent/effect boundary remains unproven; CORE NO-GO.
+
+## Post-readback owner re-pair CAS atomicity
+
+The second `native_claim_verified` CAS and all current-scope D1 mutations
+explicitly bind `d.owner_account_id` to the original independently observed
+owner. The preceding `latest` row check alone is insufficient: an owner
+could be re-paired between that await and SQL compare-and-swap, with new
+maintenance preferences enabled. The owner, credential, platform, READY,
+native session and generations must still match **inside the same SQL UPDATE**.
+This remains a source-level guard, not a native OS effect permit.
