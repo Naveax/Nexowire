@@ -47,20 +47,45 @@ async function readExactly(handle:fs.FileHandle,buf:Buffer,length:number,at:numb
   }
 }
 
+// Re-check the pathname, not merely the opened file handle. A replaced WAL
+// or SHM pathname may otherwise pass validation against the previous inode.
+// These checks do not replace native-singleton ownership or an atomic SQLite
+// open/verify handoff in the journal owner.
+type FileSnapshot={dev:number;ino:number;size:number;mtimeMs:number;ctimeMs:number};
+async function assertStablePath(file:string,opened:FileSnapshot):Promise<void>{
+  let current;
+  try{current=await fs.lstat(file)}catch{fail();}
+  if(!current.isFile()||current.isSymbolicLink()||
+     current.dev!==opened.dev||current.ino!==opened.ino||
+     current.size!==opened.size||current.mtimeMs!==opened.mtimeMs||
+     current.ctimeMs!==opened.ctimeMs)fail();
+}
+
 // SQLite reuses WAL allocation after RESTART without truncating old frames.
 // The volatile WAL-index only corroborates a clean current commit boundary.
 // It is NOT an authenticity/rollback witness or a replacement for external CAS.
 async function readReuseIndex(dbFile:string,walHeader:Buffer,pageSize:number,
   currentFrames:number,commitPages:number,digest:Checksum):Promise<{
-    bytes:Buffer;dev:number;ino:number;size:number;mtimeMs:number;
+    bytes:Buffer;dev:number;ino:number;size:number;mtimeMs:number;ctimeMs:number;
   }>{
   let prior;
   try{prior=await fs.lstat(dbFile+'-shm');}catch{fail();}
   if(!prior.isFile()||prior.isSymbolicLink())fail();
-  const handle=await fs.open(dbFile+'-shm','r');
+  // If the WAL-index disappears between lstat and open, this is an
+  // inconsistent snapshot, not a generic startup I/O failure.
+  let handle:fs.FileHandle;
+  try{handle=await fs.open(dbFile+'-shm','r');}
+  catch(e){
+    if((e as NodeJS.ErrnoException).code==='ENOENT')fail();
+    throw e;
+  }
   try{
     const opened=await handle.stat();
+    // Inode identity alone does not catch an in-place SHM rewrite between
+    // lstat and open. Native singleton ownership is still required.
     if(!opened.isFile()||opened.dev!==prior.dev||opened.ino!==prior.ino||
+       opened.size!==prior.size||opened.mtimeMs!==prior.mtimeMs||
+       opened.ctimeMs!==prior.ctimeMs||
        opened.size<32768||opened.size%32768!==0)fail();
     const bytes=Buffer.alloc(136);
     await readExactly(handle,bytes,bytes.length,0);
@@ -78,8 +103,11 @@ async function readReuseIndex(dbFile:string,walHeader:Buffer,pageSize:number,
        u32(40)!==checksum.s0||u32(44)!==checksum.s1||
        u32(96)>currentFrames||u32(128)>currentFrames)fail();
     const after=await handle.stat();
-    if(after.size!==opened.size||after.mtimeMs!==opened.mtimeMs)fail();
-    return {bytes,dev:opened.dev,ino:opened.ino,size:opened.size,mtimeMs:opened.mtimeMs};
+    if(after.size!==opened.size||after.mtimeMs!==opened.mtimeMs||
+       after.ctimeMs!==opened.ctimeMs)fail();
+    await assertStablePath(dbFile+'-shm',opened);
+    return {bytes,dev:opened.dev,ino:opened.ino,size:opened.size,
+      mtimeMs:opened.mtimeMs,ctimeMs:opened.ctimeMs};
   }finally{await handle.close();}
 }
 
@@ -93,18 +121,46 @@ export async function verifyAgentJournalWal(dbFile:string):Promise<void>{
   const walFile=dbFile+'-wal';
   let prior;
   try{prior=await fs.lstat(walFile)}catch(e){
-    if((e as NodeJS.ErrnoException).code==='ENOENT')return;
+    if((e as NodeJS.ErrnoException).code==='ENOENT'){
+      // A missing WAL with an orphaned SHM can conceal committed WAL-only
+      // journal entries (including UNKNOWN anti-replay tombstones). SQLite
+      // may reopen the base database without those entries. This is not the
+      // normal clean-start case where both sidecars are absent.
+      try{await fs.lstat(dbFile+'-shm');}
+      catch(shmError){
+        if((shmError as NodeJS.ErrnoException).code==='ENOENT')return;
+        throw shmError;
+      }
+      fail();
+    }
     throw e;
   }
   if(!prior.isFile()||prior.isSymbolicLink()){
     throw new AgentJournalWalError('SQLite WAL path is not a regular file.');
   }
-  const handle=await fs.open(walFile,'r');
+  // An observed WAL that vanishes before open is not the same as a WAL
+  // that was absent at initial lstat. Deny with the journal's fail-closed
+  // diagnostic code rather than leaking a raw filesystem ENOENT.
+  let handle:fs.FileHandle;
+  try{handle=await fs.open(walFile,'r');}
+  catch(e){
+    if((e as NodeJS.ErrnoException).code==='ENOENT')fail();
+    throw e;
+  }
   try{
     const opened=await handle.stat();
+    // Verify pre-open metadata, not only the inode. An in-place truncate
+    // between lstat and open must not be reclassified as a legitimate empty
+    // WAL, which would silently discard possible journal reservations.
     if(!opened.isFile()||opened.dev!==prior.dev||
-       opened.ino!==prior.ino)fail();
-    if(opened.size===0)return;
+       opened.ino!==prior.ino||opened.size!==prior.size||
+       opened.mtimeMs!==prior.mtimeMs||opened.ctimeMs!==prior.ctimeMs)fail();
+    // An empty WAL is legitimate, but it must still resolve to the opened
+    // inode. Do not let the short-circuit omit the namespace readback.
+    if(opened.size===0){
+      await assertStablePath(walFile,opened);
+      return;
+    }
     if(opened.size<32)fail();
     const header=Buffer.alloc(32);
     await readExactly(handle,header,32,0);
@@ -157,16 +213,42 @@ export async function verifyAgentJournalWal(dbFile:string):Promise<void>{
       currentFrames++;
       lastCommitPages=frame.readUInt32BE(4);
     }
+    // A checksummed but uncommitted current-generation suffix may be ignored
+    // during SQLite recovery. Do not silently discard possible reservation
+    // history: every nonempty current generation must end at a commit frame.
+    // Ordinary RESTART/reuse tails remain valid after their committed prefix.
+    if(currentFrames>0&&lastCommitPages===0)fail();
     const after=await handle.stat();
-    if(after.size!==opened.size||after.mtimeMs!==opened.mtimeMs)fail();
+    if(after.size!==opened.size||after.mtimeMs!==opened.mtimeMs||
+       after.ctimeMs!==opened.ctimeMs)fail();
     if(reuseIndex){
       const checked=await readReuseIndex(dbFile,header,pageSize,
         currentFrames,lastCommitPages,digest);
       if(checked.dev!==reuseIndex.dev||checked.ino!==reuseIndex.ino||
          checked.size!==reuseIndex.size||checked.mtimeMs!==reuseIndex.mtimeMs||
+         checked.ctimeMs!==reuseIndex.ctimeMs||
          !checked.bytes.equals(reuseIndex.bytes))fail();
       const stable=await handle.stat();
-      if(stable.size!==opened.size||stable.mtimeMs!==opened.mtimeMs)fail();
+      if(stable.size!==opened.size||stable.mtimeMs!==opened.mtimeMs||
+         stable.ctimeMs!==opened.ctimeMs)fail();
+    }
+    // Read back after the scan. This detects a late in-place header rewrite
+    // and checks that the path still resolves to the validated inode.
+    const finalHeader=Buffer.alloc(32);
+    await readExactly(handle,finalHeader,32,0);
+    if(!finalHeader.equals(header))fail();
+    const finalStat=await handle.stat();
+    if(finalStat.size!==opened.size||finalStat.mtimeMs!==opened.mtimeMs||
+       finalStat.ctimeMs!==opened.ctimeMs)fail();
+    await assertStablePath(walFile,opened);
+    if(reuseIndex){
+      const finalIndex=await readReuseIndex(dbFile,header,pageSize,
+        currentFrames,lastCommitPages,digest);
+      if(finalIndex.dev!==reuseIndex.dev||finalIndex.ino!==reuseIndex.ino||
+         finalIndex.size!==reuseIndex.size||
+         finalIndex.mtimeMs!==reuseIndex.mtimeMs||
+         finalIndex.ctimeMs!==reuseIndex.ctimeMs||
+         !finalIndex.bytes.equals(reuseIndex.bytes))fail();
     }
   }finally{
     await handle.close();
