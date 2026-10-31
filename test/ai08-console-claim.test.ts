@@ -26,7 +26,7 @@ function latch(){
   const held=new Promise<void>(r=>{release=r});
   return {entered,release,wait:async()=>{enter();await held}};
 }
-function fixture(){
+function fixture(nativeReadback:'allow'|'deny'|'unknown'='allow'){
   const db=new DatabaseSync(':memory:');
   const credential='nwx_dev_ai08_only_00123456';
   const owner='ai08-owner',device='ai08-device';
@@ -65,7 +65,12 @@ function fixture(){
   let nativeReads=0;
   const auth=new D1CoreConsoleAuthority(dbLike,{
     verifyAndConsume:async()=>false,
-    currentReadback:async()=>{nativeReads++;await gate.wait();return true;},
+    currentReadback:async()=>{
+      nativeReads++;
+      await gate.wait();
+      if(nativeReadback==='unknown')throw Error('AI08_NATIVE_READBACK_UNKNOWN');
+      return nativeReadback==='allow';
+    },
   });
   const call=async(action:'reserve'|'claim'|'complete')=>{
     const request:CoreAuthorityRequest={action,deviceId:device,installationId,
@@ -141,3 +146,70 @@ test('AI-08: complete cannot acknowledge success before native claim readback',a
     f.db.close();
   }
 });
+
+
+// Independent terminal-state negatives. A locally accepted synthetic claim
+// remains no proof of physical owner consent, protected Windows Broker or OS.
+test('AI-08: losing simultaneous claim cannot tombstone the dispatched winner',async()=>{
+  const f=fixture();
+  let first:Promise<unknown>|undefined;
+  try{
+    await f.call('reserve');
+    first=f.call('claim');
+    await f.gate.entered;
+    await assert.rejects(f.call('claim'),/CORE_REVOKED_REPLAY_OR_CONFLICT/);
+    assert.equal(f.state(),'dispatched',
+      'loser may not overwrite the winning claim during readback');
+    assert.equal(f.reads(),1,'only the winning claim reached native readback');
+    f.gate.release();
+    await first;
+    assert.equal(f.state(),'dispatched');
+    await f.call('complete');
+    assert.equal(f.state(),'succeeded');
+    await assert.rejects(f.call('complete'),/CORE_REVOKED_REPLAY_OR_CONFLICT/);
+  }finally{
+    f.gate.release();
+    if(first)await first.catch(()=>{});
+    f.db.close();
+  }
+});
+
+test('AI-08: complete before claim must not consume a reserved operation',async()=>{
+  const f=fixture();
+  try{
+    await f.call('reserve');
+    await assert.rejects(f.call('complete'),/CORE_REVOKED_REPLAY_OR_CONFLICT/);
+    assert.equal(f.state(),'reserved');
+    const claim=f.call('claim');
+    await f.gate.entered;
+    f.gate.release();
+    await claim;
+    assert.equal(f.state(),'dispatched');
+    await f.call('complete');
+    assert.equal(f.state(),'succeeded');
+  }finally{f.gate.release();f.db.close();}
+});
+
+for(const outcome of ['deny','unknown'] as const){
+  test('AI-08: native readback '+outcome+' tombstones claimed ID without replay',async()=>{
+    const f=fixture(outcome);
+    let pending:Promise<unknown>|undefined;
+    try{
+      await f.call('reserve');
+      pending=f.call('claim');
+      await f.gate.entered;
+      f.gate.release();
+      await assert.rejects(pending,outcome==='deny'
+        ?/CORE_NATIVE_CONSENT_SESSION_STALE/
+        :/AI08_NATIVE_READBACK_UNKNOWN/);
+      assert.equal(f.state(),'unknown','uncertain native readback is terminal');
+      await assert.rejects(f.call('claim'),'claimed ID must not be replayed');
+      await assert.rejects(f.call('complete'),'UNKNOWN is not success-eligible');
+      assert.equal(f.reads(),1,'no second independent native readback');
+    }finally{
+      f.gate.release();
+      if(pending)await pending.catch(()=>{});
+      f.db.close();
+    }
+  });
+}
