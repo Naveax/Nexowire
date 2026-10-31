@@ -100,6 +100,13 @@ async function untilAborted<T>(work: Promise<T>, signal: AbortSignal): Promise<T
 export class CoreConsoleAdmission {
   private stopped = false;
   private abort = new AbortController();
+  // A late affirmative native approval must never reopen a STOP issued
+  // while the enrollment prompt or protected service readback was pending.
+  private revokeSequence = 0;
+  // Closing an Agent controller is terminal for that instance. A delayed
+  // native consent callback must never resurrect a closed controller.
+  private closed = false;
+  private enrollmentPending = false;
   private readonly requests = new Set<string>();
   private readonly inFlight = new Set<string>();
 
@@ -128,11 +135,11 @@ export class CoreConsoleAdmission {
         AbortSignal.timeout(10000),...(requestSignal?[requestSignal]:[])]);
       if (signal.aborted) return {status:this.inactive('CORE_CONSOLE_REQUEST_CANCELLED')};
       const evidence = structuredClone(await untilAborted(this.provider.inspect(signal),signal));
+      if (this.stopped) return {status:this.inactive('REVOKED_LOCALLY')};
       const binding=this.binding??this.provider.binding;
       if(!binding)return {status:this.inactive('LOCAL_ENROLLMENT_REQUIRED')};
       this.binding=Object.freeze({...binding});
       const nowMs = this.now();
-      if (this.stopped) return {status:this.inactive('REVOKED_LOCALLY')};
       if (!Number.isSafeInteger(evidence.observedAtMs) ||
           !Number.isSafeInteger(nowMs) || evidence.observedAtMs > nowMs ||
           nowMs - evidence.observedAtMs > MAX_READBACK_AGE_MS)
@@ -180,6 +187,7 @@ export class CoreConsoleAdmission {
 
   /** No remote reenrollment/reset method: STOP cannot be undone by a tool call. */
   async revoke(): Promise<void> {
+    this.revokeSequence++;
     this.stopped = true;
     this.abort.abort();
     if (this.provider) await this.provider.revoke();
@@ -187,16 +195,40 @@ export class CoreConsoleAdmission {
 
   /** Only the provider's real local decision UI can reopen a stopped profile. */
   async enroll(signal:AbortSignal):Promise<boolean>{
+    if(this.closed)throw failure('CORE_CONSOLE_CONTROLLER_CLOSED');
     if(!this.provider?.enroll)throw failure('CORE_CONSOLE_PROVIDER_UNAVAILABLE');
-    const approved=await this.provider.enroll(signal);
-    if(approved===true&&!signal.aborted){
-      if(!this.provider.binding)throw failure('CORE_ENROLLMENT_BINDING_REQUIRED');
-      this.binding=Object.freeze({...this.provider.binding});this.abort=new AbortController();this.stopped=false;
-      return true;
-    }
-    return false;
+    if(signal.aborted)return false;
+    // The protected provider also serializes approval, but the controller
+    // must not allow another implementation to prompt/register in parallel.
+    if(this.enrollmentPending)throw failure('CORE_ENROLLMENT_PROMPT_ACTIVE');
+    this.enrollmentPending=true;
+    const observedRevokeSequence=this.revokeSequence;
+    try{
+      const approved=await this.provider.enroll(signal);
+      // close() and revoke() both fence delayed native approval, even if the
+      // downstream provider returns true or a remote revoke ACK is lost.
+      if(this.closed)throw failure('CORE_CONSOLE_CONTROLLER_CLOSED');
+      if(this.revokeSequence!==observedRevokeSequence)
+        throw failure('CORE_ENROLLMENT_REVOKED_DURING_APPROVAL');
+      if(approved===true&&!signal.aborted){
+        if(!this.provider.binding)throw failure('CORE_ENROLLMENT_BINDING_REQUIRED');
+        this.binding=Object.freeze({...this.provider.binding});
+        this.abort=new AbortController();this.stopped=false;
+        return true;
+      }
+      return false;
+    }finally{this.enrollmentPending=false;}
   }
-  close():void {this.provider?.close?.();}
+  close():void {
+    if(this.closed)return;
+    // Fence synchronously before any provider cleanup. close() is not a
+    // substitute for durable remote revoke, but cannot grant local authority.
+    this.closed=true;
+    this.revokeSequence++;
+    this.stopped=true;
+    this.abort.abort();
+    this.provider?.close?.();
+  }
   get installed():boolean {return this.provider!==undefined;}
 
   async execute(

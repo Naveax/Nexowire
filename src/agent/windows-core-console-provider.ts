@@ -257,6 +257,9 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
   private readonly lifetime=new AbortController();
   private revoking?:Promise<void>;
   private inFlightDispatch?:{requestId:string;fingerprint:string};
+  /** Monotonic local STOP sequence; an in-flight enrollment must not undo a
+   * concurrent revoke even when the protected authority enroll ACK arrives. */
+  private stopSequence=0;
   private initialization?:Promise<void>;
   onEnrollmentRequested?:()=>Promise<void>;
   constructor(private readonly options:WindowsCoreProviderOptions){}
@@ -365,9 +368,14 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
       state.windowsSessionId===latest.windowsSessionId&&
       state.windowsLogonLuid===latest.windowsLogonLuid&&
       state.windowsLogonSessionEpoch===latest.windowsLogonSessionEpoch;
-    const certificate=this.revoked||signal.aborted||!localValid||!nativeValid||
-      !unchanged||!bridge||!latestBridge||!this.matches(latest)||
-      await this.options.store.stopped()||await this.options.store.blocked?.()?null:this.profile.certificate;
+    // These are async filesystem reads. STOP, revoke or cancellation can occur
+    // while either read is outstanding; evaluate them *before* the final
+    // volatile checks, rather than checking signal.aborted only at the start.
+    const stopped=await this.options.store.stopped();
+    const blocked=await this.options.store.blocked?.();
+    const certificate=this.closed||this.revoked||signal.aborted||stopped||blocked||
+      !localValid||!nativeValid||!unchanged||!bridge||!latestBridge||
+      !this.matches(latest)?null:this.profile.certificate;
     return {certificate,pinnedLocalSpkiDer:pinned,
       current:{...this.current(latest),bridgeVerified:latest.bridgeVerified&&latestBridge},
       devicePlatform:latest.devicePlatform,deviceReady:latest.deviceReady,
@@ -456,6 +464,7 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
       // must bind epochs after this monotonic revoke, not before it.
       await this.revoke();
       await this.tail;
+      const enrollmentStopSequence=this.stopSequence;
       const fresh=await this.options.authority.call(this.profile,'read',{},signal);
       if(!fresh.coreEnabled||fresh.accessMode!=='full'||!fresh.deviceOnline||
         !fresh.bridgeVerified||fresh.ownerAccountId!==state.ownerAccountId||
@@ -501,13 +510,43 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
         registered.windowsLogonLuid!==proof.windowsLogonLuid||
         registered.windowsLogonSessionEpoch!==proof.windowsLogonSessionEpoch)
         throw new Error('CORE_NATIVE_CONSENT_AUTHORITY_BINDING_REQUIRED');
-      this.binding={ownerAccountId:challenge.ownerAccountId,deviceId:challenge.deviceId,
-        installationId:challenge.installationId};
-      this.revoked=false;await this.options.store.clearStop();
-      await this.options.store.clearBlock?.();await this.startMonitor();return true;
+      // A delayed enrollment ACK may arrive after the user cancels or another
+      // task revokes the grant. Keep revoked=true until *all* async local
+      // unblocking steps finish, and check the monotonic STOP generation.
+      try{
+        const enrollmentCancelled=()=>this.closed||signal.aborted||
+          this.stopSequence!==enrollmentStopSequence;
+        if(enrollmentCancelled())throw new Error('CORE_ENROLLMENT_CANCELLED_BEFORE_ACTIVATION');
+        this.binding={ownerAccountId:challenge.ownerAccountId,deviceId:challenge.deviceId,
+          installationId:challenge.installationId};
+        await this.options.store.clearStop();
+        await this.options.store.clearBlock?.();
+        await this.startMonitor();
+        if(enrollmentCancelled())throw new Error('CORE_ENROLLMENT_CANCELLED_BEFORE_ACTIVATION');
+        this.revoked=false;
+        return true;
+      }catch(error){
+        // The certificate may already have been registered remotely. Preserve
+        // local STOP and revoke its generation rather than publishing an
+        // enrollment that was cancelled during the final async steps.
+        await this.revoke().catch(()=>{});
+        throw error;
+      }
     }finally{this.pending=false;}
   }
   execute(request:CoreConsoleDispatch,signal:AbortSignal):Promise<CoreConsoleReceipt>{
+    // Capture the *whole* dispatch synchronously, before queueing or any
+    // asynchronous authority/OS call. A caller can otherwise mutate nested
+    // input or binding after fingerprint verification, changing the native
+    // effect without changing the signed admission.
+    let fixed:CoreConsoleDispatch;
+    try {
+      fixed=JSON.parse(JSON.stringify(request)) as CoreConsoleDispatch;
+      if(!fixed||typeof fixed!=='object'||!fixed.binding||
+        typeof fixed.requestId!=='string'||typeof fixed.fingerprint!=='string'||
+        typeof fixed.capability!=='string')throw new Error('INVALID');
+    }catch{return Promise.reject(new Error('CORE_DISPATCH_SNAPSHOT_INVALID'));}
+    request=fixed;
     const work=this.tail.then(async()=>{
       if(this.revoked||signal.aborted)throw new Error('CORE_REVOKED');
       if(request.capability!=='windows.private_viewer.start')parseCoreNativeInput(request.capability,request.input);
@@ -547,6 +586,12 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
           finalEnrollment.grantGeneration!==request.grantGeneration||
           finalEnrollment.revokeEpoch!==request.revokeEpoch)
           throw new Error('CORE_CONSOLE_FINAL_SESSION_READBACK_REQUIRED');
+        // A cancellation may arrive after the final async native consent
+        // readback but before the callback. Recheck STOP immediately before
+        // crossing into native work; native OS must still fence each real effect.
+        const stoppedBeforeNative=await this.options.store.stopped();
+        if(stoppedBeforeNative||this.closed||this.revoked||signal.aborted)
+          throw new Error('CORE_CONSOLE_FINAL_STOP_OR_CANCELLED');
         const native=this.options.native??executeCoreConsoleNative;
         // The marker lets native cleanup release pressed keys before exiting.
         // Cancellation does not grant a new request or permit a blind replay.
@@ -568,12 +613,29 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
       finally{this.inFlightDispatch=undefined;signal.removeEventListener('abort',cancel);}
       const completionProfile=this.profile;
       try{
+        // A user may cancel after the native call but before D1 receives
+        // completion. Even if the native effect already happened, the provider
+        // must not report a known success while STOP is latched.
+        if(outcome!=='unknown'){
+          const stoppedBeforeCompletion=await this.options.store.stopped();
+          if(stoppedBeforeCompletion||this.closed||this.revoked||signal.aborted)
+            outcome='unknown';
+        }
         if(outcome==='unknown')await this.persistLocalStop();
         await this.options.authority.call(completionProfile,'complete',{...fields,outcome});
         if(outcome==='unknown')await this.revoke();
         else{
+          // Completion ACK itself is asynchronous. An abort/revoke arriving
+          // during that await cannot silently clear the pendingDispatch marker
+          // and publish a successful receipt. Recheck after local settlement
+          // too, including cancellation while the durable store was writing.
+          const cancelled=()=>this.closed||this.revoked||signal.aborted;
+          if(cancelled()||await this.options.store.stopped()||cancelled())
+            throw new Error('CORE_CONSOLE_SETTLEMENT_CANCELLED');
           const settled={...this.profile};delete settled.pendingDispatch;
           await this.options.store.save(settled);this.profile=settled;
+          if(cancelled()||await this.options.store.stopped()||cancelled())
+            throw new Error('CORE_CONSOLE_SETTLEMENT_CANCELLED');
         }
       }catch(error){
         // A reporting or local-settlement failure cannot bypass local fencing.
@@ -587,6 +649,7 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
     this.tail=work.catch(()=>{});return work;
   }
   private latchLocalStop():void{
+    this.stopSequence++;
     this.revoked=true;const monitor=this.monitor;this.monitor=undefined;this.desktop=false;monitor?.kill();
   }
   private async persistLocalStop():Promise<void>{
