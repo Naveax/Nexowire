@@ -27,3 +27,13 @@
 - AI-08: independent adversarial QA on **exact PR HEAD**, not borrowed green parent SHA.
 
 **Production verdict: NO-GO; CORE disabled; `mayDispatch=false`.**
+
+## Visible issuer and installation binding
+
+The user-facing `--enroll` consent text includes the requested device,
+installation ID, owner account and SID, key mode and **SHA-256 of the canonical
+P-256 authority SPKI** that will be stored in protected config. Noncanonical
+base64, truncated DER, unsupported curve or trailing bytes deny before any
+approval dialog. This is for operator visibility only: a self-consistent
+attacker-provided key remains untrusted absent AI-03/coordinator independent
+pin provenance.

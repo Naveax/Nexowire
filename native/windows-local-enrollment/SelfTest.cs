@@ -5,6 +5,43 @@ namespace Nexowire.LocalEnrollment;
 
 internal static class SelfTest
 {
+    private static void VerifyAuthorityPinAndVisibleConsent()
+    {
+        // Disposable ephemeral ECDSA keys and pure consent text only. Do not
+        // open a UI, create protected enrollment, modify SCM or accept UAC.
+        using var ephemeral=ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var der=ephemeral.ExportSubjectPublicKeyInfo();
+        var encoded=Convert.ToBase64String(der);
+        var pin=Program.RequireCanonicalAuthoritySpki(encoded);
+        Protocol.Require(pin==Protocol.Hash(der));
+        var grant=new Grant(2,"ES256-P1363","physical-console","diagnostic-owner-0001",
+            "S-1-5-21-100-200-300-1001",
+            "11111111-1111-4111-8111-111111111111",
+            "22222222-2222-4222-8222-222222222222",
+            "33333333-3333-4333-8333-333333333333",
+            new string('a',64),new string('b',64),1,1700000000000,null);
+        var visible=Program.EnrollmentConsentSummary(grant,"software",pin);
+        foreach(var value in new[]{grant.DeviceId,grant.InstallationId,
+            grant.OwnerAccountId,grant.OwnerSid,pin,
+            "TPM koruması yok","uzaktan komut yetkisi veya UAC otomasyonu vermez"})
+            Protocol.Require(visible.Contains(value,StringComparison.Ordinal));
+        // The real MessageBox must have readable line breaks, not \\n glyphs.
+        Protocol.Require(visible.Contains("\n",StringComparison.Ordinal));
+        var tpm=Program.EnrollmentConsentSummary(grant,"tpm",pin);
+        Protocol.Require(tpm.Contains("TPM (dışa aktarılamaz)",StringComparison.Ordinal));
+        using var differentCurve=ECDsa.Create(ECCurve.NamedCurves.nistP384);
+        foreach(var invalid in new[]{
+            "",encoded+" ",encoded+"\n","not-base64",
+            Convert.ToBase64String(der.AsSpan(0,der.Length-1)),
+            Convert.ToBase64String(differentCurve.ExportSubjectPublicKeyInfo())
+        })
+        {
+            var denied=false;
+            try{Program.RequireCanonicalAuthoritySpki(invalid);}
+            catch(InvalidDataException){denied=true;}
+            Protocol.Require(denied);
+        }
+    }
     private static void VerifyFailClosedRevocationEntries()
     {
         // Isolated temp directory only: no real ProgramData/SCM/ACL/UAC.
@@ -221,6 +258,7 @@ internal static class SelfTest
     }
     internal static void Run()
     {
+        VerifyAuthorityPinAndVisibleConsent();
         VerifyCorruptedProtectedRecordParser();
         VerifyFailClosedRevocationEntries();
         VerifyStrictNativeWireText();
@@ -260,7 +298,7 @@ internal static class SelfTest
             catch(InvalidDataException){duplicateDenied=true;}Protocol.Require(duplicateDenied);
             Console.WriteLine(JsonSerializer.Serialize(new {diagnosticOnly=true,privateExportDenied=denied,
                 localConsolePolicyTestsPassed=true,revocationFenceDiagnosticPassed=true,finalSessionFreshnessTestsPassed=true,
-                revokeMarkerFailClosedDiagnosticPassed=true,strictWireTextDiagnosticPassed=true,corruptStoreParserDiagnosticPassed=true,
+                revokeMarkerFailClosedDiagnosticPassed=true,strictWireTextDiagnosticPassed=true,corruptStoreParserDiagnosticPassed=true,authorityPinAndConsentDiagnosticPassed=true,
                 spkiBase64=Convert.ToBase64String(spki),grant=new SignedGrant(grant,signature),
                 session=new SignedSession(session,sessionSig)},Protocol.Json));
         }

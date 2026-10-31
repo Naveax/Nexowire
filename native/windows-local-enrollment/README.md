@@ -183,3 +183,15 @@ restored enrollment. An independent runner test calls the *uninstalled*
 a generic denial, without calling SCM or modifying any service, ACL, key or
 owner data. These **do not** test a real installed service restart/recovery;
 independent disposable SCM acceptance is still mandatory.
+
+## AI-02 local consent issuer visibility
+
+The visible owner approval now displays the **exact installation UUID, owner
+account ID, Windows SID, device UUID and the independently supplied authority
+public-key SHA-256**, alongside TPM/software protection mode. Incoming P-256
+authority SPKI is bounded, requires canonical base64, full DER consumption and
+canonical re-export before a fingerprint is shown or persisted. Disposable
+native tests reject noncanonical base64, malformed/truncated DER and wrong
+curve; no consent UI is actually opened by the test. Showing a fingerprint
+does **not** establish a trusted externally pinned issuer, grant generation,
+current remote revoke, or Agent binary provenance. Those remain NO-GO gates.

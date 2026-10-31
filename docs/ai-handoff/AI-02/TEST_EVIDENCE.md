@@ -34,3 +34,8 @@
 - New exact-HEAD CI is required for the native `--self-test` malformed StoreConfig JSON matrix and separate non-SYSTEM uninstalled `--service` denial. No protected storage, physical device, service install, UAC or production ACL is used.
 - Expected executable exit code: 1 for non-SYSTEM diagnostic `--service`, with `LOCAL_ENROLLMENT_REJECTED` and no side effects. CNG/SCM actual privileged start/stop/crash remains NOT TESTED.
 - Last observed verified base `97cb3668fe7f37e95c9730912d6637fd0a963c56`, CI #41204589273 Windows native 4/4 PASS; overall CI status must be checked separately before claiming success.
+
+## Consent issuer pin visibility (candidate, new exact SHA required)
+
+- Existing baseline `622c82c49d4f22817f49051c9310306c01532911`: exact workflow CI #41205430526 completed **SUCCESS 8/8**, its Windows native job 5/5 PASS.
+- New native disposable `--self-test` verifies canonical P-256 SPKI and displayed SHA-256 plus visible owner/device/installation scope; negatives cover padding/whitespace, malformed or truncated DER and P-384 curve. No MessageBox or real local consent is performed. A new exact HEAD CI must confirm native C# build and tests; no prior green-run inheritance.

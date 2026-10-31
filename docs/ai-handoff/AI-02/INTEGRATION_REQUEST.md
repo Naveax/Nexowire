@@ -16,3 +16,13 @@ Provide approved, disposable Windows environment for service start/stop/crash/re
 The pipe returns bounded generic denials without leaking keys or SID, while timeout/disconnect can close the pipe without a response. Coordinator should define protected redacted log/incident instrumentation before integration; do not expose enrollment secret or user telemetry in logs.
 
 **Ownership:** AI-02 `native/windows-local-enrollment/**`, `scripts/local-enrollment/**`, v2 protocol/test and own handoff only; AI-03 verifier/mTLS, coordinator shared Agent/CI/release, AI-08 independent QA. Never change somebody else's files. CORE remains disabled.
+
+## P0-06: independently verified authority pin provenance for visible owner consent
+
+AI-02 now displays the provisioned authority P-256 SPKI SHA-256 in the local
+consent summary and rejects noncanonical DER/base64. The local owner can
+inspect this fingerprint, but **nothing in AI-02 authenticates its provenance**.
+Coordinator/AI-03 must provide an out-of-band trusted fingerprint/issuer pin
+bound to signed installation identity and matching exact device+owner+generation,
+with a reviewed UX/verification step before production. Malicious but
+well-formed replacement keys remain a production NO-GO.
