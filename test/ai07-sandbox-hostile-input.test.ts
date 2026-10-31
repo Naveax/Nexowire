@@ -1,0 +1,93 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  assessTaskSandboxSourceOnly,
+} from '../src/agent/task-os-sandbox-policy.js';
+import {
+  executeTaskWithOsSandbox,
+  OsTaskSandboxBlockedError,
+} from '../src/agent/task-os-sandbox-worker.js';
+
+const sha = 'a'.repeat(64);
+const valid = () => ({
+  schema: 1, platform: 'win32', taskId: 'task1', originalRequestId: 'req1',
+  ownerId: 'owner1', deviceId: 'dev1', ownerEpoch: 7,
+  grantId: 'grant1', grantGeneration: 1,
+  executableDigest: sha, baseWorktreeSha: sha, workerPrivilege: 'standard',
+  args: ['--version'], envAllowlist: {},
+  taskRoot: { canonicalPath: 'C:\\work', volumeOrMountIdentity: 'vol1',
+    rootFileIdOrInode: 'fid1' },
+  network: { default: 'deny', allowedEndpoints: [] },
+  budgets: { cpuMs: 1000, wallMs: 2000, memoryBytes: 65536,
+    maxProcesses: 2, outputBytes: 4096, diskBytes: 4096 },
+});
+
+test('AI-07 nested hostile accessors cannot run during source-only assessment', async () => {
+  let invoked = 0;
+  const access = () => { invoked++; throw new Error('ambient getter executed'); };
+  const cases: unknown[] = [
+    { ...valid(), get workerPrivilege() { return access(); } },
+    { ...valid(), args: [Object.defineProperty({}, 'x', {get: access})] },
+    { ...valid(), args: [1, 'safe'] },
+    { ...valid(), taskRoot: { ...valid().taskRoot,
+      get canonicalPath() { return access(); } } },
+    { ...valid(), budgets: { ...valid().budgets,
+      get wallMs() { return access(); } } },
+    { ...valid(), envAllowlist: { get SECRET() { return access(); } } },
+    { ...valid(), network: { default: 'deny',
+      get allowedEndpoints() { return access(); } } },
+  ];
+  const accessorArgs = ['--version'];
+  Object.defineProperty(accessorArgs, '0', { get: access, configurable: true });
+  cases.push({ ...valid(), args: accessorArgs });
+  for (const intent of cases) {
+    const decision = assessTaskSandboxSourceOnly(intent);
+    assert.equal(decision.dispatchAllowed, false);
+    assert.ok(decision.blockers.includes('INVALID_TASK_INTENT') ||
+      decision.blockers.includes('PRIVILEGED_WORKER_FORBIDDEN') ||
+      decision.blockers.includes('AMBIENT_ENVIRONMENT_FORBIDDEN') ||
+      decision.blockers.includes('NETWORK_MUST_BE_DEFAULT_DENY') ||
+      decision.blockers.includes('INVALID_RESOURCE_BUDGET'));
+    await assert.rejects(executeTaskWithOsSandbox(intent),
+      (e: unknown) => e instanceof OsTaskSandboxBlockedError);
+  }
+  assert.equal(invoked, 0);
+});
+
+test('AI-07 adversarial report accessors cannot claim physical cleanup or permission', () => {
+  let invoked = 0;
+  const report = {
+    mutationState: 'completed',
+    get brokerHandleInherited() { invoked++; throw Error('exposed handle'); },
+    get descendantsContained() { invoked++; throw Error('claimed drain'); },
+    get revokeDrainVerified() { invoked++; throw Error('claimed release'); },
+  };
+  const decision = assessTaskSandboxSourceOnly(valid(), report);
+  assert.equal(invoked, 0);
+  assert.equal(decision.status, 'RECONCILE_REQUIRED');
+  assert.equal(decision.cleanupVerified, false);
+  assert.equal(decision.dispatchAllowed, false);
+  assert.equal(decision.mayReplayOriginalMutation, false);
+});
+
+test('AI-07 malformed or throwing Proxy reports deny instead of throwing', () => {
+  const hostile = new Proxy({}, {getPrototypeOf() {throw Error('hostile report');}});
+  const decision = assessTaskSandboxSourceOnly(valid(), hostile);
+  assert.equal(decision.status, 'RECONCILE_REQUIRED');
+  assert.equal(decision.dispatchAllowed, false);
+  assert.equal(decision.mayReplayOriginalMutation, false);
+  const invalidIntent = assessTaskSandboxSourceOnly(hostile, undefined);
+  assert.equal(invalidIntent.status, 'BLOCKED');
+  assert.equal(invalidIntent.dispatchAllowed, false);
+  assert.ok(invalidIntent.blockers.includes('INVALID_TASK_INTENT'));
+});
+
+test('AI-07 inherited report mutation state is not accepted as a replay permit', () => {
+  const inherited = Object.create({mutationState: 'not_started'});
+  inherited.descendantsContained = true;
+  inherited.revokeDrainVerified = true;
+  const decision = assessTaskSandboxSourceOnly(valid(), inherited);
+  assert.equal(decision.status, 'RECONCILE_REQUIRED');
+  assert.equal(decision.dispatchAllowed, false);
+  assert.equal(decision.mayReplayOriginalMutation, false);
+});

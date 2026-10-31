@@ -5,3 +5,5 @@
 - Linux namespace selftest in disposable lab: **NOT RUN**. No physical PASS claimed.
 - Whole-repo `npm run typecheck`, existing tests, new exact-head CI: verify via remote Actions; prior #859 CI run `40547392793` is **not** a new-head result.
 - No real installed/signed Agent, two-device owner grant/CAS, physical file/network/handle/descendant/revoke evidence: **NO-GO**.
+
+- AI-07 hostile-input source negatives: added; exact-head CI pending, no physical validation claimed.

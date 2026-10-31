@@ -5,3 +5,10 @@
 - A positive probe result is local/self readback, not independently protected identity evidence, no root filesystem or WFP/IP/IPC denial proof, no descendant containment, and no revoke drain.
 - Existing Linux namespace/seccomp probe remains selftest-only. Unsupported OS fails closed.
 - Genuine production enabling requires #02/#03 coordination, externally authenticated grants and OS-kernel observer; never replace this contract with mock booleans or stdout.
+
+
+## 2026-10-31 continuation: hostile JS evidence handling
+- `task-os-sandbox-policy.ts` now reads intent and OS report fields through own data descriptors rather than evaluating plain-object getters; malformed objects, sparse/hostile argv, environment symbols, and throwing Proxy prototype traps fail closed.
+- Any malformed non-null report or own `mutationState` (including terminal-looking values) demands `RECONCILE_REQUIRED`, never replay. Inherited spoofing is rejected.
+- This is still **source-only**. JavaScript Proxy reflection hooks are inherently executable; the true native trust boundary must authenticate serialized bytes and independent kernel readback outside the JS object graph.
+- Added `test/ai07-sandbox-hostile-input.test.ts` negative tests. Do not equate unit tests with Windows AppContainer isolation.
