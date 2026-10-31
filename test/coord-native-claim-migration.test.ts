@@ -8,7 +8,8 @@ const migration=readFileSync(
   'utf8',
 );
 
-function makeDb(preexisting=[]){
+type CoreOpState='reserved'|'dispatched'|'succeeded'|'denied'|'unknown';
+function makeDb(preexisting:ReadonlyArray<readonly [string,CoreOpState]>=[]){
   const db=new DatabaseSync(':memory:');
   db.exec(`CREATE TABLE device_core_console_operations(
     request_id TEXT PRIMARY KEY NOT NULL,
@@ -22,22 +23,22 @@ function makeDb(preexisting=[]){
   db.exec(migration);
   return db;
 }
-function insert(db,id,state='reserved'){
+function insert(db:DatabaseSync,id:string,state:CoreOpState='reserved'){
   return db.prepare(`INSERT INTO device_core_console_operations
     (request_id,device_id,installation_id,enrollment_id,
      owner_epoch,grant_generation,revoke_epoch,fingerprint,state,reserved_at_ms)
     VALUES(?,?,?,?,?,?,?,?,?,?)`)
     .run(id,'device','install','enroll',1,1,0,'a'.repeat(64),state,1000);
 }
-function row(db,id){
+function row(db:DatabaseSync,id:string){
   return db.prepare('SELECT state,native_claim_verified AS nativeClaimVerified FROM device_core_console_operations WHERE request_id=?')
     .get(id);
 }
-function advance(db,id,state){
+function advance(db:DatabaseSync,id:string,state:CoreOpState){
   return db.prepare('UPDATE device_core_console_operations SET state=? WHERE request_id=?')
     .run(state,id);
 }
-function verify(db,id){
+function verify(db:DatabaseSync,id:string){
   return db.prepare(`UPDATE device_core_console_operations SET native_claim_verified=1
     WHERE request_id=? AND state='dispatched' AND native_claim_verified=0`).run(id);
 }
