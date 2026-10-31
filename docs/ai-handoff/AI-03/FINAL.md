@@ -11,3 +11,5 @@
 - Outstanding: new HEAD exact CI, independent AI-08 review, AI-02 protected Windows local consent service and versioned ES256-v2 bridge, real issuer/restore witness and protected signer/PKI custody, deployment endpoint/Worker integration, independent Windows SID/LUID/reboot/revoke/two-device acceptance.
 - Integration contract and requests: `CONTRACT.md` and `INTEGRATION_REQUEST.md`.
 - No live Agent/Broker, Windows service, real user credential, UAC, CORE activation, merge, release, deploy or `main` push.
+
+- Additional regression: alternate CA-valid client with a reused bearer is denied by an explicitly certificate-bound test resolver; expired server TLS must be denied even when the client has the matching server SPKI pin. Production protected resolver provisioning and v2 issuer proof remain coordinator/AI-02 dependencies. Verify fresh exact-head CI before source acceptance.

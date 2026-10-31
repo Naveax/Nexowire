@@ -15,3 +15,7 @@
 
 ## AI-06 | Consumer only
 - Consume externally verified current-binding status; do not import test certificates, synthetic ledger, or enable executor from AI-03 results. Keep dispatch disabled without native readback and separate Broker admission.
+
+## Additional AI-02 / coordinator credential-binding acceptance
+- Protected `authenticateVerifier(credential, {certificateSha256}, signal)` implementation MUST reject bearer-token reuse with any other client certificate, **even when that certificate chains to the same trusted CA**. Bind a protected exact fingerprint to owner/device/installation and role, support explicit audited rotation/revocation, and recheck identity after asynchronous custody operations. No client-supplied `X-Forwarded-Client-Cert` or header fingerprint is evidence.
+- Independent issuer provenance blocker remains: the v1 request supplies `expected.issuerSpkiSha256`. A SQL handoff row that echoes that value is not proof of independently authenticated local issuer/grant ownership. Require versioned AI-02 v2 ES256 proof readback and verified issuer binding before any physical CORE GO.

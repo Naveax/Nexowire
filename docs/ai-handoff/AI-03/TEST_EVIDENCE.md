@@ -25,3 +25,9 @@
 - `npm run typecheck`: NOT RUN locally, exit N/A.
 - GitHub hosted CI results are separate and identified by exact SHA above. No verified local clone/dependencies; no local test execution claimed.
 - Synthetic CAs, software signing keys, test native witnesses and disposable PostgreSQL are **not** real human approval, Windows SCM, TPM/CNG/DPAPI custody, independent restore witness or production PKI. Physical CORE remains `NO_GO`.
+
+## Additional follow-up source tests (NEW HEAD: await exact-SHA CI)
+- Modified `test/core-native-enrollment-verifier-handler.test.ts` to generate two more disposable signed X.509 leaf certificates (alternate valid client and expired server). The test verifier's in-memory credential resolver now checks the *actual mTLS peer* SHA-256 in addition to its bearer credential.
+- Negative A: an alternate valid client certificate under the same CA with the original bearer reaches the resolver but must be denied 403 with **zero ledger reads/consumes**.
+- Negative B: an expired server certificate with a correctly configured SPKI pin must be rejected at TLS client validation before verifier authentication or ledger consume.
+- These tests are NOT a locally observed PASS; final SHA and fresh CI to be confirmed after publication. Existing Node 22/24 and disposable PostgreSQL success on prior exact HEAD `dbf3fa213e2e634479f86a95b241d2d68a6c0453` cannot be inherited by this follow-up commit.

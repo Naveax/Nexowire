@@ -18,3 +18,8 @@ AI-02 must provide explicitly authenticated, per-device provisioning for the ind
 A newly issued server certificate with a different SPKI requires an explicit, independently authenticated new pin. An old pin must reject the new certificate **before** authorization or DB access; never silently fetch or trust a replacement pin from the response. The disposable test cert may expire within hours and is not a provisioning scheme. Rotation of the signer/client CA, credential and revoke epochs is an operator/protected-service responsibility and must fail closed until both ends are coherently re-provisioned.
 
 No code in this PR authorizes dispatch, sets CORE active, provisions production credentials, installs a service, touches live devices or modifies the Worker.
+
+## Certificate-bound principal acceptance (source-only)
+- TLS CA verification only establishes that a client certificate was issued by a trusted CA. A separate protected resolver MUST bind the *exact observed* peer certificate SHA-256 to the same credential, owner, device, installation and `independent-enrollment-verifier` role. A different valid certificate from the same CA using a copied bearer must be denied before any ledger read or consume.
+- TLS server expiry is checked by the HTTPS client independently of the explicit SPKI pin: a matching pin MUST NOT override validity dates, hostname verification, or the CA chain. A rotated/replaced client cert requires an independently authenticated protected mapping update, never header-provided identity or an Agent setting.
+- The new fixture pins a disposable client certificate fingerprint in its resolver to exercise the contract. It does not implement a production credential resolver or establish physical owner consent.
