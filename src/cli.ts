@@ -8,6 +8,7 @@ import { loadConfig } from './config.js';
 import { runHttpServer } from './mcp/http.js';
 import { runLocalFirstIngress, verifyLocalFirstPublicUpstream } from './mcp/local-first-ingress.js';
 import { readOnlyLocalFirstFunnelPlan } from './mcp/local-first-funnel-plan.js';
+import { runCloudflareConnection } from './mcp/local-first-cloudflare.js';
 import { runStdioServer } from './mcp/stdio.js';
 import { createRuntime } from './runtime.js';
 import { loadRelayConfig } from './relay/config.js';
@@ -46,6 +47,8 @@ Usage:
   nexowire update [status|check|apply]   Check or apply verified official releases
   nexowire update auto [install|run|status|enable|disable|uninstall]
                    Manage the lightweight hourly Windows auto-updater
+  nexowire local-first cloudflare-run <absolute-profile.json>
+                   Run Cloudflare-only MCP ingress (no Tailscale or VPS)
   nexowire version Show the installed Nexowire version
   nexowire help    Show this help
 
@@ -106,6 +109,11 @@ async function main(): Promise<void> {
   }
 
   if (command === 'local-first') {
+    if (process.argv[3] === 'cloudflare-run') {
+      if(process.argv.length!==5)throw new Error('cloudflare-run requires one absolute profile JSON path');
+      await runCloudflareConnection(process.argv[4]!,loadConfig());
+      return;
+    }
     if (process.argv[3] === 'funnel-plan') {
       if (process.argv.length !== 4) throw new Error('funnel-plan accepts no options');
       process.stdout.write(JSON.stringify(await readOnlyLocalFirstFunnelPlan(),null,2)+'\n');

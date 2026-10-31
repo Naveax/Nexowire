@@ -39,6 +39,16 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - name: Verify Cloudflare-only connector lifecycle and active Agent authorization
+        timeout-minutes: 5
+        shell: pwsh
+        run: |
+          $binary = Join-Path $env:RUNNER_TEMP 'nexowire-cloudflared-2026.10.1.exe'
+          Invoke-WebRequest -Uri 'https://github.com/cloudflare/cloudflared/releases/download/2026.10.1/cloudflared-windows-amd64.exe' -OutFile $binary
+          if ((Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant() -ne '4d2490e74082c5d48dbfedaf92576fa5bd1702379ab88eb7faa0cfbe8dc891b6') { throw 'Official cloudflared checksum mismatch' }
+          $env:NEXOWIRE_CLOUDFLARED_TEST_BINARY = $binary
+          node --test --import tsx test/local-first-cloudflare.test.ts test/connection-active-authorization.test.ts test/control-plane-agent-auth.test.ts test/agent-broker.e2e.test.ts
+          if ($LASTEXITCODE -ne 0) { throw 'Connection Core verification failed' }
       - name: Verify recycled WAL and consecutive journal process restarts
         timeout-minutes: 5
         run: node --test --import tsx --test-concurrency=1 test/qa-journal-wal-recycle-p11.test.ts test/agent-operation-wal-integrity.test.ts test/agent-journal-restart-regression.test.ts test/native-agent-startup-diagnostic.test.ts

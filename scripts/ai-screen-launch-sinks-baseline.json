@@ -38,6 +38,7 @@
     "src/diagnostics/environment-doctor.ts#spawn": 1,
     "src/hub/hub-boot-lifecycle.ts#spawn": 1,
     "src/hub/hub-lifecycle.ts#spawn": 1,
+    "src/mcp/local-first-cloudflare.ts#spawn": 1,
     "src/security/platform-secret-store.ts#spawn": 1,
     "src/security/platform-secret-store.ts#spawnSync": 1,
     "src/security/windows-dpapi.ts#spawn": 1,
