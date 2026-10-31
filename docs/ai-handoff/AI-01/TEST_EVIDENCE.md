@@ -37,3 +37,9 @@ Evidence originates from the exact GitHub Actions job logs/steps for `eaff829784
 - `verifyAgentJournalWal` cannot make the separate `AgentOperationJournal.initialize()` call to SQLite's `new DatabaseSync(path)` atomic; the final path readback is not an independently trusted rollback/replay authority.
 - Full clone and local `git status`/`npm ci`/`npm run build` were unavailable in this runtime. GitHub source, per-file diff, exact CI SHA and runner logs are used instead.
 - AI-08 independent exact-HEAD/combined integration QA and coordinator-owned journal API change remain open. Source-only `READY_FOR_REVIEW`; production `NO_GO`.
+
+## Pending orphaned WAL/SHM fail-closed regression (new source commit)
+- Independent, disposable SQLite WAL-mode reproduction: checkpointed base contained `old=committed`, a later WAL-only `new-unknown=unknown`; deleting WAL while leaving SHM made a normal SQLite reopen return only `old`. This is a data-loss/replay risk for the Agent journal, **not** a physical user database finding.
+- The previous verifier returned success on the initial `-wal` ENOENT and did not check the orphaned `-shm`. Candidate fix refuses that state with `AGENT_JOURNAL_WAL_CORRUPT`; a genuine clean/brand-new journal with both sidecars absent still passes.
+- Two new deterministic disposable tests are appended to the AI-01 suite; no existing assertions are relaxed or skipped. **These two cases must not be claimed PASS until the new exact-HEAD CI succeeds.** Parent documentation-only SHA `7875ba77fe0f33be393cbf3c49d16ae9e839b5ff` has its own CI tracked independently.
+- SQLite upstream reference: https://www.sqlite.org/wal.html and https://www.sqlite.org/tempfiles.html (WAL contains persistent DB state and sidecar lifetimes). No live device/Agent/credential actions.

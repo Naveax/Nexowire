@@ -18,3 +18,5 @@
 - During WAL/SHM `lstat → open → handle.stat`, device/inode **and initial size/mtime/ctime metadata** must agree. An in-place pre-open truncate/metadata drift fails closed even if the opened inode remains the same. This still does **not** provide atomic preflight-to-SQLite-open continuity.
 
 - A WAL that is **absent at the first lstat** remains a legitimate no-WAL state, but a WAL or required recycled SHM **observed present and then missing before open** must fail closed with `AgentJournalWalError` / `AGENT_JOURNAL_WAL_CORRUPT`. This preserves the journal startup diagnostic contract while retaining the original absence semantics.
+
+- **Orphaned sidecar fail-closed:** if the WAL is absent at its first `lstat` but `dbFile+'-shm'` still exists, reject as `AGENT_JOURNAL_WAL_CORRUPT`. WAL loss can leave a valid-looking older base without WAL-only `UNKNOWN` reservation history; do not silently treat a dangling index as a clean initialization. Both sidecars absent stays a legitimate new/clean journal state. This is not an external anti-rollback proof and does not close the final verify-to-SQLite-open TOCTOU gap.

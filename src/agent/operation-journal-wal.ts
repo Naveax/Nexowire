@@ -121,7 +121,18 @@ export async function verifyAgentJournalWal(dbFile:string):Promise<void>{
   const walFile=dbFile+'-wal';
   let prior;
   try{prior=await fs.lstat(walFile)}catch(e){
-    if((e as NodeJS.ErrnoException).code==='ENOENT')return;
+    if((e as NodeJS.ErrnoException).code==='ENOENT'){
+      // A missing WAL with an orphaned SHM can conceal committed WAL-only
+      // journal entries (including UNKNOWN anti-replay tombstones). SQLite
+      // may reopen the base database without those entries. This is not the
+      // normal clean-start case where both sidecars are absent.
+      try{await fs.lstat(dbFile+'-shm');}
+      catch(shmError){
+        if((shmError as NodeJS.ErrnoException).code==='ENOENT')return;
+        throw shmError;
+      }
+      fail();
+    }
     throw e;
   }
   if(!prior.isFile()||prior.isSymbolicLink()){

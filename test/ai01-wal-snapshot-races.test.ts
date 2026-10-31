@@ -370,3 +370,29 @@ test('observed recycled SHM disappearance before open denies journal startup',as
   assert.deepEqual(await fs.readFile(f.file),f.main);
   assert.deepEqual(await fs.readFile(f.file+'-wal'),f.wal);
 });
+
+
+test('orphaned SHM after WAL loss denies silent UNKNOWN replay-data loss',async t=>{
+  const f=await fixture(t,true);
+  const wal=f.file+'-wal';
+  const shm=f.file+'-shm';
+  assert.ok(f.wal.length>32,'SQLite fixture must carry WAL-only UNKNOWN');
+  await fs.unlink(wal);
+  await assert.rejects(verifyAgentJournalWal(f.file),
+    {name:'AgentJournalWalError',code:'AGENT_JOURNAL_WAL_CORRUPT'});
+  await assert.rejects(fs.stat(wal),{code:'ENOENT'});
+  assert.deepEqual(await fs.readFile(f.file),f.main,
+    'preflight must not modify the checkpointed database');
+  assert.deepEqual(await fs.readFile(shm),f.shm,
+    'orphaned index evidence must remain untouched');
+});
+
+test('clean absence of both WAL and SHM permits a new journal',async t=>{
+  const dir=await fs.mkdtemp(path.join(os.tmpdir(),'nw-ai01-no-sidecars-'));
+  t.after(()=>fs.rm(dir,{force:true,recursive:true}));
+  const file=path.join(dir,'fresh.sqlite');
+  await verifyAgentJournalWal(file);
+  for(const candidate of [file,file+'-wal',file+'-shm']){
+    await assert.rejects(fs.lstat(candidate),{code:'ENOENT'});
+  }
+});
