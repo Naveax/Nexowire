@@ -315,8 +315,10 @@ export class PostgresCoreApprovalLedger {
       // Narrow the untrusted DB column independently. A caller-selected or
       // unknown-typed issuer must never enter the protected witness comparison.
       const storedIssuer=row?.issuer_spki_sha256;
-      if(typeof storedIssuer!=='string')fail('ENROLLMENT_NOT_CONSUMED');
-      if(!/^[a-f0-9]{64}$/.test(storedIssuer))fail('ENROLLMENT_NOT_CONSUMED');
+      if(typeof storedIssuer!=='string')
+        throw new CoreApprovalLedgerError('CORE_APPROVAL_ENROLLMENT_NOT_CONSUMED');
+      if(!/^[a-f0-9]{64}$/.test(storedIssuer))
+        throw new CoreApprovalLedgerError('CORE_APPROVAL_ENROLLMENT_NOT_CONSUMED');
       if(!row||row.authority_id!==this.authorityId||row.device_id!==expected.deviceId||
         row.proof_sha256!==this.proofHash(proof)||integer(row.consumed_ms,1)<proof.approvedAtMs)
         fail('ENROLLMENT_NOT_CONSUMED');
