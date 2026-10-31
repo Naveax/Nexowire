@@ -64,3 +64,15 @@ ile birlikte yeniden `closed/revoked/signal.aborted` kontrol eder.
 Geç abort sonucu `unknown` + STOP; native effect callback çağrılmaz.
 Bu JS sınırı gerçek OS effect ile atomik değildir: native protokolde
 owner/session/revoke/CAS ve effect-boundary doğrulaması yine zorunludur.
+
+## Completion ACK sırasında geç iptal
+
+`execute()` native çağrının tamamlanmasından sonra `complete` isteği
+gönderilmeden önce ve uzaktaki `complete` yanıtı geldikten sonra
+`STOP`, `revoked`, `closed` ve `signal.aborted` durumlarını
+yeniden kontrol eder. İptal eşzamanlı geldiyse kullanıcının karşısına
+eski bir `succeeded` cevabı çıkarılmaz. Kalıcı yerel STOP,
+`pendingDispatch` koruması ve revoke uygulanır. Fiziksel etki zaten
+gerçekleşmiş olabilir; bu durum sahte `denied` olarak sunulmaz.
+Uzak D1 tamamlanma ACK'sinin iptal ile yarışı protected effect-boundary
+CAS/generation gereksinimini ortadan kaldırmaz.

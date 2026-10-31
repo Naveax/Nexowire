@@ -39,3 +39,14 @@
   17/17 AI-06 testi PASS idi. Bu bilgi yeni kaynak için PASS değildir.
 - Açık P0, schema-native claim/complete onay işaretleyicisi ve protected
   OS effect boundary; `INTEGRATION_REQUEST.md` içinde ayrı, production NO-GO.
+
+## Ek tamamlanma-ACK yarışı
+
+`src/agent/windows-core-console-provider.ts` içinde native efekt
+sonrası `complete` gönderiminden önce ve ACK sonrasında STOP/abort/
+revoked/closed kontrolü eklendi. Yerel settlement I/O sonrasında da
+değişen durum yeniden denetlenir. Tamamlanma ACK anında iptal testi
+`test/core-console-provider.integration.test.ts` içine eklendi.
+Uzak D1 `succeeded` yazmış olabileceği için sonuç terminal UNKNOWN
+olarak yerelden fence edilir; gerçek OS-native effect atomikliği veya
+koordinatör migration'ı sağlanmış değildir. Production CORE NO-GO.

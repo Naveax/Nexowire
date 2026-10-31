@@ -500,6 +500,37 @@ test('AI-06: late STOP-readback cancellation blocks native callback after claim'
   }finally{f.db.close();}
 });
 
+test('AI-06: abort during remote completion ACK never returns stale native success',async()=>{
+  const f=fixture();
+  try{
+    const {provider}=await enable(f);
+    const profile=f.profile(),e=profile.certificate!.enrollment;
+    const requestId=randomUUID(),capability='windows.pointer.move';
+    const input={hwnd:'0x123',x:0,y:0};
+    const binding={ownerAccountId:owner,deviceId,installationId:profile.installationId};
+    const fingerprint=createHash('sha256')
+      .update(JSON.stringify([requestId,capability,input,binding])).digest('hex');
+    const controller=new AbortController();
+    let abortedAtCompletion=false;
+    f.before(body=>{
+      if(body.action==='complete'){
+        abortedAtCompletion=true;
+        controller.abort();
+      }
+    });
+    await assert.rejects(provider.execute({requestId,capability,input,fingerprint,binding,
+      enrollmentId:e.enrollmentId,ownerEpoch:e.ownerEpoch,grantGeneration:e.grantGeneration,
+      revokeEpoch:e.revokeEpoch},controller.signal),/CORE_CONSOLE_SETTLEMENT_CANCELLED/);
+    assert.equal(abortedAtCompletion,true,'abort must occur after native callback');
+    assert.equal(f.effects(),1,'a completed synthetic effect cannot be retroactively undone');
+    assert.equal(await f.store.stopped(),true,'late abort must persist STOP');
+    assert.equal((await (await f.make()).controller.status('full')).active,false,
+      'provider reconstruction must not resurrect the cancelled grant');
+    await assert.rejects(f.client.call(profile,'claim',{requestId,fingerprint}),
+      'already consumed request ID must never be replayable');
+  }finally{f.db.close();}
+});
+
 test('CORE OFF in the reserve->claim race prevents the actual native callback',async()=>{
   const f=fixture();try{const {controller}=await enable(f);
     f.before(body=>{if(body.action==='claim')f.db.exec('UPDATE device_maintenance_preferences SET enabled=0');});

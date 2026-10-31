@@ -591,12 +591,29 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
       finally{this.inFlightDispatch=undefined;signal.removeEventListener('abort',cancel);}
       const completionProfile=this.profile;
       try{
+        // A user may cancel after the native call but before D1 receives
+        // completion. Even if the native effect already happened, the provider
+        // must not report a known success while STOP is latched.
+        if(outcome!=='unknown'){
+          const stoppedBeforeCompletion=await this.options.store.stopped();
+          if(stoppedBeforeCompletion||this.closed||this.revoked||signal.aborted)
+            outcome='unknown';
+        }
         if(outcome==='unknown')await this.persistLocalStop();
         await this.options.authority.call(completionProfile,'complete',{...fields,outcome});
         if(outcome==='unknown')await this.revoke();
         else{
+          // Completion ACK itself is asynchronous. An abort/revoke arriving
+          // during that await cannot silently clear the pendingDispatch marker
+          // and publish a successful receipt. Recheck after local settlement
+          // too, including cancellation while the durable store was writing.
+          const cancelled=()=>this.closed||this.revoked||signal.aborted;
+          if(cancelled()||await this.options.store.stopped()||cancelled())
+            throw new Error('CORE_CONSOLE_SETTLEMENT_CANCELLED');
           const settled={...this.profile};delete settled.pendingDispatch;
           await this.options.store.save(settled);this.profile=settled;
+          if(cancelled()||await this.options.store.stopped()||cancelled())
+            throw new Error('CORE_CONSOLE_SETTLEMENT_CANCELLED');
         }
       }catch(error){
         // A reporting or local-settlement failure cannot bypass local fencing.

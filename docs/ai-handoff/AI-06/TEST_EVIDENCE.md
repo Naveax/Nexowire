@@ -63,3 +63,14 @@ yerine geçmedikçe yeni test PASS sayılmaz.
   iddia edilmez. Önceki 17/17 PASS kanıtı yalnız
   `33fdc91ffbb41ad69183ab0a93b2a3cdf146a15e`, run `41197159107`
   için geçerlidir.
+
+## Completion ACK sırasında iptal regresyonu (ek)
+
+`test/core-console-provider.integration.test.ts` içindeki
+`AI-06: abort during remote completion ACK...` sentetik fixture testi
+native callback sayacını ve `complete` isteğinde araya giren
+AbortController iptalini kontrol eder. Amaç: effect zaten meydana gelmiş
+olabilir (`effects=1`), fakat uygulama geç iptalden sonra eski
+başarı ACK'sini kullanıcıya döndürmemeli; STOP kalıcı olmalı,
+yeniden kurulan provider aktif sayılmamalı ve request replay edilememeli.
+Bu test yeni exact HEAD'in CI sonucu gelmeden PASS sayılmaz.
