@@ -19,8 +19,12 @@ function fixture(hostile?:{stage:Stage;variant:Variant}){
   };
   const counts={begin:0,commit:0,verify:0,effect:0,getter:0,trap:0};
   const ticket='ai04_receipt_only_fixture_ticket_0123456789';
+  const carry=(value:BrokerEffectReceipt):BrokerEffectReceiptEnvelope=>
+    Object.freeze(Object.assign(Object.create(null) as object,{
+      receipt:value,
+    })) as BrokerEffectReceiptEnvelope;
   function issue(state:'RESERVED'|'COMMITTED',req:BrokerEffectRequest,
-    nonce:string):BrokerEffectReceipt|BrokerEffectReceiptEnvelope{
+    nonce:string):BrokerEffectReceipt{
     const data={state,operationId:req.operationId,capability:req.capability,
       inputSha256:req.inputSha256,challengeNonce:nonce,ticket,
       binding:{...req.binding}};
@@ -34,12 +38,8 @@ function fixture(hostile?:{stage:Stage;variant:Variant}){
       getPrototypeOf(){counts.trap++;throw Error('UNTRUSTED_PROTOTYPE')},
       ownKeys(){counts.trap++;throw Error('UNTRUSTED_OWN_KEYS')},
     });
-    // A raw Proxy returned from async is inspected for 'then' by the JS
-    // runtime before our admission checks. Carry it as an opaque data field.
-    const carry=(value:BrokerEffectReceipt):BrokerEffectReceiptEnvelope=>
-      Object.freeze(Object.assign(Object.create(null) as object,{
-        receipt:value,
-      })) as BrokerEffectReceiptEnvelope;
+    // issue returns synchronously. Only the optional opaque transport method
+    // wraps the Proxy BEFORE it can be assimilated by an async Promise.
     switch(hostile.variant){
       case 'getter':
         Object.defineProperty(receipt,'state',{enumerable:true,
@@ -49,12 +49,12 @@ function fixture(hostile?:{stage:Stage;variant:Variant}){
         Object.defineProperty(receipt.binding,'ownerId',{enumerable:true,
           get(){counts.getter++;return req.binding.ownerId}});
         return receipt;
-      case 'proxy':return carry(proxy(receipt));
+      case 'proxy':return proxy(receipt);
       case 'binding-proxy':return {...receipt,binding:proxy(receipt.binding)};
       case 'extra':return {...receipt,unexpected:true} as BrokerEffectReceipt;
       case 'binding-extra':return {...receipt,
         binding:{...receipt.binding,unexpected:true}} as BrokerEffectReceipt;
-      case 'valid-envelope':return carry(receipt);
+      case 'valid-envelope':return receipt;
     }
   }
   const authority:BrokerExternalEffectAdmission={
@@ -75,6 +75,18 @@ function fixture(hostile?:{stage:Stage;variant:Variant}){
     },
     readVerifiedBindingNow:()=>({...scope}),
   };
+  if(hostile?.variant==='proxy'||hostile?.variant==='valid-envelope'){
+    // Preserve the legacy begin/commit TypeScript API for all existing
+    // callers. Only the hostile top-level Proxy and envelope baseline choose
+    // these explicit async carrier methods; no test assertion is relaxed.
+    authority.beginOpaque=async(req,nonce)=>{
+      counts.begin++;return carry(issue('RESERVED',req,nonce));
+    };
+    authority.commitOpaque=async(req,given,nonce)=>{
+      counts.commit++;assert.equal(given,ticket);
+      return carry(issue('COMMITTED',req,nonce));
+    };
+  }
   return {counts,run:()=>invokeBrokerEffectOnce(authority,randomUUID(),
     'windows.ai04.fixture',{approved:true},
     ()=>{counts.effect++;return 'fixture-effect'},()=>true)};

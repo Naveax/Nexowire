@@ -26,3 +26,6 @@
 
 ## 2026-11-01 hostile Proxy P0 triage
 Historical exact HEAD `8ae78075f2f1c6fbb1f314aa6c38ae6daf36d24a`, run 41249550536, Node22 failed both reserve/commit raw-Proxy cases at line 88: **`counts.trap=1`**, while `counts.effect=0`, `counts.getter=0`. Root cause is ECMAScript Promise assimilation `get('then')` before `snapshotReceipt`, not signed-byte mutation. AI-04 now supports a strictly validated frozen null-prototype receipt carrier with a nested hostile Proxy; existing zero-trap assertions remain unchanged and the native validation guard still denies the Proxy. One positive Ed25519 carrier regression added. New SHA requires exact CI proof; CORE remains NO-GO.
+
+## AI-04 follow-up TypeScript API compatibility
+Commit `2337a87aed5f008c1adfd5db923536f64f8639c5`, auto-run 41250843394, Node24 Typecheck FAIL TS2345 in coordinator-owned `test/privileged-broker-effect-admission.test.ts` lines 148/363/364/408/409, because enlarging legacy `begin/commit` result types broke existing callers. This is an AI-04 source contract regression. Fixed within AI-04 by restoring the exact legacy result signatures and introducing optional typed `beginOpaque/commitOpaque` transport hooks for the hostile source fixture. No other-agent tests or production API assertions changed; new exact SHA CI required.

@@ -55,10 +55,16 @@ export interface BrokerExternalEffectAdmission {
    * All arguments, including challengeNonce, are scoped to one admission.
    */
   begin(request: BrokerEffectRequest,challengeNonce: string):
-    Promise<BrokerEffectReceiptTransport>;
+    Promise<BrokerEffectReceipt | null>;
   /** One irreversible consumption. COMMIT ACK loss = UNKNOWN, never retry. */
   commit(request: BrokerEffectRequest,ticket: string,challengeNonce: string):
-    Promise<BrokerEffectReceiptTransport>;
+    Promise<BrokerEffectReceipt | null>;
+  /** Transport-safe optional alternative to directly resolving raw receipts.
+   * The carrier is an opaque null-prototype data object, never a permit. */
+  beginOpaque?(request:BrokerEffectRequest,challengeNonce:string):
+    Promise<BrokerEffectReceiptEnvelope>;
+  commitOpaque?(request:BrokerEffectRequest,ticket:string,challengeNonce:string):
+    Promise<BrokerEffectReceiptEnvelope>;
   /**
    * Authenticated proof verification using pinned external authority identity.
    * Caller-supplied fields/proofs must not satisfy this in production.
@@ -311,7 +317,11 @@ export async function invokeBrokerEffectOnce<T>(
   });
   const reserveNonce=randomBytes(32).toString('hex');
   let untrustedReservation:BrokerEffectReceiptTransport;
-  try{untrustedReservation=await authority.begin(request,reserveNonce)}catch{deny()}
+  try{
+    untrustedReservation=typeof authority.beginOpaque==='function'
+      ?await authority.beginOpaque(request,reserveNonce)
+      :await authority.begin(request,reserveNonce);
+  }catch{deny()}
   assertMonotonicFresh();
   // Never pass the transport-owned receipt to an async verifier.
   const reserved=snapshotReceipt(untrustedReservation);
@@ -328,7 +338,11 @@ export async function invokeBrokerEffectOnce<T>(
   const ticket=reserved.receipt.ticket;
   const commitNonce=randomBytes(32).toString('hex');
   let untrustedCommit:BrokerEffectReceiptTransport;
-  try{untrustedCommit=await authority.commit(request,ticket,commitNonce)}catch{deny()}
+  try{
+    untrustedCommit=typeof authority.commitOpaque==='function'
+      ?await authority.commitOpaque(request,ticket,commitNonce)
+      :await authority.commit(request,ticket,commitNonce);
+  }catch{deny()}
   assertMonotonicFresh();
   const committed=snapshotReceipt(untrustedCommit);
   if(!receiptMatches(committed.receipt,'COMMITTED',request,commitNonce,ticket)||
