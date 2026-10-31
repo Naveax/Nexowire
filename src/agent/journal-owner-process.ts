@@ -18,6 +18,7 @@ public static class NxJournalProcess {
   if(h==IntPtr.Zero)return Marshal.GetLastWin32Error()==87?"dead":"unknown";
   try {long c,e,k,u;uint code;
    if(!GetProcessTimes(h,out c,out e,out k,out u)||!GetExitCodeProcess(h,out code))return "unknown";
+   if(c<=0)return "unknown";
    if(code!=259)return "dead";
    return "win32:"+c.ToString("x16");
   }finally{CloseHandle(h);}
@@ -55,7 +56,7 @@ async function readProcess(pid:number):Promise<JournalOwnerProcess>{
     if(process.platform==='win32'){
       return await new Promise<JournalOwnerProcess>(resolve=>{
         const child=spawn('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
-          ['-NoLogo','-NoProfile','-NonInteractive','-Command',script],{windowsHide:true,
+          ['-NoLogo','-NoProfile','-NonInteractive','-Command',script],{windowsHide:true,cwd:'C:\\Windows\\System32',
             env:windowsDpapiChildEnvironment(),stdio:['pipe','pipe','pipe']});
         let out='',done=false;
         const finish=(value:JournalOwnerProcess)=>{if(done)return;done=true;clearTimeout(timer);resolve(value);};

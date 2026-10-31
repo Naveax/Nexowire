@@ -46,3 +46,19 @@ recovering that particular installation still needs independent owner-process
 evidence or confirmed original process exit. This patch allows diagnosis to stay
 available while preserving that boundary. The observed Funnel/connector host
 name mismatch is a separate connectivity problem, not this stack trace's cause.
+
+## #402 direct native launch review
+
+The new journal-owner-process.ts spawn is reviewed as an OS metadata probe,
+not a screen/input executor or general command runner. Executable and cwd are
+fixed Windows System32 paths; shell=false (Node default), NoProfile,
+NonInteractive and scrubbed child environment. Only a validated positive integer
+PID is passed on stdin. The constant C# body requests QUERY_LIMITED_INFORMATION,
+reads process times/exit status, and closes its non-inheritable handle. No write,
+termination, network, credential or GUI API exists in the payload. Output is
+limited to128 bytes and a strict identity/dead/unknown grammar; 30s absolute
+deadline kills the helper and returns unknown. Unknown birth evidence prevents
+a new Windows ownership claim. This reviews exactly one direct spawn count;
+the audit's remaining sinks and restrictions are unchanged. windowsHide is not
+claimed as an OS sandbox, and compiler descendants from Add-Type are not claimed
+to have independently proven sandbox isolation.

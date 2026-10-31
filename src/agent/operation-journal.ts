@@ -195,6 +195,8 @@ export class AgentOperationJournal{
         type Owner={pid:number;nonce:string;process_identity:string|null};
         const before=db.prepare('SELECT pid,nonce,process_identity FROM agent_operation_owner WHERE id=1').get() as Owner|undefined;
         const self=await readJournalOwnerProcess(process.pid);
+        if(process.platform==='win32'&&self.state!=='alive')throw new AgentOperationJournalError(
+          'AGENT_JOURNAL_OWNER_UNVERIFIED','Current Windows process incarnation unavailable; mutation ownership denied.');
         const observed=before?await readJournalOwnerProcess(before.pid):undefined;
         // BEGIN IMMEDIATE serializes independent connections/processes.
         // Never misclassify another live process's in-flight request.
