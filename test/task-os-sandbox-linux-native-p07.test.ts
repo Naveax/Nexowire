@@ -26,6 +26,13 @@ test('#07 Linux diagnostic has no arbitrary shell entry point',()=>{
   }
   assert.doesNotMatch(source,/\b(?:execve|execvp|execl|system|popen|posix_spawn)\s*\(/);
   assert.doesNotMatch(source,/for\s*\(int fd=3;fd<1024/);
+  // FD 0, 1 and 2 are untrusted too: they may be inherited host sockets.
+  assert.match(source,/SYS_close_range,0U,~0U,0U/);
+  assert.doesNotMatch(source,/SYS_close_range,3U,/);
+  assert.match(source,/fcntl\(fd,F_GETFD\)/);
+  // Never give task child a write syscall merely to print its own PASS marker.
+  assert.doesNotMatch(source,/NW07_SC_ALLOW\(write\)/);
+  assert.match(source,/else puts\("NW07_NAMESPACE_SECCOMP_SOURCE_SELFTEST_OK/);
 });
 
 test('#07 probe seccomp cannot allow task exec, networking, process creation or mount syscalls',()=>{

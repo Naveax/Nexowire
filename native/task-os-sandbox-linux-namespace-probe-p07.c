@@ -5,7 +5,7 @@
  *
  * The probe demonstrates a narrow rootless Linux user/mount/PID/net isolation
  * feasibility check, not task containment. It has no resource cgroup,
- * independent attester, trusted publisher, seccomp policy or revoke drain.
+ * independent attester, trusted publisher, task-capable seccomp policy or revoke drain.
  * Build: cc -std=c11 -O2 -Wall -Wextra -Werror FILE.c -o PROBE
  */
 #define _GNU_SOURCE
@@ -70,12 +70,11 @@ static int install_probe_seccomp(void) {
     BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K,NW07_SECCOMP_ARCH,1,0),
     BPF_STMT(BPF_RET|BPF_K,SECCOMP_RET_KILL_PROCESS),
     BPF_STMT(BPF_LD|BPF_W|BPF_ABS,(unsigned)offsetof(struct seccomp_data,nr)),
-    NW07_SC_ALLOW(write),
+    /* No inherited outputs remain after close_range(0,...), so even write
+     * is unnecessary. Only termination and signal return are permitted. */
     NW07_SC_ALLOW(exit),
     NW07_SC_ALLOW(exit_group),
     NW07_SC_ALLOW(rt_sigreturn),
-    NW07_SC_ALLOW(getpid),
-    NW07_SC_ALLOW(getuid),
     BPF_STMT(BPF_RET|BPF_K,SECCOMP_RET_ERRNO|EPERM),
   };
   const struct sock_fprog program = {
@@ -162,13 +161,21 @@ static int kernel_child(const char *root,int ready_fd,int resume_fd) {
   if(syscall(SYS_pivot_root,".",".old")<0)_exit(40);
   if(chdir("/")<0)_exit(41);
   if(umount2("/.old",MNT_DETACH)<0||rmdir("/.old")<0)_exit(42);
-  /* Keep only diagnostic stdout/stderr, not ambient inherited handles. */
+  /* An inherited stdin/stdout/stderr can itself be a Broker IPC socket or
+   * credential-bearing open file. Close *all* descriptors, including 0/1/2,
+   * rather than claiming that they are harmless terminal streams. Parent
+   * prints the static selftest marker after observing our final exit status.
+   */
 #ifdef SYS_close_range
-  if(syscall(SYS_close_range,3U,~0U,0U)<0)_exit(43);
+  if(syscall(SYS_close_range,0U,~0U,0U)<0)_exit(43);
 #else
   /* Never accept a finite-FD-loop as proof that all handles were closed. */
   _exit(43);
 #endif
+  for(int fd=0;fd<=2;++fd) {
+    errno=0;
+    if(fcntl(fd,F_GETFD)!=-1 || errno!=EBADF)_exit(54);
+  }
   if(prctl(PR_SET_NO_NEW_PRIVS,1,0,0,0)<0)_exit(44);
   struct stat st;
   if(getpid()!=1||getuid()!=0)_exit(45);
@@ -179,10 +186,7 @@ static int kernel_child(const char *root,int ready_fd,int resume_fd) {
   errno=0;
   int s=socket(AF_INET,SOCK_STREAM|SOCK_CLOEXEC,0);
   if(s!=-1 || errno!=EPERM)_exit(52);
-  const char marker[]=
-    "NW07_NAMESPACE_SECCOMP_SOURCE_SELFTEST_OK (NOT_RUNTIME_OR_PHYSICAL_ACCEPTANCE)\n";
-  if(write(STDOUT_FILENO,marker,sizeof(marker)-1)!=(ssize_t)(sizeof(marker)-1))
-    _exit(53);
+  /* No stdout, stderr, inherited socket or host file remains here. */
   _exit(0);
 }
 int main(int argc,char **argv) {
@@ -236,5 +240,6 @@ int main(int argc,char **argv) {
   if(!independently_observed)return 77;
   int rc=WEXITSTATUS(status);
   if(rc!=0)fprintf(stderr,"NW07_NAMESPACE_PROBE_BLOCKED stage=%d\n",rc);
+  else puts("NW07_NAMESPACE_SECCOMP_SOURCE_SELFTEST_OK (NOT_RUNTIME_OR_PHYSICAL_ACCEPTANCE)");
   return rc;
 }

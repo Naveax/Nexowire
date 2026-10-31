@@ -14,6 +14,11 @@
 #include <windows.h>
 #include <stdio.h>
 #include <string.h>
+/* Token APIs (OpenProcessToken, GetTokenInformation and SID checks) live in
+ * Advapi32, not Kernel32. Without this MSVC linking fails after compilation. */
+#if defined(_MSC_VER)
+#pragma comment(lib, "Advapi32.lib")
+#endif
 
 /* There is intentionally no CreateProcess, service, token mutation, or IPC. */
 static int read_dword_token(HANDLE token, TOKEN_INFORMATION_CLASS type,
@@ -47,6 +52,7 @@ static int read_integrity_rid(HANDLE token, DWORD *rid) {
 static int diagnostic_readback(void) {
   HANDLE token = NULL;
   DWORD elevated = 1, appcontainer = 0, integrity_rid = 0;
+  DWORD token_type = 0;
   BOOL in_job = FALSE;
   JOBOBJECT_EXTENDED_LIMIT_INFORMATION job;
   FILETIME created, exited, kernel, user;
@@ -58,6 +64,7 @@ static int diagnostic_readback(void) {
     return 77;
   }
   token_ok = read_dword_token(token, TokenElevation, &elevated) &&
+    read_dword_token(token, TokenType, &token_type) &&
     read_dword_token(token, TokenIsAppContainer, &appcontainer) &&
     read_integrity_rid(token, &integrity_rid);
   (void)CloseHandle(token);
@@ -66,12 +73,15 @@ static int diagnostic_readback(void) {
                               &job, sizeof(job), NULL);
   if (job_ok) flags = job.BasicLimitInformation.LimitFlags;
   clock_ok = GetProcessTimes(GetCurrentProcess(), &created, &exited,
-                             &kernel, &user) != 0;
+                             &kernel, &user) != 0 &&
+    (created.dwHighDateTime != 0 || created.dwLowDateTime != 0);
   /* Job presence is NOT confinement. No independent descendant, file,
    * network, handle/ACL, WFP or revoke-and-drain proof exists here. */
   if (!token_ok || elevated != 0 || appcontainer != 1 ||
+      token_type != (DWORD)TokenPrimary ||
       integrity_rid > SECURITY_MANDATORY_LOW_RID ||
       !job_ok || !clock_ok ||
+      (flags & JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE) == 0 ||
       (flags & (JOB_OBJECT_LIMIT_BREAKAWAY_OK |
                 JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK)) != 0) {
     fputs("NW07_WINDOWS_BOUNDARY_NOT_PROVEN (NO_TASK_EXEC)\n", stderr);

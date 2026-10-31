@@ -12,3 +12,8 @@
 - Any malformed non-null report or own `mutationState` (including terminal-looking values) demands `RECONCILE_REQUIRED`, never replay. Inherited spoofing is rejected.
 - This is still **source-only**. JavaScript Proxy reflection hooks are inherently executable; the true native trust boundary must authenticate serialized bytes and independent kernel readback outside the JS object graph.
 - Added `test/ai07-sandbox-hostile-input.test.ts` negative tests. Do not equate unit tests with Windows AppContainer isolation.
+
+## 2026-10-31 native probe hardening
+- Linux disposable probe now atomically closes **every** inherited fd (including 0/1/2), verifies EBADF on those streams, removes seccomp write permission, and prints the static success marker in the outer parent only after successful wait/readback. Existing native compile and opt-in smoke still distinguish physical execution from source.
+- Windows disposable probe now explicitly links Advapi32 for MSVC, requires TokenPrimary and a Job KILL_ON_JOB_CLOSE flag in addition to AppContainer/low-integrity/no-breakaway checks. None of these individual checks authorize production confinement.
+- Exact-head CI is tracked externally; no CI workflow reruns and no production permission.

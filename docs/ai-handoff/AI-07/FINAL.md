@@ -7,3 +7,6 @@ Changed files: `src/agent/task-os-sandbox-policy.ts`; `native/task-os-sandbox-wi
 - Missing: production OS worker, #03 admission, signed owner/CAS, independent AppContainer/Job handle/disk/network isolation, descendant cleanup and verified revoke.
 - No other-owner file mutation, merge, deploy, UAC/ACL/service, real Agent or OS policy changes.
 - Child Draft PR URL, final HEAD SHA, exact CI run IDs: read live Github metadata, not an embedded self-referential SHA.
+
+## Follow-on source hardening
+- Linux selftest child closes *all* FDs rather than retaining stdin/out/err and no longer has seccomp write; outer parent owns the synthetic marker. Windows C includes Advapi32 and checks TokenPrimary, Job close semantics. Kernel acceptance remains separate and **NO_GO**.
