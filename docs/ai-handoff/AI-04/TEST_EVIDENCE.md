@@ -31,3 +31,8 @@
 - New source: `native/windows-job-owner.c` restricts child inheritance to an explicit standard IO allowlist; new `test/ai04-broker-job-handle-inheritance.test.ts` has 2 source-only static negative tests.
 - The previous 7/7 run applies ONLY to `c5fb0e424cc30e2adaaa2dec9235d62eb6a4ce4d`, not the new C changes. A new Windows native compile + Job launch/regression step on the new exact commit is mandatory; its results are pending at documentation authoring time.
 - Even if compilation and Job tests succeed, equal-HIGH and medium-token physical evidence remain BLOCKED without independent kernel proof.
+
+## Exact previous head CI result and next security regression
+- HEAD `62f73e1ddfa4c7fc8ebadcd7b7499393a66cc380`: `CI` run `41196171288` **completed SUCCESS 7/7**. Ubuntu Node 22/24, Windows browser-live, linux-native-live, WSL2, macos-agent-lifecycle-live, security-operational-live all SUCCESS. Windows hosted `Compile native Windows Job guardian` and `Physical Windows Job Object regressions` steps completed SUCCESS; two new handle-allowlist tests PASS in Ubuntu Node 24 full suite. Not an installed-Broker or physical token acceptance.
+- Additional in-scope follow-up: provider-owned `ProtectedBrokerEvidence` must be copied from own data descriptors, frozen and validated BEFORE any CAS await. New `test/ai04-broker-protected-witness-snapshot.test.ts` exercises 9 disposable tests: immutable forwarding, four rejecting getter witnesses, two rejection points after async CAS, proxy trap and inherited prototype. Results **PENDING** at doc authoring; new exact-head CI required.
+- Blocked physical criteria unchanged: equal-HIGH/SeDebug, UAC linked token, Job pre-seal handle theft, independent installed Broker OS proof.

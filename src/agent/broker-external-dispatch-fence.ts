@@ -116,6 +116,39 @@ type Permit=z.infer<typeof permit>;
 type Commit=z.infer<typeof committed>;
 type RevokeProof=z.infer<typeof revoked>;
 function deny(code:string):never{throw new WitnessAuthorityError(code)}
+/**
+ * The native witness boundary may supply an object whose property getters,
+ * prototype or references change between validation and a remote CAS await.
+ * Read a fixed set of own DATA descriptors exactly once and freeze primitives
+ * before checking any security field. This is a source-side TOCTOU fence,
+ * NOT proof of an independently protected Windows token or process.
+ */
+function snapshotProtectedBrokerEvidence(raw:unknown):ProtectedBrokerEvidence {
+  if(!raw || typeof raw!=='object' || Array.isArray(raw))
+    deny('DISPATCH_HIGH_TOKEN_UNVERIFIED');
+  try {
+    const prototype=Object.getPrototypeOf(raw);
+    if(prototype!==Object.prototype && prototype!==null)
+      deny('DISPATCH_HIGH_TOKEN_UNVERIFIED');
+    const descriptors=Object.getOwnPropertyDescriptors(raw);
+    const fields=[
+      'verified','brokerId','ownerEpoch','grantGeneration',
+      'highIntegrityToken','signedProtectedImage','protectedParentAndImports',
+    ] as const;
+    const snapshot:Record<string,unknown>=Object.create(null);
+    for(const key of fields) {
+      const descriptor=descriptors[key];
+      if(!descriptor || !Object.hasOwn(descriptor,'value') ||
+         descriptor.enumerable!==true)
+        deny('DISPATCH_HIGH_TOKEN_UNVERIFIED');
+      snapshot[key]=descriptor.value;
+    }
+    return Object.freeze(snapshot) as unknown as ProtectedBrokerEvidence;
+  }catch{
+    return deny('DISPATCH_HIGH_TOKEN_UNVERIFIED');
+  }
+}
+
 /** Source gate: does not modify #03/#04 Broker/Access owner implementation. */
 export class BrokerExternalDispatchFence {
   private readonly publicKey:KeyObject;
@@ -186,9 +219,11 @@ export class BrokerExternalDispatchFence {
   /** Refresh native Broker evidence after every remote CAS await before effect admission. */
   private async verifyBrokerFor(request:BrokerDispatchRequest,
     expectedBrokerId?:string):Promise<ProtectedBrokerEvidence>{
-    let broker:ProtectedBrokerEvidence;
-    try{broker=await this.config.verifyEffectiveBroker()}
+    let raw:ProtectedBrokerEvidence;
+    try{raw=await this.config.verifyEffectiveBroker()}
     catch{return deny('DISPATCH_EFFECTIVE_BROKER_UNAVAILABLE')}
+    // Never retain a provider-owned live object across the next await.
+    const broker=snapshotProtectedBrokerEvidence(raw);
     if(!broker||broker.verified!==true||
        !uuid.safeParse(broker.brokerId).success||
        broker.highIntegrityToken!==true||

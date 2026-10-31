@@ -13,3 +13,7 @@
 ## Additional in-scope hardening
 - Native Windows Job guardian now limits `CreateProcessW` inheritance to duplicated standard IO handles through `PROC_THREAD_ATTRIBUTE_HANDLE_LIST`; unexpected inheritable handles cannot be passed by the unbounded `TRUE` flag alone.
 - Additional new static regressions: `test/ai04-broker-job-handle-inheritance.test.ts` (2 tests). This C change is NOT covered by the earlier `c5fb...` successful run; require a new exact-HEAD Windows MSVC build and runtime regression before declaring source REVIEW complete.
+
+## Current exact-head CI and new in-scope work
+- Native handle inheritance source HEAD `62f73e1ddfa4c7fc8ebadcd7b7499393a66cc380`: CI `41196171288` completed SUCCESS **7/7**, including hosted Windows MSVC guardian compile and Windows Job regression step. The prior evidence snapshot is preserved in TEST_EVIDENCE.
+- New source-only hardening in `src/agent/broker-external-dispatch-fence.ts`: null-prototype frozen native Broker evidence snapshot before verifying/forwarding it to remote CAS. Reject inherited, accessor and throwing proxy properties. New `test/ai04-broker-protected-witness-snapshot.test.ts` (9 tests) targets initial and post-await native witness drift. This follow-up commit has its own exact SHA/CI and MUST NOT inherit `41196171288` result.

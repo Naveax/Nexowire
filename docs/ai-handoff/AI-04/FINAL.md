@@ -23,3 +23,7 @@
 ## Additional AI-04 implementation in review
 - Native Job root inheritance allowlist: `native/windows-job-owner.c` restricts child handles to duplicated standard IO; no unrestricted fallback. `test/ai04-broker-job-handle-inheritance.test.ts` adds 2 static regression assertions.
 - Previous successful run `41194719016` predates this native change. New exact-head CI must be checked, including Windows Job guardian build and physical fixture steps. Production remains NO_GO regardless of fixture success.
+
+## New source hardening after exact successful CI
+- `broker-external-dispatch-fence.ts`: detached/frozen native Broker evidence passed into remote CAS; rejects accessor, inherited and throwing proxy claims. New `test/ai04-broker-protected-witness-snapshot.test.ts` contains 9 disposable cases for mutation, owner/high getter and async readback poisoning.
+- The previous head `62f73e1ddfa4c7fc8ebadcd7b7499393a66cc380` passed `CI 41196171288` SUCCESS 7/7. This new source change has NO exact-head CI conclusion at documentation authoring. Do not treat old CI as its proof.

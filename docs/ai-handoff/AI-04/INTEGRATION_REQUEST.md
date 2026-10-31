@@ -16,3 +16,7 @@
 ## Newly identified handle-inheritance boundary
 - AI-04 owns a narrow change to `native/windows-job-owner.c` that replaces broad `CreateProcessW(..., TRUE, ...)` inheritance with an explicit `PROC_THREAD_ATTRIBUTE_HANDLE_LIST` containing only deliberately duplicated standard IO handles.
 - AI-07 still owns the complete worker token/handle/environment policy. AI-08 should verify the Windows native build + Job launch with this change at the new exact commit. Existing equal-HIGH, pre-seal and UAC-linked kernel proof blockers are independent.
+
+## AI-05 and verifier witness scope addendum
+- Source-only `broker-external-dispatch-fence.ts` now snapshots its native Broker witness. AI-05 must never reinterpret this snapshot as physical protected process evidence; the independent provider must authenticate the real HIGH token, image, owner epoch and session at each readback.
+- AI-08: add external negative review for native Broker evidence getter ABA and mutation while begin/commit await. Verify post-commit readback cannot silently substitute Broker identity.

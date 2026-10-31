@@ -15,3 +15,7 @@
 ## Native Job handle inheritance (AI-04)
 - Guardian must create the root with `STARTUPINFOEXW`, `PROC_THREAD_ATTRIBUTE_HANDLE_LIST`, and exactly its duplicated standard IO handles. An implicit inherited ancestor token, Job, file or pipe must never be accepted as safe.
 - Failure to duplicate standard IO or configure the attribute list fails closed before the root is created. This is a process-launch restriction, not a full AI-07 sandbox or installed-Broker physical trust proof.
+
+## Protected Broker readback snapshot contract
+- `BrokerExternalDispatchFence.verifyBrokerFor()` must only accept an own-data, plain/null-prototype witness with fixed primitive fields (verified, brokerId, ownerEpoch, grantGeneration, highIntegrityToken, signedProtectedImage, protectedParentAndImports).
+- A detached frozen copy is validated and passed to `beginIfCurrent`/`commitIfCurrent`. Any accessor/proxy/inherited field fails closed. Future readbacks must re-attest independently; freezing the JS object is NOT an OS signature, kernel readback or durable CAS proof.
