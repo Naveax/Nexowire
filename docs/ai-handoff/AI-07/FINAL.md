@@ -58,3 +58,6 @@ Test-only Linux fixture now also rejects inherited synthetic environment when `c
 
 ### PID1 early-orphan kernel witness
 Added pre-fork direct-parent pidfd to close the race where a parent died before PID1 installed its kernel parent-death signal. Both pre/post-gate PID1 checks fail closed; unsupported PIDFD and errors deny. Only disposable selftest protected; production NO-GO and independent native OS/Broker/worker evidence still required.
+
+### Executable early-orphan test and kernel fallback
+Added `test/ai07-sandbox-linux-pidfd-orphan.test.ts` with an intentionally broken PIDFD-readback control; native source now declares its FD before feature detection so missing SYS_pidfd_open compiles to DENIED 86 instead of referring to an undefined variable. Full task isolation still unavailable, Production NO-GO.

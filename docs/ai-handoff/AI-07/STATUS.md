@@ -76,3 +76,6 @@ Linux diagnostic forced termination no longer abandons direct-child cleanup afte
 
 ## 2026-11-01 native PID1 pre-prctl parent-death gap
 - A child in CLONE_NEWPID can observe an out-of-namespace parent as PID 0, so `getppid` is not reliable in namespace PID1. The direct diagnostic parent now opens `pidfd_open(getpid(), 0)` **before** forking; namespace PID1 inherits that exact parent handle, installs `PR_SET_PDEATHSIG(SIGKILL)`, then checks the pidfd with nonblocking `poll` both before and after the second-approval pipe gate. A dead/unknown parent fails with 87, unsupported pidfd fails 86, closure failure fails 88. No native task execution enabled.
+
+## 2026-11-01 PIDFD early-orphan real kernel regression
+- Added `test/ai07-sandbox-linux-pidfd-orphan.test.ts`. Disposable Linux test forks a parent that exits **before** its subject installs PR_SET_PDEATHSIG; inherited pre-fork self pidfd must report POLLIN. Guarded variant returns 0 with explicit BLOCKED marker; deliberately unguarded variant returns exit 55 and unsafe marker. No native Nexowire task, physical user token or production permission is involved.

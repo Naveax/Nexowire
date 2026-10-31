@@ -217,8 +217,9 @@ static int kernel_child(const char *root,int ready_fd,int resume_fd) {
    * parent dies before namespace PID1 installs PR_SET_PDEATHSIG. The kernel
    * fd pins identity even across PID namespaces and prevents PID reuse.
    * If unsupported, do not run the native selftest or claim a permit. */
+  int direct_parent_pidfd=-1;
 #ifdef SYS_pidfd_open
-  int direct_parent_pidfd=(int)syscall(SYS_pidfd_open,getpid(),0);
+  direct_parent_pidfd=(int)syscall(SYS_pidfd_open,getpid(),0);
   if(direct_parent_pidfd<0) {
     (void)close(gate[0]);(void)close(gate[1]);
     return 86;

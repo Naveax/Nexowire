@@ -69,3 +69,6 @@ Added AI-07 test cases with 32768-character single argument, two 20000-character
 ### Early parent-death race mitigation source review
 - Added native probe pre-fork self `pidfd_open`, inherited parent pidfd post-`PR_SET_PDEATHSIG` checks before/after gate and explicit FD cleanup. Local isolated Linux 6.18.57 / GCC 14.2 proof of mechanism: six standalone kernel fixture runs simulated parent death **before** child-installed `PR_SET_PDEATHSIG`; inherited pidfd `poll(POLLIN)` detected it and fixture exited `87` in all 6, with process reaped by a subreaper. This does **not** execute the native namespace selftest in CI or independently attest a task worker.
 - Exact-head native compile and Node source assertion CI remain pending. Protected production descendant cleanup, cgroup v2 and Windows native worker still unavailable.
+
+### Early-orphan PIDFD: independent real Linux kernel test
+- Local isolated Linux 6.18.57 x86_64 / GCC 14.2, `cc -O2 -Wall -Wextra -Werror`. Prior standalone fixture verified 4 protected `exit 0` and 4 intentionally disabled guard `exit 55`; both require subreaper and bounded wait. The new repository test reproduces this scenario and must pass exact-HEAD CI; no assumption that this proves native OS worker identity or descendant drain.
