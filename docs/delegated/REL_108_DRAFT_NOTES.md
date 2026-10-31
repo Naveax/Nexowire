@@ -38,4 +38,3 @@
 ## İnceleme kaydı
 
 Tarih/saat: bu dosyanın git commit zamanı (Europe/Istanbul gösterimiyle raporlanır). OS Linux, Node v24.22.1. Kanıt: repository source + GitHub API read-only + yalnız sentetik yeni test. Açık PR listesi ve güncel CI okundu; bu dosyalarda çakışma olan PR görülürse koordinatör incelemeyi durdurmalı. Gerçek log, cihaz, CORE/Broker/auth/üretim müdahalesi YOK. Yerel test ve exact teslim SHA'sı FINAL_HANDOFF/PR açıklamasındadır.
-
