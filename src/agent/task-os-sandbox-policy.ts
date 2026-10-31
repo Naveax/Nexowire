@@ -85,10 +85,15 @@ function boundedArgs(value: unknown): boolean {
     for (let i = 0; i < (length as number); i++) {
       const item = Object.getOwnPropertyDescriptor(value, String(i));
       if (!item || !('value' in item) || typeof item.value !== 'string' ||
-          item.value.length > 32768) return false;
+          item.value.length > 32768 || item.value.includes('\0')) return false;
     }
     return true;
   } catch { return false; }
+}
+/** Source-only shape restriction; NOT native canonical file identity proof. */
+function boundedTaskRootPath(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 &&
+    value.length <= 32767 && !value.includes('\0');
 }
 function boundedId(value: unknown): value is string {
   return typeof value === 'string' && value.length >= 1 && value.length <= 128 &&
@@ -137,8 +142,7 @@ export function assessTaskSandboxSourceOnly(
     !boundedId(own(task, 'deviceId')) || !boundedId(own(task, 'grantId')) ||
     !nonnegativeEpoch(own(task, 'ownerEpoch')) || !nonnegativeEpoch(own(task, 'grantGeneration')) ||
     !digest(own(task, 'executableDigest')) || !digest(own(task, 'baseWorktreeSha')) ||
-    !root || typeof own(root, 'canonicalPath') !== 'string' ||
-    !own(root, 'canonicalPath') ||
+    !root || !boundedTaskRootPath(own(root, 'canonicalPath')) ||
     !boundedId(own(root, 'volumeOrMountIdentity')) ||
     !boundedId(own(root, 'rootFileIdOrInode')) ||
     !boundedArgs(own(task, 'args'))) {

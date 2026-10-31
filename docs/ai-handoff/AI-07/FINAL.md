@@ -34,3 +34,6 @@ A second bounded outer-parent kernel readback now precedes the gate for the test
 
 ### PID1 gate hardening
 Addressed premature direct-parent SIGPIPE termination and late PR_SET_PDEATHSIG installation in disposable probe handshake. Deny-only OS task dispatch and external production NO-GO remain unchanged.
+
+### Additional denial/teardown hardening
+Eliminated inner Linux PID1 unbounded wait on both rejection and success paths; strict source-level NUL/length checks for task argv/path. Real OS kernel witness, Job/cgroup descendant drain and protected worker identity are still absent, therefore **NO_GO**.

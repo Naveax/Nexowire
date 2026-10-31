@@ -63,6 +63,13 @@ test('#07 Linux diagnostic has no arbitrary shell entry point',()=>{
   assert.match(source,/if\(got==pid\)return signals_ok\?-2:-1/);
   assert.match(source,/now-start>=5000LL/);
   assert.doesNotMatch(source,/waitpid\(pid,status,0\)/);
+  // Namespace PID1's normal and error-path waits must be bounded.
+  assert.match(source,/reap_disposable_pid1\(pid,&blocked_status,1\)==1\?61:83/);
+  assert.match(source,/int waited=reap_disposable_pid1\(pid,&status,0\)/);
+  assert.match(source,/if\(waited==1\)return 81/);
+  assert.match(source,/if\(waited!=0\)return 84/);
+  assert.match(source,/if\(now-start>=9000LL\)return -1/);
+  assert.doesNotMatch(source,/while\(waitpid\(pid,&status,0\)/);
 
 });
 

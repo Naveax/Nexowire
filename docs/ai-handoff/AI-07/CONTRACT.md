@@ -54,3 +54,6 @@ The outer source-only diagnostic requires `/proc/<probe-pid>/ns/pid_for_children
 
 ### Second-stage PID1 cancellation hardening
 The disposable namespace init calls `prctl(PR_SET_PDEATHSIG, SIGKILL)` before waiting on its private `gate[0]`; the direct probe fork parent ignores SIGPIPE so a closed gate is an ordinary failed write and triggers its exact spawned-PID cleanup path. Neither POSIX process-group death nor these local barriers count as kernel-certified descendant drain for a real task.
+
+### Inner child bounded wait and NUL truncation
+The rootless probe's inner namespace PID1 is reaped with finite monotonic `waitpid(...,WNOHANG)` windows after both allow and reject gates. A timeout attempts exact-owned PID1 SIGKILL; no observed reap implies blocked exit, not simulated descendant cleanup. The source-only sandbox policy rejects embedded NUL argv/root strings and root paths beyond 32767 UTF-16 code units, but an OS provider must revalidate canonical native file identity and exact serialization separately.

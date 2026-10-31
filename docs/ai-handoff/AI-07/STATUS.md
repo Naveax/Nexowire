@@ -46,3 +46,7 @@ Linux diagnostic forced termination no longer abandons direct-child cleanup afte
 ## 2026-10-31 PID1 gate failure handling
 - PID1 now installs PR_SET_PDEATHSIG before blocking on the private second-stage gate. The fork parent ignores SIGPIPE before sending the second-stage ready signal, so EPIPE on a vanished PID1 enters its existing exact-child kill/reap denial path rather than terminating the parent asynchronously.
 - This remains a source-only diagnostic, not an independently attested launcher or a full task/revoke containment implementation.
+
+## 2026-10-31 extra fail-closed source work
+- The disposable Linux PID namespace helper now uses monotonic WNOHANG polling in BOTH normal and rejected gate paths; it kills/reaps **only its freshly forked test PID1** within 9s. A killed or unobserved child returns blocked (81/83/84), never success. The test PID1 cannot be a task worker.
+- Source intent rejects embedded NUL in argv/task-root strings and bounds root path length. This is input-shape defense only, not Windows/Linux canonical file identity, symlink containment, or a native security permit.

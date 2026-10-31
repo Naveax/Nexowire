@@ -140,6 +140,32 @@ static int observe_child_pid_namespace(pid_t child) {
   return (host.st_dev!=observed.st_dev || host.st_ino!=observed.st_ino)?0:-1;
 }
 
+/* Direct-child-only reap: only the test-owned namespace PID1 just forked
+ * by this process is eligible. Both natural and forced waits are bounded.
+ * No host PID or caller-supplied identifier can reach this helper.
+ * Return 0 for natural exit, 1 for kill+reap, -1 for uncertain cleanup. */
+static int monotonic_ms(long long *out);
+static int reap_disposable_pid1(pid_t pid,int *status,int force_kill) {
+  if(pid<=1)return -1;
+  long long start,now;
+  int killed=force_kill;
+  if(force_kill && kill(pid,SIGKILL)<0 && errno!=ESRCH)return -1;
+  if(monotonic_ms(&start)<0)return -1;
+  for(;;) {
+    pid_t got=waitpid(pid,status,WNOHANG);
+    if(got==pid)return killed?1:0;
+    if(got<0 && errno!=EINTR)return -1;
+    if(monotonic_ms(&now)<0)return -1;
+    if(!killed && now-start>=6500LL) {
+      if(kill(pid,SIGKILL)<0 && errno!=ESRCH)return -1;
+      killed=1;
+    }
+    if(now-start>=9000LL)return -1;
+    const struct timespec pause={.tv_sec=0,.tv_nsec=20000000L};
+    (void)nanosleep(&pause,NULL);
+  }
+}
+
 static int kernel_child(const char *root,int ready_fd,int resume_fd) {
   /* Self-observed namespace inode difference: NOT an independent attester. */
   struct stat user_before, net_before, user_after, net_after;
@@ -191,16 +217,17 @@ static int kernel_child(const char *root,int ready_fd,int resume_fd) {
     (void)close(ready_fd);(void)close(resume_fd);
     if(!accepted || write(gate[1],"Y",1)!=1) {
       (void)close(gate[1]);
-      /* The only PID targeted is the disposable child just forked here.
-       * A missing/invalid parent OS witness cannot start the selftest. */
-      (void)kill(pid,SIGKILL);
+      /* A missing/invalid parent OS witness cannot start the selftest.
+       * Kill and confirm reap of only this freshly forked PID1, within
+       * a monotonic deadline; uncertainty always stays non-success. */
       int blocked_status=0;
-      while(waitpid(pid,&blocked_status,0)<0)if(errno!=EINTR)break;
-      return 61;
+      return reap_disposable_pid1(pid,&blocked_status,1)==1?61:83;
     }
     (void)close(gate[1]);
     int status=0;
-    while(waitpid(pid,&status,0)<0)if(errno!=EINTR)return 37;
+    int waited=reap_disposable_pid1(pid,&status,0);
+    if(waited==1)return 81; /* timed-out PID1 killed, not a PASS */
+    if(waited!=0)return 84; /* uncertain PID1 cleanup */
     return WIFEXITED(status)?WEXITSTATUS(status):38;
   }
   (void)close(gate[1]);
