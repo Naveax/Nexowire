@@ -96,3 +96,23 @@ test('native-compatible account ID grammar rejects Unicode, spaces and JSON esca
     assert.doesNotThrow(()=>persistentEnrollmentBytes({...f.grant.payload,ownerAccountId:valid}));
   }
 });
+
+test('cross-runtime signed wire values reject actual terminal newline',()=>{
+  const f=fixture();
+  for(const bad of [
+    {...f.grant.payload,ownerAccountId:f.grant.payload.ownerAccountId+'\n'},
+    {...f.grant.payload,ownerSid:f.grant.payload.ownerSid+'\n'},
+    {...f.grant.payload,machineBindingSha256:f.grant.payload.machineBindingSha256+'\n'},
+    {...f.grant.payload,issuerSpkiSha256:f.grant.payload.issuerSpkiSha256+'\n'},
+  ]){
+    assert.throws(()=>persistentEnrollmentBytes(bad));
+    assert.throws(()=>verifyPersistentEnrollmentSession({
+      ...f,grant:{...f.grant,payload:bad},
+    }),/V2_REJECTED/);
+  }
+  for(const bad of [
+    {...f.session.payload,ownerSid:f.session.payload.ownerSid+'\n'},
+    {...f.session.payload,enrollmentSha256:f.session.payload.enrollmentSha256+'\n'},
+    {...f.session.payload,logonLuid:f.session.payload.logonLuid+'\n'},
+  ])assert.throws(()=>persistentSessionBytes(bad));
+});

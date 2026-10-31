@@ -20,3 +20,11 @@
 - Local assistant container lacks `dotnet`, PowerShell and repository dependency checkout. Never claim local success on the basis of remote/fixture tests.
 - The new lock-file and console policy diagnostics exercise disposable OS features; they do not establish protected ProgramData ACL correctness or two-PC physical acceptance.
 - The parent PR's CI artifacts and prior SHA PASS are not transferred to a new SHA. No duplicate dispatch/rerun on an active SHA/workflow/input.
+
+## Native canonical text and revoked-marker hardening, source candidate
+
+- Last verified HEAD: `0bdf0849d7815e3fad09875516f04521d22e025f`, CI run `41200786909` SUCCESS 8/8. This evidence does NOT transfer to later commits.
+- New native `VerifyStrictNativeWireText` rejects trailing newline on account/SID/hash/LUID. JS regression checks the same exact values; .NET `\\z` is a strict end-of-input anchor.
+- New `VerifyFailClosedRevocationEntries` uses isolated temp root to reject malformed file or directory-shaped `revoked.json` marker. Production Load does not use ambiguous `File.Exists` for revocation decision.
+- Test command (Windows CI): `dotnet build native/windows-local-enrollment/Nexowire.LocalEnrollment.csproj -c Release -o native/windows-local-enrollment/bin/qa --nologo`; `node --test --import tsx test/windows-local-enrollment-native.test.ts`; `node --test --import tsx test/core-persistent-enrollment-v2.test.ts`.
+- New exact SHA/run/exit codes require a later CI readback. Local container lacks .NET/PowerShell checkout and cannot claim local PASS. These tests do NOT prove physical Windows SCM/owner approval, TPM, restart or two-PC acceptance.

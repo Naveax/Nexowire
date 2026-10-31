@@ -15,12 +15,14 @@ test('actual Windows CNG non-exportable diagnostic key interoperates with v2 ver
   const exe=fileURLToPath(new URL('../native/windows-local-enrollment/bin/qa/Nexowire.LocalEnrollment.exe',import.meta.url));
   const result=spawnSync(exe,['--self-test'],{encoding:'utf8',timeout:45000,maxBuffer:65536,windowsHide:true});
   assert.ifError(result.error);assert.equal(result.status,0,result.stderr);
-  const f=JSON.parse(result.stdout) as {diagnosticOnly:boolean;privateExportDenied:boolean;localConsolePolicyTestsPassed:boolean;revocationFenceDiagnosticPassed:boolean;spkiBase64:string;
+  const f=JSON.parse(result.stdout) as {diagnosticOnly:boolean;privateExportDenied:boolean;localConsolePolicyTestsPassed:boolean;revocationFenceDiagnosticPassed:boolean;revokeMarkerFailClosedDiagnosticPassed:boolean;strictWireTextDiagnosticPassed:boolean;spkiBase64:string;
     grant:{payload:PersistentEnrollmentV2;signatureBase64:string};
     session:{payload:PersistentSessionV2;signatureBase64:string}};
   assert.equal(f.diagnosticOnly,true);assert.equal(f.privateExportDenied,true);
   assert.equal(f.localConsolePolicyTestsPassed,true);
   assert.equal(f.revocationFenceDiagnosticPassed,true);
+  assert.equal(f.revokeMarkerFailClosedDiagnosticPassed,true);
+  assert.equal(f.strictWireTextDiagnosticPassed,true);
   const p=f.grant.payload,s=f.session.payload;
   // Identical canonical bytes are indirectly checked by signatures from CNG;
   // the service's JSON output alone cannot establish a successful verifier.

@@ -181,10 +181,18 @@ internal static class ProtectedStore
         }
         catch{handle.Dispose();throw;}
     }
+    internal static void RequireNoRevocationMarker(string root)
+    {
+        // File.Exists can return false on access denied / I/O failure.
+        // Enumeration throws instead of treating an inaccessible revoke
+        // marker as absent; even malformed files or directories deny.
+        Protocol.Require(!Directory.EnumerateFileSystemEntries(
+            root,"revoked.json",SearchOption.TopDirectoryOnly).Any());
+    }
     internal static (StoreConfig Config,SignedGrant Grant) Load()
     {
         AssertPath(Root);
-        Protocol.Require(!System.IO.File.Exists(FileName("revoked.json")));
+        RequireNoRevocationMarker(Root);
         var c=Read<StoreConfig>("config.json");var g=Read<SignedGrant>("grant.json");
         Protocol.Require(c.Version==1 && c.OwnerSid==g.Payload.OwnerSid &&
             c.OwnerAccountId==g.Payload.OwnerAccountId && c.DeviceId==g.Payload.DeviceId &&

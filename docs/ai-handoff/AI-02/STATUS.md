@@ -9,3 +9,9 @@
 - No existing agent branch changed, no merge/rebase/force-push, no live OS/device/service/Agent/Broker/UAC, no private user data.
 - **CORE:** disabled; `mayDispatch=false`; production **NO-GO**. The independent verifier and protected Agent executable/identity trust remain coordinator and AI-03 handoffs.
 - **Next:** exact-HEAD CI and independent AI-08 review, no QA skip. If a platform-specific acceptance test cannot run, mark it NOT TESTED.
+
+## 31 Oct 2026 | additional source review
+
+- Verified prior exact HEAD `0bdf0849d7815e3fad09875516f04521d22e025f`, CI `41200786909` SUCCESS 8/8.
+- Source candidate: C# strict end anchor, ambiguous revoke marker fail-closed, disposable negative regressions; exact new head/run must be recorded after push. No premature PASS.
+- Ownership unchanged, Draft #993 on #984, CORE disabled, no live or merge/deploy action.

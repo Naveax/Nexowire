@@ -5,6 +5,70 @@ namespace Nexowire.LocalEnrollment;
 
 internal static class SelfTest
 {
+    private static void VerifyFailClosedRevocationEntries()
+    {
+        // Isolated temp directory only: no real ProgramData/SCM/ACL/UAC.
+        var root=Path.Combine(Path.GetTempPath(),"nexowire-ai02-revoke-"+Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var marker=Path.Combine(root,"revoked.json");
+        try
+        {
+            ProtectedStore.RequireNoRevocationMarker(root);
+            File.WriteAllBytes(marker,new byte[]{0xff,0x00,0x01});
+            var denied=false;
+            try{ProtectedStore.RequireNoRevocationMarker(root);}
+            catch(InvalidDataException){denied=true;}
+            Protocol.Require(denied);
+            File.Delete(marker);
+            Directory.CreateDirectory(marker);
+            denied=false;
+            try{ProtectedStore.RequireNoRevocationMarker(root);}
+            catch(InvalidDataException){denied=true;}
+            Protocol.Require(denied);
+        }
+        finally{Directory.Delete(root,true);}
+    }
+    private static void VerifyStrictNativeWireText()
+    {
+        // Native '$' may match before the final newline, unlike JS
+        // end-anchoring; canonical signed values must never differ.
+        var grant=new Grant(2,"ES256-P1363","physical-console","diagnostic-owner-0001",
+            "S-1-5-21-100-200-300-1001",
+            "11111111-1111-4111-8111-111111111111",
+            "22222222-2222-4222-8222-222222222222",
+            "33333333-3333-4333-8333-333333333333",
+            new string('a',64),new string('b',64),1,1700000000000,null);
+        Protocol.Validate(grant);
+        foreach(var bad in new[]{
+            grant with { OwnerAccountId=grant.OwnerAccountId+"\n" },
+            grant with { OwnerSid=grant.OwnerSid+"\n" },
+            grant with { MachineBindingSha256=grant.MachineBindingSha256+"\n" },
+            grant with { IssuerSpkiSha256=grant.IssuerSpkiSha256+"\n" }
+        })
+        {
+            var denied=false;
+            try{Protocol.Validate(bad);}
+            catch(InvalidDataException){denied=true;}
+            Protocol.Require(denied);
+        }
+        var session=new Session(2,new string('a',64),
+            "44444444-4444-4444-8444-444444444444",
+            "nexowire.local-enrollment.session",
+            "55555555-5555-4555-8555-555555555555",
+            1,grant.OwnerSid,"0000000000001234",1700000001000,1700000011000);
+        Protocol.SessionBytes(session);
+        foreach(var bad in new[]{
+            session with { OwnerSid=session.OwnerSid+"\n" },
+            session with { EnrollmentSha256=session.EnrollmentSha256+"\n" },
+            session with { LogonLuid=session.LogonLuid+"\n" }
+        })
+        {
+            var denied=false;
+            try{Protocol.SessionBytes(bad);}
+            catch(InvalidDataException){denied=true;}
+            Protocol.Require(denied);
+        }
+    }
     private static void VerifyIpcFraming()
     {
         // Strict parser-only contract tests. No SCM, pipe, grant or consent.
@@ -129,6 +193,8 @@ internal static class SelfTest
     }
     internal static void Run()
     {
+        VerifyFailClosedRevocationEntries();
+        VerifyStrictNativeWireText();
         VerifyIpcFraming();
         VerifyConsoleSnapshotPolicy();
         VerifyDisposableExclusiveFence();
@@ -165,6 +231,7 @@ internal static class SelfTest
             catch(InvalidDataException){duplicateDenied=true;}Protocol.Require(duplicateDenied);
             Console.WriteLine(JsonSerializer.Serialize(new {diagnosticOnly=true,privateExportDenied=denied,
                 localConsolePolicyTestsPassed=true,revocationFenceDiagnosticPassed=true,finalSessionFreshnessTestsPassed=true,
+                revokeMarkerFailClosedDiagnosticPassed=true,strictWireTextDiagnosticPassed=true,
                 spkiBase64=Convert.ToBase64String(spki),grant=new SignedGrant(grant,signature),
                 session=new SignedSession(session,sessionSig)},Protocol.Json));
         }
