@@ -23,7 +23,7 @@
 |---|---|---|
 | HTTP 401 | HTTP kimlik doğrulama katmanı; `src/mcp/http.ts:250,275`, `MCP_AUTH_REQUIRED` | Eksik/geçersiz credential olasılığı; path, endpoint ve response code birlikte kaydet. Broker health unauthenticated 401 beklenen olabilir (#974). Otomatik yeniden kimlik kurma yok |
 | HTTP 403 | `src/mcp/http.ts:301`, `MCP_TOOL_NOT_AUTHORIZED` | Kimlik doğrulanmış olsa da kapsam/cihaz yetkisi yeterli olmayabilir. Tool allowlist reddi bu handler için doğrulanmıştır; diğer endpoint nedenleri ayrı doğrulanmalı |
-| HTTP 409 | Çakışma/idempotency/replay bağlamı | Her 409 replay değildir; request/operation ID ve gerçek kodu koru; mutation tekrar etme |
+| HTTP 409 | Çakışma/idempotency/replay bağlamı | `cloudflare/worker.js:492,533` içindeki `SETUP_ALREADY_CONFIGURED` setup çakışmasıdır. Her 409 replay değildir; request/operation ID ve gerçek kodu koru; mutation tekrar etme |
 | `PERMISSION_DENIED` | `mcp-agent-outcome-reconciliation.test.ts` | Failed olarak kalıcı kayıt; yeniden çağrı error cache döndürür, broker bir kez çağrılır |
 | `PATH_DENIED`, `MCP_TARGET_NOT_AUTHORIZED`, `UNAVAILABLE` | #539'da bildirilen ayrımlar | Yol, hedef yetkisi, erişilebilirlik farklıdır; denial bypass önerilmez. Tüm handler eşlemeleri bu belgede tamamlanmış sayılmaz |
 | Transport fail | Kanal/bağlantı başarısız | Komutun hiç ulaşmadığı kanıtlanmadıkça tekrar güvenli sayılmaz |
