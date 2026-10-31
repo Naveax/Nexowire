@@ -81,7 +81,9 @@ test('winning verified dispatch can complete but duplicate and late updates cann
     assert.equal(verify(db,'r2').changes,0);
     assert.equal(advance(db,'r2','succeeded').changes,1);
     assert.deepEqual(row(db,'r2'),{state:'succeeded',nativeClaimVerified:1});
-    assert.throws(()=>advance(db,'r2','denied'),/CORE_NATIVE_CLAIM_NOT_VERIFIED/);
+    assert.throws(()=>advance(db,'r2','denied'),/CORE_COMPLETED_OPERATION_TERMINAL/);
+    assert.deepEqual(row(db,'r2'),{state:'succeeded',nativeClaimVerified:1},
+      'completed operation must remain irrevocably succeeded after denied replay');
   }finally{db.close();}
 });
 
