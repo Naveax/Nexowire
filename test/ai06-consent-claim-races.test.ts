@@ -74,10 +74,13 @@ function fixture(){
   };
   const state=()=>db.prepare('SELECT state FROM device_core_console_operations WHERE request_id=?')
     .get(requestId)?.state;
-  return {db,call,state,pause:(work:()=>Promise<void>)=>{pause=work;},
+  return {db,call,state,deviceStatus:()=>authority.deviceStatus(deviceId,ownerAccountId),
+    pause:(work:()=>Promise<void>)=>{pause=work;},
     denyNativeReadback:()=>{nativeReadbackAllowed=false;}};
 }
 
+const rotatedPublicKeySpki=generateKeyPairSync('ed25519').publicKey
+  .export({format:'der',type:'spki'}).toString('base64');
 const races=[
   {name:'offline',sql:'UPDATE devices SET online=0',
     restore:'UPDATE devices SET online=1'},
@@ -93,6 +96,9 @@ const races=[
     restore:'UPDATE device_maintenance_preferences SET enabled=1'},
   {name:'bridge disabled',sql:"UPDATE device_bridge_preferences SET desired_mode='off'",
     restore:"UPDATE device_bridge_preferences SET desired_mode='auto'"},
+  {name:'signing key rotated under the same enrollment',
+    sql:`UPDATE device_core_console_authority SET public_key_spki='${rotatedPublicKeySpki}'`,
+    restore:null},
   {name:'owner session epoch rotated',
     sql:"UPDATE device_core_console_authority SET windows_logon_session_epoch='replaced-ai06-epoch'",
     restore:null},
@@ -167,5 +173,30 @@ test('AI-06: positive synthetic single claim succeeds but cannot replay',async()
     assert.equal(f.state(),'dispatched');
     await assert.rejects(f.call('claim'));
     assert.equal(f.state(),'dispatched');
+  }finally{f.db.close();}
+});
+
+test('AI-06: owner enrollment status denies a signing-key rotation during native readback',async()=>{
+  const f=fixture(),g=deferred();
+  try{
+    f.pause(g.wait);
+    const pending=f.deviceStatus();
+    await g.started;
+    f.db.prepare('UPDATE device_core_console_authority SET public_key_spki=?')
+      .run(rotatedPublicKeySpki);
+    g.release();
+    const status=await pending;
+    assert.equal(status.localEnrolled,false,'stale native identity must not publish local enrollment');
+    assert.equal(status.active,false);
+  }finally{g.release();f.db.close();}
+});
+
+test('AI-06: missing local signing key cannot be classified as enrolled',async()=>{
+  const f=fixture();
+  try{
+    f.db.exec('UPDATE device_core_console_authority SET public_key_spki=NULL');
+    const status=await f.deviceStatus();
+    assert.equal(status.localEnrolled,false);
+    assert.equal(status.active,false);
   }finally{f.db.close();}
 });

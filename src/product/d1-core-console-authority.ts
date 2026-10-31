@@ -203,6 +203,7 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
             if(latest.device_ready!==1||latest.device_platform!=='win32'||
               latest.owner_account_id!==before.owner_account_id||
               latest.installation_id!==before.installation_id||latest.enrollment_id!==before.enrollment_id||
+              latest.public_key_spki!==before.public_key_spki||
               latest.owner_epoch!==before.owner_epoch||latest.grant_generation!==before.grant_generation||
               latest.revoke_epoch!==before.revoke_epoch||
               latest.native_consent_receipt_id!==before.native_consent_receipt_id||
@@ -259,14 +260,14 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
     }
   }
   async deviceStatus(deviceId:string,ownerAccountId:string){
-    type StatusRow={enrollment_id:string|null;installation_id:string|null;
+    type StatusRow={enrollment_id:string|null;installation_id:string|null;public_key_spki:string|null;
       owner_epoch:number;grant_generation:number;revoke_epoch:number;
       enrollment_requested:number;device_ready:number;physical_active:number;
       status_observed_at_ms:number|null;fresh:number;native_consent_receipt_id:string|null;
       windows_user_sid:string|null;windows_session_id:number|null;windows_logon_luid:string|null;
       windows_logon_session_epoch:string|null};
     const readRow=()=>this.db.prepare(`SELECT c.enrollment_id,c.enrollment_requested,
-      c.installation_id,c.owner_epoch,c.grant_generation,c.revoke_epoch,
+      c.installation_id,c.public_key_spki,c.owner_epoch,c.grant_generation,c.revoke_epoch,
       c.physical_active,c.status_observed_at_ms,c.native_consent_receipt_id,
       c.windows_user_sid,c.windows_session_id,c.windows_logon_luid,c.windows_logon_session_epoch,
       CASE WHEN ${READY} THEN 1 ELSE 0 END device_ready,
@@ -274,7 +275,7 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
       ${JOIN} WHERE d.id=? AND d.owner_account_id=?`).bind(deviceId,ownerAccountId).first<StatusRow>();
     let row=await readRow();
     let nativeCurrent=false;
-    if(row?.enrollment_id&&row.installation_id&&row.native_consent_receipt_id&&
+    if(row?.enrollment_id&&row.installation_id&&row.public_key_spki&&row.native_consent_receipt_id&&
       row.windows_user_sid&&row.windows_session_id&&row.windows_logon_luid&&
       row.windows_logon_session_epoch&&this.nativeEnrollmentVerifier){
       try {
@@ -291,6 +292,7 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
         const latest=await readRow();
         nativeCurrent=nativeCurrent&&!!latest&&latest.enrollment_id===row.enrollment_id&&
           latest.installation_id===row.installation_id&&
+          latest.public_key_spki===row.public_key_spki&&
           latest.owner_epoch===row.owner_epoch&&
           latest.grant_generation===row.grant_generation&&
           latest.revoke_epoch===row.revoke_epoch&&latest.native_consent_receipt_id===row.native_consent_receipt_id&&

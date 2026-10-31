@@ -33,3 +33,9 @@ npm run typecheck                                                   NOT_RUN loca
 ```
 
 Bunlar için **yerel exit code yoktur**; başarılı gibi sunulmaz. CI testleri Node 22 ve 24 Linux runners'ında doğrulandı. Windows gerçek OS readback sınıflandırması ve fiziksel user acceptance ayrı kapıdır. `CORE_EXECUTOR_DISPATCH_ENABLED=false`, `localEnrolled=false` ve physical consent NO-GO varsayımı korunur.
+
+## AI-06 ek kaynak düzeltmesi ve henüz doğrulanmamış testler
+
+İnceleme `D1CoreConsoleAuthority.handle('claim')` içindeki asenkron native readback sonrası kontrolün `public_key_spki` değişikliğini dışladığını gösterdi. `deviceStatus()` readback sırasında SPKI rotasyonunu da karşılaştırmıyordu. Yeni fail-closed karşılaştırma her iki yola eklendi. Ayrıca eksik public key'in `localEnrolled` oluşturması yasaklandı.
+
+Yeni test sayısı: **16** (önceden CI PASS olan 13 + 1 claim-side signing-key race + 1 owner-status signing-key race + 1 missing-key status). Bu 3 yeni test ve ilgili production source fix için exact-head CI sonucu henüz yoktur, **PASS iddia edilmez**. D1 bellek-içi testinin gerçek protected signer veya OS oturum yetkisi olmadığını unutma. İlk HEAD #41194595574, sonraki doküman HEAD #41194860390 ayrı workflow/commit durumlarıdır. Yeni kaynak HEAD/CI kimliği PR ve Actions üzerindeki son commit üzerinden raporlanacaktır.
