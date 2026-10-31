@@ -83,6 +83,25 @@ async function atWalStat(walPath:string,number:number,mutate:()=>Promise<void>,
   assert.equal(triggered,true,'must hit the intended race barrier');
 }
 
+
+// Deterministic metadata race between the first lstat() and the actual
+// fs.open(). No scheduler timing, physical Agent, or production journal.
+async function atPreOpen(file:string,mutate:()=>Promise<void>,
+  assertion:()=>Promise<void>){
+  const originalOpen=fs.open;
+  let triggered=false;
+  fs.open=(async(pathArg:Parameters<typeof fs.open>[0],
+    flags:Parameters<typeof fs.open>[1],mode?:Parameters<typeof fs.open>[2])=>{
+    if(String(pathArg)===file&&flags==='r'){
+      triggered=true;
+      await mutate();
+    }
+    return originalOpen(pathArg,flags,mode);
+  }) as typeof fs.open;
+  try{await assertion();}finally{fs.open=originalOpen;}
+  assert.equal(triggered,true,'must intercept the pre-open metadata race');
+}
+
 test('clean hot WAL and authentic recycled WAL remain accepted without mutation',async t=>{
   for(const recycle of [false,true]){
     const f=await fixture(t,recycle);
@@ -292,4 +311,36 @@ test('checksum-valid current WAL with a missing final commit marker fails closed
   assert.deepEqual(await fs.readFile(f.file+'-wal'),tampered);
   assert.deepEqual(await fs.readFile(f.file),f.main);
   assert.deepEqual(await fs.readFile(f.file+'-shm'),f.shm);
+});
+
+
+test('pre-open WAL truncate cannot be mistaken for a stable empty WAL',async t=>{
+  const f=await fixture(t,false);
+  const wal=f.file+'-wal';
+  assert.ok(f.wal.length>32,'fixture must start with a nonempty WAL');
+  await atPreOpen(wal,()=>fs.truncate(wal,0),async()=>{
+    await assert.rejects(verifyAgentJournalWal(f.file),
+      {code:'AGENT_JOURNAL_WAL_CORRUPT'});
+  });
+  assert.equal((await fs.stat(wal)).size,0);
+  assert.deepEqual(await fs.readFile(f.file),f.main);
+  assert.deepEqual(await fs.readFile(f.file+'-shm'),f.shm);
+});
+
+test('recycled WAL detects byte-identical SHM metadata drift before open',async t=>{
+  const f=await fixture(t,true);
+  const shm=f.file+'-shm';
+  const before=await fs.stat(shm);
+  await atPreOpen(shm,async()=>{
+    const old=new Date('2000-01-01T00:00:00.000Z');
+    await fs.utimes(shm,old,old);
+    assert.notEqual((await fs.stat(shm)).mtimeMs,before.mtimeMs,
+      'test must modify the metadata but leave SHM contents intact');
+  },async()=>{
+    await assert.rejects(verifyAgentJournalWal(f.file),
+      {code:'AGENT_JOURNAL_WAL_CORRUPT'});
+  });
+  assert.deepEqual(await fs.readFile(f.file+'-wal'),f.wal);
+  assert.deepEqual(await fs.readFile(shm),f.shm,
+    'rejection must be based on metadata drift, not byte corruption');
 });

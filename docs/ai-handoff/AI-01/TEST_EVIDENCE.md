@@ -23,3 +23,9 @@
 - `41194627316`: önceki `0f48b9...` HEAD'te TS2532 typecheck FAIL (düzeltildi). `41194708825`: `236b215...` HEAD'te CANCELLED. `41194972463`: `57791204...` HEAD'te 7/7 SUCCESS. `41196318562`: `8e44c3...` HEAD'te kaynak testleri geçti; sonraki push sebebiyle workflow CANCELLED, tam PASS sayılmaz.
 - Bu runtime'da authenticated GitHub connector aracılığıyla commit/diff/CI doğrulandı. Yerel clone ve tam `git status`, `npm ci`, `npm run typecheck`, `npm run build` çalıştırılmış gibi gösterilmiyor.
 - Bu doküman değişikliği için yeni exact HEAD CI sonucunu **ayrı doğrula**; son başarılı kaynak SHA'sını yeni HEAD'e otomatik aktarma.
+
+## Pending AI-01 pre-open metadata race regression (new commit)
+- **Source-review finding:** the previous WAL/SHM pre-open check only matched device/inode. A same-inode WAL truncation between initial `lstat` and `fs.open` could be treated as a stable empty WAL, silently losing evidence of pending mutation reservations.
+- New deterministic isolated test: snapshot WAL initially contains SQLite frames, `fs.open` interception truncates it *before* opening, and preflight must reject with `AGENT_JOURNAL_WAL_CORRUPT`. The test asserts DB and SHM snapshots remain intact.
+- New independent SHM test: after a genuine SQLite RESTART/recycle WAL fixture, `fs.open` interception changes only SHM timestamps, retaining every SHM byte; preflight must reject metadata drift.
+- These new tests are not claimed PASS until this **new exact HEAD** CI succeeds. Earlier CI 41199721229 was 7/7 SUCCESS on `0f6e35e5abbd0bfee006e0757f7477c2f69b2834`, not this commit. No real OS identity/atomic journal-open acceptance is inferred.

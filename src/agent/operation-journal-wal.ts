@@ -74,7 +74,11 @@ async function readReuseIndex(dbFile:string,walHeader:Buffer,pageSize:number,
   const handle=await fs.open(dbFile+'-shm','r');
   try{
     const opened=await handle.stat();
+    // Inode identity alone does not catch an in-place SHM rewrite between
+    // lstat and open. Native singleton ownership is still required.
     if(!opened.isFile()||opened.dev!==prior.dev||opened.ino!==prior.ino||
+       opened.size!==prior.size||opened.mtimeMs!==prior.mtimeMs||
+       opened.ctimeMs!==prior.ctimeMs||
        opened.size<32768||opened.size%32768!==0)fail();
     const bytes=Buffer.alloc(136);
     await readExactly(handle,bytes,bytes.length,0);
@@ -119,8 +123,12 @@ export async function verifyAgentJournalWal(dbFile:string):Promise<void>{
   const handle=await fs.open(walFile,'r');
   try{
     const opened=await handle.stat();
+    // Verify pre-open metadata, not only the inode. An in-place truncate
+    // between lstat and open must not be reclassified as a legitimate empty
+    // WAL, which would silently discard possible journal reservations.
     if(!opened.isFile()||opened.dev!==prior.dev||
-       opened.ino!==prior.ino)fail();
+       opened.ino!==prior.ino||opened.size!==prior.size||
+       opened.mtimeMs!==prior.mtimeMs||opened.ctimeMs!==prior.ctimeMs)fail();
     // An empty WAL is legitimate, but it must still resolve to the opened
     // inode. Do not let the short-circuit omit the namespace readback.
     if(opened.size===0){
