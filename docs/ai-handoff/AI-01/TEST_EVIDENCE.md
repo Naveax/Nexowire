@@ -1,25 +1,25 @@
-# AI-01 / TEST_EVIDENCE
+# AI-01 | TEST_EVIDENCE
 
-## Source and historical evidence
-- Base `main`: `a19a228dc6f19fd484cf935e941a00ea625233f8`.
-- GitHub source baseline: #954 merged, #957 closed unmerged; included by merged #978 in released 1.0.8.
-- Current `test/agent-journal-restart-regression.test.ts` on main already independently generates **709 current + 295 old frames**, **473 commit frames**, **1,307 synthetic operation rows**, runs **six crash/restart iterations + one clean restart**, verifies UNKNOWN and duplicate-ID denial. AI-01 does not rewrite this shared/other-owner file.
-- 2026-10-31 GitHub CI `41194627316` on `0f48b9e5bc1224dd34d5248525832a23845fdc0c`: typecheck **FAIL**, TS2532 in two new test lines. Fixed with subsequent commit; never counted as PASS.
-- CI `41194708825` on `236b215a12dca04526ba1941f3d25efa026474a6`: Node22/24 succeeded; workflow **CANCELLED**, not 7/7.
-- CI `41194972463` on `5779120499fac5982dc9ba1e7fbf528ce06c4a66`: Node24 test summary **2,331 / 2,039 PASS / 0 FAIL / 292 SKIP**; all eight AI-01 new tests PASS, Node22 PASS, Windows dedicated WAL+restart step PASS. At captured point the workflow was **6/7 SUCCESS, browser-live still in progress**, not a completed overall PASS.
+## Baz / sınır
+- Repo: `Naveax/Nexowire`, base `main` `a19a228dc6f19fd484cf935e941a00ea625233f8`.
+- Test edilen kaynak HEAD: `f33bc494fe4efe2a75d5a4a91917661afba8fa4b`. Draft PR #986, `ai/01-wal-v108`.
+- Kaynak değişikliği: yalnız `src/agent/operation-journal-wal.ts`; yeni `test/ai01-wal-snapshot-races.test.ts`; AI-01 handoff klasörü. Başka testleri/ortak dosyaları değiştirmedik.
+- Kullanıcıya ait gerçek journal/Agent/credential UAC/ACL/DPAPI ya da iki-PC fiziksel kabul testi **yapılmadı**. Tüm DB örnekleri izole, sentetik ve SQLite tarafından üretildi.
 
-## New tests in this commit (not yet validated by CI)
-- Legitimate zero-size WAL accepted unchanged and without creating the DB.
-- POSIX empty-WAL pathname swap at the first FileHandle.stat is denied.
-- POSIX byte-identical, multi-frame recycled WAL pathname swap at late FileHandle.stat is denied.
-- Windows rename-with-open-file behavior requires a separate native runner evaluation; two swap tests are explicitly SKIP on win32, **never physical PASS**.
-- All tests operate on isolated disposable files, not a real Agent journal.
+## Testler ve kanıt
+- [CI run 41197139627](https://github.com/Naveax/Nexowire/actions/runs/41197139627), exact SHA `f33bc494fe4efe2a75d5a4a91917661afba8fa4b`, workflow `CI`, **tamamlandı: SUCCESS (7/7 job)**. İlk attempt 6/7, `browser-live` FAIL; sadece başarısız job aynı run ID içinde bir kez yeniden çalıştırıldı ve **SUCCESS**. Birincil başarısızlık korunarak raporlanır, gizlenmez.
+- Node 24 Ubuntu `test (24)`: `npm ci`, `npm run check`, `npm run build` job SUCCESS; Node test özeti **2.335 test / 2.043 PASS / 0 FAIL / 292 SKIP / 0 TODO**. Test logunda `checksum-valid current WAL with a missing final commit marker fails closed` **PASS**.
+- Node 22 Ubuntu `test (22)`: aynı iş dizisi SUCCESS; son commit-sınırı negatif testi logda `ok`.
+- Windows GitHub-hosted runner `browser-live` (tekrar koşu): `npm run typecheck` **SUCCESS**; `node --test --import tsx --test-concurrency=1 test/qa-journal-wal-recycle-p11.test.ts test/agent-operation-wal-integrity.test.ts test/agent-journal-restart-regression.test.ts test/native-agent-startup-diagnostic.test.ts` **SUCCESS**; update startup/rollback, CORE-console ve diğer Windows runner kontrolleri SUCCESS. Bu, **GitHub Windows runner** kanıtıdır; kayıtlı NAVEAX/Work-PC üzerinde fiziksel kabul değildir.
+- Eski 1.0.8 kaynak fixture'ı `test/agent-journal-restart-regression.test.ts`: SQLite-autentik 709 current / 295 old frame, 473 commit ve 1.307 sentetik işlem satırı; 6 crash/restart + 1 temiz restart; UNKNOWN tombstone ve duplicate request ID reddi. Shared/diğer sahip dosyaları AI-01 düzenlemedi.
+- AI-01 izole test dosyası: **12 ayrı test**. Hot/recycled/empty WAL olumlu; late WAL header ve SHM değişimi, POSIX inode swap (byte-identical dahil), current salt, kesik ve kısmi frame, terminal commit marker yok ama checksum-valid suffix negatif; SQLite reopen UNKNOWN ve duplicate-ID korunması. POSIX rename testleri Windows'ta platform gereği açıkça SKIP; bunlar fiziksel Windows PASS sayılmaz.
 
-## Environment/evidence limits
-- Source modifications and Git objects made via authenticated GitHub connector. No local clone exists in this runtime (github.com DNS unavailable), so local `npm run typecheck`, `npm run build`, or local `git diff --check` exit codes are **NOT RUN / NOT CLAIMED**.
-- Current commit's exact-head CI workflow/job results must be verified from its own GitHub Actions run and appended to PR evidence; do not infer from earlier HEAD.
-- No physical Windows restart, real WAL, user data, original credentials or CORE authorization accessed during AI-01.
+## İlk Windows RED: nedeni ve yeniden doğrulama
+- `41197139627` ilk attempt, `browser-live` job `124525654463`, `Verify recycled WAL and consecutive journal process restarts`: mevcut `#974 current-salt damage ...` testinin `child()` IPC cevabı 30 saniyede gelmedi; stderr boş, `test/agent-journal-restart-regression.test.ts:44`; 32 testten 30 PASS, 1 FAIL, 1 SKIP.
+- Aynı testin doğrudan `verifyAgentJournalWal()` negatif reddi bu ilk attempt'te de PASS. Hatanın hangi child yaşam döngüsü koşulundan kaynaklandığı yalnız bu logla kesin saptanmadı; false-PASS denmedi ve timeout/test beklentisi gevşetilmedi.
+- Terminal FAIL sonrası yalnız başarısız `browser-live` job yeniden denendi. Retry job `124526485719`: WAL/restart adımı, Windows tip kontrolü ve tüm workflow **SUCCESS**. Yeniden çalıştırma yeni workflow dispatch'i değildir; ilk attempt'in hatası tarihsel kanıttır.
 
-## New pending exact-HEAD negative
-- Source-review finding: an all-current WAL with a fully checksummed final frame whose DB-size commit marker is zero was accepted by the previous validator; SQLite can ignore this uncommitted suffix. New regression independently verifies every frame checksum after rewriting only the last commit marker and refuses mutation while retaining all snapshot bytes.
-- Current staging parent `8e44c3aff6be486de8ffd0a9a9830243eaf7fbac`. This new commit has **NOT** been pushed to the PR branch or validated by CI yet; previous run `41196318562` was still active at the last check. Do not infer PASS or physical validation.
+## Sınırlar ve önceki koşular
+- `41194627316`: önceki `0f48b9...` HEAD'te TS2532 typecheck FAIL (düzeltildi). `41194708825`: `236b215...` HEAD'te CANCELLED. `41194972463`: `57791204...` HEAD'te 7/7 SUCCESS. `41196318562`: `8e44c3...` HEAD'te kaynak testleri geçti; sonraki push sebebiyle workflow CANCELLED, tam PASS sayılmaz.
+- Bu runtime'da authenticated GitHub connector aracılığıyla commit/diff/CI doğrulandı. Yerel clone ve tam `git status`, `npm ci`, `npm run typecheck`, `npm run build` çalıştırılmış gibi gösterilmiyor.
+- Bu doküman değişikliği için yeni exact HEAD CI sonucunu **ayrı doğrula**; son başarılı kaynak SHA'sını yeni HEAD'e otomatik aktarma.
