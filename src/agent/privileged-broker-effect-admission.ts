@@ -110,7 +110,7 @@ function snapshotBinding(raw:BrokerVerifiedEffectBinding|null|undefined):
     return Object.freeze(snapshot) as unknown as BrokerVerifiedEffectBinding;
   }catch{return null}
 }
-\nfunction bindingValid(b:BrokerVerifiedEffectBinding|null|undefined):
+function bindingValid(b:BrokerVerifiedEffectBinding|null|undefined):
   b is BrokerVerifiedEffectBinding {
   if(!b || typeof b!=='object')return false;
   for(const key of ['authorityId','ownerId','deviceId','sessionId',
