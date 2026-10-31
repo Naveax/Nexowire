@@ -109,3 +109,52 @@ test('AI-06: parallel controller enrollment requests cannot start two approval p
   assert.equal(status.active,false,'synthetic provider is not real protected OS readback');
   assert.equal(status.state,'CURRENT_AUTHORITY_UNAVAILABLE');
 });
+
+test('AI-06: enrollment cannot run while previous remote revoke ACK is unresolved',async()=>{
+  const gate=deferred<void>();let approvals=0;
+  const provider:CoreConsoleNativeProvider={
+    binding,
+    enroll:async()=>{approvals++;return true;},
+    revoke:async()=>gate.wait(),
+    inspect:async()=>{throw new Error('NO_PROTECTED_OS_PROOF');},
+    execute:async()=>{throw new Error('NO_EFFECT');},
+  };
+  const controller=new CoreConsoleAdmission(undefined,provider);
+  const pending=controller.revoke();
+  await gate.started;
+  await assert.rejects(controller.enroll(new AbortController().signal),
+    /CORE_ENROLLMENT_REVOKE_IN_PROGRESS/);
+  assert.equal(approvals,0,'in-progress revoke must block even a new local prompt');
+  assert.equal((await controller.status('full')).state,'REVOKED_LOCALLY');
+  gate.finish();
+  await pending;
+  assert.equal(await controller.enroll(new AbortController().signal),true,
+    'a fresh enrollment may start only after confirmed revoke completion');
+  assert.equal(approvals,1);
+  assert.equal((await controller.status('full')).active,false,
+    'a synthetic provider is not physical OS consent');
+});
+
+test('AI-06: lost revoke ACK denies enrollment until later confirmed revoke',async()=>{
+  let attempts=0,approvals=0,effects=0;
+  const provider:CoreConsoleNativeProvider={
+    binding,
+    enroll:async()=>{approvals++;return true;},
+    revoke:async()=>{attempts++;if(attempts===1)throw new Error('REMOTE_ACK_LOST');},
+    inspect:async()=>{throw new Error('NO_PROTECTED_OS_PROOF');},
+    execute:async()=>{effects++;throw new Error('NO_EFFECT');},
+  };
+  const controller=new CoreConsoleAdmission(undefined,provider);
+  await assert.rejects(controller.revoke(),/REMOTE_ACK_LOST/);
+  await assert.rejects(controller.enroll(new AbortController().signal),
+    /CORE_ENROLLMENT_REVOKE_UNCERTAIN/);
+  assert.equal(approvals,0);
+  assert.equal((await controller.status('full')).state,'REVOKED_LOCALLY');
+  await controller.revoke();
+  assert.equal(attempts,2);
+  assert.equal(await controller.enroll(new AbortController().signal),true,
+    'only a later successful revoke permits a fresh explicit enrollment');
+  assert.equal(approvals,1);
+  assert.equal(effects,0);
+  assert.equal((await controller.status('full')).active,false);
+});

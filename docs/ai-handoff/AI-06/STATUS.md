@@ -11,3 +11,14 @@
 - Ortak WAL/Windows test kaynakları, `main`, migration, installer, prod D1 ve canlı cihazlar değiştirilmedi.
 - **Kalan P0:** bağımsız AI-08 #989 erken `complete(succeeded)` hatası; koordinatör Draft #996 native-verified marker migration hazırladı. AI-06 D1 kaynak entegrasyonu migration'ın doğru dalda uygulanmış kanıtına bağlı. Native OS effect-boundary ve iki-PC fiziksel kabul henüz yok.
 - Kapanış: Draft + CORE NO-GO; merge/deploy yok.
+
+## Revoke completion / lost ACK admission fence
+
+Controller `revocationsPending` ve `revocationUncertain` ile
+asenkron revoke ACK'si çözülmeden yerel enrollment'ı başlatmaz.
+Gecikmiş eski başarılı ACK yeni revoke neslini temizlemez.
+İki izole test eklenmiştir; yeni exact HEAD'in CI kanıtı beklenir.
+Önceki HEAD `033596d00b67e156d9c7696fc8ab71d21fd3de06`,
+run `41211401246`: **7/7 SUCCESS**, Node22/24 36/36 AI-06 PASS.
+Migration #996 ayrı Draft; protected effect boundary ve AI-08 gate
+olmadan CORE NO-GO sürer.

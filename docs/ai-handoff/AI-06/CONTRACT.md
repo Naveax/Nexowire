@@ -129,3 +129,17 @@ implementasyonları aynı anda iki native onay akışı başlatmasın diye
 tek enrollment isteğine izin verir. Yeni isteğin tekrar denenebilmesi
 için ilk denemenin bitmesi gerekir. Bu kontrol sahibi olmayan tarafın
 UAC onayı oluşturmaz, sentetik kanıtı fiziksel kanıt olarak kabul etmez.
+
+## Revoke ACK ve yeni enrollment arasındaki sıralama
+
+`CoreConsoleAdmission.revoke()`, ilk senkron bölümde STOP ve
+`revocationsPending` sayacını latch eder. Önceki uzak revoke işlemi
+bitmeden `enroll()` çağrısı `CORE_ENROLLMENT_REVOKE_IN_PROGRESS`
+ile fail-closed reddedilir. Revoke ACK hata/UNKNOWN dönerse
+`revocationUncertain` aktif kalır; yalnız **daha yeni, başarılı**
+`revoke()` çağrısı bu belirsizliği temizleyebilir.
+Eski/sırasız bir başarılı ACK, daha yeni revokeyi onaylayamaz.
+
+Bu kontrol yalnız local controller içindir; gerçek native service
+revocation monotonic ledger/effect-boundary readback zorunludur.
+Sentetik `provider.enroll=true` bir OS yetkilendirme kanıtı değildir.

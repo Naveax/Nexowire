@@ -128,3 +128,16 @@ kanıtı değildir. Yeni HEAD'in CI sonucu gelmeden PASS kabul edilmez.
 Node22/24 34/34 AI-06 PASS, total 2.773 / 2.419 pass / 0 fail;
 Windows browser-live RED `124545731212`, iki AI-01/#974 WAL worker
 30s timeout. Kapsam dışı testleri gevşetme veya yeni timeout oluşturma yok.
+
+## Revoke completion/ACK belirsizliği regresyonları
+
+`test/ai06-consent-controller-races.test.ts` içindeki iki ek negatif:
+(1) asenkron `provider.revoke()` çözülmemişken yeni enrollment
+başlatılamaz; (2) revoke ACK kaybından sonra belirsizlikte enrollment
+reddedilir, ancak ayrı başarılı revoke sonrası yeni explicit approval
+başlayabilir. Bu iki test sentetik controller/provider contract testidir;
+fiziksel Windows, gerçek native signer ve prod D1 doğrulanmamıştır.
+
+İlk eklenen 36 AI-06 sentetik regresyon Node 22 ve 24'te CI
+`41211401246` ile PASS; iki yeni test için exact yeni SHA/CI
+sonucu gelmeden PASS denemez.

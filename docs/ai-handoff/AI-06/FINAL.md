@@ -92,3 +92,12 @@ için Windows browser-live job `124545731212` AI-01/#974 journal
 restart testlerinde 30s timeout verdi. AI-06 bu dosyalara dokunmadı.
 Yeni kaynak HEAD exact CI'ı ayrı değerlendirilecek. Migration için
 koordinatör Draft #996 gerekir; production CORE NO-GO kalır.
+
+## Revoke ACK admission fence
+
+AI-06 controller, uzaktan revoke işlemi bitmeden yeni local owner
+enrollment'ı kabul etmez; kayıp ACK sonucunu local belirsizlik olarak
+saklar ve yalnız yeni başarılı revoke ile temizler. İki sentetik
+negatif test eklendi. Eski SHA'nın 7/7 CI başarı kanıtı yeni SHA
+için geçerli değildir. D1 native-verified migration #996
+koordinatörde, AI-08 P0 ve fiziksel OS kabulü açık; CORE NO-GO.

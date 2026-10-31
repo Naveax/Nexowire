@@ -107,6 +107,10 @@ export class CoreConsoleAdmission {
   // native consent callback must never resurrect a closed controller.
   private closed = false;
   private enrollmentPending = false;
+  // A pending remote revoke and any lost/failed revoke ACK are authorization
+  // uncertainty, never a reason to admit a fresh approval.
+  private revocationsPending = 0;
+  private revocationUncertain = false;
   private readonly requests = new Set<string>();
   private readonly inFlight = new Set<string>();
 
@@ -187,10 +191,21 @@ export class CoreConsoleAdmission {
 
   /** No remote reenrollment/reset method: STOP cannot be undone by a tool call. */
   async revoke(): Promise<void> {
-    this.revokeSequence++;
+    const sequence=++this.revokeSequence;
     this.stopped = true;
     this.abort.abort();
-    if (this.provider) await this.provider.revoke();
+    ++this.revocationsPending;
+    try {
+      if(this.provider)await this.provider.revoke();
+      // Only the most recent successful revoke ACK can clear a previous
+      // unknown. A late old ACK must never certify a newer in-flight revoke.
+      if(sequence===this.revokeSequence)this.revocationUncertain=false;
+    } catch(error) {
+      this.revocationUncertain=true;
+      throw error;
+    } finally {
+      --this.revocationsPending;
+    }
   }
 
   /** Only the provider's real local decision UI can reopen a stopped profile. */
@@ -198,6 +213,8 @@ export class CoreConsoleAdmission {
     if(this.closed)throw failure('CORE_CONSOLE_CONTROLLER_CLOSED');
     if(!this.provider?.enroll)throw failure('CORE_CONSOLE_PROVIDER_UNAVAILABLE');
     if(signal.aborted)return false;
+    if(this.revocationsPending>0)throw failure('CORE_ENROLLMENT_REVOKE_IN_PROGRESS');
+    if(this.revocationUncertain)throw failure('CORE_ENROLLMENT_REVOKE_UNCERTAIN');
     // The protected provider also serializes approval, but the controller
     // must not allow another implementation to prompt/register in parallel.
     if(this.enrollmentPending)throw failure('CORE_ENROLLMENT_PROMPT_ACTIVE');
@@ -210,6 +227,8 @@ export class CoreConsoleAdmission {
       if(this.closed)throw failure('CORE_CONSOLE_CONTROLLER_CLOSED');
       if(this.revokeSequence!==observedRevokeSequence)
         throw failure('CORE_ENROLLMENT_REVOKED_DURING_APPROVAL');
+      if(this.revocationsPending>0||this.revocationUncertain)
+        throw failure('CORE_ENROLLMENT_REVOKE_UNCERTAIN');
       if(approved===true&&!signal.aborted){
         if(!this.provider.binding)throw failure('CORE_ENROLLMENT_BINDING_REQUIRED');
         this.binding=Object.freeze({...this.provider.binding});
