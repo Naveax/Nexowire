@@ -81,3 +81,18 @@ test('session zero cannot represent physical console enrollment',()=>{
   const f=fixture();
   assert.throws(()=>persistentSessionBytes({...f.session.payload,windowsSessionId:0}));
 });
+
+test('native-compatible account ID grammar rejects Unicode, spaces and JSON escaping ambiguities',()=>{
+  const f=fixture();
+  for(const invalid of ['owner ünicode','owner\\n0001','owner account','owner/000001','x'.repeat(129),'short']){
+    const altered={...f.grant.payload,ownerAccountId:invalid};
+    assert.throws(()=>persistentEnrollmentBytes(altered));
+    assert.throws(()=>verifyPersistentEnrollmentSession({
+      ...f,grant:{...f.grant,payload:altered},
+    }),/V2_REJECTED/);
+  }
+  // Both runtimes accept the exact same bounded ASCII character set.
+  for(const valid of ['owner-account_01','owner.account:01','owner@domain01']){
+    assert.doesNotThrow(()=>persistentEnrollmentBytes({...f.grant.payload,ownerAccountId:valid}));
+  }
+});
