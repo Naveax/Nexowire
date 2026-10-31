@@ -45,3 +45,11 @@ adversarial post-readback/pre-CAS cases cover re-pair with new owner's
 preferences enabled, changed Windows logon epoch, and lost Broker
 privilege. Exact new HEAD CI evidence must be checked separately; no
 physical Windows authority is inferred. Production CORE NO-GO.
+
+## Verified-claim late-completion race tests
+
+Added four new synthetic negatives to `test/ai06-consent-claim-races.test.ts`. A verified D1 marker must not allow `complete(succeeded)` if the owner/device/platform/Broker/native logon changes before the final SQL UPDATE. All tests remain fail-closed and preserve replay tombstones. Previous exact HEAD `d9dc636ebbabe7a82a5e34170da5e7517eeb22d4`, CI `41247107420` was 7/7 SUCCESS, Node22/24 48/48 AI-06 PASS. The **new SHA is not PASS until its own matching CI finishes**. Coordinator #996 migration not in this base, physical CORE NO-GO.
+
+## Controller explicit runtime admission fields
+
+Controller ACTIVE now requires explicit Win32, READY, and verified local Broker probe in addition to signed owner policy/native admission. Six new negatives cover missing and contradictory fields with a forged `nativeAdmission='verified'` assertion. The existing last verified SHA `6b4833887a5895cf3395b6d6c96d0a435123d6a0` had 52/52 AI-06 PASS on Node22/24, CI `41248715419` Windows remained in progress at that check. A new commit with six tests requires fresh exact-HEAD CI; never inherit old PASS. Coordinator #996, AI-08 #989 and OS effect proof remain blocking; CORE NO-GO.
