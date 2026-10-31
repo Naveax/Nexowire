@@ -5,6 +5,34 @@ namespace Nexowire.LocalEnrollment;
 
 internal static class SelfTest
 {
+    private static void VerifyLocalConsentFailClosed()
+    {
+        // This exercises only the Win32 owner-dialog *decision*, not UAC.
+        // There is no desktop interaction, elevation, physical approval,
+        // service installation, key creation, or persistent state mutation.
+        Protocol.Require(Program.IsExplicitOwnerConsent(6));
+        foreach(var denied in new[]{0,1,2,3,4,5,7,8,-1,int.MaxValue})
+            Protocol.Require(!Program.IsExplicitOwnerConsent(denied));
+    }
+    private static void VerifyIpcParserBoundaryNegatives()
+    {
+        // Pure hostile frame parsing. The server/client separately enforce
+        // the four-byte 1..16384 frame length before allocation/dispatch.
+        // Do not create a real named pipe or touch an installed device.
+        foreach(var hostile in new byte[][]{
+            new byte[16385],
+            System.Text.Encoding.UTF8.GetBytes("{\"version\":2,\"version\":2}"),
+            System.Text.Encoding.UTF8.GetBytes("{\"payload\":{\"nonce\":\"x\",\"nonce\":\"x\"}}"),
+            new byte[]{0xff,0xfe,0xfd},
+            System.Text.Encoding.UTF8.GetBytes("{\"version\":2,\"payload\":{}}")
+        })
+        {
+            var rejected=false;
+            try{Protocol.Read<SignedSession>(hostile);}
+            catch(Exception e) when(e is InvalidDataException or JsonException){rejected=true;}
+            Protocol.Require(rejected);
+        }
+    }
     private static void VerifyAuthorityPinAndVisibleConsent()
     {
         // Disposable ephemeral ECDSA keys and pure consent text only. Do not
@@ -231,7 +259,14 @@ internal static class SelfTest
             (goodStatus.Replace(grant.EnrollmentId,"66666666-6666-4666-8666-666666666666"),"status"),
             (goodAttest.Replace(snapshot.LogonLuid,"0000000000009999"),"attest"),
             (goodStatus.Replace(spkiBase64,"dGVzdA=="),"status"),
-            (goodAttest.Replace(session.EnrollmentSha256,new string('f',64)),"attest")
+            (goodAttest.Replace(session.EnrollmentSha256,new string('f',64)),"attest"),
+            (goodAttest.Replace(session.Nonce,"88888888-8888-4888-8888-888888888888"),"attest"),
+            (goodAttest.Replace(session.Audience,"nexowire.local-enrollment.foreign"),"attest"),
+            (goodAttest.Replace("\"mayDispatch\":false","\"mayDispatch\":true"),"attest"),
+            (goodStatus.Replace("\"mayDispatch\":false","\"mayDispatch\":null"),"status"),
+            (goodStatus.Replace("\"witness\":null","\"witness\":{}"),"status"),
+            (goodStatus.Replace("\"grant\":{","\"grant\":{\"unexpectedAuthority\":true,"),"status"),
+            (goodStatus.Replace("\"evidence\":{","\"evidence\":{\"windowsSessionId\":4,"),"status")
         })
         {
             using var doc=JsonDocument.Parse(json);
@@ -359,6 +394,8 @@ internal static class SelfTest
     }
     internal static void Run()
     {
+        VerifyLocalConsentFailClosed();
+        VerifyIpcParserBoundaryNegatives();
         VerifyAuthorityPinAndVisibleConsent();
         VerifyCorruptedProtectedRecordParser();
         VerifyFailClosedRevocationEntries();

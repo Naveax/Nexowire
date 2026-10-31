@@ -119,8 +119,12 @@ test('Windows installer read-only preflight rejects owner and installation ident
     for(const [id,req,error] of [
       [identity,{...request,installationId:randomUUID()},'LOCAL_OWNER_DEVICE_MISMATCH'],
       [identity,{...request,ownerAccountId:'other-account-01'},'LOCAL_OWNER_DEVICE_MISMATCH'],
+      [identity,{...request,ownerSid:'S-1-5-18'},'LOCAL_OWNER_DEVICE_MISMATCH'],
+      [identity,{...request,deviceId:otherDeviceId},'LOCAL_OWNER_DEVICE_MISMATCH'],
+      [{...identity,ownerAccountId:'other-account-01'},request,'LOCAL_OWNER_DEVICE_MISMATCH'],
       [{...identity,installationId:''},request,'AGENT_IDENTITY_BINDING_INCOMPLETE'],
       [{id:deviceId,ownerAccountId},request,'AGENT_IDENTITY_BINDING_INCOMPLETE'],
+      [{id:deviceId,installationId},request,'AGENT_IDENTITY_BINDING_INCOMPLETE'],
     ] as const){
       const rejected=execute(id,req);
       assert.ifError(rejected.error);
@@ -150,6 +154,21 @@ test('Windows installer read-only preflight rejects owner and installation ident
       assert.notEqual(denied.status,0,denied.stdout);
       assert.match(denied.stderr,new RegExp(error));
     }
+    // Re-pin the original manifest and then change only the runtime payload.
+    // A manifest whose digest is valid must still reject a swapped file.
+    writeFileSync(join(bundle,'manifest.json'),manifestBytes);
+    writeFileSync(join(runtime,'Nexowire.LocalEnrollment.exe'),
+      Buffer.from('ai02-runtime-replaced-after-manifest-pin'));
+    const replacedRuntime=execute(identity,request,'preflight',manifestHash);
+    assert.ifError(replacedRuntime.error);
+    assert.notEqual(replacedRuntime.status,0,replacedRuntime.stdout);
+    assert.match(replacedRuntime.stderr,/RUNTIME_HASH_MISMATCH/);
+    // The negative fixture is never executable and -Execute was never used.
+    writeFileSync(join(runtime,'Nexowire.LocalEnrollment.exe'),fakeExe);
+    const restored=execute(identity,request,'preflight',manifestHash);
+    assert.ifError(restored.error);
+    assert.equal(restored.status,0,restored.stderr);
+    assert.match(restored.stdout,/"installed"\s*:\s*false/);
   }finally{rmSync(root,{recursive:true,force:true});}
 });
 

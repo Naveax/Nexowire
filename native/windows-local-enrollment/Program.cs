@@ -34,9 +34,9 @@ internal static class Program
                 var (c,g)=ProtectedStore.Load();RequireOwner(c.OwnerSid);
                 Protocol.Require(Environment.UserInteractive && Process.GetCurrentProcess().SessionId>0);
                 WindowsSessionEvidence.RequireActiveLocalConsole(Process.GetCurrentProcess().SessionId);
-                Protocol.Require(MessageBoxW(IntPtr.Zero,
+                Protocol.Require(IsExplicitOwnerConsent(MessageBoxW(IntPtr.Zero,
                     RevocationConsentSummary(g.Payload),
-                    "Nexowire — Kaydı iptal et",0x00010000|0x00000100|0x00000004|0x00000030)==6);
+                    "Nexowire — Kaydı iptal et",0x00010000|0x00000100|0x00000004|0x00000030)));
                 RequireOwner(c.OwnerSid);
                 WindowsSessionEvidence.RequireActiveLocalConsole(Process.GetCurrentProcess().SessionId);
                 // A lock can be contested for seconds after the visible UI.
@@ -57,6 +57,10 @@ internal static class Program
         }
         catch { Console.Error.WriteLine("LOCAL_ENROLLMENT_REJECTED");return 1; }
     }
+    // Pure decision gate: only Win32 MessageBox IDYES (6) permits a local
+    // enrollment or revoke ceremony. Closing, Cancel (2), No (7), and
+    // unexpected results are denial; no UAC automation or override exists.
+    internal static bool IsExplicitOwnerConsent(int dialogResult) => dialogResult==6;
     private static void RequireOwner(string sid)
     {
         using var current=WindowsIdentity.GetCurrent();
@@ -141,7 +145,7 @@ internal static class Program
         var approved=MessageBoxW(IntPtr.Zero,
             EnrollmentConsentSummary(g,mode,authoritySha256),
             "Nexowire — Kalıcı yerel kayıt",0x00010000|0x00000100|0x00000004|0x00000030);
-        Protocol.Require(approved==6);
+        Protocol.Require(IsExplicitOwnerConsent(approved));
         // The same elevated owner must still control the active local
         // console after consent; an RDP switch or logoff denies.
         ProtectedStore.RequireAdministrator();

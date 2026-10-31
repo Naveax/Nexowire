@@ -108,3 +108,9 @@
 - This candidate requires its **own exact-HEAD** Windows CI result; previous
   workflow #41248725949 may be superseded by the new SHA and must not be
   labeled full SUCCESS unless its final result explicitly says success.
+
+## AI-02 additional negative candidate, exact-HEAD CI required
+- New pure native `SelfTest.VerifyLocalConsentFailClosed` denies Cancel(2), No(7), closed/error and all other non-Yes dialog results. It does **not** launch a UAC prompt or count as physical consent. `Program.IsExplicitOwnerConsent` is now the single decision helper for existing enroll/revoke MessageBox guards (Yes=6 only); no authority is added.
+- `SelfTest.VerifyIpcParserBoundaryNegatives` adds >16 KiB, duplicate nested fields, malformed UTF-8 and incomplete signed session rejection. The existing IPC fixture additionally denies swapped signed challenge nonce/audience, status witness substitution, `mayDispatch=true/null` and injected extra grant/evidence fields. Signed original cases remain mandatory.
+- Read-only Windows installer preflight fixture adds wrong owner SID/device and Agent owner account/missing binding, plus a **valid manifest SHA-256 whose runtime payload was replaced**. Mutation under the disposable fixture is rejected by runtime hash readback; fixture restores the original payload and rechecks successful `installed=false` preflight. Never invokes `-Execute`, real UAC, SCM or ProgramData.
+- **Prior matching HEAD** `8d61b16e0e95adc1202c384fb8f2ddf92c0bd8ba`, [CI #41249336072](https://github.com/Naveax/Nexowire/actions/runs/41249336072), **7/8 SUCCESS observed with browser-live in_progress**. These results do NOT apply to the next source/test commit. New exact HEAD and CI ID must be read from GitHub after commit. Local .NET/PowerShell test execution N/A (no SDK/pwsh/checkout); only GitHub exact-SHA CI may claim PASS.

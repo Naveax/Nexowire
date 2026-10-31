@@ -21,3 +21,6 @@ Last source HEAD before this candidate: `4c2b379dd12c4b704d19e5804d83afae44dc10a
 4. Approved disposable Windows acceptance P1: actual installed SCM lifecycle, crash/reboot, hostile pipe client, session changes, TPM hardware, owner physical consent, offline revoke and eventual two-PC staged checks. Source-only CNG tests are not real owner/SCM acceptance.
 
 **CORE remains disabled; `mayDispatch=false`. No merge, deploy, live device, UAC/ACL or actual SCM modifications.**
+
+## Next source review delta and acceptance caution
+- Local owner dialog cancellation and additional IPC/installer spoofing regression fixtures are source-only. The native service still returns `mayDispatch:false`; the v2 ES256 machine grant is **not** the off-host v1 Ed25519 authorization. New source/test SHA's matching CI must be independently verified. Windows UAC cancellation, real ACL/access denied, RDP switch and protected live SCM operations remain NOT TESTED; production CORE NO-GO.

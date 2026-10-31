@@ -17,3 +17,7 @@ malformed manifests **whose exact manifest SHA-256 is itself correctly
 re-pinned**. This is separate from source-signer authenticity. Actual
 production installation is still blocked by independently authenticated
 installed Agent identity, pin custody, physical console and real SCM acceptance.
+
+## Next AI-02 test/handoff candidate (do not promote to PASS before exact CI)
+- Added testable local owner consent decision (only explicit Win32 Yes=6), malicious signed IPC status/attest envelope variants, >16 KiB/native duplicate-frame negatives and disposable Windows installer identity/runtime replacement negatives. All source/tests exclusively AI-02 owned; no service/user credential/UAC touched. The cancelled-UAC physical negative remains NOT TESTED and must not be confused with simulated cancelled MessageBox.
+- Prior exact HEAD `8d61b16e0e95adc1202c384fb8f2ddf92c0bd8ba`, workflow #41249336072 7/8 SUCCESS at last read, final browser status pending. Subsequent HEAD must have matching own CI run. Details in TEST_EVIDENCE and INTEGRATION_REQUEST.
