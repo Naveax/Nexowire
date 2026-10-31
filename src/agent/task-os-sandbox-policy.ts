@@ -40,9 +40,11 @@ export interface TaskSandboxSourceAssessment {
 }
 
 function record(value: unknown): value is Record<string, unknown> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
-  try { return Object.getPrototypeOf(value) === Object.prototype; }
-  catch { return false; }
+  if (typeof value !== 'object' || value === null) return false;
+  try {
+    return !Array.isArray(value) &&
+      Object.getPrototypeOf(value) === Object.prototype;
+  } catch { return false; }
 }
 
 /**
@@ -68,16 +70,16 @@ function plainEmptyObject(value: unknown): boolean {
   catch { return false; }
 }
 function emptyList(value: unknown): boolean {
-  if (!Array.isArray(value)) return false;
   try {
-    return Object.getPrototypeOf(value) === Array.prototype &&
+    return Array.isArray(value) &&
+      Object.getPrototypeOf(value) === Array.prototype &&
       Object.getOwnPropertyDescriptor(value, 'length')?.value === 0;
   } catch { return false; }
 }
 function boundedArgs(value: unknown): boolean {
-  if (!Array.isArray(value)) return false;
   try {
-    if (Object.getPrototypeOf(value) !== Array.prototype) return false;
+    if (!Array.isArray(value) ||
+        Object.getPrototypeOf(value) !== Array.prototype) return false;
     const length: unknown = Object.getOwnPropertyDescriptor(value, 'length')?.value;
     if (!Number.isSafeInteger(length) || (length as number) > 256) return false;
     for (let i = 0; i < (length as number); i++) {

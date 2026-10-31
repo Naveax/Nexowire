@@ -7,3 +7,5 @@
 - No real installed/signed Agent, two-device owner grant/CAS, physical file/network/handle/descendant/revoke evidence: **NO-GO**.
 
 - AI-07 hostile-input source negatives: added; exact-head CI pending, no physical validation claimed.
+
+- Revoked Proxy negative test added: `Array.isArray` can throw `TypeError` for revoked Proxies; parser now handles it and returns deny-only decisions. Exact-head CI still required.

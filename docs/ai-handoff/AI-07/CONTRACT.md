@@ -12,3 +12,5 @@
 - Any malformed non-null report or own `mutationState` (including terminal-looking values) demands `RECONCILE_REQUIRED`, never replay. Inherited spoofing is rejected.
 - This is still **source-only**. JavaScript Proxy reflection hooks are inherently executable; the true native trust boundary must authenticate serialized bytes and independent kernel readback outside the JS object graph.
 - Added `test/ai07-sandbox-hostile-input.test.ts` negative tests. Do not equate unit tests with Windows AppContainer isolation.
+
+- Revoked Proxy values in task/args/network/readback are never allowed to throw through the assessment path: all `Array.isArray` reflection is caught and yields invalid/blocked or reconciliation. No execution permit exists.

@@ -91,3 +91,35 @@ test('AI-07 inherited report mutation state is not accepted as a replay permit',
   assert.equal(decision.dispatchAllowed, false);
   assert.equal(decision.mayReplayOriginalMutation, false);
 });
+
+test('AI-07 revoked Proxy objects and arrays fail closed without uncaught errors', async () => {
+  const badTask = Proxy.revocable({}, {});
+  badTask.revoke();
+  const taskAssessment = assessTaskSandboxSourceOnly(badTask.proxy);
+  assert.equal(taskAssessment.status, 'BLOCKED');
+  assert.ok(taskAssessment.blockers.includes('INVALID_TASK_INTENT'));
+  await assert.rejects(executeTaskWithOsSandbox(badTask.proxy),
+    (e: unknown) => e instanceof OsTaskSandboxBlockedError);
+
+  const badArgs = Proxy.revocable([], {});
+  badArgs.revoke();
+  const argsAssessment = assessTaskSandboxSourceOnly({
+    ...valid(), args: badArgs.proxy,
+  });
+  assert.equal(argsAssessment.dispatchAllowed, false);
+  assert.ok(argsAssessment.blockers.includes('INVALID_TASK_INTENT'));
+
+  const badEndpoints = Proxy.revocable([], {});
+  badEndpoints.revoke();
+  const endpointAssessment = assessTaskSandboxSourceOnly({
+    ...valid(), network: {default: 'deny', allowedEndpoints: badEndpoints.proxy},
+  });
+  assert.equal(endpointAssessment.dispatchAllowed, false);
+  assert.ok(endpointAssessment.blockers.includes('NETWORK_MUST_BE_DEFAULT_DENY'));
+
+  const badReport = Proxy.revocable({}, {});
+  badReport.revoke();
+  const reportAssessment = assessTaskSandboxSourceOnly(valid(), badReport.proxy);
+  assert.equal(reportAssessment.status, 'RECONCILE_REQUIRED');
+  assert.equal(reportAssessment.mayReplayOriginalMutation, false);
+});
