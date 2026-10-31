@@ -80,7 +80,9 @@ test('Windows installer read-only preflight rejects owner and installation ident
     const execute=(id:unknown,req:unknown)=>{
       writeFileSync(identityPath,JSON.stringify(id));
       writeFileSync(requestPath,JSON.stringify(req));
-      return spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',command],{
+      // Read-only preflight supports PowerShell 7; CI's pwsh environment
+      // does not guarantee Windows PowerShell 5.1's module-autoload path.
+      return spawnSync('pwsh.exe',['-NoProfile','-NonInteractive','-Command',command],{
         encoding:'utf8',timeout:10000,maxBuffer:16384,windowsHide:true,
         env:{...process.env,AI02_DEVICE:deviceId,AI02_OTHER:otherDeviceId,
           AI02_SCRIPT:script,AI02_BUNDLE:bundle,AI02_HASH:manifestHash,
