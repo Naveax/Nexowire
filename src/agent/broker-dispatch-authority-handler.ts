@@ -204,7 +204,11 @@ export function createBrokerDispatchAuthorityHandler(config:{
       try{body=JSON.parse(Buffer.concat(chunks).toString('utf8'))}
       catch{respond(res,400,{error:'invalid_request'});return}
       if(action==='release'){
-        if(!await principalStillCurrent()){respond(res,403,{error:'denied'});return}
+        // Release is NOT a new effect admission. An owner may revoke after
+        // the first authenticated request has arrived. A second live-grant
+        // check here could strand a previously reserved claim and stop drain.
+        // The external durable CAS must match this exact original principal,
+        // immutable request scope, Broker ID and dispatch ID before cleanup.
         const parsed=release.safeParse(body);
         if(!parsed.success||parsed.data.brokerId!==p.brokerId||
            !scoped(p,parsed.data.request.scope)){

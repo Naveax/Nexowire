@@ -103,7 +103,7 @@ test('dispatch wire adapter enforces identity, protected readback and signed rec
   const deviceId=randomUUID(),deviceEpoch=randomUUID(),sessionEpoch=randomUUID();
   const token=randomUUID()+randomUUID(),principal={brokerId,ownerId,deviceId,deviceEpoch,sessionEpoch};
   const backend=new FixtureAuthority(authorityId,authorityKey.privateKey);
-  let high=true,credentialCurrent=true;
+  let high=true,credentialCurrent=true,expireAfterNextValidAuth=false;
   let principalSource:()=>typeof principal=()=>principal;
   let evidenceSource:(()=>Promise<ProtectedBrokerEvidence|undefined>)|undefined;
   const effective=():ProtectedBrokerEvidence=>({verified:true,brokerId,ownerEpoch:4,
@@ -111,8 +111,15 @@ test('dispatch wire adapter enforces identity, protected readback and signed rec
     protectedParentAndImports:true});
   const approval=signedOperatorGrantVerifier(pub(ownerKey.publicKey));
   const settings={authorityId,publicKeyPem:pub(authorityKey.publicKey),authority:backend,
-    authenticateBroker:async(credential:string)=>credential===token&&credentialCurrent
-      ?principalSource():undefined,
+    authenticateBroker:async(credential:string)=>{
+      const valid=credential===token&&credentialCurrent;
+      const resolved=valid?principalSource():undefined;
+      if(valid&&expireAfterNextValidAuth){
+        expireAfterNextValidAuth=false;
+        credentialCurrent=false;
+      }
+      return resolved;
+    },
     readProtectedBroker:async()=>evidenceSource?evidenceSource():effective(),
     verifyOwnerRevocation:async(r:DispatchRevokeRequest)=>approval({kind:'revoke',
       authorityId,deviceId:r.deviceId,ownerId:r.ownerId,epoch:r.deviceEpoch,
@@ -310,6 +317,28 @@ test('dispatch wire adapter enforces identity, protected readback and signed rec
     assert.equal(backend.releaseCalls,before);
     await remote.release({dispatchId:parsed.dispatchId,brokerId,request:op});
     assert.equal(backend.active.size,0);
+  });
+
+  await t.test('release drains exact preexisting claim if live credential expires mid-request',async()=>{
+    const op=operation();
+    const reservation=await remote.beginIfCurrent(op,effective(),'9'.repeat(64));
+    const claim=JSON.parse(Buffer.from(reservation.payload,'base64url').toString('utf8')) as
+      {dispatchId:string};
+    const before=backend.releaseCalls;
+    // First authentication is still valid, and it becomes revoked immediately
+    // afterward. Release must not attempt a second fresh-grant admission.
+    expireAfterNextValidAuth=true;
+    try {
+      await remote.release({dispatchId:claim.dispatchId,brokerId,request:op});
+      assert.equal(backend.releaseCalls,before+1);
+      assert.equal(backend.active.has(claim.dispatchId),false);
+      // The same now-revoked credential must NOT authorize a new claim.
+      assert.equal((await post('begin',{request:operation(),broker:effective(),
+        challengeNonce:'8'.repeat(64)})).status,403);
+    } finally {
+      expireAfterNextValidAuth=false;
+      credentialCurrent=true;
+    }
   });
 
   await t.test('server refuses validly signed noncanonical Broker receipt',async()=>{
