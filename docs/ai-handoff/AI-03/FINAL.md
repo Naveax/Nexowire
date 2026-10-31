@@ -1,14 +1,21 @@
-# AI-03 | FINAL (source-only handoff)
+# AI-03 | FINAL: source-only review handoff
 
-- **Verdict:** `READY_FOR_REVIEW` for AI-03 source; **CORE production `NO_GO`**, physical acceptance NOT_PROVEN.
-- **Branch:** `ai/03-native-verifier-20261031`. **Draft PR:** [#988](https://github.com/Naveax/Nexowire/pull/988), open, not merged.
-- **Base SHA:** `5e52b756cc6959ffacb7bcd25f2fc1ad2beccc39` (#982, upstream #981/#970).
-- **Last exact SHA with fully completed source tests:** `5959e6cbb7b44f30d489b492c50201a765a0a0cb`; GitHub Actions `CI` run [#41200342022](https://github.com/Naveax/Nexowire/actions/runs/41200342022), **7/7 SUCCESS**. Node22 and Node24 each **2,403 PASS / 0 FAIL / 352 SKIP / 2 TODO**, typecheck/build SUCCESS. Linux native seven disposable PostgreSQL enrollment negatives PASS; browser-live SUCCESS.
-- **Files modified by AI-03 vs base:** `src/protocol/core-native-consent-transport.ts`, `src/security/core-native-mtls-fetch.ts`, `test/core-native-consent-transport.test.ts`, `test/core-native-enrollment-verifier-handler.test.ts`, `test/core-native-verifier-server.test.ts`, and `docs/ai-handoff/AI-03/{STATUS,CONTRACT,TEST_EVIDENCE,INTEGRATION_REQUEST,FINAL}.md`. No out-of-scope files.
-- **Source achievements:** exact pinned TLS1.3 client transport, strict verified JSON/200 response metadata, no ambient fetch fallback, absolute bounded timeout for noncooperative transports, rotated/expired server/client cert and same-CA alternate-client denial, scope/nonce/replay/expiry tests and durable one-use PostgreSQL CAS readback.
-- **Acceptance distinction:** CI and genuine *disposable* TLS socket/PostgreSQL tests passed. Local repository commands were NOT RUN (exit N/A; no checkout/dependencies). No physical Windows UAC, installer, protected key custody, TPM/DPAPI, two-PC reboot/offline/revoke/session-switch or real owner approval performed.
-- **P0 cross-team blockers:** AI-02 protected signed v2 ES256 consent/grant proof bound to `expected.issuerSpkiSha256` and versioned v1 bridge; independent certificate-to-bearer principal resolver; current owner/device/SID/session/LUID generation and monotonic revoke/restore witness; deployment owner mTLS/Worker composition. Independent AI-08 review of exact AI-03 lineage also remains.
-- **CI identity caution:** this documentation-only synchronization creates a new HEAD. Its matching GitHub CI must be independently verified after commit; source SHA success cannot be misreported as subsequent HEAD PASS. Current exact PR HEAD and corresponding CI run are reported in PR metadata.
-- **No production activation, synthetic approval, merge, deploy, release, live service or other-agent file mutations.** See `CONTRACT.md` and `INTEGRATION_REQUEST.md`.
-
-- Additional AI-03-owned ledger gate: an issuer hash sent by the request cannot authorize enrollment unless a *separately provided protected native readback* reports the same current issuer. Readback also checks the hash persisted in the consumed SQL row against current protected issuer. Real disposable PG negative tests cover substituted/absent/rotated issuer with durable replay denial. This is source-only and still requires AI-02's authentic signed v2 grant implementation. Verify the new exact-head CI before final source PASS.
+- **Verdict:** `READY_FOR_REVIEW` for AI-03-owned source; **production CORE `NO_GO`**, physical consent `NOT_PROVEN`.
+- **Branch:** `ai/03-native-verifier-20261031`, [Draft PR #988](https://github.com/Naveax/Nexowire/pull/988), state OPEN/DRAFT.
+- **Base:** `5e52b756cc6959ffacb7bcd25f2fc1ad2beccc39` (#982, with #981/#970 upstream).
+- **Last fully verified *source* HEAD:** `7ee900583eaf103603ea8534460a6708cd6b0465`.
+- **Matching source CI:** workflow `369213208`, [run #41243629237](https://github.com/Naveax/Nexowire/actions/runs/41243629237), **7/7 SUCCESS**. Node22/24 each **2,403 PASS, 0 FAIL, 355 SKIP, 2 TODO**, typecheck and build SUCCESS; Linux native real disposable PostgreSQL **10/10 enrollment tests PASS**, browser-live SUCCESS.
+- **PR diff:** 12 changed files, only AI-03 owned paths:
+  - `src/protocol/core-native-consent-transport.ts`;
+  - `src/security/core-native-mtls-fetch.ts`;
+  - `src/security/postgres-core-approval-ledger.ts`;
+  - `test/core-native-consent-transport.test.ts`;
+  - `test/core-native-enrollment-verifier-handler.test.ts`;
+  - `test/core-native-verifier-server.test.ts`;
+  - `test/postgres-core-approval-ledger.test.ts`;
+  - `docs/ai-handoff/AI-03/{CONTRACT,STATUS,TEST_EVIDENCE,INTEGRATION_REQUEST,FINAL}.md`.
+- **Acceptance:** TLS1.3 mTLS disposable socket pin/revocation/expiry/identity negatives; strict HTTP 200 signed response/metadata, no ambient fetch, bounded noncooperative transport; real ephemeral PostgreSQL receipt one-use/replay/late ACK/revoke and pre-INSERT/post-COMMIT issuer races. **Test keys, synthetic native witness, disposable PG and hosted CI are not physical owner approval or production trust custody.**
+- **Project commands locally:** NOT RUN, exit N/A (no repository checkout/dependency tree). Positive test claims are GitHub exact-SHA CI only, not local runs.
+- **Current external P0 blockers:** AI-02 independently verified and signed v2 CNG ES256 issuer/grant binding to v1 proof; independent bearer/client-certificate principal resolver; protected mTLS credential/pin custody and production transport composition; fresh Windows owner/SID/logon session/LUID/grant/revoke generations; rollback-resistant independent restore gate; AI-08 adversarial review of exact AI-03 HEAD and two real Windows devices with reboot/revoke/session-switch/offline acceptance.
+- **Critical SHA caveat:** This synchronization is a docs-only child commit, not `7ee900583eaf103603ea8534460a6708cd6b0465`. Its own exact SHA/run must be checked independently after publication. Historical `7ee900583eaf103603ea8534460a6708cd6b0465` success cannot be copied into the child until CI completes.
+- **No merge, rebase, deploy, release, real UAC/ACL/TPM/DPAPI, live device/service or other agent file changes.** See `CONTRACT.md`, `TEST_EVIDENCE.md` and `INTEGRATION_REQUEST.md`.
