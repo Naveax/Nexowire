@@ -11,6 +11,39 @@ const request=z.object({
   fingerprint:z.string().regex(/^[a-f0-9]{64}$/),
   capability:z.string().min(1).max(128),
 }).strict();
+/**
+ * Snapshot the original CAS request without invoking caller-owned getters.
+ * Zod's standard object parse can read accessors; an accessor may change the
+ * UUID/fingerprint or create side effects before the first identity check.
+ * This does not authenticate the request: external CAS remains authoritative.
+ */
+function immutableRequest(candidate:unknown):Readonly<CasRequest>{
+  if(!candidate||typeof candidate!=='object'||Array.isArray(candidate))
+    reject('BOUND_CAS_REQUEST_INVALID');
+  const inspected=candidate as object;
+  let descriptors:PropertyDescriptorMap;
+  let keys:PropertyKey[];
+  let prototype:unknown;
+  try{
+    descriptors=Object.getOwnPropertyDescriptors(inspected);
+    keys=Reflect.ownKeys(inspected);
+    prototype=Object.getPrototypeOf(inspected);
+  }catch{return reject('BOUND_CAS_REQUEST_INVALID')}
+  const required=['deviceId','epoch','requestId','fingerprint',
+    'capability'] as const;
+  if((prototype!==Object.prototype&&prototype!==null)||
+     keys.length!==required.length||
+     required.some(key=>!Object.prototype.hasOwnProperty.call(descriptors,key)||
+       !('value' in descriptors[key]!)))
+    reject('BOUND_CAS_REQUEST_INVALID');
+  const detached=Object.fromEntries(
+    required.map(key=>[key,descriptors[key]!.value]),
+  );
+  const parsed=request.safeParse(detached);
+  if(!parsed.success)return reject('BOUND_CAS_REQUEST_INVALID');
+  return Object.freeze(parsed.data);
+}
+
 const externalReceiptSchema=z.object({
   authorityId:uuid,deviceId:uuid,epoch:uuid,requestId:uuid,
   ownerId:uuid,sessionEpoch:uuid,
@@ -283,7 +316,7 @@ export class PostgresBoundGrantCas implements MonotonicTrustRoot {
   async reserve(value:CasRequest):Promise<CasReservation>{
     // The callback receives the same immutable UUID/fingerprint/scope key
     // even if it keeps a reference across credential or SQL awaits.
-    const input=Object.freeze(request.parse(value));
+    const input=immutableRequest(value);
     await this.trusted();
     const scope=await this.authenticate(input);
     return this.transaction(async db=>{

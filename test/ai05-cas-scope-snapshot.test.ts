@@ -233,3 +233,31 @@ test('AI-05 accessor-backed external receipt denied without getter execution',as
   assert.equal(h.evidence.externalCalls,1);
   assert.ok(h.evidence.queries.includes('ROLLBACK'));
 });
+
+test('AI-05 hostile CAS request getters never run before a reservation',async()=>{
+  const raw=request();
+  let getterCalls=0;
+  Object.defineProperty(raw,'requestId',{
+    enumerable:true,configurable:true,
+    get(){getterCalls++;return ids.request},
+  });
+  const h=fixture({resolve:async()=>scope()});
+  await assert.rejects(h.cas.reserve(raw),
+    hasCode('BOUND_CAS_REQUEST_INVALID'));
+  assert.equal(getterCalls,0);
+  assert.equal(h.evidence.queries.length,0);
+  assert.equal(h.evidence.externalCalls,0);
+});
+
+test('AI-05 request pollution and symbol keys cannot enter CAS identity',async()=>{
+  const h=fixture({resolve:async()=>scope()});
+  const symbols={...request(),[Symbol('hidden')]:ids.foreignOwner};
+  const inherited=Object.assign(Object.create({hidden:ids.foreignOwner}),request()) as CasRequest;
+  const extras={...request(),unexpected:ids.foreignSession};
+  for(const raw of [symbols,inherited,extras] as unknown[]){
+    await assert.rejects(h.cas.reserve(raw as CasRequest),
+      hasCode('BOUND_CAS_REQUEST_INVALID'));
+  }
+  assert.equal(h.evidence.externalCalls,0);
+  assert.equal(h.evidence.queries.length,0);
+});
