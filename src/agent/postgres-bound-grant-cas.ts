@@ -197,8 +197,10 @@ function immutableExternalReceipt(
     required.map(key=>[key,descriptors[key]!.value]),
   );
   const parsed=externalReceiptSchema.safeParse(detached);
-  if(!parsed.success)reject('BOUND_CAS_EXTERNAL_PROOF_MISMATCH');
-  return Object.freeze(parsed.data);
+  if(!parsed.success)return reject('BOUND_CAS_EXTERNAL_PROOF_MISMATCH');
+  const accepted=parsed.data;
+  if(!accepted)return reject('BOUND_CAS_EXTERNAL_PROOF_MISMATCH');
+  return Object.freeze(accepted);
 }
 
 /**
