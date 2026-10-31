@@ -236,6 +236,7 @@ function report(result){
     '- Source: '+result.origin,
     '- Main SHA: '+result.mainSha,
     '- Source review: **'+result.sourceReview+'**',
+    '- Findings: '+(result.findings.length?result.findings.join(', '):'none'),
     '- CORE production: **NO_GO** (physical owner proof, rollback, native authority not proven)',
     '- No merge, CI dispatch, deployment or live device operations performed.',
     '',
