@@ -21,7 +21,29 @@ test('NaN Infinity negative metrics and prices rejected',()=>{for(const value of
 test('empty workload and absent price rejected rather than invented',()=>{assert.throws(()=>costMatrix({...fixture(),workload:[]}));const f=fixture();delete (f.prices as Partial<CostInput['prices']>).cpuMs;assert.throws(()=>costMatrix(f))});
 test('arithmetic overflow cannot serialize as null',()=>{const f=fixture();f.workload[0]!.perUser.cpuMs=Number.MAX_VALUE;assert.throws(()=>costMatrix(f))});
 test('unknown currency cannot label numeric prices',()=>{assert.throws(()=>costMatrix({...fixture(),currency:'UNKNOWN'}))});
+test('made-up three-letter currency cannot label numeric prices',()=>{assert.throws(()=>costMatrix({...fixture(),currency:'ZZZ'}));assert.equal(costMatrix({...fixture(),currency:'TRY'}).currency,'TRY')});
 test('impossible pricing date rejected',()=>{const f=fixture();f.prices.cpuMs!.verifiedOn='2026-02-30';assert.throws(()=>costMatrix(f))});
+test('unmodeled price keys cannot silently disappear from a complete modeled subtotal',()=>{
+ const f=fixture();Object.assign(f.prices,{relayGiB:{amount:100,per:1,source:'synthetic',verifiedOn:'2026-10-31'}});
+ assert.throws(()=>costMatrix(f),/Unknown pricing meter/);
+});
+test('explicit UNKNOWN provenance cannot authorize numeric prices',()=>{
+ const f=fixture();f.prices.cpuMs!.source='UNKNOWN';assert.throws(()=>costMatrix(f));
+ f.prices.cpuMs=null;assert.equal(costMatrix(f).scenarios[0]!.components.cpuMs,'UNKNOWN');
+});
+test('positive price rate underflow fails instead of reporting a zero charge',()=>{
+ const f=fixture();f.prices.relayGB={amount:Number.MIN_VALUE,per:1e100,source:'synthetic',verifiedOn:'2026-10-31'};
+ assert.throws(()=>costMatrix(f),/underflow/);
+});
+test('positive weighted usage underflow fails instead of reporting zero quantity',()=>{
+ const f=fixture();f.workload=[{share:.5,perUser:{...f.workload[0]!.perUser,relayGB:Number.MIN_VALUE}},{share:.5,perUser:{...f.workload[0]!.perUser,relayGB:0}}];
+ assert.throws(()=>costMatrix(f),/underflow/);
+});
+test('positive charge underflow fails even when rate and quantity are representable',()=>{
+ const f=fixture();f.workload[0]!.perUser.relayGB=Number.MIN_VALUE;
+ f.prices.relayGB={amount:Number.MIN_VALUE,per:1,source:'synthetic',verifiedOn:'2026-10-31'};
+ assert.throws(()=>costMatrix(f),/underflow/);
+});
 
 test('invalid cost CLI emits no misleading JSON',async()=>{
  const {mkdtempSync,writeFileSync,rmSync}=await import('node:fs');

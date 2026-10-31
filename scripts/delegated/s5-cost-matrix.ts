@@ -6,11 +6,30 @@ type Meter=typeof meters[number];
 export interface CostInput {currency:string; asOf:string; source:string; period:string; workload:{share:number; perUser:Record<Meter,number|null>}[]; prices:Record<Meter,{amount:number; per:number; source:string; verifiedOn:string; currency?:string; unit?:string}|null>}
 export function costMatrix(input:CostInput){
  const date=(s:string)=>typeof s==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(s)&&Number.isFinite(Date.parse(s+'T00:00:00Z'))&&new Date(s+'T00:00:00Z').toISOString().slice(0,10)===s;
- if(!input||typeof input.currency!=='string'||!/^(?:[A-Z]{3}|TEST|UNKNOWN)$/.test(input.currency)||!input.source?.trim()||!input.period?.trim()||!date(input.asOf)||!Array.isArray(input.workload)||!input.workload.length)throw Error('Currency, date, source, period and workload required');
+ if(!input||typeof input.currency!=='string'||!/^(?:[A-Z]{3}|TEST|UNKNOWN)$/.test(input.currency)||(!['TEST','UNKNOWN'].includes(input.currency)&&!Intl.supportedValuesOf('currency').includes(input.currency))||!input.source?.trim()||!input.period?.trim()||!date(input.asOf)||!Array.isArray(input.workload)||!input.workload.length)throw Error('Currency, date, source, period and workload required');
  const units:Record<Meter,string>={ingressRequests:'requests',d1Reads:'rows',d1Writes:'rows',cpuMs:'ms',relayGB:'GB'};
  let shares=0;for(const w of input.workload){if(!w||!w.perUser||Object.keys(w).some(k=>!['share','perUser'].includes(k))||Object.keys(w.perUser).some(k=>!meters.includes(k as Meter))||!Number.isFinite(w.share)||w.share<0||w.share>1)throw Error('Invalid share');shares+=w.share;for(const m of meters){const v=w.perUser?.[m];if(v!==null&&(typeof v!=='number'||!Number.isFinite(v)||v<0))throw Error('Missing metrics must explicitly be null');}}
  if(Math.abs(shares-1)>1e-9)throw Error('Shares must sum to one');
- for(const m of meters){const p=input.prices?.[m];if(p!==null&&(!p||Object.keys(p).some(k=>!['amount','per','source','verifiedOn','currency','unit'].includes(k))||(p.currency!==undefined&&p.currency!==input.currency)||(p.unit!==undefined&&p.unit!==units[m])||input.currency==='UNKNOWN'||!Number.isFinite(p.amount)||p.amount<0||!Number.isFinite(p.per)||p.per<=0||!p.source?.trim()||!date(p.verifiedOn)||p.verifiedOn>input.asOf))throw Error('Verified price or explicit null required');}
- return {classification:'HYPOTHETICAL_NOT_CAPACITY_NOT_INVOICE',currency:input.currency,asOf:input.asOf,source:input.source,period:input.period,relayUnit:'decimal GB (1e9 bytes)',pricingEvidence:input.prices,excluded:'Fixed fees, allowances, taxes, tiers, storage, DO and other services; total is UNKNOWN',scenarios:[100,1000,10000].map(users=>{const components=Object.fromEntries(meters.map(m=>{const p=input.prices[m];if(p===null||input.workload.some(w=>w.share>0&&w.perUser[m]===null))return [m,'UNKNOWN'];const quantity=users*input.workload.reduce((sum,w)=>sum+w.share*(w.perUser[m]??0),0);if(!Number.isFinite(quantity))throw Error('Quantity overflow');const value=quantity*(p.amount/p.per);if(!Number.isFinite(value))throw Error('Cost overflow');return [m,value]}));const knownSubtotal=Object.values(components).reduce<number>((sum,v)=>sum+(typeof v==='number'?v:0),0);if(!Number.isFinite(knownSubtotal))throw Error('Subtotal overflow');return {hypotheticalUsers:users,components,knownSubtotal,modeledVariableTotal:Object.values(components).some(v=>v==='UNKNOWN')?'UNKNOWN':knownSubtotal,total:'UNKNOWN'};})};
+ if(!input.prices||typeof input.prices!=='object'||Array.isArray(input.prices)||Object.keys(input.prices).some(k=>!meters.includes(k as Meter)))throw Error('Unknown pricing meter');
+ for(const m of meters){const p=input.prices[m];if(p!==null&&(!p||Object.keys(p).some(k=>!['amount','per','source','verifiedOn','currency','unit'].includes(k))||(p.currency!==undefined&&p.currency!==input.currency)||(p.unit!==undefined&&p.unit!==units[m])||input.currency==='UNKNOWN'||!Number.isFinite(p.amount)||p.amount<0||!Number.isFinite(p.per)||p.per<=0||typeof p.source!=='string'||!p.source.trim()||p.source.trim().toUpperCase()==='UNKNOWN'||!date(p.verifiedOn)||p.verifiedOn>input.asOf))throw Error('Verified price or explicit null required');}
+ return {classification:'HYPOTHETICAL_NOT_CAPACITY_NOT_INVOICE',currency:input.currency,asOf:input.asOf,source:input.source,period:input.period,relayUnit:'decimal GB (1e9 bytes)',pricingEvidence:input.prices,excluded:'Fixed fees, allowances, taxes, tiers, storage, DO and other services; total is UNKNOWN',scenarios:[100,1000,10000].map(users=>{
+  const components=Object.fromEntries(meters.map(m=>{
+   const p=input.prices[m];if(p===null||input.workload.some(w=>w.share>0&&w.perUser[m]===null))return [m,'UNKNOWN'];
+   const quantity=users*input.workload.reduce((sum,w)=>{
+    const usage=w.perUser[m]??0;const contribution=w.share*usage;
+    if(w.share>0&&usage>0&&contribution===0)throw Error('Quantity underflow');
+    return sum+contribution;
+   },0);
+   if(!Number.isFinite(quantity))throw Error('Quantity overflow');
+   const rate=p.amount/p.per;
+   if(!Number.isFinite(rate)||(p.amount>0&&rate===0))throw Error('Price rate overflow/underflow');
+   const value=quantity*rate;
+   if(!Number.isFinite(value)||(quantity>0&&rate>0&&value===0))throw Error('Cost overflow/underflow');
+   return [m,value];
+  }));
+  const knownSubtotal=Object.values(components).reduce<number>((sum,v)=>sum+(typeof v==='number'?v:0),0);
+  if(!Number.isFinite(knownSubtotal))throw Error('Subtotal overflow');
+  return {hypotheticalUsers:users,components,knownSubtotal,modeledVariableTotal:Object.values(components).some(v=>v==='UNKNOWN')?'UNKNOWN':knownSubtotal,total:'UNKNOWN'};
+ })};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){try{const [file,...extra]=process.argv.slice(2);if(!file||extra.length||!statSync(file).isFile()||statSync(file).size>1_000_000)throw Error('Provide local input JSON, max 1MB');process.stdout.write(JSON.stringify(costMatrix(JSON.parse(readFileSync(file,'utf8')) as CostInput),null,2)+'\n')}catch(e){process.stderr.write(String(e)+'\n');process.exitCode=2}}
