@@ -98,7 +98,7 @@ export class PostgresCoreApprovalLedger {
       fail('NATIVE_BINDING_UNVERIFIED');
     // The request-supplied issuer must never become "verified" merely because
     // its hex value was persisted in an immutable PostgreSQL row.
-    if(issuerSpkiSha256!==undefined&&n.issuerSpkiSha256!==issuerSpkiSha256)
+    if(issuerSpkiSha256!==undefined&&(!n||n.issuerSpkiSha256!==issuerSpkiSha256))
       fail('ISSUER_UNVERIFIED');
   }
   private async transaction<T>(fn:(tx:Tx)=>Promise<T>):Promise<T>{
@@ -312,13 +312,17 @@ export class PostgresCoreApprovalLedger {
       const {proof}=await this.stored(tx,receiptId,expected);
       const row=(await tx.db.query('SELECT authority_id,device_id,proof_sha256,issuer_spki_sha256,consumed_ms '+
         'FROM core_approval.enrollment_consumptions WHERE receipt_id=$1',[receiptId])).rows[0];
+      // Narrow the untrusted DB column independently. A caller-selected or
+      // unknown-typed issuer must never enter the protected witness comparison.
+      const storedIssuer=row?.issuer_spki_sha256;
+      if(typeof storedIssuer!=='string')fail('ENROLLMENT_NOT_CONSUMED');
+      if(!/^[a-f0-9]{64}$/.test(storedIssuer))fail('ENROLLMENT_NOT_CONSUMED');
       if(!row||row.authority_id!==this.authorityId||row.device_id!==expected.deviceId||
-        row.proof_sha256!==this.proofHash(proof)||integer(row.consumed_ms,1)<proof.approvedAtMs||
-        typeof row.issuer_spki_sha256!=='string'||!/^[a-f0-9]{64}$/.test(row.issuer_spki_sha256))
+        row.proof_sha256!==this.proofHash(proof)||integer(row.consumed_ms,1)<proof.approvedAtMs)
         fail('ENROLLMENT_NOT_CONSUMED');
       // Reconcile the durable issuer tombstone with a fresh independent native
       // readback. Native issuer rotation/revoke may deny but never undo consume.
-      await this.trusted(expected,row.issuer_spki_sha256);await this.current(tx,expected);
+      await this.trusted(expected,storedIssuer);await this.current(tx,expected);
       return proof;
     });
   }
