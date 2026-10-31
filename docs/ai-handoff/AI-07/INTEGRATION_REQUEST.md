@@ -22,3 +22,6 @@ Coordinator should run `node --test --import tsx test/ai07-sandbox-windows-msvc-
 
 ### Independent PID namespace evidence and FS negative
 AI-08 should verify real `pid_for_children` namespace identity from the kernel outside the worker, and distinguish `EPERM` syscall denial from merely absent path. AI-05/AI-04 must never treat a successful unsigned namespace diagnostic as a grant, Job/CMF ownership, protected handle readback or permission to execute. Real cgroup task descendant drain and filesystem/network IPC negative remain separate acceptance blockers.
+
+### Genuine Linux parent-death test availability
+Coordinator/AI-08 can separately run `node --test --import tsx test/ai07-sandbox-linux-parent-death.test.ts` on disposable Linux kernel with pidfd and subreaper support. Fenced run must exit 0, deliberately disabled fence must exit 55; failure to support these primitives is BLOCKED, not PASS. This does **not** discharge isolated task filesystem/network/cgroup/credential or revoke evidence, or authorize CORE launch.

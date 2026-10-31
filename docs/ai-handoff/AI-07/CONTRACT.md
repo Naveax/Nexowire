@@ -63,3 +63,6 @@ The forked pre-unshare Linux diagnostic child installs `PR_SET_PDEATHSIG(SIGKILL
 
 ### Conservative source-only aggregate command envelope
 `boundedArgs` rejects sparse/accessor/proxy-invalid arrays, embedded NUL, individual strings above 32767 UTF-16 code units, **and combined argv lengths plus separators above 32767 units**. This is source preflight against truncation/oversize and never proves a Windows native command-line or Linux argv encoding. AI-05 must sign/compare exact immutable argument bytes before Broker dispatch; no fallback to legacy spawn is allowed.
+
+### Disposable kernel negative is non-authoritative
+A dedicated, isolated Linux test uses `pidfd_open` plus `PR_SET_CHILD_SUBREAPER` and exact `waitpid` to witness death of its own child following `PR_SET_PDEATHSIG`. An intentionally disabled fence must fail with exit 55; a positive test marker explicitly states `NOT_TASK_WORKER_ACCEPTANCE`. This supplies genuine fixture-level kernel signaling evidence **only**, not a task-capable sandbox, namespace/cgroup containment or an independent signed grant.

@@ -43,3 +43,6 @@ Added pre-unshare parent-death signal + original parent PID race guard on the **
 
 ### Aggregate input-boundary restriction
 Conservative combined argv length and targeted negative tests prevent source-only requests with excessive or NUL-truncated command parameters being mistaken for valid input. Real OS native request binding, independent caller authorization and kernel isolation remain **NO_GO**.
+
+### Isolated OS kernel evidence added
+Added reproducible `test/ai07-sandbox-linux-parent-death.test.ts`: native Linux PIDFD/subreaper parent-death behavior with a deliberate RED control when fence is disabled. Isolated Linux 6.18.57/GCC 14.2 validated positive exit 0 and negative exit 55; exact repository HEAD CI pending. Production worker, Windows MSVC/AppContainer, Linux task namespace/cgroup and descendant revoke remain NO-GO.

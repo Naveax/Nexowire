@@ -51,3 +51,7 @@ Linux source regression now checks `PR_SET_PDEATHSIG` occurs before the PID1 sec
 
 ### Aggregate argv negative cases
 Added AI-07 test cases with 32768-character single argument, two 20000-character arguments, NUL-bearing string, NUL task root and oversized root. All explicitly assert `INVALID_TASK_INTENT`, `BLOCKED` and a rejected executor promise. This is Node source-level test evidence only; exact-head CI results must be checked on the new commit before claiming PASS.
+
+### Isolated real-kernel negative, distinct from production acceptance
+- **Local disposable container:** Linux 6.18.57 x86_64, GCC 14.2, C11 -O2 -Wall -Wextra -Werror. Existing `PR_SET_PDEATHSIG` fixture with pidfd_open, subreaper and exact waitpid: 5 consecutive fenced runs exited `0`; controlled `-DNW07_TEST_DISABLE_PDEATHSIG` variant exited `55` and emitted `NW07_KERNEL_FIXTURE_BLOCKED=55`. Result is real Linux kernel process lifecycle **fixture evidence only**, not native sandbox, authentic Nexowire task, signed worker or physical desktop confirmation.
+- **New reproducible repository test:** `node --test --import tsx test/ai07-sandbox-linux-parent-death.test.ts` compiles fenced and intentionally unfenced variants on disposable Linux CI. On non-Linux it is explicitly NOT_RUN. Missing pidfd or kernel features means FAIL/BLOCKED on Linux, never synthetic PASS. Exact-head CI must be reverified on new commit.
