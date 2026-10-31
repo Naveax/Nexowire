@@ -1,6 +1,14 @@
-# AI-04 -> AI-05 / coordinator integration requests
+# AI-04 -> Coordinator / AI-05 / AI-07 / AI-08
 
-1. AI-05 must call Broker effect admission at every actual irreversible Windows mutation, not only one outer executor admission; use a new stable operation UUID per effect. `src/agent/executors.ts` is owned by AI-05 and is NOT changed here.
-2. Wire Broker independently authenticated one-use CAS/receipt verification. The local `verifyReceipt` contract requires exactly the frozen `signedPayloadUtf8` argument. A fixture verifier that returns true is prohibited in production.
-3. Keep execution disabled until genuine OS kernel identity, Windows Job ownership/descendant handling, pre-seal/equal-HIGH handle duplication and revoke cleanup have independently checkable evidence. A provisional Job readback is a P0 blocker.
-4. Coordinator owns workflow changes or real Windows CI probes. Please independently run the AI-04 negative tests and strict MSVC C4133 compilation checks without skip/fixture promotion.
+## Required security handoff (no cross-agent source edits)
+1. AI-05: wrap every separate irreversible Windows effect with an independently validated Broker admission. Use a stable original operation UUID per effect, with exact immutable input digest and owner/device/session/generation scope. Do not treat one outer `executor` admission as multiple effect CAS acknowledgements. Integration in `src/agent/executors.ts` belongs to AI-05, not AI-04.
+2. Independent Broker authority owner/coordinator: implement real pinned `verifyReceipt(receipt,signedPayloadUtf8)` that checks **the exact argument bytes** and a durable one-use reservation/commit/UNKNOWN/revoke backend. Test verifiers returning true are not installation evidence.
+3. AI-07/coordinator: require real OS token/handle/publisher readback for installed Broker and Job worker. Hosted Windows 2025 evidence in CI run `41194719016` explicitly blocks equal-HIGH acceptance because SeDebugPrivilege was enabled and the linked Medium token could not be issued. The pre-seal duplicated Job-handle window remains independently OPEN. Treat UNKNOWN as deny, not success.
+4. AI-08: independently assess #987 negative tests, Windows Job blocked cases, MSVC C4133 behavior, and compare exact HEAD CI evidence. A successful fixture run is **not** physical release acceptance.
+5. Coordinator only: if Windows CI needs new isolated test setup, own the workflow change. Do not weaken source negatives, suppress C4133, alter physical gates, or treat a hosted token as the owner's PC.
+ 
+## Proposed minimum contract
+- Admission input: `{ operationId: UUID, capability, inputSha256, binding: { authorityId, ownerId, deviceId, sessionId, ownerEpoch, deviceEpoch, sessionEpoch, generation, highTokenProofId, protectedBrokerProofId, expiresAtMs } }`.
+- `readVerifiedBinding()` and `readVerifiedBindingNow()` return plain own-data witness snapshots or null (fail closed). Their source-side snapshots provide NO independent OS proof.
+- `begin(request, nonce)` and `commit(request, ticket, nonce)` must return independently signed RESERVED/COMMITTED exact-byte receipts. Lost ACK => sticky UNKNOWN. No mutation callback on UNKNOWN, revoke, mismatched binding, expired budget or token uncertainty.
+- Release gate remains **NO_GO** until OS and independent authority contracts are installed and separately verified on authorized hardware.
