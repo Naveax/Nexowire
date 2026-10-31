@@ -93,7 +93,8 @@ function fixture(t:import('node:test').TestContext,conflict=false) {
       encoding:'utf8',timeout:30000,env:{...process.env,GITHUB_TOKEN:''},
     });
     const output=JSON.parse(result.stdout||'{}') as {
-      status?:string;findings?:string[];nodes?:unknown[];
+      status?:string;findings?:string[];
+      nodes?:Array<{pr:number;result:string;conflictFiles?:string[]}>;
       mergeAuthorized?:boolean;deployAuthorized?:boolean;productionCore?:string;
       sourceWorkingTreeModified?:boolean;
     };
@@ -124,7 +125,7 @@ test('distinct AI PRs changing the same line result in a blocked merge',t=>{
   assert.equal(result.status,2,result.stderr);
   assert.equal(output.status,'BLOCKED');
   assert.ok(output.findings?.some(x=>x.includes('PR_980_MERGE_TREE_NONZERO')));
-  const collision=output.nodes?.find((n:any)=>n.pr===980);
+  const collision=output.nodes?.find(n=>n.pr===980);
   assert.ok(collision?.conflictFiles?.includes('conflict.txt'),
     'Git merge-tree should report the actual conflicting file');
   assert.equal(output.mergeAuthorized,false);
