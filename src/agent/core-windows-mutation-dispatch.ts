@@ -6,6 +6,7 @@
  */
 import {AsyncLocalStorage} from 'node:async_hooks';
 import {createHash} from 'node:crypto';
+import {types as nodeTypes} from 'node:util';
 import {BrokerExternalDispatchFence,type BrokerDispatchRequest}
   from './broker-external-dispatch-fence.js';
 import {privilegeRequirement} from '../security/privilege.js';
@@ -42,6 +43,7 @@ function canonical(value:unknown,ancestors=new Set<object>()):string {
   if(typeof value==='number'&&Number.isFinite(value))
     return JSON.stringify(value);
   if(typeof value!=='object')deny('CORE_DISPATCH_INPUT_NOT_CANONICAL');
+  if(nodeTypes.isProxy(value))deny('CORE_DISPATCH_INPUT_NOT_CANONICAL');
   if(ancestors.has(value))deny('CORE_DISPATCH_INPUT_NOT_CANONICAL');
   const proto=Object.getPrototypeOf(value);
   if(!Array.isArray(value)&&proto!==Object.prototype&&proto!==null)
@@ -132,6 +134,109 @@ export function coreWindowsEffectFingerprint(
 }
 
 /**
+ * A frozen object may still contain an accessor property. Treat only exact
+ * own enumerable data descriptors as an authenticated callback payload.
+ * Reject Proxy wrappers before any reflective operation executes traps.
+ */
+function assertFrozenPlainDispatchRecord(
+  value:unknown,fields:readonly string[],
+):void{
+  if(!value||typeof value!=='object'||Array.isArray(value)||
+     nodeTypes.isProxy(value))
+    deny('CORE_DISPATCH_APPROVED_REQUEST_MISMATCH');
+  let descriptors:PropertyDescriptorMap;
+  let keys:PropertyKey[];
+  let prototype:unknown;
+  try{
+    descriptors=Object.getOwnPropertyDescriptors(value);
+    keys=Reflect.ownKeys(value);
+    prototype=Object.getPrototypeOf(value);
+  }catch{return deny('CORE_DISPATCH_APPROVED_REQUEST_MISMATCH')}
+  if((prototype!==Object.prototype&&prototype!==null)||
+     keys.length!==fields.length||
+     fields.some(key=>!Object.prototype.hasOwnProperty.call(descriptors,key)||
+       !('value' in descriptors[key]!)||
+       descriptors[key]!.enumerable!==true)||
+     !Object.isFrozen(value))
+    deny('CORE_DISPATCH_APPROVED_REQUEST_MISMATCH');
+}
+
+/**
+ * A caller-supplied BrokerDispatchRequest is not automatically trustworthy.
+ * Descriptor-only inspection prevents inherited properties, getters and
+ * Proxy traps from being executed during the original pre-CAS snapshot.
+ * The independent Broker fence must still authenticate owner/session/UUID.
+ */
+function ownDispatchRecord(
+  raw:unknown,fields:readonly string[],code:string,
+):Record<string,unknown>{
+  if(!raw||typeof raw!=='object'||Array.isArray(raw)||nodeTypes.isProxy(raw))
+    deny(code);
+  const object=raw as object;
+  let descriptors:PropertyDescriptorMap;
+  let keys:PropertyKey[];
+  let prototype:unknown;
+  try{
+    descriptors=Object.getOwnPropertyDescriptors(object);
+    keys=Reflect.ownKeys(object);
+    prototype=Object.getPrototypeOf(object);
+  }catch{return deny(code)}
+  if((prototype!==Object.prototype&&prototype!==null)||
+     keys.length!==fields.length||
+     fields.some(key=>!Object.prototype.hasOwnProperty.call(descriptors,key)||
+       !('value' in descriptors[key]!)||
+       descriptors[key]!.enumerable!==true))
+    deny(code);
+  return Object.fromEntries(fields.map(key=>[key,descriptors[key]!.value]));
+}
+
+/**
+ * The only pre-CAS source of a Broker dispatch identity. A plain detached,
+ * strictly typed, deeply frozen two-level record is forwarded through the
+ * external CAS/Broker callback. This pure snapshot never grants CORE access.
+ */
+export function snapshotCoreWindowsDispatchRequest(
+  raw:unknown,
+):Readonly<BrokerDispatchRequest>{
+  const code='CORE_DISPATCH_REQUEST_BINDING_MISMATCH';
+  const request=ownDispatchRecord(raw,
+    ['requestId','capability','fingerprint','scope'],code);
+  const scope=ownDispatchRecord(request.scope,
+    ['ownerId','deviceId','deviceEpoch','sessionEpoch','ownerEpoch',
+      'expectedGeneration','requiredPrivilege'],code);
+  const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const isUuid=(value:unknown):value is string=>
+    typeof value==='string'&&uuid.test(value);
+  if(!isUuid(request.requestId)||
+     typeof request.capability!=='string'||request.capability.length<1||
+     request.capability.length>128||
+     typeof request.fingerprint!=='string'||
+     !/^[0-9a-f]{64}$/.test(request.fingerprint)||
+     !isUuid(scope.ownerId)||!isUuid(scope.deviceId)||
+     !isUuid(scope.deviceEpoch)||!isUuid(scope.sessionEpoch)||
+     !Number.isSafeInteger(scope.ownerEpoch)||
+     (scope.ownerEpoch as number)<=0||
+     !Number.isSafeInteger(scope.expectedGeneration)||
+     (scope.expectedGeneration as number)<=0||
+     (scope.requiredPrivilege!=='CORE'&&scope.requiredPrivilege!=='ROOT'))
+    deny(code);
+  return Object.freeze({
+    requestId:request.requestId as string,
+    capability:request.capability as string,
+    fingerprint:request.fingerprint as string,
+    scope:Object.freeze({
+      ownerId:scope.ownerId as string,
+      deviceId:scope.deviceId as string,
+      deviceEpoch:scope.deviceEpoch as string,
+      sessionEpoch:scope.sessionEpoch as string,
+      ownerEpoch:scope.ownerEpoch as number,
+      expectedGeneration:scope.expectedGeneration as number,
+      requiredPrivilege:scope.requiredPrivilege as 'CORE'|'ROOT',
+    }),
+  });
+}
+
+/**
  * #947's detached and frozen approved request is the only post-CAS source of
  * identity. #916's older #910 fence has no approved callback argument: if
  * called with that older implementation, deny rather than use a mutable
@@ -142,15 +247,20 @@ export function assertCoreApprovedDispatchRequest(
   expected:Readonly<BrokerDispatchRequest>,
   prepared:PreparedCoreWindowsMutation,
 ):void{
-  if(!approved||!Object.isFrozen(approved)||
-     !approved.scope||!Object.isFrozen(approved.scope)||
-     approved.requestId!==expected.requestId||
+  if(!approved)deny('CORE_DISPATCH_APPROVED_REQUEST_MISMATCH');
+  const trustedExpected=snapshotCoreWindowsDispatchRequest(expected);
+  assertFrozenPlainDispatchRecord(approved,
+    ['requestId','capability','fingerprint','scope']);
+  assertFrozenPlainDispatchRecord(approved!.scope,
+    ['ownerId','deviceId','deviceEpoch','sessionEpoch','ownerEpoch',
+      'expectedGeneration','requiredPrivilege']);
+  if(approved!.requestId!==trustedExpected.requestId||
      approved.capability!==prepared.capability||
      approved.fingerprint!==prepared.fingerprint||
-     expected.capability!==prepared.capability||
-     expected.fingerprint!==prepared.fingerprint)
+     trustedExpected.capability!==prepared.capability||
+     trustedExpected.fingerprint!==prepared.fingerprint)
     deny('CORE_DISPATCH_APPROVED_REQUEST_MISMATCH');
-  const a=approved.scope,b=expected.scope;
+  const a=approved.scope,b=trustedExpected.scope;
   if(a.ownerId!==b.ownerId||a.deviceId!==b.deviceId||
      a.deviceEpoch!==b.deviceEpoch||a.sessionEpoch!==b.sessionEpoch||
      a.ownerEpoch!==b.ownerEpoch||a.expectedGeneration!==b.expectedGeneration||
@@ -197,18 +307,18 @@ export async function executeCoreWindowsMutation<T>(
 ):Promise<T>{
   if(!CORE_EXECUTOR_DISPATCH_ENABLED)
     deny('CORE_EXECUTOR_DISPATCH_NOT_INSTALLED');
-  if(!admission||!(admission.fence instanceof BrokerExternalDispatchFence))
+  if(!admission)deny('CORE_DISPATCH_TRUSTED_FENCE_REQUIRED');
+  const properties=ownDispatchRecord(admission,
+    ['fence','request'],'CORE_DISPATCH_TRUSTED_FENCE_REQUIRED');
+  const fence=properties.fence;
+  if(nodeTypes.isProxy(fence)||
+     !(fence instanceof BrokerExternalDispatchFence))
     deny('CORE_DISPATCH_TRUSTED_FENCE_REQUIRED');
   // All input and scope snapshots happen synchronously BEFORE the first CAS
   // await. The source input object may change afterwards without affecting
   // the approved bytes or the Broker callback.
   const prepared=prepareCoreWindowsMutation(capability,input);
-  const source=admission.request;
-  if(!source||!source.scope)deny('CORE_DISPATCH_REQUEST_BINDING_MISMATCH');
-  const request=Object.freeze({
-    requestId:source.requestId,capability:source.capability,
-    fingerprint:source.fingerprint,scope:Object.freeze({...source.scope}),
-  }) as BrokerDispatchRequest;
+  const request=snapshotCoreWindowsDispatchRequest(properties.request);
   if(request.scope.requiredPrivilege!=='CORE'||
      request.capability!==prepared.capability||
      request.fingerprint!==prepared.fingerprint||
@@ -216,7 +326,7 @@ export async function executeCoreWindowsMutation<T>(
     deny('CORE_DISPATCH_REQUEST_BINDING_MISMATCH');
   // #947 forwards the detached, frozen approved request to the callback.
   // #910 does not. A missing approved request cannot authorize an effect.
-  return await admission.fence.execute(request,async(
+  return await fence.execute(request,async(
     approved?:BrokerDispatchRequest,
   )=>{
     assertCoreApprovedDispatchRequest(approved,request,prepared);
@@ -242,7 +352,32 @@ export async function executeCoreWindowsMutation<T>(
  * prove the low-privilege token, descendants, resource/IO/network confinement,
  * revoke/drain and no-replay before the launcher can resume any process.
  */
-export const CORE_SANDBOX_REQUIRED_CAPABILITIES:ReadonlySet<string>=new Set([
+
+/**
+ * A TypeScript ReadonlySet annotation does NOT prevent Set.prototype.clear()
+ * or .delete() in JavaScript. The two CORE fail-closed deny lists must not
+ * expose an actual mutable Set instance to other in-process modules.
+ *
+ * The backing Set remains closure-private; callers only receive an immutable
+ * ReadonlySet interface. This is defense-in-depth, not OS/Broker authority.
+ */
+function immutableCapabilitySet(values:readonly string[]):ReadonlySet<string>{
+  const entries=new Set(values);
+  const view:ReadonlySet<string>={
+    get size(){return entries.size},
+    has(value){return entries.has(value)},
+    keys(){return entries.keys()},
+    values(){return entries.values()},
+    entries(){return entries.entries()},
+    [Symbol.iterator](){return entries.values()},
+    forEach(callback,thisArg){
+      entries.forEach(value=>callback.call(thisArg,value,value,view));
+    },
+  };
+  return Object.freeze(view);
+}
+
+export const CORE_SANDBOX_REQUIRED_CAPABILITIES:ReadonlySet<string>=immutableCapabilitySet([
   'shell.exec','wsl.exec','process.start','process.write',
   'task.graph.run','runbook.run','workspace.checks',
   'workspace.snapshot','workspace.detect',
@@ -271,7 +406,7 @@ export function assertCoreSandboxRouteUnavailable(
  * No #02 native per-effect callback is installed for these #03 routes.
  * Keep the separate owner-console/private-GUI checks; this denies earlier.
  */
-export const CORE_OTHER_UNADMITTED_EFFECT_CAPABILITIES:ReadonlySet<string>=new Set([
+export const CORE_OTHER_UNADMITTED_EFFECT_CAPABILITIES:ReadonlySet<string>=immutableCapabilitySet([
   'files.write','files.mkdir','files.copy','files.move','files.delete',
   'files.patch','nexowire.update.apply','process.stop','process.prune',
   // Even HKCU/user/process-scoped writes are effects; CORE is not an

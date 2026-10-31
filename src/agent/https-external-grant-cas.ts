@@ -1,4 +1,5 @@
 import * as z from 'zod';
+import {types as nodeTypes} from 'node:util';
 import type {CasRequest} from './remote-mutation-cas.js';
 import type {AuthenticatedGrantScope,ExternalGrantCas,
   ExternalGrantCasReceipt,ExternalRevokeRequest,ExternalRevokeReceipt,
@@ -50,6 +51,51 @@ export class ExternalGrantTransportError extends Error {
 const reject=(code:string):never=>{throw new ExternalGrantTransportError(code)};
 
 /**
+ * The authority input consists exclusively of primitive scalar fields.
+ * Reconstruct it from own enumerable data descriptors BEFORE any asynchronous
+ * credential, CAS, or HTTP call. Zod parsing of a borrowed object can execute
+ * a getter; a proxy can execute traps even during descriptor inspection.
+ *
+ * Do not treat this snapshot as authentication: the independently protected
+ * external CAS must still check current owner/device/session and one-use UUID.
+ */
+function plainCasRecordSnapshot(
+  raw:unknown,fields:readonly string[],errorCode:string,
+):Record<string,unknown>{
+  if(!raw||typeof raw!=='object'||Array.isArray(raw)||nodeTypes.isProxy(raw))
+    return reject(errorCode);
+  const record=raw as object;
+  let descriptors:PropertyDescriptorMap;
+  let keys:PropertyKey[];
+  let prototype:unknown;
+  try{
+    descriptors=Object.getOwnPropertyDescriptors(record);
+    keys=Reflect.ownKeys(record);
+    prototype=Object.getPrototypeOf(record);
+  }catch{return reject(errorCode)}
+  if((prototype!==Object.prototype&&prototype!==null)||
+     keys.length!==fields.length||
+     fields.some(field=>!Object.prototype.hasOwnProperty.call(descriptors,field)||
+       !('value' in descriptors[field]!)||
+       descriptors[field]!.enumerable!==true))
+    return reject(errorCode);
+  return Object.fromEntries(fields.map(field=>[field,descriptors[field]!.value]));
+}
+
+
+/**
+ * A server may commit a one-use CAS mutation and still return a timeout,
+ * overload response or 5xx. Such HTTP results MUST NOT be interpreted as a
+ * definitive refusal that makes an automatic retry safe.
+ *
+ * A strict non-ambiguous client error (e.g. 403/409) remains a refusal
+ * under the external authority's documented no-side-effect rejection contract.
+ */
+function httpOutcomeUncertain(status:number):boolean{
+  return status===408||status===425||status===429||status>=500;
+}
+
+/**
  * Production-wire HTTPS adapter for a separately enrolled monotonic CAS.
  *
  * IMPORTANT: This is a real transport/client implementation, NOT a hosted
@@ -65,21 +111,32 @@ export class HttpsExternalGrantCas implements ExternalGrantCas {
     credentialFor:(deviceId:string,deviceEpoch:string,sessionEpoch:string)=>
       Promise<string|undefined>;
   }){
+    // Do not retain the caller's mutable configuration across async
+    // credential acquisition or HTTP response verification.
+    const pinned=Object.freeze({...config});
     let endpoint:URL;
-    try{endpoint=new URL(config.endpoint)}
+    try{endpoint=new URL(pinned.endpoint)}
     catch{throw new ExternalGrantTransportError('EXTERNAL_GRANT_URL_INVALID')}
     if(endpoint.protocol!=='https:'||endpoint.username||endpoint.password||
        endpoint.hash||endpoint.search||
        endpoint.pathname!=='/v1/grant-cas/reserve'||
-       !uuid.safeParse(config.authorityId).success)
+       !uuid.safeParse(pinned.authorityId).success)
       reject('EXTERNAL_GRANT_URL_INVALID');
     this.endpoint=endpoint;
+    this.config=pinned;
   }
   async reserveIfCurrent(
     input:CasRequest,authorization:AuthenticatedGrantScope,
   ):Promise<ExternalGrantCasReceipt>{
-    const operation=request.parse(input);
-    const bound=scope.parse(authorization);
+    const operation=Object.freeze(request.parse(plainCasRecordSnapshot(
+      input,['deviceId','epoch','requestId','fingerprint','capability'],
+      'EXTERNAL_GRANT_INPUT_INVALID',
+    )));
+    const bound=Object.freeze(scope.parse(plainCasRecordSnapshot(
+      authorization,['ownerId','deviceId','deviceEpoch','sessionEpoch',
+        'expectedGeneration','requiredPrivilege'],
+      'EXTERNAL_GRANT_SCOPE_INVALID',
+    )));
     if(operation.deviceId!==bound.deviceId||
        operation.epoch!==bound.deviceEpoch)
       reject('EXTERNAL_GRANT_SCOPE_INVALID');
@@ -97,7 +154,8 @@ export class HttpsExternalGrantCas implements ExternalGrantCas {
         signal:AbortSignal.timeout(this.config.timeoutMs??3500),
       });
     }catch{return reject('EXTERNAL_GRANT_TRANSPORT_UNKNOWN')}
-    if(!response.ok)return reject('EXTERNAL_GRANT_AUTHORITY_REFUSED');
+    if(!response.ok)return reject(httpOutcomeUncertain(response.status)
+      ?'EXTERNAL_GRANT_TRANSPORT_UNKNOWN':'EXTERNAL_GRANT_AUTHORITY_REFUSED');
     let payload:string;
     try{payload=await response.text()}
     catch{return reject('EXTERNAL_GRANT_PROOF_INVALID')}
@@ -120,7 +178,11 @@ export class HttpsExternalGrantCas implements ExternalGrantCas {
     return proof;
   }
   async revokeIfCurrent(value:ExternalRevokeRequest):Promise<ExternalRevokeReceipt>{
-    const operation=revokeRequest.parse(value);
+    const operation=Object.freeze(revokeRequest.parse(plainCasRecordSnapshot(
+      value,['deviceId','ownerId','deviceEpoch','sessionEpoch',
+        'expectedGeneration','signedOwnerApproval'],
+      'EXTERNAL_REVOKE_INPUT_INVALID',
+    )));
     let token:string|undefined;
     try{token=await this.config.credentialFor(
       operation.deviceId,operation.deviceEpoch,operation.sessionEpoch)}
@@ -136,7 +198,8 @@ export class HttpsExternalGrantCas implements ExternalGrantCas {
         signal:AbortSignal.timeout(this.config.timeoutMs??3500),
       });
     }catch{return reject('EXTERNAL_REVOKE_OUTCOME_UNKNOWN')}
-    if(!response.ok)return reject('EXTERNAL_REVOKE_AUTHORITY_REFUSED');
+    if(!response.ok)return reject(httpOutcomeUncertain(response.status)
+      ?'EXTERNAL_REVOKE_OUTCOME_UNKNOWN':'EXTERNAL_REVOKE_AUTHORITY_REFUSED');
     let payload:string;
     try{payload=await response.text()}
     catch{return reject('EXTERNAL_REVOKE_PROOF_INVALID')}
@@ -158,7 +221,12 @@ export class HttpsExternalGrantCas implements ExternalGrantCas {
     return data;
   }
   async rePairIfCurrent(value:ExternalRePairRequest):Promise<ExternalRePairReceipt>{
-    const operation=repairRequest.parse(value);
+    const operation=Object.freeze(repairRequest.parse(plainCasRecordSnapshot(
+      value,['deviceId','ownerId','deviceEpoch','sessionEpoch',
+        'expectedGeneration','signedOwnerApproval','newOwnerId',
+        'newDeviceEpoch','newSessionEpoch'],
+      'EXTERNAL_REPAIR_INPUT_INVALID',
+    )));
     if(operation.newDeviceEpoch===operation.deviceEpoch||
        operation.newSessionEpoch===operation.sessionEpoch)
       return reject('EXTERNAL_REPAIR_EPOCH_REUSE');
@@ -174,7 +242,8 @@ export class HttpsExternalGrantCas implements ExternalGrantCas {
       body:JSON.stringify(operation),
       signal:AbortSignal.timeout(this.config.timeoutMs??3500),
     })}catch{return reject('EXTERNAL_REPAIR_OUTCOME_UNKNOWN')}
-    if(!response.ok)return reject('EXTERNAL_REPAIR_AUTHORITY_REFUSED');
+    if(!response.ok)return reject(httpOutcomeUncertain(response.status)
+      ?'EXTERNAL_REPAIR_OUTCOME_UNKNOWN':'EXTERNAL_REPAIR_AUTHORITY_REFUSED');
     let payload:string;
     try{payload=await response.text()}
     catch{return reject('EXTERNAL_REPAIR_PROOF_INVALID')}
