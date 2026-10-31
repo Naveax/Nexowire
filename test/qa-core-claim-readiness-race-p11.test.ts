@@ -49,6 +49,16 @@ function fixture() {
   for (const file of ['0014_device_maintenance_preferences.sql','0015_device_bridge_preferences.sql',
     '0019_core_console_authority.sql','0020_core_console_native_logon_binding.sql'])
     db.exec(readFileSync(new URL('../cloudflare/migrations/'+file,import.meta.url),'utf8'));
+  // Isolated test-local emulation of the coordinator #996 additive schema;
+  // migration is separately owned and is NOT written to AI-06's branch.
+  db.exec(`ALTER TABLE device_core_console_operations
+    ADD COLUMN native_claim_verified INTEGER NOT NULL DEFAULT 0
+    CHECK(native_claim_verified IN (0,1));
+    CREATE TRIGGER ai06_completion_requires_native_claim BEFORE UPDATE OF state
+    ON device_core_console_operations
+    WHEN NEW.state IN ('succeeded','denied') AND
+      (OLD.state <> 'dispatched' OR OLD.native_claim_verified <> 1)
+    BEGIN SELECT RAISE(ABORT,'CORE_NATIVE_CLAIM_NOT_VERIFIED'); END;`);
   db.prepare('INSERT INTO device_maintenance_preferences VALUES(?,?,?,?)').run(device,owner,1,'2026-10-28');
   db.prepare('INSERT INTO device_bridge_preferences VALUES(?,?,?,?)').run(device,owner,'auto','2026-10-28');
   db.prepare(`UPDATE device_core_console_authority SET installation_id=?,enrollment_id=?,public_key_spki=?,

@@ -100,6 +100,17 @@ async function untilAborted<T>(work: Promise<T>, signal: AbortSignal): Promise<T
 export class CoreConsoleAdmission {
   private stopped = false;
   private abort = new AbortController();
+  // A late affirmative native approval must never reopen a STOP issued
+  // while the enrollment prompt or protected service readback was pending.
+  private revokeSequence = 0;
+  // Closing an Agent controller is terminal for that instance. A delayed
+  // native consent callback must never resurrect a closed controller.
+  private closed = false;
+  private enrollmentPending = false;
+  // A pending remote revoke and any lost/failed revoke ACK are authorization
+  // uncertainty, never a reason to admit a fresh approval.
+  private revocationsPending = 0;
+  private revocationUncertain = false;
   private readonly requests = new Set<string>();
   private readonly inFlight = new Set<string>();
 
@@ -128,11 +139,11 @@ export class CoreConsoleAdmission {
         AbortSignal.timeout(10000),...(requestSignal?[requestSignal]:[])]);
       if (signal.aborted) return {status:this.inactive('CORE_CONSOLE_REQUEST_CANCELLED')};
       const evidence = structuredClone(await untilAborted(this.provider.inspect(signal),signal));
+      if (this.stopped) return {status:this.inactive('REVOKED_LOCALLY')};
       const binding=this.binding??this.provider.binding;
       if(!binding)return {status:this.inactive('LOCAL_ENROLLMENT_REQUIRED')};
       this.binding=Object.freeze({...binding});
       const nowMs = this.now();
-      if (this.stopped) return {status:this.inactive('REVOKED_LOCALLY')};
       if (!Number.isSafeInteger(evidence.observedAtMs) ||
           !Number.isSafeInteger(nowMs) || evidence.observedAtMs > nowMs ||
           nowMs - evidence.observedAtMs > MAX_READBACK_AGE_MS)
@@ -150,8 +161,15 @@ export class CoreConsoleAdmission {
       const enrollment=evidence.desktop==='default'?evaluation:
         evaluateCoreConsoleEnrollment({...evaluationInput,desktop:'default'});
       const nativeProviderPresent=evidence.nativeConsentProviderPresent===true;
+      // The native provider's "verified" assertion is not sufficient if its
+      // independent runtime evidence disagrees or is missing. Requiring all
+      // three fields here prevents an alternate/buggy provider from reporting
+      // ACTIVE with a Linux device, unready Broker or unverified local probe.
+      const runtimeVerified=evidence.devicePlatform==='win32'&&
+        evidence.deviceReady===true&&evidence.brokerVersionVerified===true;
       const localEnrolled=nativeProviderPresent&&enrollment.policyEligible;
-      const active = nativeProviderPresent&&evaluation.policyEligible&&evidence.nativeAdmission === 'verified';
+      const active = nativeProviderPresent&&runtimeVerified&&
+        evaluation.policyEligible&&evidence.nativeAdmission === 'verified';
       return {evidence,status:{
         preferenceEnabled: typeof evidence.current?.coreEnabled === 'boolean'
           ? evidence.current.coreEnabled : null,
@@ -160,11 +178,12 @@ export class CoreConsoleAdmission {
         state:active ? 'ACTIVE'
           : evidence.nativeConsentProviderPresent !== true ? 'LOCAL_ENROLLMENT_REQUIRED'
           : evidence.current?.coreEnabled === false ? 'CORE_NOT_EFFECTIVE'
-          : evidence.brokerVersionVerified === false &&
-            evidence.current?.coreEnabled === true &&
-            evidence.current.accessMode === 'full' &&
-            !evidence.certificate
+          : evidence.brokerVersionVerified !== true
             ? 'CORE_BROKER_VERIFICATION_REQUIRED'
+          : evidence.devicePlatform !== 'win32'
+            ? 'CORE_DEVICE_PLATFORM_NOT_VERIFIED'
+          : evidence.deviceReady !== true
+            ? 'CORE_DEVICE_NOT_READY'
           : evaluation.policyEligible
             ? 'NATIVE_ADMISSION_UNAVAILABLE' : evaluation.reason,
       }};
@@ -180,23 +199,63 @@ export class CoreConsoleAdmission {
 
   /** No remote reenrollment/reset method: STOP cannot be undone by a tool call. */
   async revoke(): Promise<void> {
+    const sequence=++this.revokeSequence;
     this.stopped = true;
     this.abort.abort();
-    if (this.provider) await this.provider.revoke();
+    ++this.revocationsPending;
+    try {
+      if(this.provider)await this.provider.revoke();
+      // Only the most recent successful revoke ACK can clear a previous
+      // unknown. A late old ACK must never certify a newer in-flight revoke.
+      if(sequence===this.revokeSequence)this.revocationUncertain=false;
+    } catch(error) {
+      this.revocationUncertain=true;
+      throw error;
+    } finally {
+      --this.revocationsPending;
+    }
   }
 
   /** Only the provider's real local decision UI can reopen a stopped profile. */
   async enroll(signal:AbortSignal):Promise<boolean>{
+    if(this.closed)throw failure('CORE_CONSOLE_CONTROLLER_CLOSED');
     if(!this.provider?.enroll)throw failure('CORE_CONSOLE_PROVIDER_UNAVAILABLE');
-    const approved=await this.provider.enroll(signal);
-    if(approved===true&&!signal.aborted){
-      if(!this.provider.binding)throw failure('CORE_ENROLLMENT_BINDING_REQUIRED');
-      this.binding=Object.freeze({...this.provider.binding});this.abort=new AbortController();this.stopped=false;
-      return true;
-    }
-    return false;
+    if(signal.aborted)return false;
+    if(this.revocationsPending>0)throw failure('CORE_ENROLLMENT_REVOKE_IN_PROGRESS');
+    if(this.revocationUncertain)throw failure('CORE_ENROLLMENT_REVOKE_UNCERTAIN');
+    // The protected provider also serializes approval, but the controller
+    // must not allow another implementation to prompt/register in parallel.
+    if(this.enrollmentPending)throw failure('CORE_ENROLLMENT_PROMPT_ACTIVE');
+    this.enrollmentPending=true;
+    const observedRevokeSequence=this.revokeSequence;
+    try{
+      const approved=await this.provider.enroll(signal);
+      // close() and revoke() both fence delayed native approval, even if the
+      // downstream provider returns true or a remote revoke ACK is lost.
+      if(this.closed)throw failure('CORE_CONSOLE_CONTROLLER_CLOSED');
+      if(this.revokeSequence!==observedRevokeSequence)
+        throw failure('CORE_ENROLLMENT_REVOKED_DURING_APPROVAL');
+      if(this.revocationsPending>0||this.revocationUncertain)
+        throw failure('CORE_ENROLLMENT_REVOKE_UNCERTAIN');
+      if(approved===true&&!signal.aborted){
+        if(!this.provider.binding)throw failure('CORE_ENROLLMENT_BINDING_REQUIRED');
+        this.binding=Object.freeze({...this.provider.binding});
+        this.abort=new AbortController();this.stopped=false;
+        return true;
+      }
+      return false;
+    }finally{this.enrollmentPending=false;}
   }
-  close():void {this.provider?.close?.();}
+  close():void {
+    if(this.closed)return;
+    // Fence synchronously before any provider cleanup. close() is not a
+    // substitute for durable remote revoke, but cannot grant local authority.
+    this.closed=true;
+    this.revokeSequence++;
+    this.stopped=true;
+    this.abort.abort();
+    this.provider?.close?.();
+  }
   get installed():boolean {return this.provider!==undefined;}
 
   async execute(

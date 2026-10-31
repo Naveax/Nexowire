@@ -38,6 +38,16 @@ function fixture(){
     db.exec(readFileSync(new URL('../cloudflare/migrations/'+file,import.meta.url),'utf8'));
   db.exec(`INSERT INTO device_maintenance_preferences VALUES('${deviceId}','${owner}',1,'2026-10-24');
     INSERT INTO device_bridge_preferences VALUES('${deviceId}','${owner}','auto','2026-10-24');`);
+  // Isolated test-local emulation of the coordinator #996 additive schema;
+  // migration is separately owned and is NOT written to AI-06's branch.
+  db.exec(`ALTER TABLE device_core_console_operations
+    ADD COLUMN native_claim_verified INTEGER NOT NULL DEFAULT 0
+    CHECK(native_claim_verified IN (0,1));
+    CREATE TRIGGER ai06_completion_requires_native_claim BEFORE UPDATE OF state
+    ON device_core_console_operations
+    WHEN NEW.state IN ('succeeded','denied') AND
+      (OLD.state <> 'dispatched' OR OLD.native_claim_verified <> 1)
+    BEGIN SELECT RAISE(ABORT,'CORE_NATIVE_CLAIM_NOT_VERIFIED'); END;`);
   // Idempotent migration must not reset existing counters, keys or requests.
   db.exec(readFileSync(new URL('../cloudflare/migrations/0019_core_console_authority.sql',import.meta.url),'utf8'));
   const d1:D1DatabaseLike={prepare:sql=>new Statement(db.prepare(sql)),
@@ -88,11 +98,17 @@ function fixture(){
     beforeRequest?.(JSON.parse(String(init?.body)));return handler(request);}) as typeof fetch;
   const client=new CoreConsoleAuthorityClient('https://core.example',credential,fetcher);
   let record:Profile|null=null,stopped=false,blocked=false,consents=0,effects=0,desktop=true,bridge=true;
+  const nativeInputs:unknown[]=[];
   let forgedNativeReceipt:((value:NativeCoreConsentProof)=>NativeCoreConsentProof)|undefined;
   let onNative:(()=>Promise<void>)|undefined;
+  let beforeBlockedRead:(()=>void)|undefined;
+  let beforeClearStop:(()=>void)|undefined;
   const store:CoreProfileStore={stopFile:'fixture-only-STOP',load:async()=>structuredClone(record),
-    save:async p=>{record=structuredClone(p);},stop:async()=>{stopped=true;},clearStop:async()=>{stopped=false;},stopped:async()=>stopped,
-    block:async()=>{blocked=true;},clearBlock:async()=>{blocked=false;},blocked:async()=>blocked};
+    save:async p=>{record=structuredClone(p);},stop:async()=>{stopped=true;},
+    clearStop:async()=>{const hook=beforeClearStop;beforeClearStop=undefined;hook?.();stopped=false;},
+    stopped:async()=>stopped,
+    block:async()=>{blocked=true;},clearBlock:async()=>{blocked=false;},
+    blocked:async()=>{const hook=beforeBlockedRead;beforeBlockedRead=undefined;hook?.();return blocked;}};
   const options={deviceId,authority:client,store,
     broker:{probe:async()=>({reachable:bridge,elevated:bridge,version:NEXOWIRE_VERSION})},
     // SYNTHETIC native receipt/readback fixture. It has no protected Windows
@@ -112,7 +128,10 @@ function fixture(){
         return proof;
       },
     },
-    native:async()=>{effects++;await onNative?.();return {data:{syntheticNativeEffect:true}};},
+    native:async(_capability:string,nativeInput:unknown)=>{
+      nativeInputs.push(structuredClone(nativeInput));
+      effects++;await onNative?.();return {data:{syntheticNativeEffect:true}};
+    },
     monitor:{desktopAllowed:()=>desktop,close:()=>{}},
   };
   const make=async(withNativeConsent=true)=>{
@@ -122,6 +141,7 @@ function fixture(){
     return {provider,controller:new CoreConsoleAdmission(undefined,provider)};
   };
   return {db,d1,authority,client,store,make,consents:()=>consents,effects:()=>effects,
+    nativeInputs:()=>structuredClone(nativeInputs),
     profile:()=>structuredClone(record)!,setProfile:(p:Profile)=>{record=structuredClone(p);},
     setDesktop:(v:boolean)=>{desktop=v;},setBridge:(v:boolean)=>{bridge=v;},
     setNativeReadback:(v:boolean)=>{readbackEnabled=v;},
@@ -129,6 +149,8 @@ function fixture(){
     setCurrentLogon:(v:typeof currentLogon)=>{currentLogon={...v};},
     duringNativeReadback:(cb:()=>void)=>{beforeNativeReadback=cb;},
     afterLocalReadback:(cb:()=>void)=>{afterLocalNativeReadback=cb;},
+    beforeBlockedRead:(cb:()=>void)=>{beforeBlockedRead=cb;},
+    beforeClearStop:(cb:()=>void)=>{beforeClearStop=cb;},
     pauseNextAuthorityReadback:()=>{
       let entered!:()=>void,release!:()=>void;
       const enteredPromise=new Promise<void>(resolve=>{entered=resolve;});
@@ -218,6 +240,34 @@ test('an enrollment retry during idle readiness loss cannot discard the existing
     assert.equal(f.consents(),1);
     assert.equal((await runtime.controller.status('full')).active,true);
   }finally{runtime?.provider.close();f.db.close();}
+});
+
+for(const race of [
+  {name:'device offline',mutate:(f:ReturnType<typeof fixture>)=>
+    f.db.exec('UPDATE devices SET online=0')},
+  {name:'Broker readiness lost',mutate:(f:ReturnType<typeof fixture>)=>
+    f.db.exec('UPDATE devices SET admin_bridge_ready=0')},
+  {name:'owner account changed',mutate:(f:ReturnType<typeof fixture>)=>
+    f.db.exec("UPDATE devices SET owner_account_id='owner-changed-during-existing-consent'")},
+  {name:'another provider persisted pending dispatch',mutate:(f:ReturnType<typeof fixture>)=>{
+    const profile=f.profile();
+    f.setProfile({...profile,pendingDispatch:{requestId:randomUUID(),fingerprint:'a'.repeat(64)}});
+  }},
+])test('AI-06: existing consent reuse cannot return success after async '+race.name,async()=>{
+  const f=fixture();
+  try{
+    const runtime=await enable(f);
+    let interleaved=false;
+    f.afterLocalReadback(()=>{interleaved=true;race.mutate(f);});
+    await assert.rejects(runtime.controller.enroll(new AbortController().signal),
+      /CORE_EXISTING_ENROLLMENT_READBACK_STALE/,
+      'native proof from before a remote/local mutation cannot reopen consent');
+    assert.equal(interleaved,true,'the local readback race hook must fire');
+    assert.equal(f.consents(),1,'unsafe consent reuse must not prompt a second owner approval');
+    assert.equal(f.effects(),0,'readback-only race cannot dispatch native input');
+    assert.equal((await runtime.controller.status('full')).active,false);
+    runtime.provider.close();
+  }finally{f.db.close();}
 });
 
 test('an enrollment retry with pending work still revokes and drains before any new approval',{timeout:10000},async()=>{
@@ -427,6 +477,143 @@ test('a losing duplicate D1 claim cannot tombstone the winner during native read
     assert.equal(f.db.prepare('SELECT state FROM device_core_console_operations WHERE request_id=?')
       .get(requestId)?.state,'dispatched','replay remains terminal');
   }finally{releaseGate?.();f.db.close();}
+});
+
+test('AI-06: caller mutation during async claim cannot change the native effect payload',async()=>{
+  const f=fixture();
+  try{
+    const {provider}=await enable(f);
+    const profile=f.profile();
+    const e=profile.certificate!.enrollment;
+    const requestId=randomUUID(),capability='windows.pointer.move';
+    const input={hwnd:'0x123',x:0,y:0};
+    const binding={ownerAccountId:owner,deviceId,installationId:profile.installationId};
+    const fingerprint=createHash('sha256')
+      .update(JSON.stringify([requestId,capability,input,binding])).digest('hex');
+    let changed=false;
+    f.before(body=>{
+      if(body.action==='claim'){
+        // Interleave after fingerprint acceptance but before final native
+        // readback/actuation. This is a synthetic mutation of a shared object.
+        input.x=9999;input.hwnd='0x999';
+        changed=true;
+      }
+    });
+    const result=await provider.execute({requestId,capability,input,fingerprint,binding,
+      enrollmentId:e.enrollmentId,ownerEpoch:e.ownerEpoch,grantGeneration:e.grantGeneration,
+      revokeEpoch:e.revokeEpoch},new AbortController().signal);
+    assert.equal(changed,true,'interleaving must actually occur');
+    assert.equal(result.outcome,'succeeded');
+    assert.deepEqual(f.nativeInputs(),[{hwnd:'0x123',x:0,y:0}],
+      'native must see only the immutable authorized snapshot');
+    assert.equal(f.effects(),1);
+  }finally{f.db.close();}
+});
+
+test('AI-06: late STOP-readback cancellation blocks native callback after claim',async()=>{
+  const f=fixture();
+  try{
+    const {provider}=await enable(f);
+    const profile=f.profile();
+    const e=profile.certificate!.enrollment;
+    const requestId=randomUUID(),capability='windows.pointer.move';
+    const input={hwnd:'0x123',x:0,y:0};
+    const binding={ownerAccountId:owner,deviceId,installationId:profile.installationId};
+    const fingerprint=createHash('sha256')
+      .update(JSON.stringify([requestId,capability,input,binding])).digest('hex');
+    const controller=new AbortController();
+    let interleaved=false;
+    f.before(body=>{
+      if(body.action==='claim')f.beforeBlockedRead(()=>{
+        // The readback is already verified. Cancel *within* the last async
+        // local block/STOP query, after earlier signal checks have run.
+        interleaved=true;controller.abort();
+      });
+    });
+    const receipt=await provider.execute({requestId,capability,input,fingerprint,binding,
+      enrollmentId:e.enrollmentId,ownerEpoch:e.ownerEpoch,grantGeneration:e.grantGeneration,
+      revokeEpoch:e.revokeEpoch},controller.signal);
+    assert.equal(interleaved,true,'the cancellation hook must actually fire');
+    assert.equal(receipt.outcome,'unknown','cancelled claim must never report success');
+    assert.equal(f.effects(),0,'no synthetic native effect after late cancellation');
+    assert.equal(await f.store.stopped(),true,'STOP remains latched');
+    assert.equal(f.db.prepare('SELECT state FROM device_core_console_operations WHERE request_id=?')
+      .get(requestId)?.state,'unknown','uncertain request remains terminal');
+  }finally{f.db.close();}
+});
+
+test('AI-06: abort during remote completion ACK never returns stale native success',async()=>{
+  const f=fixture();
+  try{
+    const {provider}=await enable(f);
+    const profile=f.profile(),e=profile.certificate!.enrollment;
+    const requestId=randomUUID(),capability='windows.pointer.move';
+    const input={hwnd:'0x123',x:0,y:0};
+    const binding={ownerAccountId:owner,deviceId,installationId:profile.installationId};
+    const fingerprint=createHash('sha256')
+      .update(JSON.stringify([requestId,capability,input,binding])).digest('hex');
+    const controller=new AbortController();
+    let abortedAtCompletion=false;
+    f.before(body=>{
+      if(body.action==='complete'){
+        abortedAtCompletion=true;
+        controller.abort();
+      }
+    });
+    await assert.rejects(provider.execute({requestId,capability,input,fingerprint,binding,
+      enrollmentId:e.enrollmentId,ownerEpoch:e.ownerEpoch,grantGeneration:e.grantGeneration,
+      revokeEpoch:e.revokeEpoch},controller.signal),/CORE_CONSOLE_SETTLEMENT_CANCELLED/);
+    assert.equal(abortedAtCompletion,true,'abort must occur after native callback');
+    assert.equal(f.effects(),1,'a completed synthetic effect cannot be retroactively undone');
+    assert.equal(await f.store.stopped(),true,'late abort must persist STOP');
+    assert.equal((await (await f.make()).controller.status('full')).active,false,
+      'provider reconstruction must not resurrect the cancelled grant');
+    await assert.rejects(f.client.call(profile,'claim',{requestId,fingerprint}),
+      'already consumed request ID must never be replayable');
+  }finally{f.db.close();}
+});
+
+test('AI-06: cancellation after remote enrollment registration must retain STOP',async()=>{
+  const f=fixture();
+  try{
+    const {provider}=await f.make();
+    const controller=new AbortController();
+    let cancelledAtRegister=false;
+    f.before(body=>{
+      if(body.action==='enroll'){
+        cancelledAtRegister=true;
+        controller.abort();
+      }
+    });
+    await assert.rejects(provider.enroll(controller.signal),
+      /CORE_ENROLLMENT_CANCELLED_BEFORE_ACTIVATION/);
+    assert.equal(cancelledAtRegister,true,'registration race hook must run');
+    assert.equal(await f.store.stopped(),true,'cancelled enrollment must preserve durable STOP');
+    const row=f.db.prepare('SELECT enrollment_id FROM device_core_console_authority WHERE device_id=?')
+      .get(deviceId);
+    assert.equal(row?.enrollment_id,null,'cancelled registration must be revoked remotely');
+    assert.equal((await (await f.make()).controller.status('full')).active,false,
+      'restarted provider must not resurrect a cancelled native enrollment');
+    assert.equal(f.effects(),0);
+  }finally{f.db.close();}
+});
+
+test('AI-06: concurrent revoke during clearStop cannot reopen enrollment',async()=>{
+  const f=fixture();
+  try{
+    const {provider}=await f.make();
+    let revokedDuringActivation=false;
+    f.beforeClearStop(()=>{
+      revokedDuringActivation=true;
+      void provider.revoke().catch(()=>{});
+    });
+    await assert.rejects(provider.enroll(new AbortController().signal),
+      /CORE_ENROLLMENT_CANCELLED_BEFORE_ACTIVATION/);
+    assert.equal(revokedDuringActivation,true,'revoke must race the final unblocking step');
+    assert.equal(await f.store.stopped(),true);
+    assert.equal((await (await f.make()).controller.status('full')).active,false);
+    assert.equal(f.effects(),0);
+  }finally{f.db.close();}
 });
 
 test('CORE OFF in the reserve->claim race prevents the actual native callback',async()=>{

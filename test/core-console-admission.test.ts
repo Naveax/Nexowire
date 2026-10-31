@@ -26,7 +26,9 @@ function evidence(): CoreConsoleEvidence {
     pinnedLocalSpkiDer:der,current:{...binding,ownerEpoch:8,grantGeneration:4,
       revokeEpoch:2,coreEnabled:true,accessMode:'full',deviceOnline:true,bridgeVerified:true},
     desktop:'default',observedAtMs:now,nativeAdmission:'verified',
-    // Synthetic test evidence only. Production has no consent provider installed.
+    // All runtime checks are mandatory even when a synthetic provider asserts
+    // a native-verified proof. The actual OS boundary remains unimplemented.
+    devicePlatform:'win32',deviceReady:true,brokerVersionVerified:true,
     nativeConsentProviderPresent:true};
 }
 function fixture(patch: Partial<CoreConsoleNativeProvider> = {}) {
@@ -252,4 +254,22 @@ test('policy rejects truthy non-booleans and noncanonical signature encodings fr
   f.set({...original,certificate:{...original.certificate!,
     signatureBase64:original.certificate!.signatureBase64+'\n'}});
   assert.equal((await f.controller.status('full')).active,false);
+});
+
+for(const scenario of [
+  {name:'Linux platform',patch:{devicePlatform:'linux'},code:'CORE_DEVICE_PLATFORM_NOT_VERIFIED'},
+  {name:'missing platform',patch:{devicePlatform:undefined},code:'CORE_DEVICE_PLATFORM_NOT_VERIFIED'},
+  {name:'unready device',patch:{deviceReady:false},code:'CORE_DEVICE_NOT_READY'},
+  {name:'missing device readiness',patch:{deviceReady:undefined},code:'CORE_DEVICE_NOT_READY'},
+  {name:'failed local Broker probe',patch:{brokerVersionVerified:false},code:'CORE_BROKER_VERIFICATION_REQUIRED'},
+  {name:'missing local Broker probe',patch:{brokerVersionVerified:undefined},code:'CORE_BROKER_VERIFICATION_REQUIRED'},
+] as const)test('AI-06: controller rejects asserted native admission with '+scenario.name,async()=>{
+  const f=fixture();
+  f.set({...evidence(),...scenario.patch});
+  const status=await f.controller.status('full');
+  assert.equal(status.active,false,'a provider assertion cannot bypass missing runtime evidence');
+  assert.equal(status.state,scenario.code);
+  await assert.rejects(f.controller.execute('windows.pointer.click',{},randomUUID(),'full'),
+    code(scenario.code));
+  assert.equal(f.calls(),0,'no native callback may run');
 });
