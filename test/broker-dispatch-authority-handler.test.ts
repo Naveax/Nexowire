@@ -103,14 +103,24 @@ test('dispatch wire adapter enforces identity, protected readback and signed rec
   const deviceId=randomUUID(),deviceEpoch=randomUUID(),sessionEpoch=randomUUID();
   const token=randomUUID()+randomUUID(),principal={brokerId,ownerId,deviceId,deviceEpoch,sessionEpoch};
   const backend=new FixtureAuthority(authorityId,authorityKey.privateKey);
-  let high=true;
+  let high=true,credentialCurrent=true,expireAfterNextValidAuth=false;
+  let principalSource:()=>typeof principal=()=>principal;
+  let evidenceSource:(()=>Promise<ProtectedBrokerEvidence|undefined>)|undefined;
   const effective=():ProtectedBrokerEvidence=>({verified:true,brokerId,ownerEpoch:4,
     grantGeneration:7,highIntegrityToken:high as true,signedProtectedImage:true,
     protectedParentAndImports:true});
   const approval=signedOperatorGrantVerifier(pub(ownerKey.publicKey));
   const settings={authorityId,publicKeyPem:pub(authorityKey.publicKey),authority:backend,
-    authenticateBroker:async(credential:string)=>credential===token?principal:undefined,
-    readProtectedBroker:async()=>effective(),
+    authenticateBroker:async(credential:string)=>{
+      const valid=credential===token&&credentialCurrent;
+      const resolved=valid?principalSource():undefined;
+      if(valid&&expireAfterNextValidAuth){
+        expireAfterNextValidAuth=false;
+        credentialCurrent=false;
+      }
+      return resolved;
+    },
+    readProtectedBroker:async()=>evidenceSource?evidenceSource():effective(),
     verifyOwnerRevocation:async(r:DispatchRevokeRequest)=>approval({kind:'revoke',
       authorityId,deviceId:r.deviceId,ownerId:r.ownerId,epoch:r.deviceEpoch,
       sessionEpoch:r.sessionEpoch,generation:r.expectedGeneration},r.signedOwnerApproval)};
@@ -172,6 +182,62 @@ test('dispatch wire adapter enforces identity, protected readback and signed rec
       challengeNonce:'1'.repeat(64)})).status,403);
     high=true;
     assert.equal(backend.beginCalls,before);
+  });
+
+  await t.test('native Broker readback rejects accessor, inherited and trapping Proxy evidence',async()=>{
+    const baseline=backend.beginCalls;
+    for(const kind of ['accessor','inherited','proxy'] as const){
+      let getterReads=0;
+      evidenceSource=async()=>{
+        const raw=effective();
+        if(kind==='accessor'){
+          Object.defineProperty(raw,'brokerId',{enumerable:true,
+            get(){getterReads++;return brokerId}});
+          return raw;
+        }
+        if(kind==='inherited')return Object.create(raw) as ProtectedBrokerEvidence;
+        return new Proxy(raw,{ownKeys(){throw Error('PROVIDER_TRAP')}});
+      };
+      try{
+        const response=await post('begin',{request:operation(),broker:effective(),
+          challengeNonce:'5'.repeat(64)});
+        assert.equal(response.status,403,kind+' must fail closed');
+        assert.equal(backend.beginCalls,baseline);
+        assert.equal(getterReads,0,'never execute provider-controlled getter');
+      }finally{evidenceSource=undefined}
+    }
+  });
+
+  await t.test('protected principal rejects inherited and accessor scope without invoking CAS',async()=>{
+    const baseline=backend.beginCalls;
+    for(const kind of ['accessor','inherited'] as const){
+      let getterReads=0;
+      principalSource=()=>{
+        if(kind==='inherited')return Object.create(principal) as typeof principal;
+        const raw={...principal};
+        Object.defineProperty(raw,'ownerId',{enumerable:true,
+          get(){getterReads++;return ownerId}});
+        return raw;
+      };
+      try{
+        const response=await post('begin',{request:operation(),broker:effective(),
+          challengeNonce:'6'.repeat(64)});
+        assert.equal(response.status,403);
+        assert.equal(backend.beginCalls,baseline);
+        assert.equal(getterReads,0);
+      }finally{principalSource=()=>principal}
+    }
+  });
+
+  await t.test('mid-request Broker credential revoke refuses CAS despite HIGH token',async()=>{
+    const baseline=backend.beginCalls;
+    evidenceSource=async()=>{credentialCurrent=false;return effective()};
+    try{
+      const response=await post('begin',{request:operation(),broker:effective(),
+        challengeNonce:'7'.repeat(64)});
+      assert.equal(response.status,403);
+      assert.equal(backend.beginCalls,baseline);
+    }finally{credentialCurrent=true;evidenceSource=undefined}
   });
 
   await t.test('concurrent Hubs cannot use one UUID twice',async()=>{
@@ -253,6 +319,51 @@ test('dispatch wire adapter enforces identity, protected readback and signed rec
     assert.equal(backend.active.size,0);
   });
 
+  await t.test('release drains exact preexisting claim if live credential expires mid-request',async()=>{
+    const op=operation();
+    const reservation=await remote.beginIfCurrent(op,effective(),'9'.repeat(64));
+    const claim=JSON.parse(Buffer.from(reservation.payload,'base64url').toString('utf8')) as
+      {dispatchId:string};
+    const before=backend.releaseCalls;
+    // First authentication is still valid, and it becomes revoked immediately
+    // afterward. Release must not attempt a second fresh-grant admission.
+    expireAfterNextValidAuth=true;
+    try {
+      await remote.release({dispatchId:claim.dispatchId,brokerId,request:op});
+      assert.equal(backend.releaseCalls,before+1);
+      assert.equal(backend.active.has(claim.dispatchId),false);
+      // The same now-revoked credential must NOT authorize a new claim.
+      assert.equal((await post('begin',{request:operation(),broker:effective(),
+        challengeNonce:'8'.repeat(64)})).status,403);
+    } finally {
+      expireAfterNextValidAuth=false;
+      credentialCurrent=true;
+    }
+  });
+
+  await t.test('server refuses validly signed noncanonical Broker receipt',async()=>{
+    const op=operation();
+    const original=backend.beginIfCurrent.bind(backend);
+    let dispatchId:string|undefined;
+    backend.beginIfCurrent=async(...args)=>{
+      const receipt=await original(...args);
+      const json=Buffer.from(receipt.payload,'base64url').toString('utf8');
+      dispatchId=(JSON.parse(json) as {dispatchId:string}).dispatchId;
+      const bytes=Buffer.from(' '+json,'utf8');
+      return {payload:bytes.toString('base64url'),
+        signature:sign(null,bytes,authorityKey.privateKey).toString('base64url')};
+    };
+    try{
+      const response=await post('begin',{request:op,broker:effective(),
+        challengeNonce:'4'.repeat(64)});
+      assert.equal(response.status,503);
+      assert.ok(dispatchId);
+    }finally{
+      backend.beginIfCurrent=original;
+      if(dispatchId)await remote.release({dispatchId,brokerId,request:op});
+    }
+  });
+
   await t.test('owner revoke needs a real signature and a matching drained receipt',async()=>{
     const intent={kind:'revoke',authorityId,deviceId,ownerId,epoch:deviceEpoch,
       sessionEpoch,generation:7};
@@ -265,7 +376,17 @@ test('dispatch wire adapter enforces identity, protected readback and signed rec
       {code:'BROKER_DISPATCH_REMOTE_REFUSED'});
     assert.equal(backend.revokeCalls,before);
     req.signedOwnerApproval=envelope(ownerKey.privateKey);
-    const result=await remote.revokeAndDrain(req,'2'.repeat(64));
+    // Owner-signed deny/drain must remain possible when the original Broker
+    // credential becomes invalid *after* initial authenticated admission.
+    expireAfterNextValidAuth=true;
+    const result=await (async()=>{
+      try{
+        return await remote.revokeAndDrain(req,'2'.repeat(64));
+      }finally{
+        expireAfterNextValidAuth=false;
+        credentialCurrent=true;
+      }
+    })();
     const proof=JSON.parse(Buffer.from(result.payload,'base64url').toString()) as {drained:boolean};
     assert.equal(proof.drained,true);
     let effects=0;

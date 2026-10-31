@@ -1,4 +1,5 @@
 import {createHash,randomBytes} from 'node:crypto';
+import {types as nodeUtilTypes} from 'node:util';
 
 /**
  * Broker #02 source contract ONLY. No physical or production provider is
@@ -27,6 +28,14 @@ export interface BrokerEffectRequest {
   readonly inputSha256: string;
   readonly binding: BrokerVerifiedEffectBinding;
 }
+/** A plain null-prototype carrier avoids Promise thenable assimilation of
+ * the untrusted nested receipt. It is transport, never authorization. */
+export interface BrokerEffectReceiptEnvelope {
+  readonly receipt: BrokerEffectReceipt | null;
+}
+export type BrokerEffectReceiptTransport =
+  BrokerEffectReceipt | BrokerEffectReceiptEnvelope | null;
+
 export interface BrokerEffectReceipt {
   readonly state: 'RESERVED' | 'COMMITTED';
   readonly operationId: string;
@@ -50,6 +59,12 @@ export interface BrokerExternalEffectAdmission {
   /** One irreversible consumption. COMMIT ACK loss = UNKNOWN, never retry. */
   commit(request: BrokerEffectRequest,ticket: string,challengeNonce: string):
     Promise<BrokerEffectReceipt | null>;
+  /** Transport-safe optional alternative to directly resolving raw receipts.
+   * The carrier is an opaque null-prototype data object, never a permit. */
+  beginOpaque?(request:BrokerEffectRequest,challengeNonce:string):
+    Promise<BrokerEffectReceiptEnvelope>;
+  commitOpaque?(request:BrokerEffectRequest,ticket:string,challengeNonce:string):
+    Promise<BrokerEffectReceiptEnvelope>;
   /**
    * Authenticated proof verification using pinned external authority identity.
    * Caller-supplied fields/proofs must not satisfy this in production.
@@ -81,6 +96,37 @@ const TICKET=/^[a-zA-Z0-9_-]{24,256}$/;
 const MAX_FUTURE_MS=30_000;
 function deny(): never {throw new BrokerEffectAdmissionDenied();}
 
+/**
+ * A provider-owned OS/owner witness is not trustworthy as a live JS object.
+ * Reject inherited/accessor properties, then consume one fixed set of own
+ * data values. In particular, never validate a getter's first value and
+ * compare a later value from the same object (synchronous TOCTOU / ABA).
+ * This snapshot is only a source-side guard; it is NOT kernel evidence.
+ */
+function snapshotBinding(raw:BrokerVerifiedEffectBinding|null|undefined):
+  BrokerVerifiedEffectBinding|null {
+  if(!raw || typeof raw!=='object' || nodeUtilTypes.isProxy(raw) ||
+     Array.isArray(raw))return null;
+  try {
+    const prototype=Object.getPrototypeOf(raw);
+    if(prototype!==Object.prototype && prototype!==null)return null;
+    const descriptors=Object.getOwnPropertyDescriptors(raw);
+    const fields=[
+      'authorityId','ownerId','deviceId','sessionId',
+      'ownerEpoch','deviceEpoch','sessionEpoch','generation',
+      'highTokenProofId','protectedBrokerProofId','expiresAtMs',
+    ] as const;
+    if(Reflect.ownKeys(descriptors).length!==fields.length)return null;
+    const snapshot:Record<string,unknown>=Object.create(null);
+    for(const key of fields){
+      const descriptor=descriptors[key];
+      if(!descriptor || !Object.hasOwn(descriptor,'value') ||
+        descriptor.enumerable!==true)return null;
+      snapshot[key]=descriptor.value;
+    }
+    return Object.freeze(snapshot) as unknown as BrokerVerifiedEffectBinding;
+  }catch{return null}
+}
 function bindingValid(b:BrokerVerifiedEffectBinding|null|undefined):
   b is BrokerVerifiedEffectBinding {
   if(!b || typeof b!=='object')return false;
@@ -138,37 +184,78 @@ function receiptMatches(receipt:BrokerEffectReceipt|null,
     sameBinding(req.binding,receipt.binding);
 }
 
-/**
- * Capture an untrusted transport receipt ONCE before any signature-verification
- * await. Copy via JSON round-trip to discard attacker-owned references,
- * prototypes, getters and nested object identities. Deep-freeze every object
- * (not just the top-level receipt) so a verifier cannot mutate its own input.
- *
- * The verifier must sign-check `signedPayloadUtf8`; it is derived from this
- * *same* snapshot and is a primitive string, immutable across awaits.
- * No field of the raw transport response is ever read again.
- */
-function snapshotReceipt(raw:BrokerEffectReceipt|null):
-  {readonly receipt:BrokerEffectReceipt;readonly signedPayloadUtf8:string} {
-  if(!raw || typeof raw!=='object')deny();
-  let rawJson:string|undefined;
-  try{rawJson=JSON.stringify(raw)}catch{deny()}
-  if(!rawJson || Buffer.byteLength(rawJson,'utf8')>16*1024)deny();
-  let parsed:unknown;
-  try{parsed=JSON.parse(rawJson)}catch{deny()}
-  if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))deny();
-  const deepFreeze=(value:unknown,depth:number):void=>{
-    if(depth>32)deny();
-    if(value && typeof value==='object'){
-      for(const child of Object.values(value))deepFreeze(child,depth+1);
-      Object.freeze(value);
+/** Exactly-once, getter-free copy of a provider-owned signed receipt.
+ * This rejects hostile JS object shape; it is NOT a native OS/CAS witness. */
+const effectReceiptKeys=['state','operationId','capability','inputSha256',
+  'challengeNonce','ticket','binding','proof'] as const;
+const effectBindingKeys=['authorityId','ownerId','deviceId','sessionId',
+  'ownerEpoch','deviceEpoch','sessionEpoch','generation','highTokenProofId',
+  'protectedBrokerProofId','expiresAtMs'] as const;
+const effectNumericKeys=new Set<string>([
+  'ownerEpoch','deviceEpoch','sessionEpoch','generation','expiresAtMs',
+]);
+function strictEffectData(raw:unknown,fields:readonly string[]):Record<string,unknown>{
+  if(!raw||typeof raw!=='object'||nodeUtilTypes.isProxy(raw))deny();
+  try {
+    if(Array.isArray(raw))deny();
+    const prototype=Object.getPrototypeOf(raw);
+    if(prototype!==Object.prototype&&prototype!==null)deny();
+    const descriptors=Object.getOwnPropertyDescriptors(raw);
+    const names=Reflect.ownKeys(descriptors);
+    if(names.length!==fields.length)deny();
+    const copy:Record<string,unknown>=Object.create(null);
+    for(const key of names){
+      if(typeof key!=='string'||!fields.includes(key))deny();
+      const d=descriptors[key];
+      if(!d||!Object.hasOwn(d,'value')||d.enumerable!==true)deny();
+      copy[key]=d.value;
     }
-  };
-  deepFreeze(parsed,0);
-  const receipt=parsed as BrokerEffectReceipt;
-  // The receipt interface is a payload plus an opaque proof. The exact bytes
-  // sent to the verifier are the same frozen fields later read by the gate.
-  const {proof: _proof,...signedPayload}=receipt;
+    // Preserve original insertion order for the exact signed UTF-8 bytes.
+    return copy;
+  }catch{deny()}
+}
+/**
+ * Promise resolution reads the then property of a directly resolved Proxy
+ * before the consumer can inspect it. A frozen null-prototype carrier avoids
+ * that runtime trap and leaves the nested receipt opaque until strictEffectData.
+ * Only a single own enumerable data descriptor is admitted as a carrier.
+ * Legacy raw receipts remain compatible, but cannot guarantee zero pre-await
+ * thenable traps from a malicious provider. Protected adapters must use this
+ * carrier or an opaque primitive signed wire representation.
+ */
+function receiptFromTransport(raw:BrokerEffectReceiptTransport):
+  BrokerEffectReceipt|null {
+  if(!raw||typeof raw!=='object'||nodeUtilTypes.isProxy(raw)||Array.isArray(raw))
+    return raw as BrokerEffectReceipt|null;
+  try {
+    if(Object.getPrototypeOf(raw)!==null)
+      return raw as BrokerEffectReceipt;
+    const descriptors=Object.getOwnPropertyDescriptors(raw);
+    if(!Object.hasOwn(descriptors,'receipt'))
+      return raw as BrokerEffectReceipt;
+    const d=descriptors.receipt;
+    if(Reflect.ownKeys(descriptors).length!==1||
+       !d||!Object.hasOwn(d,'value')||d.enumerable!==true||
+       !Object.isFrozen(raw))deny();
+    return d.value as BrokerEffectReceipt|null;
+  }catch{deny()}
+}
+function snapshotReceipt(raw:BrokerEffectReceiptTransport):
+  {readonly receipt:BrokerEffectReceipt;readonly signedPayloadUtf8:string} {
+  const data=strictEffectData(receiptFromTransport(raw),effectReceiptKeys);
+  const binding=strictEffectData(data.binding,effectBindingKeys);
+  for(const key of effectBindingKeys){
+    if(typeof binding[key]!==(effectNumericKeys.has(key)?'number':'string'))deny();
+  }
+  for(const key of effectReceiptKeys){
+    if(key!=='binding'&&typeof data[key]!=='string')deny();
+  }
+  data.binding=Object.freeze(binding);
+  const receipt=Object.freeze(data) as unknown as BrokerEffectReceipt;
+  let originalUtf8:string|undefined;
+  try{originalUtf8=JSON.stringify(receipt)}catch{deny()}
+  if(!originalUtf8||Buffer.byteLength(originalUtf8,'utf8')>16*1024)deny();
+  const {proof:_proof,...signedPayload}=receipt;
   let signedPayloadUtf8:string|undefined;
   try{signedPayloadUtf8=JSON.stringify(signedPayload)}catch{deny()}
   if(!signedPayloadUtf8)deny();
@@ -208,7 +295,7 @@ export async function invokeBrokerEffectOnce<T>(
   const captured=frozenEffectInput(capability,input);
   if(!SHA.test(captured.inputSha256))deny();
   let first:BrokerVerifiedEffectBinding|null;
-  try{first=await authority.readVerifiedBinding()}catch{deny()}
+  try{first=snapshotBinding(await authority.readVerifiedBinding())}catch{deny()}
   if(!bindingValid(first))deny();
   // Use the ORIGINAL wall-time budget, capped at the 30 s binding limit.
   // Do not refresh the budget after begin/commit/readback awaits.
@@ -224,13 +311,17 @@ export async function invokeBrokerEffectOnce<T>(
     lastNs=nowNs;
   };
   assertMonotonicFresh();
-  const binding=Object.freeze({...first});
+  const binding=first; // already a detached frozen witness snapshot
   const request:BrokerEffectRequest=Object.freeze({
     operationId,capability,inputSha256:captured.inputSha256,binding,
   });
   const reserveNonce=randomBytes(32).toString('hex');
-  let untrustedReservation:BrokerEffectReceipt|null;
-  try{untrustedReservation=await authority.begin(request,reserveNonce)}catch{deny()}
+  let untrustedReservation:BrokerEffectReceiptTransport;
+  try{
+    untrustedReservation=typeof authority.beginOpaque==='function'
+      ?await authority.beginOpaque(request,reserveNonce)
+      :await authority.begin(request,reserveNonce);
+  }catch{deny()}
   assertMonotonicFresh();
   // Never pass the transport-owned receipt to an async verifier.
   const reserved=snapshotReceipt(untrustedReservation);
@@ -246,8 +337,12 @@ export async function invokeBrokerEffectOnce<T>(
   // Consume ticket ONLY from the immutable signature-verified snapshot.
   const ticket=reserved.receipt.ticket;
   const commitNonce=randomBytes(32).toString('hex');
-  let untrustedCommit:BrokerEffectReceipt|null;
-  try{untrustedCommit=await authority.commit(request,ticket,commitNonce)}catch{deny()}
+  let untrustedCommit:BrokerEffectReceiptTransport;
+  try{
+    untrustedCommit=typeof authority.commitOpaque==='function'
+      ?await authority.commitOpaque(request,ticket,commitNonce)
+      :await authority.commit(request,ticket,commitNonce);
+  }catch{deny()}
   assertMonotonicFresh();
   const committed=snapshotReceipt(untrustedCommit);
   if(!receiptMatches(committed.receipt,'COMMITTED',request,commitNonce,ticket)||
@@ -260,7 +355,7 @@ export async function invokeBrokerEffectOnce<T>(
   if(!sameSignedPayload(committed)||
      !receiptMatches(committed.receipt,'COMMITTED',request,commitNonce,ticket))deny();
   let recent:BrokerVerifiedEffectBinding|null;
-  try{recent=await authority.readVerifiedBinding()}catch{deny()}
+  try{recent=snapshotBinding(await authority.readVerifiedBinding())}catch{deny()}
   assertMonotonicFresh();
   if(!bindingValid(recent)||!sameBinding(binding,recent))deny();
   // Elevation probe may synchronously spawn Windows tooling and take seconds.
@@ -269,7 +364,7 @@ export async function invokeBrokerEffectOnce<T>(
   try{if(verifyWindowsElevationNow()!==true)deny()}catch{deny()}
   assertMonotonicFresh();
   let immediate:BrokerVerifiedEffectBinding|null;
-  try{immediate=authority.readVerifiedBindingNow()}catch{deny()}
+  try{immediate=snapshotBinding(authority.readVerifiedBindingNow())}catch{deny()}
   if(!bindingValid(immediate)||!sameBinding(binding,immediate))deny();
   assertMonotonicFresh();
   return execute(captured.input);

@@ -40,6 +40,30 @@ const permit=z.object({kind:z.enum(['broker_dispatch_permit_v1',
   generation:z.number().int().positive().safe(),privilege:z.enum(['CORE','ROOT']),
   issuedAtMs:z.number().int().positive().safe(),
   expiresAtMs:z.number().int().positive().safe()}).strict();
+// Provider-owned objects are not trusted as live JS references: Zod's parse
+// copies values, but accessor fields can be read with different values between
+// checks. Require every security field to be its own plain DATA descriptor.
+// This is a source-only TOCTOU guard, NOT protected OS evidence.
+const nativePrincipalFields=['brokerId','ownerId','deviceId','deviceEpoch','sessionEpoch'] as const;
+const nativeEvidenceFields=['verified','brokerId','ownerEpoch','grantGeneration',
+  'highIntegrityToken','signedProtectedImage','protectedParentAndImports'] as const;
+function snapshotOwnData(raw:unknown,fields:readonly string[]):Record<string,unknown>|undefined {
+  if(!raw || typeof raw!=='object' || Array.isArray(raw))return undefined;
+  try {
+    const prototype=Object.getPrototypeOf(raw);
+    if(prototype!==Object.prototype&&prototype!==null)return undefined;
+    const descriptors=Object.getOwnPropertyDescriptors(raw);
+    // Preserve strict-schema rejection of extra/hidden/symbol keys.
+    if(Reflect.ownKeys(descriptors).length!==fields.length)return undefined;
+    const snapshot:Record<string,unknown>=Object.create(null);
+    for(const field of fields){
+      const d=descriptors[field];
+      if(!d||!Object.hasOwn(d,'value')||d.enumerable!==true)return undefined;
+      snapshot[field]=d.value;
+    }
+    return Object.freeze(snapshot);
+  }catch{return undefined}
+}
 const revoked=z.object({kind:z.literal('broker_dispatch_revocation_v1'),
   authorityId:id,deviceId:id,ownerId:id,deviceEpoch:id,sessionEpoch:id,
   challengeNonce:challenge,previousGeneration:z.number().int().positive().safe(),
@@ -102,6 +126,12 @@ export function createBrokerDispatchAuthorityHandler(config:{
        !verify(null,bytes,key,signature))return fail();
     let value:unknown;
     try{value=JSON.parse(bytes.toString('utf8'))}catch{return fail()}
+    // Verify the exact signed UTF-8 wire form, not merely parsed values.
+    // This protocol requires compact JSON.stringify bytes, not arbitrary
+    // JSON spelling or RFC 8785 canonicalization.
+    const canonical=JSON.stringify(value);
+    if(!canonical || !Buffer.from(canonical,'utf8').equals(bytes))
+      return fail();
     return {raw:envelope,value};
   };
   const scoped=(p:DispatchBrokerPrincipal,s:{ownerId:string;deviceId:string;
@@ -149,9 +179,18 @@ export function createBrokerDispatchAuthorityHandler(config:{
       if(!auth){respond(res,403,{error:'denied'});return}
       let resolved:DispatchBrokerPrincipal|undefined;
       try{resolved=await authenticateBroker(auth[1]!)}catch{}
-      const parsedPrincipal=principal.safeParse(resolved);
+      const parsedPrincipal=principal.safeParse(snapshotOwnData(resolved,nativePrincipalFields));
       if(!parsedPrincipal.success){respond(res,403,{error:'denied'});return}
       const p=Object.freeze(parsedPrincipal.data);
+      // Re-authenticate the exact Broker principal AFTER pending network body
+      // or native readback awaits. A once-valid bearer can be revoked mid-flight.
+      const principalStillCurrent=async():Promise<boolean>=>{
+        let current:DispatchBrokerPrincipal|undefined;
+        try{current=await authenticateBroker(auth[1]!)}catch{return false}
+        const parsed=principal.safeParse(snapshotOwnData(current,nativePrincipalFields));
+        return parsed.success&&parsed.data.brokerId===p.brokerId&&
+          scoped(p,parsed.data);
+      };
       const limit=16384;
       if(Number(req.headers['content-length'])>limit){respond(res,413,{error:'too_large'});return}
       const chunks:Buffer[]=[];let size=0;
@@ -165,6 +204,11 @@ export function createBrokerDispatchAuthorityHandler(config:{
       try{body=JSON.parse(Buffer.concat(chunks).toString('utf8'))}
       catch{respond(res,400,{error:'invalid_request'});return}
       if(action==='release'){
+        // Release is NOT a new effect admission. An owner may revoke after
+        // the first authenticated request has arrived. A second live-grant
+        // check here could strand a previously reserved claim and stop drain.
+        // The external durable CAS must match this exact original principal,
+        // immutable request scope, Broker ID and dispatch ID before cleanup.
         const parsed=release.safeParse(body);
         if(!parsed.success||parsed.data.brokerId!==p.brokerId||
            !scoped(p,parsed.data.request.scope)){
@@ -176,6 +220,10 @@ export function createBrokerDispatchAuthorityHandler(config:{
         respond(res,204);return;
       }
       if(action==='revoke-and-drain'){
+        // Owner-signed revoke is a DENY/drain operation, never a new grant.
+        // The original authenticated Broker scope and exact signed owner
+        // approval remain mandatory. Reauth after the body could block
+        // emergency revocation when the credential expires mid-request.
         const parsed=revoke.safeParse(body);
         if(!parsed.success||!scoped(p,parsed.data)){
           respond(res,403,{error:'denied'});return;
@@ -196,13 +244,17 @@ export function createBrokerDispatchAuthorityHandler(config:{
       }
       Object.freeze(op.scope);Object.freeze(op);
       // Evidence comes from the server's protected provider, not from the HTTP body.
-      const observed=evidence.safeParse(await readProtectedBroker(p,op));
+      const observed=evidence.safeParse(snapshotOwnData(
+        await readProtectedBroker(p,op),nativeEvidenceFields));
       if(!observed.success||observed.data.brokerId!==p.brokerId||
          observed.data.ownerEpoch!==op.scope.ownerEpoch||
          observed.data.grantGeneration!==op.scope.expectedGeneration){
         respond(res,403,{error:'denied'});return;
       }
       const broker=Object.freeze(observed.data);
+      if(!await principalStillCurrent()){
+        respond(res,403,{error:'denied'});return;
+      }
       if(action==='begin'){
         const receipt=await authority.beginIfCurrent(op,broker,input.challengeNonce);
         respond(res,200,checkedPermit(receipt,op,broker,input.challengeNonce,'begin'));
