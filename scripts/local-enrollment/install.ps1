@@ -53,7 +53,17 @@ $requestText=[IO.File]::ReadAllText((Resolve-Path -LiteralPath $EnrollmentReques
 $request=$requestText|ConvertFrom-Json
 $identity=Get-Content -LiteralPath $AgentIdentityFile -Raw -Encoding UTF8|ConvertFrom-Json
 $owner=[Security.Principal.WindowsIdentity]::GetCurrent()
+# The provisioning request must be bound to the same exact installation
+# and owner account as the independent Agent identity, not just its device UUID.
+# Missing fields intentionally fail closed until the coordinator supplies a
+# protected, independently authenticated Agent identity export.
+if($null -eq $identity.installationId -or $null -eq $identity.ownerAccountId -or
+    $null -eq $request.installationId -or $null -eq $request.ownerAccountId){
+    throw 'AGENT_IDENTITY_BINDING_INCOMPLETE'
+}
 if([Guid]$identity.id -ne $ExpectedDeviceId -or [Guid]$request.deviceId -ne $ExpectedDeviceId -or
+    [Guid]$identity.installationId -ne [Guid]$request.installationId -or
+    [string]$identity.ownerAccountId -cne [string]$request.ownerAccountId -or
     $request.ownerSid -cne $owner.User.Value){throw 'LOCAL_OWNER_DEVICE_MISMATCH'}
 $runtime=Join-Path (Resolve-Path -LiteralPath $BundleDirectory).Path 'runtime'
 Assert-PlainPath $runtime
