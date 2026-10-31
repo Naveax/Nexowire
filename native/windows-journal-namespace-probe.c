@@ -33,7 +33,12 @@ static int open_pin(const wchar_t *file, FILE_PIN *out) {
     if (attrs == INVALID_FILE_ATTRIBUTES ||
         (attrs & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) != 0)
         return 0;
-    h = CreateFileW(file, FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE,
+    /* Attribute-only handles did not deny rename on the hosted Windows
+     * runner. Acquire actual FILE_READ_DATA as well; omission of
+     * FILE_SHARE_DELETE must be checked by the explicit rename negative.
+     * This remains a disposable kernel diagnostic, NOT SQLite VFS handoff. */
+    h = CreateFileW(file, FILE_READ_DATA | FILE_READ_ATTRIBUTES,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE,
                     NULL, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, NULL);
     if (h == INVALID_HANDLE_VALUE) return 0;
     if (!GetFileInformationByHandleEx(h, FileAttributeTagInfo, &tag, sizeof(tag)) ||
