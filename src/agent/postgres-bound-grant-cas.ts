@@ -112,6 +112,48 @@ function validScope(scope:AuthenticatedGrantScope,requested:CasRequest):void{
     reject('BOUND_CAS_REQUEST_SCOPE_MISMATCH');
 }
 /**
+ * Detach a resolver-owned identity before the first asynchronous database
+ * boundary. Checking a borrowed object and then awaiting FOR UPDATE used to
+ * permit the resolver to change owner/session/generation before the external
+ * reserve and local tombstone insert. Descriptor inspection also refuses
+ * accessor-backed fields without invoking a hostile getter.
+ *
+ * This freezes metadata, not authorization: the external provider must still
+ * atomically verify the CURRENT owner/revoke fence with the original UUID.
+ */
+function immutableScope(
+  candidate:unknown,requested:CasRequest,
+):Readonly<AuthenticatedGrantScope>{
+  if(!candidate||typeof candidate!=='object'||Array.isArray(candidate))
+    reject('BOUND_CAS_UNVERIFIED_SCOPE');
+  let descriptors:PropertyDescriptorMap;
+  let keys:PropertyKey[];
+  let prototype:unknown;
+  try{
+    descriptors=Object.getOwnPropertyDescriptors(candidate);
+    keys=Reflect.ownKeys(candidate);
+    prototype=Object.getPrototypeOf(candidate);
+  }catch{return reject('BOUND_CAS_UNVERIFIED_SCOPE')}
+  const required=['ownerId','deviceId','deviceEpoch','sessionEpoch',
+    'expectedGeneration','requiredPrivilege'] as const;
+  if((prototype!==Object.prototype&&prototype!==null)||
+     keys.length!==required.length||
+     required.some(key=>!Object.prototype.hasOwnProperty.call(descriptors,key)||
+       !('value' in descriptors[key]!)))
+    reject('BOUND_CAS_UNVERIFIED_SCOPE');
+  const snapshot=Object.freeze({
+    ownerId:descriptors.ownerId!.value as string,
+    deviceId:descriptors.deviceId!.value as string,
+    deviceEpoch:descriptors.deviceEpoch!.value as string,
+    sessionEpoch:descriptors.sessionEpoch!.value as string,
+    expectedGeneration:descriptors.expectedGeneration!.value as number,
+    requiredPrivilege:descriptors.requiredPrivilege!.value as RequiredPrivilege,
+  });
+  validScope(snapshot,requested);
+  return snapshot;
+}
+
+/**
  * Real PostgreSQL source integration for a remote witness CAS.
  *
  * The device row AND delegation row are locked in the SAME transaction as
@@ -152,8 +194,7 @@ export class PostgresBoundGrantCas implements MonotonicTrustRoot {
     try{scope=await this.config.resolveAuthenticatedScope(input)}
     catch{reject('BOUND_CAS_AUTHENTICATION_UNAVAILABLE')}
     if(!scope)reject('BOUND_CAS_AUTHENTICATION_MISSING');
-    validScope(scope!,input);
-    return scope!;
+    return immutableScope(scope,input);
   }
   private async reserveExternally(input:CasRequest,
     scope:AuthenticatedGrantScope):Promise<ExternalGrantCasReceipt>{
@@ -188,7 +229,9 @@ export class PostgresBoundGrantCas implements MonotonicTrustRoot {
     }finally{db.release()}
   }
   async reserve(value:CasRequest):Promise<CasReservation>{
-    const input=request.parse(value);
+    // The callback receives the same immutable UUID/fingerprint/scope key
+    // even if it keeps a reference across credential or SQL awaits.
+    const input=Object.freeze(request.parse(value));
     await this.trusted();
     const scope=await this.authenticate(input);
     return this.transaction(async db=>{
