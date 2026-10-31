@@ -352,7 +352,33 @@ export async function executeCoreWindowsMutation<T>(
  * prove the low-privilege token, descendants, resource/IO/network confinement,
  * revoke/drain and no-replay before the launcher can resume any process.
  */
-export const CORE_SANDBOX_REQUIRED_CAPABILITIES:ReadonlySet<string>=new Set([
+
+/**
+ * A TypeScript ReadonlySet annotation does NOT prevent Set.prototype.clear()
+ * or .delete() in JavaScript. The two CORE fail-closed deny lists must not
+ * expose an actual mutable Set instance to other in-process modules.
+ *
+ * The backing Set remains closure-private; callers only receive an immutable
+ * ReadonlySet interface. This is defense-in-depth, not OS/Broker authority.
+ */
+function immutableCapabilitySet(values:readonly string[]):ReadonlySet<string>{
+  const entries=new Set(values);
+  const view:ReadonlySet<string>={
+    get size(){return entries.size},
+    has(value){return entries.has(value)},
+    keys(){return entries.keys()},
+    values(){return entries.values()},
+    entries(){return entries.entries()},
+    [Symbol.iterator](){return entries.values()},
+    forEach(callback,thisArg){
+      entries.forEach(value=>callback.call(thisArg,value,value,view));
+    },
+    get [Symbol.toStringTag](){return 'Set'},
+  };
+  return Object.freeze(view);
+}
+
+export const CORE_SANDBOX_REQUIRED_CAPABILITIES:ReadonlySet<string>=immutableCapabilitySet([
   'shell.exec','wsl.exec','process.start','process.write',
   'task.graph.run','runbook.run','workspace.checks',
   'workspace.snapshot','workspace.detect',
@@ -381,7 +407,7 @@ export function assertCoreSandboxRouteUnavailable(
  * No #02 native per-effect callback is installed for these #03 routes.
  * Keep the separate owner-console/private-GUI checks; this denies earlier.
  */
-export const CORE_OTHER_UNADMITTED_EFFECT_CAPABILITIES:ReadonlySet<string>=new Set([
+export const CORE_OTHER_UNADMITTED_EFFECT_CAPABILITIES:ReadonlySet<string>=immutableCapabilitySet([
   'files.write','files.mkdir','files.copy','files.move','files.delete',
   'files.patch','nexowire.update.apply','process.stop','process.prune',
   // Even HKCU/user/process-scoped writes are effects; CORE is not an

@@ -3,7 +3,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {prepareCoreWindowsMutation,assertCoreApprovedDispatchRequest,
-  snapshotCoreWindowsDispatchRequest,CORE_EXECUTOR_DISPATCH_ENABLED}
+  snapshotCoreWindowsDispatchRequest,CORE_EXECUTOR_DISPATCH_ENABLED,
+  CORE_SANDBOX_REQUIRED_CAPABILITIES,
+  CORE_OTHER_UNADMITTED_EFFECT_CAPABILITIES,
+  assertCoreSandboxRouteUnavailable,assertCoreOtherNativeEffectUnavailable}
   from '../src/agent/core-windows-mutation-dispatch.js';
 
 const mismatch=(code:string)=>(error:unknown):boolean=>
@@ -168,5 +171,27 @@ test('AI-05 exported approval comparator never evaluates hostile expected identi
     approved,malicious,prepared),
   mismatch('CORE_DISPATCH_REQUEST_BINDING_MISMATCH'));
   assert.equal(reads,0);
+  assert.equal(CORE_EXECUTOR_DISPATCH_ENABLED,false);
+});
+
+test('AI-05 CORE denial lists are runtime immutable, not just readonly TS types',()=>{
+  const sandbox=CORE_SANDBOX_REQUIRED_CAPABILITIES;
+  const native=CORE_OTHER_UNADMITTED_EFFECT_CAPABILITIES;
+  for(const [list,capability] of [
+    [sandbox,'shell.exec'],
+    [native,'files.write'],
+  ] as const){
+    assert.equal(Object.isFrozen(list),true);
+    assert.equal(list.has(capability),true);
+    assert.equal(typeof (list as {clear?:unknown}).clear,'undefined');
+    assert.throws(()=>Set.prototype.clear.call(list as Set<string>),TypeError);
+    assert.throws(()=>Set.prototype.delete.call(
+      list as Set<string>,capability),TypeError);
+    assert.equal(list.has(capability),true);
+  }
+  assert.throws(()=>assertCoreSandboxRouteUnavailable('shell.exec',true),
+    mismatch('OS_TASK_SANDBOX_UNAVAILABLE'));
+  assert.throws(()=>assertCoreOtherNativeEffectUnavailable('files.write',true),
+    mismatch('CORE_NATIVE_EFFECT_ADMISSION_REQUIRED'));
   assert.equal(CORE_EXECUTOR_DISPATCH_ENABLED,false);
 });

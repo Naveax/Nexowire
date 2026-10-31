@@ -38,3 +38,6 @@ Source+test tip `33bb714bc158e118ce363f4e17ed39cb864605a0`, CI [41201461962](htt
 - Four new cases: (i) originally approved mutable nested owner/session/UUID cannot affect frozen request; (ii) original request or nested owner getters not invoked; (iii) Proxy, symbol, extra key rejected without traps; (iv) standalone approved-comparator expected identity with accessor rejected before any getter read. Test files remain `test/ai05-cas-*.test.ts`.
 - First code candidate `2fcf9670071f8f564f628a869d24a8b12de0b63a` had test-only TS2322 due to literal-narrowed fixture; `a4b81cd13bd9fdceb5e7195f0ede83ad7df3c9bc` widens only the mutable test variable and preserves all negative checks.
 - A new docs-inclusive HEAD requires its own exact-SHA CI, even though it changes no source. No local checkout or physical OS validation occurred.
+
+## Denial list mutability negative test (latest source candidate)
+One extra AI-05 executor test rejects runtime clearing/deleting of CORE sandbox/native-effect denial lists, then verifies both forbidden CORE routes still fail closed and the global CORE dispatch flag stays false. The new source branch HEAD and its CI must be verified after this patch, and this test is synthetic source-only, not physical evidence.

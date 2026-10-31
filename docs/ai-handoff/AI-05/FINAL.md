@@ -27,3 +27,6 @@ The executor canonicalization rejects nested Proxy inputs and frozen accessor-be
 - Source CI [41204241838](https://github.com/Naveax/Nexowire/actions/runs/41204241838): Node22/24/Linux/WSL2/macOS/Security SUCCESS, Windows browser-live was still running at the latest observation. **Full CI and docs-inclusive exact HEAD need fresh verification.**
 - Prior exact SHA 1b3f78d… had Windows #974 journal worker 30s IPC timeout; handoff routed to coordinator, without touching its code or weakening tests. The later source CI passed the WAL step, but intermittent worker hangs need investigation.
 - **Decision: READY_FOR_SOURCE_REVIEW only where CI confirms; PRODUCTION CORE NO_GO.** Independent CAS anti-rollback custody, signed native Broker OS admission/ACL, sandbox, physical owner enrollment and two-PC restart/revoke acceptance remain NOT PROVEN. CORE default false, no merge or deploy.
+
+## Fail-closed defence-in-depth follow-up
+The exported CORE sandbox/native-effect denial lists now use a genuinely immutable façade rather than a runtime mutable Set with a compile-time readonly annotation. Added a negative test for .clear/.delete and preserved CORE source default false. A new exact-SHA CI result is required; earlier 7/7 pertains only to the earlier SHA.
