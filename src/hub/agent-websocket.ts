@@ -21,6 +21,7 @@ export interface AgentWebSocketServerOptions {
   helloTimeoutMs?: number;
   authorizationCheckMs?: number;
   authorizationTimeoutMs?: number;
+  remoteOnly?: boolean;
   credentialStore?: CredentialStore;
   remoteCredentialVerifier?: (
     authorizationHeader: string | undefined,
@@ -34,6 +35,8 @@ export function attachAgentWebSocketServer(
   agentTokens?: string | readonly string[],
   options: AgentWebSocketServerOptions = {},
 ): WebSocketServer {
+  if(options.remoteOnly&&!options.remoteCredentialVerifier)
+    throw new Error('Remote-only Agent admission requires the device credential authority');
   const wss = new WebSocketServer({ noServer: true });
   const heartbeatMs = Math.max(250, options.heartbeatMs ?? 30_000);
   const helloTimeoutMs = Math.max(250, options.helloTimeoutMs ?? 5_000);
@@ -86,9 +89,9 @@ export function attachAgentWebSocketServer(
     socket.once('close',()=>lifetime.abort());
 
     void (async () => {
-      const localAuthConfigured =
+      const localAuthConfigured = !options.remoteOnly && (
         configuredAgentTokens.length > 0 ||
-        options.credentialStore?.hasConfigured('agent') === true;
+        options.credentialStore?.hasConfigured('agent') === true);
       const remoteAuthConfigured =
         options.remoteCredentialVerifier !== undefined;
       const authRequired =

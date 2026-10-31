@@ -1,6 +1,12 @@
 import { createServer, request as httpRequest, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { LocalFirstTransportBudgetHook } from './all-ingress-transport-meter-proposal.js';
+import type {Duplex} from 'node:stream';
+import {bridgeLocalAgentUpgrade} from './local-first-agent-upgrade.js';
+const upgradedSockets=new WeakMap<Server,Set<Duplex>>();
+export function closeLocalFirstAgentSockets(server:Server){
+  for(const socket of upgradedSockets.get(server)??[])socket.destroy();
+}
 
 /**
  * An opt-in LOOPBACK-only MCP ingress for a local, already running Nexowire Hub.
@@ -15,6 +21,7 @@ export interface LocalFirstIngressOptions {
   hubPort: number;
   listenPort: number;
   publicHostname?: string;
+  allowAgentWebSocket?: boolean;
   maxConcurrent?: number;
   maxRequestBytes?: number;
   /** DEV only. Operator-supplied trusted tunnel+app scope, NEVER HTTP input. */
@@ -23,7 +30,7 @@ export interface LocalFirstIngressOptions {
 
 export function validateLocalFirstIngress(input: LocalFirstIngressOptions): Required<
   Pick<LocalFirstIngressOptions, 'hubPort'|'listenPort'|'maxConcurrent'|'maxRequestBytes'>
-> & {publicHostname?: string;stagingTransportBudget?: LocalFirstTransportBudgetHook} {
+> & {publicHostname?: string;allowAgentWebSocket?:boolean;stagingTransportBudget?: LocalFirstTransportBudgetHook} {
   for (const [name, value] of [
     ['hubPort', input.hubPort], ['listenPort',input.listenPort],
   ] as const) {
@@ -57,6 +64,7 @@ export function validateLocalFirstIngress(input: LocalFirstIngressOptions): Requ
   }
   return {hubPort:input.hubPort,listenPort:input.listenPort,maxConcurrent,
     maxRequestBytes,...(publicHostname ? {publicHostname}:{}),
+    ...(input.allowAgentWebSocket===true?{allowAgentWebSocket:true}:{}),
     ...(input.stagingTransportBudget
       ? {stagingTransportBudget:input.stagingTransportBudget}:{}),
   };
@@ -75,6 +83,7 @@ export function validateLocalFirstIngress(input: LocalFirstIngressOptions): Requ
 export async function verifyLocalFirstPublicUpstream(input:{
   hubPort:number;
   expectedResourceUrl:string;
+  requireRemoteAgentAdmission?:boolean;
   fetchImpl?:typeof fetch;
 }):Promise<void>{
   if (!Number.isInteger(input.hubPort) || input.hubPort<1 || input.hubPort>65535) {
@@ -107,6 +116,8 @@ export async function verifyLocalFirstPublicUpstream(input:{
   const identity=health as Record<string,unknown> | null;
   const runtime=identity?.runtime as Record<string,unknown> | null;
   const protectedResource=metadata as Record<string,unknown> | null;
+  if(input.requireRemoteAgentAdmission&&runtime?.remoteAgentAdmissionContract!=='device-bound-revalidate-v1')
+    throw new Error('Public Agent ingress requires remote-only device-bound revalidation on the actual Hub');
   if(identity?.ok!==true || identity.service!=='nexowire' ||
       runtime?.ownerOauthConfigured!==true ||
       protectedResource?.resource!==resource.toString() ||
@@ -269,15 +280,24 @@ export function createLocalFirstIngressServer(options:LocalFirstIngressOptions):
     });
     req.pipe(upstream);
   });
-  server.on('upgrade',(_req,socket)=>{
+  const agentSockets=new Set<Duplex>();upgradedSockets.set(server,agentSockets);
+  server.on('upgrade',(req,socket,head)=>{
     // Denied WebSocket upgrades are STILL observed as arrival attempts.
     if(settings.stagingTransportBudget){
       try{
         const h=settings.stagingTransportBudget;
-        h.meter.observe(h.trustedScope,h.clock?.()??new Date());
+        const allowance=h.meter.observe(h.trustedScope,h.clock?.()??new Date());
+        if(!allowance.allowed){socket.destroy();return;}
       }catch{
         // Always destroy even if trusted quota DB is down.
+        socket.destroy();return;
       }
+    }
+    if(settings.allowAgentWebSocket&&req.url==='/agent'&&
+        authorizedHost(req.headers.host,settings.publicHostname)&&
+        authorizedOrigin(req.headers.origin,settings.publicHostname)&&agentSockets.size<32){
+      agentSockets.add(socket);
+      bridgeLocalAgentUpgrade(req,socket,head,settings.hubPort,()=>agentSockets.delete(socket));return;
     }
     socket.destroy();
   });

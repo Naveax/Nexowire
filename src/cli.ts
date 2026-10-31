@@ -9,6 +9,10 @@ import { runHttpServer } from './mcp/http.js';
 import { runLocalFirstIngress, verifyLocalFirstPublicUpstream } from './mcp/local-first-ingress.js';
 import { readOnlyLocalFirstFunnelPlan } from './mcp/local-first-funnel-plan.js';
 import { runCloudflareConnection } from './mcp/local-first-cloudflare.js';
+import { cloudflareConnectionLifecycle } from './mcp/cloudflare-connection-lifecycle.js';
+import { inspectCloudflareConnection } from './mcp/cloudflare-connection-doctor.js';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import { runStdioServer } from './mcp/stdio.js';
 import { createRuntime } from './runtime.js';
 import { loadRelayConfig } from './relay/config.js';
@@ -49,6 +53,10 @@ Usage:
                    Manage the lightweight hourly Windows auto-updater
   nexowire local-first cloudflare-run <absolute-profile.json>
                    Run Cloudflare-only MCP ingress (no Tailscale or VPS)
+  nexowire local-first cloudflare-install <absolute-profile.json>
+  nexowire local-first cloudflare-doctor <absolute-profile.json>
+  nexowire local-first cloudflare-status|cloudflare-start|cloudflare-stop|cloudflare-uninstall
+                   Manage the Windows user-logon connection task
   nexowire version Show the installed Nexowire version
   nexowire help    Show this help
 
@@ -109,6 +117,22 @@ async function main(): Promise<void> {
   }
 
   if (command === 'local-first') {
+    if(process.argv[3]==='cloudflare-doctor'){
+      const file=process.argv[4];
+      if(process.argv.length!==5||!file||!path.isAbsolute(file))throw new Error('cloudflare-doctor requires one absolute profile JSON path');
+      const stat=await fs.lstat(file);
+      if(!stat.isFile()||stat.isSymbolicLink()||stat.size>16384)throw new Error('Invalid Cloudflare profile');
+      process.stdout.write(JSON.stringify(await inspectCloudflareConnection(JSON.parse(await fs.readFile(file,'utf8')),loadConfig()))+'\n');return;
+    }
+    const cloudflareAction=process.argv[3]?.startsWith('cloudflare-')?process.argv[3].slice('cloudflare-'.length):undefined;
+    if(cloudflareAction==='install'){
+      if(process.argv.length!==5)throw new Error('cloudflare-install requires an absolute profile JSON path');
+      process.stdout.write(JSON.stringify(await cloudflareConnectionLifecycle('install',process.argv[4]))+'\n');return;
+    }
+    if(cloudflareAction==='status'||cloudflareAction==='start'||cloudflareAction==='stop'||cloudflareAction==='uninstall'){
+      if(process.argv.length!==4)throw new Error('Cloudflare task action accepts no arguments');
+      process.stdout.write(JSON.stringify(await cloudflareConnectionLifecycle(cloudflareAction))+'\n');return;
+    }
     if (process.argv[3] === 'cloudflare-run') {
       if(process.argv.length!==5)throw new Error('cloudflare-run requires one absolute profile JSON path');
       await runCloudflareConnection(process.argv[4]!,loadConfig());

@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import * as z from 'zod';
 import type {NexowireConfig} from '../config.js';
-import {createLocalFirstIngressServer,validateLocalFirstIngress,
+import {createLocalFirstIngressServer,validateLocalFirstIngress,closeLocalFirstAgentSockets,
   verifyLocalFirstPublicUpstream} from './local-first-ingress.js';
 import {windowsDpapiChildEnvironment} from '../security/windows-dpapi.js';
 
@@ -19,6 +19,7 @@ const Profile=z.object({
   binary:absoluteFile,
   binarySha256:z.string().regex(/^[a-f0-9]{64}$/),
   listenPort:z.number().int().min(1).max(65535).default(43111),
+  publishAgentEndpoint:z.boolean().default(false),
 }).strict();
 export type CloudflareConnectionProfile=z.infer<typeof Profile>;
 
@@ -26,7 +27,7 @@ export type CloudflareConnectionProfile=z.infer<typeof Profile>;
 export function cloudflareConnectionConfig(input:unknown,config:NexowireConfig){
   const profile=Profile.parse(input);
   const safe=validateLocalFirstIngress({hubPort:config.port,
-    listenPort:profile.listenPort,publicHostname:profile.hostname});
+    listenPort:profile.listenPort,publicHostname:profile.hostname,allowAgentWebSocket:profile.publishAgentEndpoint});
   const resource=config.mcpResourceUrl?new URL(config.mcpResourceUrl):undefined;
   if(!config.controlPlaneAgentAuth || !resource || resource.protocol!=='https:' ||
       resource.hostname!==safe.publicHostname || resource.port || resource.pathname!=='/mcp' ||
@@ -34,12 +35,15 @@ export function cloudflareConnectionConfig(input:unknown,config:NexowireConfig){
       safe.publicHostname!.endsWith('.trycloudflare.com') ||
       safe.publicHostname!.endsWith('.ts.net'))
     throw new Error('Cloudflare connection requires stable HTTPS MCP resource and hosted OAuth authority');
+  if(profile.publishAgentEndpoint&&config.remoteAgentAuthOnly!==true)
+    throw new Error('Public Agent endpoint requires remote-only Agent authentication');
   const tunnelConfig={
     tunnel:profile.tunnelId,
     'credentials-file':profile.credentialsFile,
     ingress:[{
       hostname:safe.publicHostname,
-      path:'^(/mcp|/\\.well-known/oauth-protected-resource(/mcp)?)$',
+      path:profile.publishAgentEndpoint?'^(/agent|/mcp|/\\.well-known/oauth-protected-resource(/mcp)?)$':
+        '^(/mcp|/\\.well-known/oauth-protected-resource(/mcp)?)$',
       service:`http://127.0.0.1:${profile.listenPort}`,
       originRequest:{httpHostHeader:safe.publicHostname},
     },{service:'http_status:404'}],
@@ -74,7 +78,8 @@ export async function startCloudflareConnection(input:unknown,config:NexowireCon
       !/^[A-Za-z0-9+/]{43}=$/.test(credentials.TunnelSecret) ||
       Buffer.from(credentials.TunnelSecret,'base64').length!==32)
     throw new Error('Cloudflare tunnel credentials do not match the selected tunnel');
-  await verifyLocalFirstPublicUpstream({hubPort:config.port,expectedResourceUrl:config.mcpResourceUrl!});
+  await verifyLocalFirstPublicUpstream({hubPort:config.port,expectedResourceUrl:config.mcpResourceUrl!,
+    requireRemoteAgentAdmission:profile.publishAgentEndpoint});
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-cloudflare-'));
   const origin=createLocalFirstIngressServer(safe);
   let child:ReturnType<typeof spawn>|undefined;
@@ -88,7 +93,7 @@ export async function startCloudflareConnection(input:unknown,config:NexowireCon
       const timer=setTimeout(()=>child?.kill('SIGKILL'),5000);
       try{await exit;}finally{clearTimeout(timer);}
     }
-    origin.closeAllConnections();
+    closeLocalFirstAgentSockets(origin);origin.closeAllConnections();
     await new Promise<void>(resolve=>origin.close(()=>resolve()));
     await fs.rm(dir,{recursive:true,force:true});
   })();

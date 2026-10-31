@@ -55,6 +55,58 @@ upgrades, unauthenticated MCP POSTs, inappropriate Host/Origin and excessive
 bodies. It forwards only to the fixed local Hub, which retains OAuth,
 owner/device authorization and metering. The tunnel grants no CORE authority.
 
+## Optional device-bound Agent path for the second PC
+
+The default remains MCP-only. To move the second PC's Agent off Tailscale,
+the profile can explicitly set `publishAgentEndpoint: true`. This is refused
+unless the Hub is configured with `NEXOWIRE_AGENT_REMOTE_AUTH_ONLY=true` AND
+its actual local health advertises `remoteAgentAdmissionContract` equal to
+`device-bound-revalidate-v1`. The named tunnel then allows the exact `/agent`
+path as well. It forwards only to that same local Hub, retaining the original
+device credential. The real Hub must authenticate successfully before the
+bridge returns HTTP 101. Shared static/local fallback tokens cannot authorize
+this mode. Wrong hello identity is denied and open-session revocation crosses
+the bridge; unknown mutations remain unknown and are not replayed.
+
+The bridge is bounded to 32 authenticating/active sockets and a 10s handshake
+deadline, with stream backpressure and explicit shutdown of upgraded sockets.
+Admin/health/arbitrary paths remain denied. This is an authenticated Agent
+endpoint, not publication of the entire Hub. The second Agent must be updated
+through the existing enrollment/lifecycle path to the new `wss://<hostname>/agent`
+endpoint with its genuine credential and unchanged device identity; do not
+launch a second Agent or synthesize an enrollment record.
+
+## Windows user-logon installation and diagnostics
+
+The following explicit CLI operations are implemented:
+
+```
+nexowire local-first cloudflare-install <absolute-profile.json>
+nexowire local-first cloudflare-status
+nexowire local-first cloudflare-start
+nexowire local-first cloudflare-stop
+nexowire local-first cloudflare-uninstall
+nexowire local-first cloudflare-doctor <absolute-profile.json>
+```
+
+Install registers ONLY a separate `Nexowire Cloudflare Connection` task for
+the current user, Interactive/Limited, AtLogOn, IgnoreNew, with battery support
+and bounded scheduler failure recovery. It does not start the task at install,
+replace an existing launcher/task, or touch Hub/Agent/Broker tasks. The BOM
+launcher safely quotes Unicode/apostrophe paths, persists only approved Hub
+configuration/protected secret filenames, and strips inherited Node/tunnel
+overrides. A foreign task/action/principal is refused. Stop precedes uninstall;
+successful owned uninstall removes only its own marked launcher. Windows CI
+must prove actual registration/uninstall and real disposable descendant cleanup;
+no Windows reboot or actual owner-machine installation is inferred from CI.
+
+Doctor probes the public exact OAuth metadata and an unauthenticated MCP
+initialize request with fixed deadlines, size limits and no redirect. It sends
+no bearer or stored credential. Only matching resource + configured issuer +
+HTTP 401 gives `PUBLIC_OAUTH_BOUNDARY_OK`; `authenticatedToolVerified` remains
+false. A reachable URL, process spawn or metadata alone is never labeled full
+readiness. Full owner OAuth/tool/off-network tests are still required.
+
 ## Active Agent authorization
 
 The Hub now revalidates already-open Agent WebSocket sessions every 60s by
@@ -86,7 +138,26 @@ privileged install. `windowsHide` is not an isolation claim. The reviewed
 single sink was added to the existing launch audit baseline; the audit is
 not disabled, and other unchanged sinks are not thereby proved isolated.
 
+Follow-up sink review: `src/mcp/cloudflare-connection-lifecycle.ts#spawn` uses
+only fixed System32 WindowsPowerShell, fixed ScheduledTasks module/script,
+allowlisted action enum and bounded task/path environment. No shell-selected
+executable or raw secret is used; stdin ignored, bounded stdout, stderr drained
+without logging and 30s absolute deadline. It can manage only the exact task
+whose action, argument and owner SID match this installation, RunLevel Limited.
+It never controls the existing Agent/Hub/Broker or grants CORE/UAC rights.
+That one additional sink is explicitly added to the audit baseline. The raw
+Agent WebSocket bridge creates no native process and substitutes no credentials.
+
 ## Evidence and remaining live gates
+
+Follow-up local group: 62 total, 60 passed, 2 explicitly Windows-only cases
+not runnable on Linux. Includes the official Linux connector, real local
+two-device Agent bridge, refusal of shared credentials and wrong hello ID,
+revocation crossing the bridge with one dispatched UNKNOWN mutation, public
+doctor denials, existing MCP/fault/reconnect contracts and runtime health.
+Windows CI must additionally run both new actual scheduler cases (including
+descendant cleanup) before this source revision is accepted. Earlier green
+CI covers only the preceding implementation, not this follow-up commit.
 
 Local targeted group: 49/49 passed, including a real official Linux
 cloudflared 2026.10.1 binary (SHA256

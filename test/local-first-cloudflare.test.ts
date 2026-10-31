@@ -103,4 +103,9 @@ test('official hash-pinned cloudflared accepts generated configuration and rejec
   assert.match(run(['ingress','rule','https://mcp.example.test/mcp']),/Matched rule #0/);
   assert.match(run(['ingress','rule','https://mcp.example.test/agent']),/Matched rule #1/);
   assert.match(run(['ingress','rule','https://other.example.test/mcp']),/Matched rule #1/);
+  const hub=config();hub.remoteAgentAuthOnly=true;
+  const published=cloudflareConnectionConfig({...profile(),publishAgentEndpoint:true},hub).tunnelConfig;
+  await writeFile(file,JSON.stringify(published));
+  assert.match(run(['ingress','rule','https://mcp.example.test/agent']),/Matched rule #0/);
+  assert.match(run(['ingress','rule','https://mcp.example.test/admin']),/Matched rule #1/);
 });
