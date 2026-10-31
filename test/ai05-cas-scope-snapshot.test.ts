@@ -33,6 +33,7 @@ const hasCode=(code:string)=>(error:unknown):boolean=>
 function fixture(config:{
   resolve:()=>Promise<AuthenticatedGrantScope|undefined>;
   onClock?:()=>void|Promise<void>;
+  onReservationRead?:()=>void|Promise<void>;
   reserve?:(
     request:CasRequest,scope:AuthenticatedGrantScope,
   )=>Promise<ExternalGrantCasReceipt>;
@@ -62,8 +63,10 @@ function fixture(config:{
             await config.onClock?.();
             return {rows:[{now_ms:Date.now()}]};
           }
-          if(sql.includes('FROM witness_reservations'))
+          if(sql.includes('FROM witness_reservations')){
+            await config.onReservationRead?.();
             return {rows:[]};
+          }
           if(sql.startsWith('UPDATE witness_clock'))
             return {rows:[{last_sequence:71}]};
           if(sql.startsWith('INSERT INTO witness_reservations')){
@@ -178,4 +181,55 @@ test('AI-05 externally tombstoned UUID cannot be inserted as fresh',async()=>{
   assert.equal(h.evidence.externalCalls,1);
   assert.equal(h.evidence.insert,null);
   assert.equal(h.evidence.queries.at(-1),'COMMIT');
+});
+
+test('AI-05 external created:false is pinned before later SQL await',async()=>{
+  const known=scope();
+  const borrowed:ExternalGrantCasReceipt={
+    authorityId:ids.authority,deviceId:ids.device,epoch:ids.epoch,
+    requestId:ids.request,ownerId:known.ownerId,
+    sessionEpoch:known.sessionEpoch,
+    grantGeneration:known.expectedGeneration,
+    fingerprint:'a'.repeat(64),capability:'windows.registry.set',
+    sequence:70,created:false,
+  };
+  const h=fixture({
+    resolve:async()=>scope(),
+    reserve:async()=>borrowed,
+    onReservationRead:()=>{
+      // A borrowed receipt can be modified after validation if the CAS
+      // adapter retains it. The original already-reserved outcome must win.
+      borrowed.created=true;
+      borrowed.sequence=999;
+    },
+  });
+  const result=await h.cas.reserve(request());
+  assert.equal(result.created,false);
+  assert.equal(result.sequence,70);
+  assert.equal(h.evidence.externalCalls,1);
+  assert.equal(h.evidence.insert,null);
+});
+
+test('AI-05 accessor-backed external receipt denied without getter execution',async()=>{
+  const known=scope();
+  const borrowed:ExternalGrantCasReceipt={
+    authorityId:ids.authority,deviceId:ids.device,epoch:ids.epoch,
+    requestId:ids.request,ownerId:known.ownerId,
+    sessionEpoch:known.sessionEpoch,
+    grantGeneration:known.expectedGeneration,
+    fingerprint:'a'.repeat(64),capability:'windows.registry.set',
+    sequence:70,created:false,
+  };
+  let getterCalls=0;
+  Object.defineProperty(borrowed,'created',{
+    configurable:true,enumerable:true,
+    get(){getterCalls++;return true},
+  });
+  const h=fixture({resolve:async()=>scope(),reserve:async()=>borrowed});
+  await assert.rejects(h.cas.reserve(request()),
+    hasCode('BOUND_CAS_EXTERNAL_PROOF_MISMATCH'));
+  assert.equal(getterCalls,0);
+  assert.equal(h.evidence.insert,null);
+  assert.equal(h.evidence.externalCalls,1);
+  assert.ok(h.evidence.queries.includes('ROLLBACK'));
 });
