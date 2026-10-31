@@ -83,9 +83,12 @@ function fixture(nativeReadback:'allow'|'deny'|'unknown'='allow'){
       return nativeReadback==='allow';
     },
   });
-  const call=async(action:'reserve'|'claim'|'complete')=>{
-    const request:CoreAuthorityRequest={action,deviceId:device,installationId,
-      nonce:randomUUID(),issuedAtMs:Date.now(),requestId,fingerprint};
+  const call=async(action:'reserve'|'claim'|'complete'|'revoke',
+    override:Readonly<{fingerprint?:string;installationId?:string}>={})=>{
+    const request:CoreAuthorityRequest={action,deviceId:device,
+      installationId:override.installationId??installationId,
+      nonce:randomUUID(),issuedAtMs:Date.now(),requestId,
+      fingerprint:override.fingerprint??fingerprint};
     if(action==='complete')request.outcome='succeeded';
     request.signature=sign(null,coreOperationBytes(request),signer.privateKey).toString('base64');
     return auth.handle(credential,request);
@@ -226,3 +229,138 @@ for(const outcome of ['deny','unknown'] as const){
     }
   });
 }
+
+
+// New independent AI-08 negative scenarios; the original early-completion
+// P0 test above is unmodified. These are disposable D1 state-machine checks,
+// not proof of a native Broker, owner consent or execution sandbox.
+test('AI-08: dispatched claim cannot be rolled back to a reusable reservation',async()=>{
+  const f=fixture();
+  let pending:Promise<unknown>|undefined;
+  try{
+    await f.call('reserve');
+    pending=f.call('claim');
+    await f.gate.entered;
+    assert.equal(f.state(),'dispatched');
+    assert.throws(()=>f.db.exec(
+      "UPDATE device_core_console_operations SET state='reserved'"),
+      /CORE_DISPATCHED_REPLAY_DENIED/,
+      'coordinator 0021 migration must forbid reserved replay');
+    assert.equal(f.state(),'dispatched');
+    f.gate.release();
+    await pending;
+    assert.equal(f.reads(),1);
+  }finally{
+    f.gate.release();
+    if(pending)await pending.catch(()=>{});
+    f.db.close();
+  }
+});
+
+test('AI-08: native DENY UNKNOWN tombstone cannot be rewritten to reserved',async()=>{
+  const f=fixture('deny');
+  let pending:Promise<unknown>|undefined;
+  try{
+    await f.call('reserve');
+    pending=f.call('claim');
+    await f.gate.entered;
+    f.gate.release();
+    await assert.rejects(pending,/CORE_NATIVE_CONSENT_SESSION_STALE/);
+    assert.equal(f.state(),'unknown');
+    assert.throws(()=>f.db.exec(
+      "UPDATE device_core_console_operations SET state='reserved'"),
+      /CORE_UNKNOWN_TERMINAL/,
+      'UNKNOWN request IDs must be terminal across reconciliation and replay');
+    assert.equal(f.state(),'unknown');
+    await assert.rejects(f.call('claim'),'same ID must not gain a second claim');
+    await assert.rejects(f.call('complete'),'terminal UNKNOWN must not acknowledge success');
+    assert.equal(f.reads(),1);
+  }finally{
+    f.gate.release();
+    if(pending)await pending.catch(()=>{});
+    f.db.close();
+  }
+});
+
+test('AI-08: fingerprint and owner scope of a reserved operation are immutable',async()=>{
+  const f=fixture();
+  try{
+    await f.call('reserve');
+    assert.throws(()=>f.db.exec(
+      "UPDATE device_core_console_operations SET fingerprint='"+'e'.repeat(64)+"'"),
+      /CORE_OPERATION_IDENTITY_IMMUTABLE/);
+    assert.throws(()=>f.db.exec(
+      'UPDATE device_core_console_operations SET owner_epoch=owner_epoch+1'),
+      /CORE_OPERATION_IDENTITY_IMMUTABLE/);
+    assert.equal(f.state(),'reserved');
+  }finally{f.db.close();}
+});
+
+test('AI-08: validly re-signed foreign fingerprint cannot steal the original reservation',async()=>{
+  const f=fixture();
+  let pending:Promise<unknown>|undefined;
+  try{
+    await f.call('reserve');
+    await assert.rejects(f.call('claim',{fingerprint:'e'.repeat(64)}),
+      /CORE_REVOKED_REPLAY_OR_CONFLICT/);
+    assert.equal(f.state(),'reserved',
+      'different signed fingerprint cannot consume the original reserved UUID');
+    pending=f.call('claim');
+    await f.gate.entered;
+    f.gate.release();
+    await pending;
+    assert.equal(f.state(),'dispatched');
+    assert.equal(f.reads(),1,'wrong-fingerprint claim must not invoke native readback');
+  }finally{
+    f.gate.release();
+    if(pending)await pending.catch(()=>{});
+    f.db.close();
+  }
+});
+
+test('AI-08: signed local revoke during native readback denies the effect and keeps ID terminal',async()=>{
+  const f=fixture();
+  let pending:Promise<unknown>|undefined;
+  try{
+    await f.call('reserve');
+    pending=f.call('claim');
+    await f.gate.entered;
+    await f.call('revoke');
+    f.gate.release();
+    await assert.rejects(pending,/CORE_NATIVE_CONSENT_SESSION_CHANGED/);
+    assert.equal(f.state(),'unknown',
+      'consumed claim must not remain dispatchable after signed revoke');
+    await assert.rejects(f.call('complete'),'revoked owner cannot complete a late effect');
+    await assert.rejects(f.call('claim'),'revoke cannot resurrect the old request ID');
+    assert.equal(f.reads(),1);
+  }finally{
+    f.gate.release();
+    if(pending)await pending.catch(()=>{});
+    f.db.close();
+  }
+});
+
+test('AI-08: lost reserve ACK cannot allocate or execute the same request twice',async()=>{
+  const f=fixture();
+  let pending:Promise<unknown>|undefined;
+  try{
+    await f.call('reserve'); // Synthetic client discards its successful ACK.
+    await assert.rejects(f.call('reserve'),
+      /CORE_REVOKED_REPLAY_OR_CONFLICT/,
+      'fresh nonce may not bypass the original durable request-ID reservation');
+    assert.equal(f.state(),'reserved');
+    pending=f.call('claim');
+    await f.gate.entered;
+    f.gate.release();
+    await pending;
+    assert.equal(f.reads(),1,'only the original reservation can reach readback');
+    assert.equal(f.state(),'dispatched');
+    await f.call('complete');
+    assert.equal(f.state(),'succeeded');
+    await assert.rejects(f.call('complete'),'same completed effect cannot be replayed');
+  }finally{
+    f.gate.release();
+    if(pending)await pending.catch(()=>{});
+    f.db.close();
+  }
+});
