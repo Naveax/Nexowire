@@ -24,7 +24,11 @@ internal static class EnrollmentClient
                 "evidence" or "witness");
             fields.Add(property.Name);
         }
-        Protocol.Require(fields.Count==8 &&
+        // Capture the out variable outside short-circuit evaluation so
+        // malformed/missing witness remains a rejection, not a compiler
+        // definite-assignment ambiguity.
+        var witnessPresent=root.TryGetProperty("witness",out var witness);
+        Protocol.Require(fields.Count==8 && witnessPresent &&
             root.TryGetProperty("version",out var version) &&
             version.ValueKind==JsonValueKind.Number && version.TryGetInt32(out var v) && v==2 &&
             root.TryGetProperty("verified",out var verified) && verified.ValueKind==JsonValueKind.True &&
@@ -34,8 +38,7 @@ internal static class EnrollmentClient
             root.TryGetProperty("spkiBase64",out var key) && key.ValueKind==JsonValueKind.String &&
             key.GetString() is {Length:>0 and <=1024} &&
             root.TryGetProperty("keyProvider",out var provider) && provider.ValueKind==JsonValueKind.String &&
-            provider.GetString() is "Microsoft Platform Crypto Provider" or "Microsoft Software Key Storage Provider" &&
-            root.TryGetProperty("witness",out var witness));
+            provider.GetString() is "Microsoft Platform Crypto Provider" or "Microsoft Software Key Storage Provider");
         Protocol.Require(operation=="attest"
             ? witness.ValueKind==JsonValueKind.Object
             : witness.ValueKind==JsonValueKind.Null);
