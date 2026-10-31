@@ -70,3 +70,128 @@ adapter and #982 mTLS/verifier composition; real machine-key ACL/TPM/SCM/pipe
 acceptance (including hostile owner clients); two-device visible enrollment,
 reboot, reconnect, interruption and offline revoke testing. Local service source
 compilation/CNG diagnostics must pass before presenting any installation UAC.
+
+## AI-02 hardening candidate (Draft only)
+
+The native pipe now sends a bounded, non-sensitive v2 denial frame for rejected
+operations when the client remains connected. The diagnostic client refuses
+denials, wrong protocol versions and frames that claim dispatch permission.
+It still does **not** cryptographically validate raw pipe output: only an
+independently pinned Agent verifier may use signed proof, and no proof activates
+CORE by itself. A consumed challenge nonce cannot be replayed after a lost ACK.
+
+The opt-in installer preflight additionally requires that the **device UUID,
+installation UUID and owner account ID** match the independently supplied Agent
+identity. Incomplete identity fields fail closed. This comparison does **not**
+authenticate that identity file's provenance. The coordinator must supply
+an independently protected and authenticated Agent identity export before
+installation acceptance; simply copying matching attacker-controlled JSON
+is insufficient. The current installer is not approved for production.
+
+The read-only opt-in service-removal preflight is:
+
+```powershell
+.\scripts\local-enrollment\uninstall.ps1 -ExpectedManifestSha256 '<pinned-sha256>' -ExpectedDeviceId '<device-uuid>'
+```
+
+Actual SCM removal requires `-Execute`, a local elevated interactive console,
+the installed service's exact path and device match, a previously committed
+local `revoked.json` marker and a typed, device-specific operator confirmation.
+It removes only the service registration, preserving runtime files, CNG keys,
+nonce history and revocation evidence for manual review. It does **not** remove
+the original Agent/Broker, reinstate revoked grants, reset state or assert
+successful final SCM deletion while Windows may still be finalizing it.
+Run only in an authorized disposable Windows test environment until accepted.
+
+The targeted Windows CI tests exercise CNG diagnostics, strict response-frame
+validation and disposable read-only installer/uninstaller preflights. They do
+not prove actual hostile-client IPC containment, service crash recovery,
+installer rollback, TPM trust, unattended reboot operation or two-PC acceptance.
+
+## AI-02 physical-console ceremony fence (Draft only)
+
+The elevated enrollment/revocation UI now requires a live *active local console*
+Windows session. The native WTS console session ID, client protocol type (0 =
+local), and connect state (active) must agree, and the console session ID is
+rechecked after each WTS read. Enrollment checks immediately before displaying
+and again after the user confirms; switching to RDP or disconnecting during the
+ceremony rejects the grant before protected storage is written. The service
+reuses the same native checks for client attestation. Synthetic snapshot policy
+tests are **not physical approval** and do not activate CORE.
+
+The diagnostic `--attest` client additionally refuses a success frame with a
+missing or null witness. The `--status` client refuses an unexpected witness
+object. This is strict response framing only; cryptographic verification and
+fresh independent issuer/revocation state remain external requirements.
+
+## AI-02 local revoke/attestation serialization fence (Draft only)
+
+Attestation now holds an exclusive kernel file-share handle in the protected
+ProgramData root through its response. Visible local revocation acquires the
+same fence after confirmation, revalidates the signed grant under the fence and
+persists the revoke marker before reporting completion. A crash drops the kernel
+handle; an existing marker still blocks startup/signing. Lock acquisition is
+bounded by a monotonic clock and cancellation and **never** treats contention
+as approval. The diagnostic self-test proves only Windows temp-file exclusion,
+timeout/cancellation and reopening, not real SCM crash/restart or actual owner
+revocation. A response already delivered before revocation is still subject to
+independent verifier expiry and current external revoke checks.
+
+## AI-02 status / attest final admission fence
+
+Both local IPC operations now acquire the same protected revoke/attestation
+file-sharing fence before loading current signed grant state; status is still
+read-only and `mayDispatch=false`. For attest, the native service rechecks
+live console SID/session/LUID, unchanged protected grant/revocation state,
+challenge TTL and cancellation **after signing, immediately before sending**.
+Both success replies must fit the bounded 16384-byte protocol frame. A stale
+session or expired challenge fails closed, while any already consumed nonce
+remains consumed after a lost ACK. This is source-side narrowing of a race, not
+an atomic OS-to-remote-dispatch guarantee: AI-03 must independently enforce
+current external revoke/generation/one-use admission at the last execution
+boundary. Synthetic self-test exercises late-expiry and changed-session
+rejections; it is not an installed Windows Service or physical consent test.
+
+## AI-02 exclusive fence ACL handle readback
+
+The local revoke/IPC lock file uses `FileShare.None`; opening its path a
+second time to read the ACL can produce an OS sharing violation. The protected
+owner/DACL check now reads from the **same already-open exclusive FileStream**,
+while checking bounded file size and absence of reparse attributes, and retains
+all original fail-closed SYSTEM/Administrators-only ACL requirements. A new
+Windows disposable self-test reads ACL on an exclusive handle and verifies
+contended second open fails by timeout. This is not proof of production SCM
+hosting or an enrolled owner; real installed service tests remain outstanding.
+
+## AI-02 strict diagnostic response field set
+
+The native `--status` and `--attest` clients now reject duplicate JSON
+properties at any depth, unknown or missing top-level v2 keys, unsupported
+key-provider strings, empty public-key encoding and incorrect witness shape.
+Both success envelopes must declare `mayDispatch:false` and are **still
+untrusted until independently cryptographically verified and pinned**.
+Disposable self-tests retain positive status/attest controls and explicit
+negative malformed/duplicate/downgrade cases; no enrollment or SCM actions.
+
+## AI-02 disposable negative: protected-record parser and service principal
+
+The native self-test now feeds empty, invalid UTF-8, overlong, duplicate,
+unknown, missing-required and truncated protected-store wire records to the
+bounded strict JSON reader. These must all reject and never be treated as a
+restored enrollment. An independent runner test calls the *uninstalled*
+`--service` entry as a non-LocalSystem principal and verifies it exits with
+a generic denial, without calling SCM or modifying any service, ACL, key or
+owner data. These **do not** test a real installed service restart/recovery;
+independent disposable SCM acceptance is still mandatory.
+
+## AI-02 local consent issuer visibility
+
+The visible owner approval now displays the **exact installation UUID, owner
+account ID, Windows SID, device UUID and the independently supplied authority
+public-key SHA-256**, alongside TPM/software protection mode. Incoming P-256
+authority SPKI is bounded, requires canonical base64, full DER consumption and
+canonical re-export before a fingerprint is shown or persisted. Disposable
+native tests reject noncanonical base64, malformed/truncated DER and wrong
+curve; no consent UI is actually opened by the test. Showing a fingerprint
+does **not** establish a trusted externally pinned issuer, grant generation,
+current remote revoke, or Agent binary provenance. Those remain NO-GO gates.

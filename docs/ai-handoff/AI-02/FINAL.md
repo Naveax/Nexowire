@@ -1,0 +1,11 @@
+# AI-02 | interim source delivery
+
+- **Verdict:** SOURCE CANDIDATE / REVIEW AFTER EXACT-HEAD CI; **PRODUCTION NO-GO**.
+- **Draft PR:** https://github.com/Naveax/Nexowire/pull/993 ; branch `ai/02-enrollment-hardening-20261031`, open, unmerged.
+- **Stack base:** #984 `9d0f35607d4cde87bd031e2da77855cfaf570c31` (parent #983). New source HEAD is the PR's current live SHA; do not infer from parent.
+- **Known previous source HEAD:** `97cb3668fe7f37e95c9730912d6637fd0a963c56`, [run 41204589273](https://github.com/Naveax/Nexowire/actions/runs/41204589273) observed 7/8 SUCCESS with Windows native 4/4 PASS and browser-live pending. This is historical, not green proof for future commits.
+- **Implemented in AI-02-only paths:** C#↔TypeScript canonical v2 signed wire, protected CNG and local-store validation, native active-console and SID/session/LUID readback, bounded IPC denial and fixed `mayDispatch=false`, one-use challenge nonce, revoke/attest exclusive fence, explicit read-only installer identity preflight and revoke-first service-only uninstall, corrupted revoke marker handling, disposable clock/malformed message/ACL/parser tests.
+- **Current staged negatives requiring new exact SHA CI:** malformed protected-record JSON/UTF-8/missing-required/unknown/duplicate/oversized cases; uninstalled Windows `--service` entry must reject non-LocalSystem runner before any SCM operation. All tests remain enforced, not skipped or replaced by synthetic PASS.
+- **Not tested:** actual installed SCM service with start/stop/restart, physical owner UAC approval, host corrupt protected ProgramData, malicious same-user pipe client process trust, real TPM hardware/DPAPI state, offline external CAS revoke/rollback, two production PCs. Disposable CNG/self-test/packaging evidence is not physical acceptance.
+- **External blockers:** coordinator-protected authenticated Agent identity and same-user client executable provenance; AI-03 independent mTLS/issuer pin/revoke ledger/generation/CAS; AI-08 independent adversarial review; disposable Windows service lifecycle and recovery acceptance. See `INTEGRATION_REQUEST.md`.
+- **No merge, deploy, main/workflow/shared file changes, CORE activation, localEnrolled/active forging, live device/Agent/Hub/Broker/UAC/ACL modification.**

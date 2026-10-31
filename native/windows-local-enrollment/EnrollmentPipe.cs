@@ -58,10 +58,15 @@ internal static class EnrollmentPipe
                 Protocol.Require(sid==config.OwnerSid && evidence is not null);
                 var r=Protocol.Read<Request>(bytes);
                 Protocol.Require(r.Version==2 && r.Operation is "status" or "attest");
+                // Serialize both signed attestation and read-only status
+                // against visible local revocation. Neither may report a
+                // verified stale grant after a completed local revoke.
+                using var fence=ProtectedStore.AcquireRevocationFence(deadline.Token);
                 var (fresh,g)=ProtectedStore.Load();
                 Protocol.Require(fresh==config);
                 using var key=ProtectedStore.OpenKey(config);using var signer=new ECDsaCng(key);
                 SignedSession? witness=null;
+                Session? attestedChallenge=null;
                 if(r.Operation=="attest")
                 {
                     Protocol.Require(r.Challenge is not null);
@@ -84,18 +89,55 @@ internal static class EnrollmentPipe
                     Protocol.Require(latest==evidence && DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()<p.ValidUntilMs);
                     witness=new SignedSession(p,Convert.ToBase64String(signer.SignData(Protocol.SessionBytes(p),
                         HashAlgorithmName.SHA256,DSASignatureFormat.IeeeP1363FixedFieldConcatenation)));
-                    Protocol.Require(ProtectedStore.Load()==(config,g));
+                    attestedChallenge=p;
                 }
                 else Protocol.Require(r.Challenge is null);
+                // Closing the signer/reply TOCTOU window is best effort:
+                // the independently operated verifier still needs a final
+                // current-session / revocation / one-use authority check.
+                SessionEvidence? beforeReply=null;
+                pipe.RunAsClient(()=>beforeReply=WindowsSessionEvidence.CaptureImpersonated(config.OwnerSid));
+                Protocol.Require(beforeReply==evidence && ProtectedStore.Load()==(config,g));
+                if(attestedChallenge is not null)
+                    Protocol.RequireFreshSession(attestedChallenge,evidence!,beforeReply,
+                        DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+                deadline.Token.ThrowIfCancellationRequested();
                 var response=JsonSerializer.SerializeToUtf8Bytes(new {version=2,verified=true,
                     grant=g,spkiBase64=Convert.ToBase64String(signer.ExportSubjectPublicKeyInfo()),
                     keyProvider=config.KeyProvider,evidence,witness,mayDispatch=false},Protocol.Json);
+                Protocol.Require(response.Length is >0 and <=16384);
                 System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(lengthBytes,response.Length);
                 await pipe.WriteAsync(lengthBytes,deadline.Token);await pipe.WriteAsync(response,deadline.Token);
                 await pipe.FlushAsync(deadline.Token);
             }
             catch(Exception e) when(e is not OutOfMemoryException and not StackOverflowException)
-            { if(stop.IsCancellationRequested)break; }
+            {
+                if(stop.IsCancellationRequested)break;
+                // A rejected operation must not look like a successful empty
+                // response. Send only a bounded, non-sensitive denial; nonce
+                // claims made before a lost ACK remain consumed.
+                try
+                {
+                    if(pipe.IsConnected)
+                    {
+                        using var rejectDeadline=CancellationTokenSource.CreateLinkedTokenSource(stop);
+                        rejectDeadline.CancelAfter(TimeSpan.FromMilliseconds(500));
+                        var denied=JsonSerializer.SerializeToUtf8Bytes(new {
+                            version=2,verified=false,error="LOCAL_ENROLLMENT_REJECTED",mayDispatch=false
+                        },Protocol.Json);
+                        var prefix=new byte[4];
+                        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(prefix,denied.Length);
+                        await pipe.WriteAsync(prefix,rejectDeadline.Token);
+                        await pipe.WriteAsync(denied,rejectDeadline.Token);
+                        await pipe.FlushAsync(rejectDeadline.Token);
+                    }
+                }
+                catch(Exception writeError) when(writeError is not OutOfMemoryException and not StackOverflowException)
+                {
+                    // Peer disconnect/timeout is still denial; no retry of an
+                    // already claimed one-use challenge is performed here.
+                }
+            }
             finally{if(pipe.IsConnected)pipe.Disconnect();}
         }
     }

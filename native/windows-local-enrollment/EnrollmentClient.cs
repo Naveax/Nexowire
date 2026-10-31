@@ -7,6 +7,42 @@ namespace Nexowire.LocalEnrollment;
 
 internal static class EnrollmentClient
 {
+    // Framing/denial validation is not authorization. A separate Agent verifier
+    // must pin the installed device key and verify signed grant/witness scope.
+    internal static void RequireAcceptedFrame(JsonElement root,string operation)
+    {
+        Protocol.Require(operation is "status" or "attest" &&
+            root.ValueKind==JsonValueKind.Object);
+        // A diagnostic pipe response is untrusted. Deny duplicate fields at
+        // every depth and any unknown/missing top-level v2 fields.
+        Protocol.RejectDuplicates(root);
+        var fields=new HashSet<string>(StringComparer.Ordinal);
+        foreach(var property in root.EnumerateObject())
+        {
+            Protocol.Require(property.Name is "version" or "verified" or
+                "mayDispatch" or "grant" or "spkiBase64" or "keyProvider" or
+                "evidence" or "witness");
+            fields.Add(property.Name);
+        }
+        // Capture the out variable outside short-circuit evaluation so
+        // malformed/missing witness remains a rejection, not a compiler
+        // definite-assignment ambiguity.
+        var witnessPresent=root.TryGetProperty("witness",out var witness);
+        Protocol.Require(fields.Count==8 && witnessPresent &&
+            root.TryGetProperty("version",out var version) &&
+            version.ValueKind==JsonValueKind.Number && version.TryGetInt32(out var v) && v==2 &&
+            root.TryGetProperty("verified",out var verified) && verified.ValueKind==JsonValueKind.True &&
+            root.TryGetProperty("mayDispatch",out var dispatch) && dispatch.ValueKind==JsonValueKind.False &&
+            root.TryGetProperty("grant",out var grant) && grant.ValueKind==JsonValueKind.Object &&
+            root.TryGetProperty("evidence",out var evidence) && evidence.ValueKind==JsonValueKind.Object &&
+            root.TryGetProperty("spkiBase64",out var key) && key.ValueKind==JsonValueKind.String &&
+            key.GetString() is {Length:>0 and <=1024} &&
+            root.TryGetProperty("keyProvider",out var provider) && provider.ValueKind==JsonValueKind.String &&
+            provider.GetString() is "Microsoft Platform Crypto Provider" or "Microsoft Software Key Storage Provider");
+        Protocol.Require(operation=="attest"
+            ? witness.ValueKind==JsonValueKind.Object
+            : witness.ValueKind==JsonValueKind.Null);
+    }
     [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)]
     private static extern SafePipeHandle CreateFileW(string name,uint access,uint share,IntPtr sa,
         uint disposition,uint flags,IntPtr template);
@@ -42,6 +78,7 @@ internal static class EnrollmentClient
         // Wire bytes alone are UNTRUSTED. The Agent/independent verifier must
         // validate the provisioned issuer pin and signed scope before use.
         using var doc=JsonDocument.Parse(response);
+        RequireAcceptedFrame(doc.RootElement,operation);
         Console.WriteLine(doc.RootElement.GetRawText());
     }
 }
