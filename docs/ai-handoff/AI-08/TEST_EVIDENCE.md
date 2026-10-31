@@ -1,5 +1,20 @@
 # AI-08 | Negatif test kanıtı (exact SHA/CI ayrımı)
 
+## 31 Ekim 2026 | Kesin CI sonucu ve sonraki Broker negatifleri
+
+**Bu bölüm aşağıdaki eski pending notlarından daha günceldir.**
+
+- **Failing QA HEAD** `6004e2b44c8a5c5f9374a74498e98288e4d8f5cb`; matching [run #41199793251](https://github.com/Naveax/Nexowire/actions/runs/41199793251) **COMPLETED FAILURE**.
+- Node22 job `124533274467` exit 1, `2805 tests / 2448 PASS / 1 FAIL / 354 SKIP / 2 TODO`, AI-08 `34 PASS / 1 FAIL`. Node24 job `124533274359` CANCELLED after corresponding new failure appeared in partial test log. Linux-native, local-enrollment-native, WSL2, macOS, security-operational and Windows browser-live SUCCESS.
+- **P0 test** `test/ai08-console-claim.test.ts:135`: `complete(succeeded)` is accepted while native `currentReadback` remains pending, then readback DENY cannot tombstone `succeeded`. Actual `{acceptedEarly:true,stateAfterDeniedReadback:'succeeded'}`, expected `{acceptedEarly:false,stateAfterDeniedReadback:'unknown'}`. It is a reproducible `SYNTHETIC_SQLITE` source defect, **not physical Windows execution evidence**.
+- **Fix owner:** AI-06 + coordinator-owned DB migration. New durable `native_claim_verified=0` default, atomic identity/epoch/READY/current consent check after independent readback, only then one-time marker, and `complete` must require marker=1; old unverified `dispatched` rows never eligible. No test skip or masking. See [handoff](https://github.com/Naveax/Nexowire/pull/985#issuecomment-6543216193).
+- **Next AI-08 source change pending exact-HEAD CI:** 3 independent Broker receipt-negative tests: (1) validly signed foreign COMMITTED ticket, (2) final protected generation drift, (3) final protected Broker proof ID substitution. Expected all deny effect and replay. These tests have **NOT_TESTED** outcome until their own exact SHA CI completes. They do not replace the red D1 gate.
+- The earlier 34/34 PASS belongs only to previous source SHA `13ea5e612942f9464ab88ab4e30d8d2974e813fe` (run `41198517077`). It cannot be inherited by current failing SHA or future commit.
+
+---
+
+
+
 ## CI kanıt seviyeleri
 
 ### Doğrudan ölçülmüş AI-08 kaynak testleri

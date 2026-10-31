@@ -1,24 +1,33 @@
-# AI-08 | Bağımsız QA handoff
+# AI-08 | Bağımsız QA teslim handoff
 
-**Durum:** Kaynak QA `REVIEW`; production CORE `NO_GO`. Fiziksel sınırlar BLOCKED.
+**Karar:** **NO_GO**, kaynak düzeyi güvenlik testi RED; Draft PR açık.
+**Hedef:** 14 Kasım 2026. Bitiş tarihi güvenlik kabulü değildir.
 
-- **Draft PR:** https://github.com/Naveax/Nexowire/pull/989
-- **Branch:** `ai/08-independent-qa-20261031`
-- **Base SHA:** `9d0f35607d4cde87bd031e2da77855cfaf570c31` (#984)
-- **Son ölçülmüş test kodu SHA:** `9feb149e1b2723bb4609d21e4167824e400e9b85`
-- **Run ID:** `41196966679` (CI; Node job'ları SUCCESS, Windows browser-live son gözlemde in_progress)
-- **Değişiklik alanı:** 6 adet `test/ai08-*.test.ts` + `docs/ai-handoff/AI-08/**`; production source, native, installer, CI, gerçek cihaz değişikliği yok.
-- **Test komutları:** `npm run typecheck`, `npm test`, `npm run build` (Node22/24 job exit 0); `node --test --import tsx test/ai08-*.test.ts` bağımsız CI suite içinde 32 test ile keşfedildi.
-- **Ölçülen negatifler:** Node 22/24 **32/32 PASS**; genel **2802 total / 2446 PASS / 0 FAIL / 354 SKIP / 2 TODO** (her Node sürümü). 10 yeni D1 identity/epoch/readiness senaryosu eklendi.
-- **Etkileşim/kanal:** Bu rapor PR head'e bağlı tarihi source kanıtıdır. Dokümantasyon commit'inin **kendi** exact HEAD CI'sı geçmeden yeni SHA'ya PASS devredilemez.
-- **Eksik:** Gerçek native sandbox, Windows kernel token/handles/descendants/WFP, physical UAC/DPAPI/owner consent, rollback-independent offhost CAS, 2-PC sleep/reboot/24h, bütün yeni owner-PR'ların tek entegrasyon HEAD'i.
+| Alan | Değer |
+|---|---|
+| Repo | `Naveax/Nexowire` |
+| Branch | `ai/08-independent-qa-20261031` |
+| Draft PR | https://github.com/Naveax/Nexowire/pull/989 |
+| Base SHA | `9d0f35607d4cde87bd031e2da77855cfaf570c31` |
+| Son test edilmiş HEAD | `6004e2b44c8a5c5f9374a74498e98288e4d8f5cb` |
+| Run | [41199793251](https://github.com/Naveax/Nexowire/actions/runs/41199793251), **FAILURE** |
 
-**Merge/deploy/live device:** yapılmadı. **Production NO_GO.**
+## Ölçülmüş kaynak QA ve açık hata
 
+- Node22 job `124533274467`: 2.805 total / 2.448 PASS / **1 FAIL** / 354 SKIP / 2 TODO. AI-08 **34 PASS, 1 FAIL**.
+- Node24 job `124533274359`: CANCELLED, kısmi test logunda aynı AI-08 RED; final Node24 suite başarı iddiası **yok**.
+- Diğer işlerin altısı SUCCESS, `browser-live` dahil; tüm workflow FAILURE.
+- Tek RED: `test/ai08-console-claim.test.ts:135` sentetik in-memory D1'daki `claim` native readback beklerken ayrı imzalı `complete(succeeded)` başarılı kaydediliyor. Sonradan native readback DENY/offline, ancak işlem `succeeded` kalıyor.
+- Yeniden üretim: `npm test` veya `node --test --import tsx test/ai08-console-claim.test.ts`. CI job exit code 1. Yerel komut bu turda çalıştırılmadı; CI doğrudan kanıttır.
+- Bağımsız kanıt: [AI-08 P0](https://github.com/Naveax/Nexowire/pull/989#issuecomment-6543216588) ve [AI-06 handoff](https://github.com/Naveax/Nexowire/pull/985#issuecomment-6543216193). Koordinatör-owned schema migration ve AI-06 D1 state-machine, readback onayına bağlı tek kullanımlık marker gerektiriyor.
 
-## 31.10.2026 QA devam eki
-Mevcut 32 ölçülmüş testi silmeden, AI-08 üç regresyon daha ekledi: immutable Broker signed receipt üzerine raw transport substitution, CAS aynı UUID eşzamanlı admission/replay ve pre-aborted mTLS. Bu testler için **yeni HEAD CI bekleniyor**; yeni SHA/runs sonucu GitHub'dan alınmadan 35/35 PASS yazılmaz. Başka ajan kaynağı değiştirilmedi; Draft / CORE production NO_GO.
+## Bu devam çalışması (henüz CI ölçülmedi)
 
+`test/ai08-broker-receipt.test.ts` üç ek negatif test kazandı: imzası doğru ama foreign COMMIT ticket; final-native generation drift; final-native protected proof substitution. Aynı test dosyası, başka ajan source/test değişmedi. **Yeni HEAD / yeni CI sonucu GitHub PR'dan ayrıca doğrulanmalı; PASS/FAIL uydurulmaz.**
 
-## 31 Ekim | Premature complete/claim-denial handoff
-AI-08 `test/ai08-console-claim.test.ts` içinde readback-pending `claim` + ayrı imzalı `complete(succeeded)` + native readiness loss yarışına adversarial regresyon ekledi. **Yeni exact HEAD CI sonucu bekleniyor, PASS iddia edilmez.** Önceki `13ea5e612942f9464ab88ab4e30d8d2974e813fe` için Node22/24 34/34 AI-08 PASS; bu P0 vakasını içermez. Koordinatör-owned migration / AI-06 D1 state transition ihtiyacı `INTEGRATION_REQUEST.md` içinde dosya+satır ile açıklandı. Üretim CORE NO_GO; testin RED olması güvenlik kapısını gevşetme gerekçesi değildir.
+## Kanıtın sınırları ve nihai karar
+
+- D1 = `SYNTHETIC_SQLITE`, Broker receipt/CAS = `SYNTHETIC_UNIT`, WAL = `DISPOSABLE_SQLITE`, mTLS = `LOCAL_TLS_LOOPBACK`.
+- Gerçek owner UAC/DPAPI Windows Enrollment, native protected OS effect, token/job/AppContainer kernel isolation, rollback-independent CAS failover, iki-PC 24h ve entegrasyon HEAD **BLOCKED**.
+- Dosya kapsamı: 6 `test/ai08-*.test.ts`, 5 `docs/ai-handoff/AI-08/*.md`. `src/`, `native/`, `cloudflare/`, CI, `main`, live Agent/PC değişmedi.
+- PR yalnız Draft. Merge, deploy, release, physical attestation yapılmadı.

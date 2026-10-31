@@ -11,7 +11,7 @@ import {
 const CAP='windows.firewall.control';
 const ALTERNATE='windows.task.control';
 const TICKET='ai08_synthetic_ticket_0123456789abcdef';
-type Attack='none'|'reserve-scope'|'reserve-signature'|'commit-capability'|'lost-commit-ack'|'transport-post-snapshot-tamper';
+type Attack='none'|'reserve-scope'|'reserve-signature'|'commit-capability'|'lost-commit-ack'|'transport-post-snapshot-tamper'|'commit-ticket-aba'|'final-revoke-generation'|'final-protected-proof-swap';
 function fixture(attack:Attack){
   const key=generateKeyPairSync('ed25519');
   const binding:BrokerVerifiedEffectBinding={
@@ -28,6 +28,10 @@ function fixture(attack:Attack){
     const payload={state,operationId:request.operationId,capability:request.capability,
       inputSha256:request.inputSha256,challengeNonce,ticket:TICKET,
       binding:{...request.binding}};
+    // Create an independently signed but foreign COMMITTED ticket. This is
+    // ticket substitution, not a corrupted signature fixture.
+    if(attack==='commit-ticket-aba'&&state==='COMMITTED')
+      payload.ticket='ai08_alternate_ticket_0123456789abcdef';
     const signedPayload=attack==='reserve-signature'&&state==='RESERVED'
       ?{...payload,capability:ALTERNATE}:payload;
     const proof=sign(null,Buffer.from(JSON.stringify(signedPayload)),key.privateKey).toString('base64');
@@ -38,7 +42,13 @@ function fixture(attack:Attack){
   const admitted=new Set<string>();
   const adapter:BrokerExternalEffectAdmission={
     readVerifiedBinding:async()=>({...binding}),
-    readVerifiedBindingNow:()=>({...binding}),
+    readVerifiedBindingNow:()=>{
+      if(attack==='final-revoke-generation')
+        return {...binding,generation:binding.generation+1};
+      if(attack==='final-protected-proof-swap')
+        return {...binding,protectedBrokerProofId:'ai08-foreign-protected-proof'};
+      return {...binding};
+    },
     begin:async (req,nonce)=>{
       if(admitted.has(req.operationId))return null;
       admitted.add(req.operationId);
@@ -50,7 +60,14 @@ function fixture(attack:Attack){
       if(ticket!==TICKET)return null;
       remoteConsumes++;
       if(attack==='lost-commit-ack')throw Error('synthetic ACK lost after consuming');
-      return issued('COMMITTED',req,nonce);
+      const receipt=issued('COMMITTED',req,nonce);
+      if(attack==='commit-ticket-aba'){
+        const {proof,...signed}=receipt;
+        assert.equal(verify(null,Buffer.from(JSON.stringify(signed)),key.publicKey,
+          Buffer.from(proof,'base64')),true,
+          'foreign COMMITTED ticket must have a valid external signature');
+      }
+      return receipt;
     },
     verifyReceipt:async(receipt,signedPayloadUtf8)=>{
       verifiedPayloads++;
@@ -125,3 +142,19 @@ test('AI-08: post-snapshot transport mutation cannot substitute signed Broker au
   assert.equal(f.remoteConsumes,1);
   assert.equal(f.verifiedPayloads,2);
 });
+
+
+for(const attack of ['commit-ticket-aba','final-revoke-generation',
+  'final-protected-proof-swap'] as const){
+  test('AI-08: '+attack+' rejects a signed commit before privileged effect',async()=>{
+    const f=fixture(attack);
+    await assert.rejects(f.run(),{code:'BROKER_EFFECT_ADMISSION_REQUIRED'});
+    assert.equal(f.callbacks,0,'no effect on a new ticket or revoked native binding');
+    assert.equal(f.remoteConsumes,1,'a remote commit cannot be replayed after denial');
+    await assert.rejects(f.run(),{code:'BROKER_EFFECT_ADMISSION_REQUIRED'});
+    assert.equal(f.callbacks,0);
+    assert.equal(f.remoteConsumes,1,'the same UUID cannot cause a second commit');
+    if(attack!=='commit-ticket-aba')
+      assert.equal(f.verifiedPayloads,2,'both signed receipts were valid before native change');
+  });
+}
