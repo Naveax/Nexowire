@@ -1,0 +1,10 @@
+# AI-07 | STATUS — source-only sandbox diagnostics
+
+- **Scope:** native/task-os-sandbox-* C diagnostics, src/agent/task-os-sandbox-policy.ts, test/ai07-*, docs/ai-handoff/AI-07/**. Coordinator #1004 and CI files are out-of-scope.
+- **PR/branch:** [Draft #990](https://github.com/Naveax/Nexowire/pull/990), ai/07-isolation-worker-20261031. Base branch docs/07-task-os-sandbox-provider-contract-20261024, verified base SHA `68ee74ce7e1e5a36c8ae2f9b065f49a5cb13cee9` before this round.
+- **Last verified branch parent:** `a6900ab9695d3524ca8999d3bd62975c3d4bab59`. Latest branch HEAD and run must be read from the Draft PR (do not infer a self-referential commit hash here).
+- **Parent exact-SHA workflow:** [CI #41249427088](https://github.com/Naveax/Nexowire/actions/runs/41249427088) **6/7 SUCCESS and Windows browser-live in_progress** when checked; no duplicate workflow dispatched. The parent outcome is not the successor's result.
+- **This source change:** incomplete/unsupported **kernel/Job/AppContainer/pidfd/cgroup/descendant/handle/env/path/permission/IPC** reports without mutationState now require durable reconciliation even when an untrusted caller supplies false/null. Added three deny-only regression tests; existing admission remains permanently blocked.
+- **Isolation limitations:** native probes are selftest-only (`--selftest-only`), OS native readbacks lack a protected production attester, cgroup/Job whole-descendant proof and trusted revoke. No task execution, grant, UAC, service, device or CORE changes.
+- **Dependency:** coordinator-only [Draft #1004](https://github.com/Naveax/Nexowire/pull/1004) carries collision-free Windows rename; at latest read its base SHA was `d4f034ac6068e5228b3cc192eb6e1a2d02029709`, **eight AI-07 commits behind** `a6900ab9695d3524ca8999d3bd62975c3d4bab59`. Coordinator must refresh against the newest frozen AI-07 head; AI-07 does not push a second renamed C copy.
+- **Review / release:** NO_GO until exact new HEAD CI and independent protected OS worker/admission/readback/physical acceptance. Keep Draft; no merge/deploy/live device.

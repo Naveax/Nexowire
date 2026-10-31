@@ -40,8 +40,105 @@ export interface TaskSandboxSourceAssessment {
 }
 
 function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null &&
-    !Array.isArray(value) && Object.getPrototypeOf(value) === Object.prototype;
+  if (typeof value !== 'object' || value === null) return false;
+  try {
+    return !Array.isArray(value) &&
+      Object.getPrototypeOf(value) === Object.prototype;
+  } catch { return false; }
+}
+
+/**
+ * Values from intent/readbacks are adversarial JS objects. Only read own data
+ * descriptors: plain getters must never execute during a deny-only assessment.
+ * A Proxy can still intercept reflection; a throwing trap always fails closed.
+ */
+function own(value: Record<string, unknown> | null, field: string): unknown {
+  if (!value) return undefined;
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(value, field);
+    return descriptor && 'value' in descriptor ? descriptor.value : undefined;
+  } catch { return undefined; }
+}
+function ownFieldExists(value: Record<string, unknown> | null, field: string): boolean {
+  if (!value) return false;
+  try { return Object.getOwnPropertyDescriptor(value, field) !== undefined; }
+  catch { return true; } // Unknown report layout must be reconciled, not replayed.
+}
+/** Reject even non-enumerable/symbolic or accessor extra request fields.
+ * This is a source-only shape check, NOT an authenticated snapshot: a hostile
+ * Proxy can mutate values between descriptor reads, so the native admission
+ * owner must still sign and compare exact immutable serialized bytes. */
+function exactOwnDataKeys(value: unknown, expected: readonly string[]): boolean {
+  if (!record(value)) return false;
+  try {
+    const actual = Reflect.ownKeys(value);
+    if (actual.length !== expected.length) return false;
+    if (!actual.every(key => typeof key === 'string' && expected.includes(key))) {
+      return false;
+    }
+    return expected.every(key => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      return descriptor !== undefined && 'value' in descriptor;
+    });
+  } catch { return false; }
+}
+const TASK_KEYS = Object.freeze([
+  'schema','platform','taskId','originalRequestId','ownerId','deviceId',
+  'grantId','ownerEpoch','grantGeneration','executableDigest',
+  'baseWorktreeSha','workerPrivilege','args','envAllowlist','taskRoot',
+  'network','budgets',
+] as const);
+const ROOT_KEYS = Object.freeze([
+  'canonicalPath','volumeOrMountIdentity','rootFileIdOrInode',
+] as const);
+const NETWORK_KEYS = Object.freeze(['default','allowedEndpoints'] as const);
+const BUDGET_KEYS = Object.freeze([
+  'cpuMs','wallMs','memoryBytes','maxProcesses','outputBytes','diskBytes',
+] as const);
+function plainEmptyObject(value: unknown): boolean {
+  if (!record(value)) return false;
+  try { return Reflect.ownKeys(value).length === 0; }
+  catch { return false; }
+}
+function emptyList(value: unknown): boolean {
+  try {
+    return Array.isArray(value) &&
+      Object.getPrototypeOf(value) === Array.prototype &&
+      Object.getOwnPropertyDescriptor(value, 'length')?.value === 0 &&
+      Reflect.ownKeys(value).length === 1;
+  } catch { return false; }
+}
+function boundedArgs(value: unknown): boolean {
+  try {
+    if (!Array.isArray(value) ||
+        Object.getPrototypeOf(value) !== Array.prototype) return false;
+    const length: unknown = Object.getOwnPropertyDescriptor(value, 'length')?.value;
+    if (!Number.isSafeInteger(length) || (length as number) > 256) return false;
+    // Only the exact indexed argv slots and intrinsic length are admitted.
+    // Hidden own properties, symbols and accessor-backed metadata could make
+    // a later serializer sign bytes other than the fields we inspected.
+    // Malicious Proxy ownKeys traps are caught and remain deny-only.
+    if (Reflect.ownKeys(value).length !== (length as number) + 1) return false;
+    // Individual limits are insufficient: 256 x 32K strings would let
+    // untrusted callers force a huge serialized payload before OS admission.
+    // Keep the combined argument envelope conservatively under the Windows
+    // 32767 UTF-16 command-line ceiling. Native quoting/argv rules must still
+    // be verified independently and this check never grants execution.
+    let totalUnits = 0;
+    for (let i = 0; i < (length as number); i++) {
+      const item = Object.getOwnPropertyDescriptor(value, String(i));
+      if (!item || !('value' in item) || typeof item.value !== 'string' ||
+          item.value.length > 32767 || item.value.includes('\0')) return false;
+      totalUnits += item.value.length + 1;
+      if (totalUnits > 32767) return false;
+    }
+    return true;
+  } catch { return false; }
+}
+/** Source-only shape restriction; NOT native canonical file identity proof. */
+function boundedTaskRootPath(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 &&
+    value.length <= 32767 && !value.includes('\0');
 }
 function boundedId(value: unknown): value is string {
   return typeof value === 'string' && value.length >= 1 && value.length <= 128 &&
@@ -72,72 +169,102 @@ export function assessTaskSandboxSourceOnly(
 ): TaskSandboxSourceAssessment {
   const blockers: SandboxBlocker[] = [];
   const task = record(intent) ? intent : null;
-  const platform = task?.platform;
+  const platform = own(task, 'platform');
   const backend: SandboxBackend | null = platform === 'win32'
     ? 'windows-restricted-token-appcontainer-job'
     : platform === 'linux' ? 'linux-user-mount-pid-netns-cgroup'
       : platform === 'darwin' ? 'macos-isolated-vm' : null;
   if (!backend) blockers.push('UNSUPPORTED_PLATFORM');
 
-  const root = task && record(task.taskRoot) ? task.taskRoot : null;
-  const network = task && record(task.network) ? task.network : null;
-  const budgets = task && record(task.budgets) ? task.budgets : null;
-  if (!task || task.schema !== 1 || !boundedId(task.taskId) ||
-    !boundedId(task.originalRequestId) || !boundedId(task.ownerId) ||
-    !boundedId(task.deviceId) || !boundedId(task.grantId) ||
-    !nonnegativeEpoch(task.ownerEpoch) || !nonnegativeEpoch(task.grantGeneration) ||
-    !digest(task.executableDigest) || !digest(task.baseWorktreeSha) ||
-    !root || typeof root.canonicalPath !== 'string' || !root.canonicalPath ||
-    !boundedId(root.volumeOrMountIdentity) || !boundedId(root.rootFileIdOrInode) ||
-    !Array.isArray(task.args) || task.args.length > 256 ||
-    !task.args.every(v => typeof v === 'string' && v.length <= 32768)) {
+  const maybeRoot = own(task, 'taskRoot');
+  const maybeNetwork = own(task, 'network');
+  const maybeBudgets = own(task, 'budgets');
+  const root = record(maybeRoot) ? maybeRoot : null;
+  const network = record(maybeNetwork) ? maybeNetwork : null;
+  const budgets = record(maybeBudgets) ? maybeBudgets : null;
+  if (!exactOwnDataKeys(task, TASK_KEYS) ||
+    !exactOwnDataKeys(root, ROOT_KEYS) ||
+    own(task, 'schema') !== 1 || !boundedId(own(task, 'taskId')) ||
+    !boundedId(own(task, 'originalRequestId')) || !boundedId(own(task, 'ownerId')) ||
+    !boundedId(own(task, 'deviceId')) || !boundedId(own(task, 'grantId')) ||
+    !nonnegativeEpoch(own(task, 'ownerEpoch')) || !nonnegativeEpoch(own(task, 'grantGeneration')) ||
+    !digest(own(task, 'executableDigest')) || !digest(own(task, 'baseWorktreeSha')) ||
+    !root || !boundedTaskRootPath(own(root, 'canonicalPath')) ||
+    !boundedId(own(root, 'volumeOrMountIdentity')) ||
+    !boundedId(own(root, 'rootFileIdOrInode')) ||
+    !boundedArgs(own(task, 'args'))) {
     blockers.push('INVALID_TASK_INTENT');
   }
-  if (task?.workerPrivilege !== 'standard') {
+  if (own(task, 'workerPrivilege') !== 'standard') {
     blockers.push('PRIVILEGED_WORKER_FORBIDDEN');
   }
   // Until a real provider can build a clean environment, caller-supplied
   // environment is never accepted, including a synthetic sanitized flag.
-  if (!task || !record(task.envAllowlist) ||
-      Object.keys(task.envAllowlist).length !== 0) {
+  if (!task || !plainEmptyObject(own(task, 'envAllowlist'))) {
     blockers.push('AMBIENT_ENVIRONMENT_FORBIDDEN');
   }
-  if (!network || network.default !== 'deny' ||
-      !Array.isArray(network.allowedEndpoints) ||
-      network.allowedEndpoints.length !== 0) {
+  if (!exactOwnDataKeys(network, NETWORK_KEYS) ||
+      own(network, 'default') !== 'deny' ||
+      !emptyList(own(network, 'allowedEndpoints'))) {
     blockers.push('NETWORK_MUST_BE_DEFAULT_DENY');
   }
-  if (!budgets ||
-    !positiveBudget(budgets.cpuMs, 86_400_000) ||
-    !positiveBudget(budgets.wallMs, 86_400_000) ||
-    !positiveBudget(budgets.memoryBytes, Number.MAX_SAFE_INTEGER) ||
-    !positiveBudget(budgets.maxProcesses, 1024) ||
-    !positiveBudget(budgets.outputBytes, 1_073_741_824) ||
-    !positiveBudget(budgets.diskBytes, Number.MAX_SAFE_INTEGER)) {
+  if (!exactOwnDataKeys(budgets, BUDGET_KEYS) ||
+    !positiveBudget(own(budgets, 'cpuMs'), 86_400_000) ||
+    !positiveBudget(own(budgets, 'wallMs'), 86_400_000) ||
+    !positiveBudget(own(budgets, 'memoryBytes'), Number.MAX_SAFE_INTEGER) ||
+    !positiveBudget(own(budgets, 'maxProcesses'), 1024) ||
+    !positiveBudget(own(budgets, 'outputBytes'), 1_073_741_824) ||
+    !positiveBudget(own(budgets, 'diskBytes'), Number.MAX_SAFE_INTEGER)) {
     blockers.push('INVALID_RESOURCE_BUDGET');
   }
 
   const observation = record(reported) ? reported : null;
   // Flagged risks are useful to report, but an attacker setting them to false
   // is NOT positive evidence. The trusted-native-provider blocker remains.
-  if (observation?.brokerHandleInherited === true ||
-      observation?.guardianJobHandleDuplicable === true ||
-      observation?.privilegedHandleAccessible === true) {
+  if (own(observation, 'brokerHandleInherited') === true ||
+      own(observation, 'guardianJobHandleDuplicable') === true ||
+      own(observation, 'privilegedHandleAccessible') === true) {
     blockers.push('GUARDIAN_OR_BROKER_HANDLE_EXPOSURE');
   }
-  if (observation?.breakawayAllowed === true ||
-      observation?.nestedJobUnverified === true) {
+  if (own(observation, 'breakawayAllowed') === true ||
+      own(observation, 'nestedJobUnverified') === true) {
     blockers.push('BREAKAWAY_OR_NESTED_JOB_UNVERIFIED');
   }
-  if (observation?.descendantsContained !== true) {
+  if (own(observation, 'descendantsContained') !== true) {
     blockers.push('DESCENDANT_CONTAINMENT_UNVERIFIED');
   }
-  if (observation?.revokeDrainVerified !== true) {
+  if (own(observation, 'revokeDrainVerified') !== true) {
     blockers.push('REVOKE_DRAIN_UNVERIFIED');
   }
-  const mayHaveMutated = observation?.mutationState === 'unknown' ||
-    observation?.mutationState === 'in_progress' ||
-    observation?.mutationState === 'ack_lost';
+  // No caller-supplied mutation state, including "not_started" or "done",
+  // is proof that a durable request did not already cause effects. A reported
+  // state field is enough to quarantine for external reconciliation. Inspect
+  // the descriptor, not the property value: do not execute an accessor getter.
+  // The presence of any untrusted mutation report, even `completed` or
+  // `not_started`, does not establish that an effect never happened.
+  // A lost ACK, uncertain revoke/drain or partially observed launch can be
+  // reported without mutationState. Treat the PRESENCE of any such untrusted
+  // signal as ambiguous even when its value is false, null or an accessor.
+  // Hostile field reflection is caught by ownFieldExists; it cannot authorize
+  // release/replay by omitting mutationState. Independent durable CAS is
+  // required to resolve these states; this source parser never does so.
+  const uncertainReportFields = [
+    'mutationState', 'ackLost', 'ack_lost', 'lostAck', 'outcomeUnknown',
+    'launchUnknown', 'revokeUnknown', 'drainUnknown', 'operationAttempted',
+    // A caller can omit mutationState while reporting a partial kernel
+    // readback, unsupported native isolation or an uncertain descendant/
+    // secret boundary. Such reports must not be mistaken for a clean,
+    // never-attempted operation. Even a false/null value is not proof.
+    'nativeReadbackUnknown', 'kernelReadbackUnknown', 'jobReadbackUnknown',
+    'appContainerReadbackUnknown', 'pidfdReadbackUnknown',
+    'cgroupReadbackUnknown', 'sandboxUnsupported',
+    'descendantCleanupUnknown', 'handleLeakageUnknown',
+    'environmentLeakageUnknown', 'pathIdentityUnknown',
+    'permissionReadbackUnknown', 'ipcReadbackUnknown',
+  ] as const;
+  const mayHaveMutated = reported != null &&
+    (observation === null ||
+      uncertainReportFields.some(field => ownFieldExists(observation, field)));
   if (mayHaveMutated) blockers.push('MUTATION_STATE_UNKNOWN_RECONCILE_REQUIRED');
   blockers.push('TRUSTED_NATIVE_SANDBOX_PROVIDER_UNAVAILABLE');
   return Object.freeze({
