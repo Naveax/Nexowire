@@ -183,7 +183,7 @@ test('independent native enrollment verifier enforces real TLS transport and sco
           res.end('{}');return;
         }
         res.setHeader('content-type','application/json');
-        if(kind==='large'{res.end('x'.repeat(32769));return}
+        if(kind==='large'){res.end('x'.repeat(32769));return}
         if(kind==='slow'){
           res.writeHead(200);const timer=setInterval(()=>res.write(' '),10);
           res.once('close',()=>clearInterval(timer));return;
