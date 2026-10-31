@@ -45,3 +45,16 @@
 - Last confirmed green exact HEAD `6a3c6f9f9f3a7421dd4de3b8846e819fdb45b66a`, workflow #41211679265 **SUCCESS 8/8**, Windows native 5/5 PASS (historical evidence, not transferable).
 - New source candidate: repeat administrator, exact owner SID, and active console OS checks **after** contested revoke fence, and **after** TPM/software key creation before protected enrollment writes. Revoke dialog now displays exact owner/device/installation/enrollment/generation; its pure negative test rejects malformed grant, checks visible scope and real newline formatting.
 - Physical SCM, local owner UAC/console, OS session switch, hardware TPM and crash/recovery are **NOT TESTED**. A real Windows test fixture and AI-08 independent source review remain required. Keep `mayDispatch=false`, CORE off, Draft and production NO-GO.
+
+## Protected authority SPKI revalidation candidate
+
+- After native source audit, `ProtectedStore.Load()` now proposes validation of
+  the persisted authority SPKI on every read, not just at initial consent.
+  Disposable native negatives reject wrong version, empty/malformed or padded
+  authority key and a clean ephemeral positive SPKI. No real user keys, local
+  enrollment, issuer approval, production SCM or UAC are touched.
+- Candidate source requires its **own exact-HEAD CI**. Last previous source
+  `e6fac5b2cf02903a08f3c75e6a021bb6376b241b` had CI #41243740113 queued/running at initial audit; no
+  previous PASS is inherited. This shape validation does not bind a changed
+  but valid public key to the historical physical consent. External issuer-pin
+  provenance is a P0 dependency and CORE production NO-GO.

@@ -189,11 +189,21 @@ internal static class ProtectedStore
         Protocol.Require(!Directory.EnumerateFileSystemEntries(
             root,"revoked.json",SearchOption.TopDirectoryOnly).Any());
     }
+    internal static void RequireCanonicalAuthorityConfig(StoreConfig config)
+    {
+        // StoreConfig is ACL-protected but is not itself signed. Reject
+        // malformed/noncanonical authority SPKI during EVERY local read,
+        // not only during the initial visible approval.
+        Protocol.Require(config.Version==1);
+        Program.RequireCanonicalAuthoritySpki(config.AuthoritySpkiBase64);
+        // This is NOT independent issuer provenance or anti-rollback.
+    }
     internal static (StoreConfig Config,SignedGrant Grant) Load()
     {
         AssertPath(Root);
         RequireNoRevocationMarker(Root);
         var c=Read<StoreConfig>("config.json");var g=Read<SignedGrant>("grant.json");
+        RequireCanonicalAuthorityConfig(c);
         Protocol.Require(c.Version==1 && c.OwnerSid==g.Payload.OwnerSid &&
             c.OwnerAccountId==g.Payload.OwnerAccountId && c.DeviceId==g.Payload.DeviceId &&
             c.InstallationId==g.Payload.InstallationId && g.Payload.MachineBindingSha256==MachineBinding());

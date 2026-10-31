@@ -210,3 +210,16 @@ protected state is intentionally left fail-closed for reviewed recovery rather
 than silently reusing consent. Native self-test validates the displayed scope
 and invalid-grant denial without displaying any UI. This does not prove a live
 SCM service or physical owner acceptance on production devices.
+
+## AI-02 canonical authority recheck on protected store reads
+
+On every `ProtectedStore.Load`, the stored external authority public-key
+SPKI must again satisfy the same bounded canonical P-256 DER and base64
+validation as the original local enrollment. A corrupted, truncated, padded
+or syntactically wrong key cannot produce a successful local status or
+attestation response. The disposable native self-test checks valid protected
+config and invalid version/base64/whitespace configurations without touching
+the real ProgramData store. **Important:** even a well-formed substituted
+authority key is not independently trusted: signed installation identity,
+externally pinned issuer and monotonic off-device revocation remain separate
+production P0 blockers.

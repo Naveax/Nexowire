@@ -14,6 +14,26 @@ internal static class SelfTest
         var encoded=Convert.ToBase64String(der);
         var pin=Program.RequireCanonicalAuthoritySpki(encoded);
         Protocol.Require(pin==Protocol.Hash(der));
+        var stored=new StoreConfig(1,"S-1-5-21-100-200-300-1001",
+            "11111111-1111-4111-8111-111111111111",
+            "22222222-2222-4222-8222-222222222222",
+            "diagnostic-owner-0001",
+            "Nexowire.LocalEnrollment.33333333-3333-4333-8333-333333333333",
+            "Microsoft Software Key Storage Provider",encoded);
+        ProtectedStore.RequireCanonicalAuthorityConfig(stored);
+        foreach(var bad in new[]{
+            stored with {Version=0},
+            stored with {AuthoritySpkiBase64=""},
+            stored with {AuthoritySpkiBase64="not-base64"},
+            stored with {AuthoritySpkiBase64=encoded+" "},
+            stored with {AuthoritySpkiBase64=encoded+"\n"}
+        })
+        {
+            var deniedConfig=false;
+            try{ProtectedStore.RequireCanonicalAuthorityConfig(bad);}
+            catch(InvalidDataException){deniedConfig=true;}
+            Protocol.Require(deniedConfig);
+        }
         var grant=new Grant(2,"ES256-P1363","physical-console","diagnostic-owner-0001",
             "S-1-5-21-100-200-300-1001",
             "11111111-1111-4111-8111-111111111111",
