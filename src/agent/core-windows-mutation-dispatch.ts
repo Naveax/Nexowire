@@ -373,7 +373,6 @@ function immutableCapabilitySet(values:readonly string[]):ReadonlySet<string>{
     forEach(callback,thisArg){
       entries.forEach(value=>callback.call(thisArg,value,value,view));
     },
-    get [Symbol.toStringTag](){return 'Set'},
   };
   return Object.freeze(view);
 }
