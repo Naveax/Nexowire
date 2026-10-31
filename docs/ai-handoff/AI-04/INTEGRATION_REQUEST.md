@@ -45,3 +45,11 @@
 - `test/ai04-broker-config-snapshot.test.ts` adds four negative tests: replacement CAS authority, false-to-true identity callback substitution, config getter, and trapping config Proxy. No production OS/effect permission or fixture bypass is added.
 - The pinned `authority` object remains an externally supplied service interface, **not an immutable OS trust anchor**. Its native process/service SID, TLS peer and anti-rollback durable grant state still require coordinator and independent physical verification. Protected kernel acceptance is BLOCKED, production CORE NO-GO.
 - Predecessor signed-envelope source SHA `d971f0239d3d2b76b406697aac0183cbdea60097` uses CI run `41246475485`; this new source candidate needs a distinct exact-head CI before PASS may be claimed.
+
+## AI-04 immutable caller request and owner revocation scopes (2026-11-01)
+
+- `BrokerExternalDispatchFence.execute` and `.revoke` previously passed caller-owned input directly into Zod; accessing a getter in `requestId`, `scope.ownerId`, `scope.sessionEpoch` or `signedOwnerApproval` could run untrusted code while constructing an admission identity.
+- Both entrypoints now refuse Proxy wrappers before reflection, then snapshot the exact own enumerable data descriptor set with no extra/inherited/hidden/symbol fields. The nested owner/device/session scope is separately captured, validated by strict Zod, and frozen before identity/CAS awaits. Mutated caller references never replace the validated request or revoke scope.
+- `test/ai04-broker-request-snapshot.test.ts` adds 12 source-only cases: valid dispatch and revoke reach the independent deny-only gates; top-level and nested getters, nested symbols/hidden values, inherited root/scope, Proxy root/scope and hostile owner approval/Proxy revoke reject without effects or invoking malicious traps.
+- Important boundary: `node:util.types.isProxy` is a JavaScript runtime guard and the frozen snapshot remains source-only; only the installed protected Broker and independent owner authority can certify real owner/device/OS execution. Cross-agent physical acceptance/CORE remain NO-GO.
+- Prior exact HEAD `81fbfedbff4d03093e9b0a4aef6487a7b76967aa` [CI #41247119812](https://github.com/Naveax/Nexowire/actions/runs/41247119812) completed SUCCESS 7/7; this follow-up requires a separate exact HEAD CI. No earlier PASS is transferred.

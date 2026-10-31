@@ -1,5 +1,6 @@
 import {createPublicKey,verify,randomBytes,type KeyObject} from 'node:crypto';
 import * as z from 'zod';
+import {types as nodeUtilTypes} from 'node:util';
 import type {AuthenticatedGrantScope} from './postgres-bound-grant-cas.js';
 import {WitnessAuthorityError} from './postgres-monotonic-witness.js';
 
@@ -187,6 +188,38 @@ function snapshotFenceConfig<T extends object>(raw:T):T {
   }catch{return deny('DISPATCH_CONFIG_INVALID')}
 }
 
+/**
+ * Bind caller-owned dispatch/revocation inputs BEFORE Zod or any asynchronous
+ * owner/CAS check. Zod alone can evaluate getters on untrusted input and
+ * nested scope, giving different values to different admission consumers.
+ * A JavaScript snapshot is not a protected OS identity proof.
+ */
+function snapshotOwnDispatchData(raw:unknown,fields:readonly string[],
+  code:string):Readonly<Record<string,unknown>> {
+  if(!raw||typeof raw!=='object'||nodeUtilTypes.isProxy(raw))
+    deny(code);
+  try {
+    if(Array.isArray(raw))deny(code);
+    const prototype=Object.getPrototypeOf(raw);
+    if(prototype!==Object.prototype&&prototype!==null)deny(code);
+    const descriptors=Object.getOwnPropertyDescriptors(raw);
+    if(Reflect.ownKeys(descriptors).length!==fields.length)deny(code);
+    const result:Record<string,unknown>=Object.create(null);
+    for(const key of fields){
+      const descriptor=descriptors[key];
+      if(!descriptor||!Object.hasOwn(descriptor,'value')||
+         descriptor.enumerable!==true)deny(code);
+      result[key]=descriptor.value;
+    }
+    return Object.freeze(result);
+  }catch{return deny(code)}
+}
+const requestFields=['requestId','fingerprint','capability','scope'] as const;
+const requestScopeFields=['ownerId','deviceId','deviceEpoch','sessionEpoch',
+  'ownerEpoch','expectedGeneration','requiredPrivilege'] as const;
+const revokeFields=['deviceId','ownerId','deviceEpoch','sessionEpoch',
+  'expectedGeneration','signedOwnerApproval'] as const;
+
 /** Source gate: does not modify #03/#04 Broker/Access owner implementation. */
 export class BrokerExternalDispatchFence {
   private readonly publicKey:KeyObject;
@@ -372,7 +405,12 @@ export class BrokerExternalDispatchFence {
     // caller nor an injected same-process identity/CAS adapter may rewrite
     // the admission identity after validation. Freeze the nested scope first:
     // freezing only the outer object permits owner/session substitution.
-    const request=operation.parse(raw);
+    const plain=snapshotOwnDispatchData(raw,requestFields,'DISPATCH_REQUEST_INVALID');
+    const scoped=snapshotOwnDispatchData(plain.scope,requestScopeFields,
+      'DISPATCH_REQUEST_INVALID');
+    const parsed=operation.safeParse({...plain,scope:scoped});
+    if(!parsed.success)deny('DISPATCH_REQUEST_INVALID');
+    const request=parsed.data;
     Object.freeze(request.scope);
     Object.freeze(request);
     const requestId=request.requestId;
@@ -557,7 +595,8 @@ export class BrokerExternalDispatchFence {
    * No auto-retry, no re-enabling the old owner epoch after an UNKNOWN.
    */
   async revoke(raw:DispatchRevokeRequest):Promise<RevokeProof>{
-    const parsed=revokeInput.safeParse(raw);
+    const plain=snapshotOwnDispatchData(raw,revokeFields,'DISPATCH_REVOKE_INVALID');
+    const parsed=revokeInput.safeParse(plain);
     if(!parsed.success)deny('DISPATCH_REVOKE_INVALID');
     const request:DispatchRevokeRequest=parsed.data;
     Object.freeze(request);
