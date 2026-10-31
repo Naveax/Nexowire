@@ -65,7 +65,8 @@ test('early signed complete cannot succeed while native readback is still pendin
     advance(db,'r1','unknown');
     assert.deepEqual(row(db,'r1'),{state:'unknown',nativeClaimVerified:0});
     assert.throws(()=>advance(db,'r1','dispatched'),/CORE_UNKNOWN_TERMINAL/);
-    assert.throws(()=>verify(db,'r1'),/CORE_NATIVE_CLAIM_MARK_DENIED/);
+    // No matching dispatched row is a CAS denial, not a SQL exception.
+    assert.equal(verify(db,'r1').changes,0);
   }finally{db.close();}
 });
 
@@ -76,7 +77,8 @@ test('winning verified dispatch can complete but duplicate and late updates cann
     advance(db,'r2','dispatched');
     assert.equal(verify(db,'r2').changes,1);
     assert.deepEqual(row(db,'r2'),{state:'dispatched',nativeClaimVerified:1});
-    assert.throws(()=>verify(db,'r2'),/CORE_NATIVE_CLAIM_MARK_DENIED/);
+    // Duplicate post-readback CAS loses with zero modified rows.
+    assert.equal(verify(db,'r2').changes,0);
     assert.equal(advance(db,'r2','succeeded').changes,1);
     assert.deepEqual(row(db,'r2'),{state:'succeeded',nativeClaimVerified:1});
     assert.throws(()=>advance(db,'r2','denied'),/CORE_NATIVE_CLAIM_NOT_VERIFIED/);
