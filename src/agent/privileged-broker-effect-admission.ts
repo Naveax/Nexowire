@@ -28,6 +28,14 @@ export interface BrokerEffectRequest {
   readonly inputSha256: string;
   readonly binding: BrokerVerifiedEffectBinding;
 }
+/** A plain null-prototype carrier avoids Promise thenable assimilation of
+ * the untrusted nested receipt. It is transport, never authorization. */
+export interface BrokerEffectReceiptEnvelope {
+  readonly receipt: BrokerEffectReceipt | null;
+}
+export type BrokerEffectReceiptTransport =
+  BrokerEffectReceipt | BrokerEffectReceiptEnvelope | null;
+
 export interface BrokerEffectReceipt {
   readonly state: 'RESERVED' | 'COMMITTED';
   readonly operationId: string;
@@ -47,10 +55,10 @@ export interface BrokerExternalEffectAdmission {
    * All arguments, including challengeNonce, are scoped to one admission.
    */
   begin(request: BrokerEffectRequest,challengeNonce: string):
-    Promise<BrokerEffectReceipt | null>;
+    Promise<BrokerEffectReceiptTransport>;
   /** One irreversible consumption. COMMIT ACK loss = UNKNOWN, never retry. */
   commit(request: BrokerEffectRequest,ticket: string,challengeNonce: string):
-    Promise<BrokerEffectReceipt | null>;
+    Promise<BrokerEffectReceiptTransport>;
   /**
    * Authenticated proof verification using pinned external authority identity.
    * Caller-supplied fields/proofs must not satisfy this in production.
@@ -200,9 +208,35 @@ function strictEffectData(raw:unknown,fields:readonly string[]):Record<string,un
     return copy;
   }catch{deny()}
 }
-function snapshotReceipt(raw:BrokerEffectReceipt|null):
+/**
+ * Promise resolution reads the then property of a directly resolved Proxy
+ * before the consumer can inspect it. A frozen null-prototype carrier avoids
+ * that runtime trap and leaves the nested receipt opaque until strictEffectData.
+ * Only a single own enumerable data descriptor is admitted as a carrier.
+ * Legacy raw receipts remain compatible, but cannot guarantee zero pre-await
+ * thenable traps from a malicious provider. Protected adapters must use this
+ * carrier or an opaque primitive signed wire representation.
+ */
+function receiptFromTransport(raw:BrokerEffectReceiptTransport):
+  BrokerEffectReceipt|null {
+  if(!raw||typeof raw!=='object'||nodeUtilTypes.isProxy(raw)||Array.isArray(raw))
+    return raw as BrokerEffectReceipt|null;
+  try {
+    if(Object.getPrototypeOf(raw)!==null)
+      return raw as BrokerEffectReceipt;
+    const descriptors=Object.getOwnPropertyDescriptors(raw);
+    if(!Object.hasOwn(descriptors,'receipt'))
+      return raw as BrokerEffectReceipt;
+    const d=descriptors.receipt;
+    if(Reflect.ownKeys(descriptors).length!==1||
+       !d||!Object.hasOwn(d,'value')||d.enumerable!==true||
+       !Object.isFrozen(raw))deny();
+    return d.value as BrokerEffectReceipt|null;
+  }catch{deny()}
+}
+function snapshotReceipt(raw:BrokerEffectReceiptTransport):
   {readonly receipt:BrokerEffectReceipt;readonly signedPayloadUtf8:string} {
-  const data=strictEffectData(raw,effectReceiptKeys);
+  const data=strictEffectData(receiptFromTransport(raw),effectReceiptKeys);
   const binding=strictEffectData(data.binding,effectBindingKeys);
   for(const key of effectBindingKeys){
     if(typeof binding[key]!==(effectNumericKeys.has(key)?'number':'string'))deny();
@@ -276,7 +310,7 @@ export async function invokeBrokerEffectOnce<T>(
     operationId,capability,inputSha256:captured.inputSha256,binding,
   });
   const reserveNonce=randomBytes(32).toString('hex');
-  let untrustedReservation:BrokerEffectReceipt|null;
+  let untrustedReservation:BrokerEffectReceiptTransport;
   try{untrustedReservation=await authority.begin(request,reserveNonce)}catch{deny()}
   assertMonotonicFresh();
   // Never pass the transport-owned receipt to an async verifier.
@@ -293,7 +327,7 @@ export async function invokeBrokerEffectOnce<T>(
   // Consume ticket ONLY from the immutable signature-verified snapshot.
   const ticket=reserved.receipt.ticket;
   const commitNonce=randomBytes(32).toString('hex');
-  let untrustedCommit:BrokerEffectReceipt|null;
+  let untrustedCommit:BrokerEffectReceiptTransport;
   try{untrustedCommit=await authority.commit(request,ticket,commitNonce)}catch{deny()}
   assertMonotonicFresh();
   const committed=snapshotReceipt(untrustedCommit);

@@ -26,3 +26,8 @@ The 14 November 2026 target does not override missing kernel or owner evidence.
 - All changes remain AI-04 owned. No merge, rebase, deploy, Windows service, UAC/ACL, real device or CORE flag mutation.
 - Remaining physical P0: equal-HIGH SeDebug, UAC-linked Medium, pre-seal Job handle duplication, native protected Broker/OS owner identity, independently operated persistent one-use CAS, isolated worker/revoke drain and two authorized-device acceptance.
 - **Decision: source-only REVIEW pending latest exact-HEAD CI; production CORE NO_GO.**
+
+## 2026-11-01 P0 Promise-assimilation fix candidate
+- Owned source/test changes: `privileged-broker-effect-admission.ts`, `ai04-broker-effect-receipt-snapshot.test.ts`; no native Windows Job rewrite, C4133 or handle inheritance check weakened.
+- Source contract accepts a verified null-prototype data carrier with nested untrusted Proxy. Signed UTF-8 payload remains exact original receipt fields. Ed25519 positive envelope test added, existing reserve/commit negative zero-trap/effect/getter assertions unchanged.
+- Prior SHA `8ae78075f2f1c6fbb1f314aa6c38ae6daf36d24a` Node22 2 FAIL due to runtime `get('then')` on raw async-returned Proxy. New HEAD CI pending. Legacy raw async Proxy cannot guarantee zero then traps, so production protected adapters require carrier/primitive wire responses. Physical OS/Broker/CAS acceptance BLOCKED, CORE NO-GO, Draft only.

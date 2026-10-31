@@ -4,11 +4,11 @@ import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID,sign,verify} from 'node:crypto';
 import {invokeBrokerEffectOnce,type BrokerExternalEffectAdmission,
   type BrokerEffectRequest,type BrokerEffectReceipt,
-  type BrokerVerifiedEffectBinding,
+  type BrokerEffectReceiptEnvelope,type BrokerVerifiedEffectBinding,
 } from '../src/agent/privileged-broker-effect-admission.js';
 const keys=generateKeyPairSync('ed25519');
 type Stage='reserve'|'commit';
-type Variant='getter'|'binding-getter'|'proxy'|'binding-proxy'|'extra'|'binding-extra';
+type Variant='getter'|'binding-getter'|'proxy'|'binding-proxy'|'extra'|'binding-extra'|'valid-envelope';
 function fixture(hostile?:{stage:Stage;variant:Variant}){
   const scope:BrokerVerifiedEffectBinding={
     authorityId:'ai04_authority',ownerId:'ai04_owner',deviceId:'ai04_device',
@@ -20,7 +20,7 @@ function fixture(hostile?:{stage:Stage;variant:Variant}){
   const counts={begin:0,commit:0,verify:0,effect:0,getter:0,trap:0};
   const ticket='ai04_receipt_only_fixture_ticket_0123456789';
   function issue(state:'RESERVED'|'COMMITTED',req:BrokerEffectRequest,
-    nonce:string):BrokerEffectReceipt{
+    nonce:string):BrokerEffectReceipt|BrokerEffectReceiptEnvelope{
     const data={state,operationId:req.operationId,capability:req.capability,
       inputSha256:req.inputSha256,challengeNonce:nonce,ticket,
       binding:{...req.binding}};
@@ -34,6 +34,12 @@ function fixture(hostile?:{stage:Stage;variant:Variant}){
       getPrototypeOf(){counts.trap++;throw Error('UNTRUSTED_PROTOTYPE')},
       ownKeys(){counts.trap++;throw Error('UNTRUSTED_OWN_KEYS')},
     });
+    // A raw Proxy returned from async is inspected for 'then' by the JS
+    // runtime before our admission checks. Carry it as an opaque data field.
+    const carry=(value:BrokerEffectReceipt):BrokerEffectReceiptEnvelope=>
+      Object.freeze(Object.assign(Object.create(null) as object,{
+        receipt:value,
+      })) as BrokerEffectReceiptEnvelope;
     switch(hostile.variant){
       case 'getter':
         Object.defineProperty(receipt,'state',{enumerable:true,
@@ -43,11 +49,12 @@ function fixture(hostile?:{stage:Stage;variant:Variant}){
         Object.defineProperty(receipt.binding,'ownerId',{enumerable:true,
           get(){counts.getter++;return req.binding.ownerId}});
         return receipt;
-      case 'proxy':return proxy(receipt);
+      case 'proxy':return carry(proxy(receipt));
       case 'binding-proxy':return {...receipt,binding:proxy(receipt.binding)};
       case 'extra':return {...receipt,unexpected:true} as BrokerEffectReceipt;
       case 'binding-extra':return {...receipt,
         binding:{...receipt.binding,unexpected:true}} as BrokerEffectReceipt;
+      case 'valid-envelope':return carry(receipt);
     }
   }
   const authority:BrokerExternalEffectAdmission={
@@ -74,6 +81,11 @@ function fixture(hostile?:{stage:Stage;variant:Variant}){
 }
 test('AI-04 valid signed primitive receipt admits only disposable callback',async()=>{
   const f=fixture();
+  assert.equal(await f.run(),'fixture-effect');
+  assert.deepEqual(f.counts,{begin:1,commit:1,verify:2,effect:1,getter:0,trap:0});
+});
+test('AI-04 signed Ed25519 receipt survives an opaque transport carrier',async()=>{
+  const f=fixture({stage:'reserve',variant:'valid-envelope'});
   assert.equal(await f.run(),'fixture-effect');
   assert.deepEqual(f.counts,{begin:1,commit:1,verify:2,effect:1,getter:0,trap:0});
 });
