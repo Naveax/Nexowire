@@ -158,3 +158,9 @@ Kayıt otomatik silinmez veya yeniden prompt oluşturulmaz.
 Bu kontrol JavaScript readback ile native OS effect arasında atomiklik
 kanıtı değildir. Kaynak testleri sentetiktir ve protected owner
 consent/effect-boundary provider hâlâ entegrasyon şartıdır.
+
+## D1 native-verification second CAS source contract
+
+The sole winning claim first consumes `reserved -> dispatched` before asynchronous native `currentReadback`. After the independent result and fresh owner/device/platform/Broker/session/readiness D1 verification, it must perform a **separate** `native_claim_verified=0 -> 1` CAS with exactly one affected row. Both CAS and signed `complete` bind the immutable requestId, fingerprint, installation, enrollment and owner/grant/revoke epoch, current native receipt, SID, session ID, logon LUID and session epoch. The `complete` operation requires marker 1 for `succeeded/denied`; `unknown` can terminally quarantine an unverified dispatched operation.
+
+Coordinator #996 migration is REQUIRED in the runtime schema. Its absence causes SQL error and fail-closed claim/complete (no permissive fallback). Source-only isolated tests mimic the minimum additive marker and completion trigger **in-memory**, not the production migration. Actual protected Win32 consent/effect boundary remains unproven; CORE NO-GO.

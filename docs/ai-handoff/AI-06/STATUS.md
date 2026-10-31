@@ -32,3 +32,7 @@ platform/session veya başka Agent pending işinde consent reuse
 reddedilir. Dört sentetik negatif test eklendi. Yeni exact SHA'nın
 CI sonucu beklenir; migration #996 ve protected OS effect-boundary
 halen koordinatör/AI-03 bağımlılığıdır, CORE NO-GO.
+
+## Latest D1 P0 source work
+
+`src/product/d1-core-console-authority.ts`: second post-native-readback, winner-only `native_claim_verified` D1 CAS and signed completion gate. Three new isolated regressions cover premature complete, native DENY/UNKNOWN and old schema fail-closed. Coordinator #996 migration is a separate Draft and NOT in AI-06 base. Synthetic fixture SQL is test-local only. The previous exact HEAD `b120183fca21076390c41aedfa79af93393149db` CI [#41243933313](https://github.com/Naveax/Nexowire/actions/runs/41243933313) was **7/7 SUCCESS** with 42 AI-06 tests; new exact SHA/CI must be separately confirmed. CORE NO-GO.

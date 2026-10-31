@@ -110,3 +110,7 @@ yeniden kontrolü eklendi. Dört izole race testi oluşturuldu;
 geçtiği yalnız yeni exact HEAD CI ile kanıtlanabilir. Bu düzeltme
 D1 premature complete P0 ile gerçek native OS effect boundary
 atomikliğini çözmez. CORE NO-GO.
+
+## AI-06 P0 source handoff: verified D1 claim
+
+Owned D1 source now requires an atomic second native-verified claim CAS after current independent native session readback. Premature `complete` cannot accept `succeeded/denied` with marker 0, even if signed. Missing coordinator #996 schema fails closed instead of silently treating legacy `dispatched` as verified. Three isolated regression cases were added; exact CI evidence must be recorded for the new HEAD. This remains a **Draft source integration**; coordinator #996 migration, AI-08 independent P0 check and physical Windows effect-boundary readback remain blocking. Production CORE NO-GO.

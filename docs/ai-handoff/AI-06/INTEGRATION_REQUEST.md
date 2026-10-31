@@ -60,3 +60,9 @@ premature `complete` **kabulü** hâlâ mümkündür; AI-08
 `acceptedEarly=false` regresyonu hâlâ kırmızı olmalıdır.
 Migration/ledger eksikliğini örtmek için bu iyileştirme kabul kanıtı
 olarak kullanılmamalıdır.
+
+## Coordinator native-claim-verified SQL dependency handoff
+
+AI-06 added the post-readback `native_claim_verified=1` compare-and-swap to owned `src/product/d1-core-console-authority.ts`, guarded by the full immutable original scope, live D1 READY and native SID/session/LUID/epoch binding. Completion now requires marker 1 for `succeeded` and `denied`; UNKNOWN can safely tombstone an uncertain dispatched ID. The in-memory test-local migration shim is *not* the coordinator's production migration.
+
+**Coordinator action:** Integrate the separate Draft #996 `cloudflare/migrations/0021_core_console_native_claim_verified.sql` with this source into a reviewed integration build; perform native verifier/OS effect-boundary checks; re-run the **independent, unrelaxed AI-08 early-complete regression** and full isolated suites. Do not enable CORE until real owner-bound Windows effect evidence exists. AI-06 did not merge, edit or deploy #996.

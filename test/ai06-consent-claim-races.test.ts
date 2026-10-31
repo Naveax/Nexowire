@@ -25,7 +25,7 @@ function deferred(){
   return {started,release,wait:async()=>{entered();await proceed;}};
 }
 
-function fixture(){
+function fixture(withClaimMarker=true){
   const db=new DatabaseSync(':memory:');
   const deviceId='ai06-device-0001',ownerAccountId='ai06-owner-0001';
   const credential='nwx_dev_ai06_isolated_fixture_0001';
@@ -42,6 +42,18 @@ function fixture(){
   for(const name of ['0014_device_maintenance_preferences.sql','0015_device_bridge_preferences.sql',
     '0019_core_console_authority.sql','0020_core_console_native_logon_binding.sql'])
     db.exec(readFileSync(new URL('../cloudflare/migrations/'+name,import.meta.url),'utf8'));
+  if(withClaimMarker){
+  // Isolated test-local emulation of the coordinator #996 additive schema;
+  // migration is separately owned and is NOT written to AI-06's branch.
+  db.exec(`ALTER TABLE device_core_console_operations
+    ADD COLUMN native_claim_verified INTEGER NOT NULL DEFAULT 0
+    CHECK(native_claim_verified IN (0,1));
+    CREATE TRIGGER ai06_completion_requires_native_claim BEFORE UPDATE OF state
+    ON device_core_console_operations
+    WHEN NEW.state IN ('succeeded','denied') AND
+      (OLD.state <> 'dispatched' OR OLD.native_claim_verified <> 1)
+    BEGIN SELECT RAISE(ABORT,'CORE_NATIVE_CLAIM_NOT_VERIFIED'); END;`);
+  }
   db.prepare('INSERT INTO device_maintenance_preferences VALUES(?,?,?,?)')
     .run(deviceId,ownerAccountId,1,'2026-10-31');
   db.prepare('INSERT INTO device_bridge_preferences VALUES(?,?,?,?)')
@@ -75,7 +87,10 @@ function fixture(){
   };
   const state=()=>db.prepare('SELECT state FROM device_core_console_operations WHERE request_id=?')
     .get(requestId)?.state;
-  return {db,call,state,deviceStatus:()=>authority.deviceStatus(deviceId,ownerAccountId),
+  const marker=()=>withClaimMarker
+    ?db.prepare('SELECT native_claim_verified FROM device_core_console_operations WHERE request_id=?')
+      .get(requestId)?.native_claim_verified:null;
+  return {db,call,state,marker,deviceStatus:()=>authority.deviceStatus(deviceId,ownerAccountId),
     pause:(work:()=>Promise<void>)=>{pause=work;},
     denyNativeReadback:()=>{nativeReadbackAllowed=false;}};
 }
@@ -253,4 +268,42 @@ test('AI-06: denied claim tombstones a concurrent premature completion as UNKNOW
     await assert.rejects(f.call('complete'),'premature completion cannot replay');
     assert.equal(f.state(),'unknown');
   }finally{g.release();f.db.close();}
+});
+
+test('AI-06: signed early completion is rejected until native-verified claim CAS',async()=>{
+  const f=fixture(),g=deferred();
+  try{
+    await f.call('reserve');assert.equal(f.marker(),0);
+    f.pause(g.wait);const pending=f.call('claim');await g.started;
+    assert.equal(f.state(),'dispatched');assert.equal(f.marker(),0);
+    await assert.rejects(f.call('complete'),
+      /CORE_REVOKED_REPLAY_OR_CONFLICT|CORE_NATIVE_CLAIM_NOT_VERIFIED/);
+    assert.equal(f.state(),'dispatched');assert.equal(f.marker(),0);
+    g.release();await pending;
+    assert.equal(f.marker(),1,'native verifier winner records the second CAS');
+    await f.call('complete');assert.equal(f.state(),'succeeded');
+    await assert.rejects(f.call('complete'),'terminal completion must not replay');
+  }finally{g.release();f.db.close();}
+});
+
+test('AI-06: native readback denial leaves unverified UNKNOWN tombstone',async()=>{
+  const f=fixture(),g=deferred();
+  try{
+    await f.call('reserve');f.pause(g.wait);
+    const claim=f.call('claim');await g.started;
+    f.denyNativeReadback();g.release();
+    await assert.rejects(claim,/CORE_NATIVE_CONSENT_SESSION_STALE/);
+    assert.equal(f.state(),'unknown');assert.equal(f.marker(),0);
+    await assert.rejects(f.call('complete'));
+  }finally{g.release();f.db.close();}
+});
+
+test('AI-06: missing coordinator claim-marker migration fails closed',async()=>{
+  const f=fixture(false);
+  try{
+    await f.call('reserve');
+    await assert.rejects(f.call('claim'),/native_claim_verified|no such column/i);
+    assert.equal(f.state(),'unknown','no unsigned legacy fallback');
+    await assert.rejects(f.call('complete'),/native_claim_verified|no such column/i);
+  }finally{f.db.close();}
 });

@@ -218,6 +218,17 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
               latest.windows_logon_luid!==before.windows_logon_luid||
               latest.windows_logon_session_epoch!==before.windows_logon_session_epoch)
               throw new Error('CORE_NATIVE_CONSENT_SESSION_CHANGED');
+            // Second durable, winner-only CAS after independent native
+            // currentReadback. Missing coordinator migration fails closed.
+            await changed(`UPDATE device_core_console_operations SET native_claim_verified=1
+              WHERE request_id=? AND fingerprint=? AND device_id=? AND installation_id=? AND enrollment_id=?
+                AND owner_epoch=? AND grant_generation=? AND revoke_epoch=?
+                AND state='dispatched' AND native_claim_verified=0
+                AND device_id IN(SELECT c.device_id ${JOIN} WHERE ${currentPredicate}
+                  AND c.native_consent_receipt_id=? AND c.windows_user_sid=? AND c.windows_session_id=?
+                  AND c.windows_logon_luid=? AND c.windows_logon_session_epoch=?)`,
+              [...opArgs,...currentArgs,before.native_consent_receipt_id,before.windows_user_sid,
+                before.windows_session_id,before.windows_logon_luid,before.windows_logon_session_epoch]);
           }catch(error){
             // Only the worker that won the reservation may downgrade its
             // dispatch. A losing contender cannot revoke that worker's claim.
@@ -229,7 +240,13 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
           await changed(`UPDATE device_core_console_operations SET state=?
             WHERE request_id=? AND fingerprint=? AND device_id=? AND installation_id=? AND enrollment_id=?
               AND owner_epoch=? AND grant_generation=? AND revoke_epoch=? AND state='dispatched'
-              AND device_id IN(SELECT c.device_id ${JOIN} WHERE ${currentPredicate})`,[r.outcome,...opArgs,...currentArgs]);
+              AND (?='unknown' OR native_claim_verified=1)
+              AND device_id IN(SELECT c.device_id ${JOIN} WHERE ${currentPredicate}
+                AND c.native_consent_receipt_id=? AND c.windows_user_sid=? AND c.windows_session_id=?
+                AND c.windows_logon_luid=? AND c.windows_logon_session_epoch=?)`,
+            [r.outcome,...opArgs,r.outcome,...currentArgs,before.native_consent_receipt_id,
+              before.windows_user_sid,before.windows_session_id,before.windows_logon_luid,
+              before.windows_logon_session_epoch]);
         }
       }
     }

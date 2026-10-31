@@ -155,3 +155,9 @@ CI sonucunu görmeden PASS iddia edilmez.
 Önceki kaynak HEAD `e4e4a653090a03f164035250d76ed4456fce01a5`
 Node24 CI'da 38/38 AI-06 PASS; bu sonuç yeni kaynak commitine
 taşınmaz. Gerçek Windows OS readback/effect kanıtı yoktur.
+
+## D1 claim second CAS: isolated source evidence
+
+The owned `test/ai06-consent-claim-races.test.ts` adds three cases: signed `complete(succeeded)` is denied while native claim readback is pending and marker 0; winner's independent verification sets marker 1, allowing exactly one terminal completion; DENY leaves marker 0 / terminal UNKNOWN; and missing coordinator schema denies claim and complete without a legacy fallback. The three owned in-memory fixture paths add the minimal marker/trigger; they DO NOT import the #996 migration from the separate Draft or prove physical OS authority.
+
+**Expected AI-06 named regression count:** 45 (previous exact HEAD `b120183fca21076390c41aedfa79af93393149db` was 42/42 PASS). New commit result must be checked by exact SHA, Node 22/24 and Windows jobs. Do not reuse previous CI evidence.

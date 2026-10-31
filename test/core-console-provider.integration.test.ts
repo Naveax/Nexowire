@@ -38,6 +38,16 @@ function fixture(){
     db.exec(readFileSync(new URL('../cloudflare/migrations/'+file,import.meta.url),'utf8'));
   db.exec(`INSERT INTO device_maintenance_preferences VALUES('${deviceId}','${owner}',1,'2026-10-24');
     INSERT INTO device_bridge_preferences VALUES('${deviceId}','${owner}','auto','2026-10-24');`);
+  // Isolated test-local emulation of the coordinator #996 additive schema;
+  // migration is separately owned and is NOT written to AI-06's branch.
+  db.exec(`ALTER TABLE device_core_console_operations
+    ADD COLUMN native_claim_verified INTEGER NOT NULL DEFAULT 0
+    CHECK(native_claim_verified IN (0,1));
+    CREATE TRIGGER ai06_completion_requires_native_claim BEFORE UPDATE OF state
+    ON device_core_console_operations
+    WHEN NEW.state IN ('succeeded','denied') AND
+      (OLD.state <> 'dispatched' OR OLD.native_claim_verified <> 1)
+    BEGIN SELECT RAISE(ABORT,'CORE_NATIVE_CLAIM_NOT_VERIFIED'); END;`);
   // Idempotent migration must not reset existing counters, keys or requests.
   db.exec(readFileSync(new URL('../cloudflare/migrations/0019_core_console_authority.sql',import.meta.url),'utf8'));
   const d1:D1DatabaseLike={prepare:sql=>new Statement(db.prepare(sql)),
