@@ -78,32 +78,46 @@ static int selftest(void) {
                        {INVALID_HANDLE_VALUE, {0}}};
     FILE_PIN reopened = {INVALID_HANDLE_VALUE, {0}};
     int pass = 0;
+    const char *stage = "temp-directory";
+    DWORD failed_win32 = 0;
     unsigned int i;
     DWORD n = GetTempPathW(MAX_PATH, tmp);
     if (n == 0 || n >= MAX_PATH) goto done;
+    stage = "reserve-disposable-directory";
     if (!GetTempFileNameW(tmp, L"NXJ", 0, dir)) goto done;
+    stage = "create-disposable-directory";
     if (!DeleteFileW(dir) || !CreateDirectoryW(dir, NULL)) goto done;
     if (!join(changed, MAX_PATH, dir, L"operations.renamed") ||
         !join(linked, MAX_PATH, dir, L"operations.hardlink")) goto done;
     for (i = 0; i < 3; i++) {
+        stage = "create-db-wal-shm-test-file";
         if (!join(paths[i], MAX_PATH, dir, names[i]) || !mkfile(paths[i])) goto done;
+        stage = "pin-native-file-id";
         if (!open_pin(paths[i], &pin[i])) goto done;
     }
     /* A second open must identify the same kernel-owned file object. */
     for (i = 0; i < 3; i++) {
+        stage = "reopen-same-kernel-file-id";
         if (!open_pin(paths[i], &reopened) || !same_id(&pin[i], &reopened))
             goto done;
         close_pin(&reopened);
         /* No FILE_SHARE_DELETE on the pin: ordinary rename must fail. */
+        stage = "deny-rename-while-file-pinned";
         if (MoveFileExW(paths[i], changed, MOVEFILE_REPLACE_EXISTING)) goto done;
+        stage = "verify-original-path-after-denied-rename";
         if (GetFileAttributesW(paths[i]) == INVALID_FILE_ATTRIBUTES) goto done;
     }
     for (i = 0; i < 3; i++) close_pin(&pin[i]);
     /* Hardlink alias makes a path-only trust claim invalid. */
+    stage = "create-hardlink-alias";
     if (!CreateHardLinkW(linked, paths[0], NULL)) goto done;
+    stage = "deny-hardlink-alias";
     if (open_pin(paths[0], &reopened)) goto done;
     pass = 1;
 done:
+    /* Capture the error before cleanup calls overwrite GetLastError().
+     * Stage values are fixed literals, never disk paths or identities. */
+    failed_win32 = GetLastError();
     close_pin(&reopened);
     for (i = 0; i < 3; i++) close_pin(&pin[i]);
     DeleteFileW(linked);
@@ -114,7 +128,9 @@ done:
         puts("NEXOWIRE_DISPOSABLE_KERNEL_FILE_ID_PROBE_PASS (NOT SQLITE/CORE AUTHORITY)");
         return 0;
     }
-    fputs("NEXOWIRE_DISPOSABLE_KERNEL_FILE_ID_PROBE_BLOCKED\n", stderr);
+    fprintf(stderr,
+        "NEXOWIRE_DISPOSABLE_KERNEL_FILE_ID_PROBE_BLOCKED stage=%s win32=%lu\n",
+        stage, (unsigned long)failed_win32);
     return 2;
 }
 
