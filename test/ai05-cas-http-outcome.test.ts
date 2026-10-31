@@ -186,7 +186,7 @@ test('AI-05 HTTPS CAS rejects proxy, symbol and hidden identity properties befor
     enumerable:false,configurable:true,value:operation.fingerprint,
   });
   for(const value of [proxy,symbol,hidden]){
-    await assert.rejects(provider.reserveIfCurrent(value),
+    await assert.rejects(provider.reserveIfCurrent(value,grant),
       code('EXTERNAL_GRANT_INPUT_INVALID'));
   }
   assert.equal(traps,0);
