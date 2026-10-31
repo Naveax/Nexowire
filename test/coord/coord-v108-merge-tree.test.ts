@@ -130,8 +130,8 @@ test('distinct AI PRs changing the same line result in a blocked merge',t=>{
   const {result,output}=f.execute();
   assert.equal(result.status,2,result.stderr);
   assert.equal(output.status,'BLOCKED');
-  assert.ok(output.findings?.some(x=>x.includes('PR_980_MERGE_TREE_NONZERO')));
-  const collision=output.nodes?.find(n=>n.pr===980);
+  assert.ok(output.findings?.some(x=>x.includes('PR_986_MERGE_TREE_NONZERO')));
+  const collision=output.nodes?.find(n=>n.pr===986);
   assert.ok(collision?.conflictFiles?.includes('conflict.txt'),
     'Git merge-tree should report the actual conflicting file');
   assert.equal(output.mergeAuthorized,false);
