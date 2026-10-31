@@ -333,6 +333,55 @@ test('real PostgreSQL enrollment: requested issuer must match independent protec
   }finally{await f.close()}
 });
 
+test('real PostgreSQL enrollment: issuer changes during native witness await deny before INSERT',integration,async()=>{
+  const f=await fixture();try{
+    const p=await approved(f);let reads=0;
+    const ledger=f.create({readProtectedNativeBinding:async(expected,signal)=>{
+      const current=await f.config.readProtectedNativeBinding(expected,signal);
+      reads++;
+      return current?{...current,issuerSpkiSha256:(reads===2?'b':'a').repeat(64)}:null;
+    }});
+    // Initial readback matches A, but the second independent witness (inside
+    // the transaction, before the irreversible INSERT) reports issuer B.
+    await assert.rejects(ledger.consumeForEnrollment(p,'a'.repeat(64)),
+      /CORE_APPROVAL_ISSUER_UNVERIFIED/);
+    assert.equal(reads,2,'the protected issuer is checked again inside the transaction');
+    assert.equal((await f.admin.query('SELECT COUNT(*) AS n FROM core_approval.enrollment_consumptions '+
+      'WHERE receipt_id=$1',[p.receiptId])).rows[0].n,'0',
+      'a changed issuer cannot leave a committed enrollment receipt');
+    assert.deepEqual(await f.create().consumeForEnrollment(p,'a'.repeat(64)),p);
+  }finally{await f.close()}
+});
+
+test('real PostgreSQL enrollment: issuer changes after COMMIT deny ACK but preserve tombstone',integration,async()=>{
+  const f=await fixture();try{
+    const p=await approved(f);let switched=false;
+    const wrapped:DispatchStorePool={async connect(){const c=await f.runtime.connect();return {
+      query:async(sql,values=[])=>{
+        const result=await c.query(sql,values);
+        if(sql==='COMMIT'&&!switched){switched=true;f.setIssuer('b'.repeat(64))}
+        return {rows:result.rows as Record<string,unknown>[]};
+      },release:(destroy=false)=>c.release(destroy),
+    }}};
+    await assert.rejects(f.create({pool:wrapped}).consumeForEnrollment(p,'a'.repeat(64)),
+      /CORE_APPROVAL_ISSUER_UNVERIFIED/);
+    assert.equal(switched,true,'native issuer changed only after the durable COMMIT');
+    const rows=(await f.admin.query('SELECT issuer_spki_sha256 FROM core_approval.enrollment_consumptions '+
+      'WHERE receipt_id=$1',[p.receiptId])).rows;
+    assert.equal(rows.length,1,'the previously consumed receipt remains durable');
+    assert.equal(rows[0].issuer_spki_sha256,'a'.repeat(64));
+    await assert.rejects(f.create().readEnrollmentProof(p.receiptId,f.binding),
+      /CORE_APPROVAL_ISSUER_UNVERIFIED/);
+    await assert.rejects(f.create().consumeForEnrollment(p,'b'.repeat(64)),
+      /CORE_APPROVAL_ENROLLMENT_REPLAY/);
+    f.setIssuer('a'.repeat(64));
+    assert.deepEqual(await f.create().readEnrollmentProof(p.receiptId,f.binding),p,
+      'restoring matching protected issuer only permits read-only reconciliation');
+    await assert.rejects(f.create().consumeForEnrollment(p,'a'.repeat(64)),
+      /CORE_APPROVAL_ENROLLMENT_REPLAY/);
+  }finally{await f.close()}
+});
+
 test('real PostgreSQL enrollment: independent verifiers racing the same receipt admit exactly one',integration,async()=>{
   const f=await fixture();try{
     const p=await approved(f);
