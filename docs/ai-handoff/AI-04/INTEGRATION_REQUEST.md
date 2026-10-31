@@ -12,3 +12,10 @@
 ## Harici owner/session kimlik otoritesi gerekliliği
 - AI-04 Broker source çağrısı, reserve ve commit `await` sınırlarından sonra imzalı request kapsamını `verifyIdentity` ile yeniden doğrular. Bu sözleşmenin gerçek sağlayıcısı AI-03/AI-05/koordinatör tarafından pinli, protected device/session/owner readback olmalıdır. Basit mutable boolean veya UI grant fiziksel kanıt değildir.
 - Otoritenin revoke/effect admission işlemi yine **atomik** olmalı: iki ayrı asenkron source check'i efektle aynı linearization point garantisini vermez. Kaybolan ACK/durable tombstone NO-GO sınırlarını gevşetmeyin.
+
+## AI-04 handler provider-owned witness ve credential yenilemesi (kaynak düzeyi)
+
+- Handler, `authenticateBroker` principal ve `readProtectedBroker` nesnelerindeki yalnız kendi **data descriptor** alanlarını, prototype ve fazladan alan kontrolüyle snapshot'lar. Accessor, inherited, proxy trap, eksik veya fazladan alanlar fail-closed reddedilir. Bu değişiklik **fiziksel Windows kernel attestation değildir**.
+- HTTPS isteğinin gövdesi okunduktan sonra, release/revoke için tekrar `authenticateBroker` yapılır; begin/commit için protected broker readback sonrası yeniden authenticate edilen principal ilk brokerId/ownerId/deviceId/deviceEpoch/sessionEpoch ile karşılaştırılır. Revoked/UNKNOWN kimlikle CAS mutasyonu çağrılmaz.
+- Mevcut `test/broker-dispatch-authority-handler.test.ts` içerisine readback accessor/inherited/proxy, authenticated principal accessor/inherited ve readback sırasında credential revoke negatifleri eklendi. CI bu yeni HEAD üzerinde doğrulanmadan PASS kabul edilmemelidir.
+- **Koordinatör:** `authenticateBroker` eski boolean/cache yerine canlı/korumalı principal kaynağını okumalı; aynı request için tekrar doğrulanma desteği sağlamalı. Final effect admission için owner+OS atomik linearization yine ayrı P0 ve CORE NO-GO.

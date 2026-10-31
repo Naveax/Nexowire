@@ -103,14 +103,17 @@ test('dispatch wire adapter enforces identity, protected readback and signed rec
   const deviceId=randomUUID(),deviceEpoch=randomUUID(),sessionEpoch=randomUUID();
   const token=randomUUID()+randomUUID(),principal={brokerId,ownerId,deviceId,deviceEpoch,sessionEpoch};
   const backend=new FixtureAuthority(authorityId,authorityKey.privateKey);
-  let high=true;
+  let high=true,credentialCurrent=true;
+  let principalSource:()=>typeof principal=()=>principal;
+  let evidenceSource:(()=>Promise<ProtectedBrokerEvidence|undefined>)|undefined;
   const effective=():ProtectedBrokerEvidence=>({verified:true,brokerId,ownerEpoch:4,
     grantGeneration:7,highIntegrityToken:high as true,signedProtectedImage:true,
     protectedParentAndImports:true});
   const approval=signedOperatorGrantVerifier(pub(ownerKey.publicKey));
   const settings={authorityId,publicKeyPem:pub(authorityKey.publicKey),authority:backend,
-    authenticateBroker:async(credential:string)=>credential===token?principal:undefined,
-    readProtectedBroker:async()=>effective(),
+    authenticateBroker:async(credential:string)=>credential===token&&credentialCurrent
+      ?principalSource():undefined,
+    readProtectedBroker:async()=>evidenceSource?evidenceSource():effective(),
     verifyOwnerRevocation:async(r:DispatchRevokeRequest)=>approval({kind:'revoke',
       authorityId,deviceId:r.deviceId,ownerId:r.ownerId,epoch:r.deviceEpoch,
       sessionEpoch:r.sessionEpoch,generation:r.expectedGeneration},r.signedOwnerApproval)};
@@ -172,6 +175,62 @@ test('dispatch wire adapter enforces identity, protected readback and signed rec
       challengeNonce:'1'.repeat(64)})).status,403);
     high=true;
     assert.equal(backend.beginCalls,before);
+  });
+
+  await t.test('native Broker readback rejects accessor, inherited and trapping Proxy evidence',async()=>{
+    const baseline=backend.beginCalls;
+    for(const kind of ['accessor','inherited','proxy'] as const){
+      let getterReads=0;
+      evidenceSource=async()=>{
+        const raw=effective();
+        if(kind==='accessor'){
+          Object.defineProperty(raw,'brokerId',{enumerable:true,
+            get(){getterReads++;return brokerId}});
+          return raw;
+        }
+        if(kind==='inherited')return Object.create(raw) as ProtectedBrokerEvidence;
+        return new Proxy(raw,{ownKeys(){throw Error('PROVIDER_TRAP')}});
+      };
+      try{
+        const response=await post('begin',{request:operation(),broker:effective(),
+          challengeNonce:'5'.repeat(64)});
+        assert.equal(response.status,403,kind+' must fail closed');
+        assert.equal(backend.beginCalls,baseline);
+        assert.equal(getterReads,0,'never execute provider-controlled getter');
+      }finally{evidenceSource=undefined}
+    }
+  });
+
+  await t.test('protected principal rejects inherited and accessor scope without invoking CAS',async()=>{
+    const baseline=backend.beginCalls;
+    for(const kind of ['accessor','inherited'] as const){
+      let getterReads=0;
+      principalSource=()=>{
+        if(kind==='inherited')return Object.create(principal) as typeof principal;
+        const raw={...principal};
+        Object.defineProperty(raw,'ownerId',{enumerable:true,
+          get(){getterReads++;return ownerId}});
+        return raw;
+      };
+      try{
+        const response=await post('begin',{request:operation(),broker:effective(),
+          challengeNonce:'6'.repeat(64)});
+        assert.equal(response.status,403);
+        assert.equal(backend.beginCalls,baseline);
+        assert.equal(getterReads,0);
+      }finally{principalSource=()=>principal}
+    }
+  });
+
+  await t.test('mid-request Broker credential revoke refuses CAS despite HIGH token',async()=>{
+    const baseline=backend.beginCalls;
+    evidenceSource=async()=>{credentialCurrent=false;return effective()};
+    try{
+      const response=await post('begin',{request:operation(),broker:effective(),
+        challengeNonce:'7'.repeat(64)});
+      assert.equal(response.status,403);
+      assert.equal(backend.beginCalls,baseline);
+    }finally{credentialCurrent=true;evidenceSource=undefined}
   });
 
   await t.test('concurrent Hubs cannot use one UUID twice',async()=>{
