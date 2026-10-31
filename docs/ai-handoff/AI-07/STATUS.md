@@ -42,3 +42,7 @@ Linux diagnostic forced termination no longer abandons direct-child cleanup afte
 
 ## Double-barrier fix for Linux pid_for_children (31 Oct 2026)
 - Corrected a proposed single-barrier readback: the Linux `pid_for_children` namespace link is empty until the first child is created. Direct probe now forks disposable PID 1 but the PID1 child blocks on a private gate; direct probe announces `P` to the outer observer. The observer then reads `/proc/<pid>/ns/pid_for_children` and releases the PID1 gate only on an independently observed distinct namespace. Any unavailable kernel evidence denies; still no task execution.
+
+## 2026-10-31 PID1 gate failure handling
+- PID1 now installs PR_SET_PDEATHSIG before blocking on the private second-stage gate. The fork parent ignores SIGPIPE before sending the second-stage ready signal, so EPIPE on a vanished PID1 enters its existing exact-child kill/reap denial path rather than terminating the parent asynchronously.
+- This remains a source-only diagnostic, not an independently attested launcher or a full task/revoke containment implementation.

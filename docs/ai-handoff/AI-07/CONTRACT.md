@@ -51,3 +51,6 @@ The outer source-only diagnostic requires `/proc/<probe-pid>/ns/pid_for_children
 
 ### Correct two-stage namespace witness
 `unshare(CLONE_NEWPID)` changes the namespace for future children only, and the kernel `pid_for_children` link may be empty until the first child exists. Therefore the separate `P` checkpoint only occurs **after** the disposable PID1 is forked. PID1 blocks on an O_CLOEXEC pipe gate until the external parent reads kernel namespace differences and replies `Y`; denial/EOF rejects the probe. Both readiness reads have bounded monotonic waits. This is a selftest-only unsigned parent/child handshake, not trusted production admission.
+
+### Second-stage PID1 cancellation hardening
+The disposable namespace init calls `prctl(PR_SET_PDEATHSIG, SIGKILL)` before waiting on its private `gate[0]`; the direct probe fork parent ignores SIGPIPE so a closed gate is an ordinary failed write and triggers its exact spawned-PID cleanup path. Neither POSIX process-group death nor these local barriers count as kernel-certified descendant drain for a real task.

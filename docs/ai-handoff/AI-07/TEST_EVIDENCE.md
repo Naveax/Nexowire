@@ -38,3 +38,6 @@ The Linux source negative test now checks that group signal errors do not short-
 
 ### Kernel namespace witness ordering
 - Source negative test checks that `pid_for_children` is read from the outer parent **after** the first fork and **before** PID1's gate release. Prior one-stage check was invalid because the link is empty until a child is created (Linux pid_namespaces(7)). Exact-head CI and optional isolated Linux namespace selftest remain separate evidence; unsupported kernels must return BLOCKED.
+
+### PID1 gate ordering and negative signal handling
+Linux source regression now checks `PR_SET_PDEATHSIG` occurs before the PID1 second approval read, and the gate writer explicitly suppresses SIGPIPE so broken pipe produces a controlled denial path. New exact-HEAD native compile and complete Node22/24 test results are required. No disposed Windows/Linux physical OS worker test is inferred.

@@ -31,3 +31,6 @@ The unshare caller's future-child PID namespace is now directly checked via `pid
 
 ### Two-stage PID namespace witness
 A second bounded outer-parent kernel readback now precedes the gate for the test-only namespace PID 1. This corrects early `pid_for_children` inspection, keeps task execution disabled, and does not establish any release-ready OS sandbox.
+
+### PID1 gate hardening
+Addressed premature direct-parent SIGPIPE termination and late PR_SET_PDEATHSIG installation in disposable probe handshake. Deny-only OS task dispatch and external production NO-GO remain unchanged.

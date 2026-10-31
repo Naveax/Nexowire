@@ -183,7 +183,10 @@ static int kernel_child(const char *root,int ready_fd,int resume_fd) {
     (void)close(gate[0]);
     const char pid_ready='P';
     char pid_approved=0;
-    int accepted=write(ready_fd,&pid_ready,1)==1 &&
+    /* A dead PID1 must yield EPIPE, never async SIGPIPE process death
+     * before the exact owned PID is signalled and reaped. */
+    int accepted=signal(SIGPIPE,SIG_IGN)!=SIG_ERR &&
+      write(ready_fd,&pid_ready,1)==1 &&
       read(resume_fd,&pid_approved,1)==1 && pid_approved=='Y';
     (void)close(ready_fd);(void)close(resume_fd);
     if(!accepted || write(gate[1],"Y",1)!=1) {
@@ -202,14 +205,14 @@ static int kernel_child(const char *root,int ready_fd,int resume_fd) {
   }
   (void)close(gate[1]);
   (void)close(ready_fd);(void)close(resume_fd);
+  /* Install the kernel parent-death signal BEFORE the blocking PID1 gate.
+   * If the direct fork parent disappears during outer readback, the nested
+   * namespace init must not wait indefinitely on a pipe from a dead parent.
+   * This is still unsigned selftest evidence, not production revoke proof. */
+  if(prctl(PR_SET_PDEATHSIG,SIGKILL)<0)_exit(55);
   char child_approved=0;
   if(read(gate[0],&child_approved,1)!=1 || child_approved!='Y')_exit(61);
   if(close(gate[0])<0)_exit(62);
-  /* Child is PID 1 of the new PID namespace. If its outer forked parent
-   * dies, request kernel termination rather than leaving an orphaned init.
-   * The parent also kills its isolated process group on a timed-out probe.
-   * This is not an OS task cleanup proof for production. */
-  if(prctl(PR_SET_PDEATHSIG,SIGKILL)<0)_exit(55);
   if(chdir(root)<0)_exit(39);
   if(syscall(SYS_pivot_root,".",".old")<0)_exit(40);
   if(chdir("/")<0)_exit(41);

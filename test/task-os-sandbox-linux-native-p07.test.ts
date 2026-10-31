@@ -41,6 +41,13 @@ test('#07 Linux diagnostic has no arbitrary shell entry point',()=>{
   assert.match(source,/if\(waited==-2\)return 78/);
   assert.match(source,/if\(setpgid\(0,0\)<0\)_exit\(80\)/);
   assert.match(source,/if\(prctl\(PR_SET_PDEATHSIG,SIGKILL\)<0\)_exit\(55\)/);
+  // Before PID1's private approval read, install its parent-death fence.
+  assert.ok(source.indexOf('if(prctl(PR_SET_PDEATHSIG,SIGKILL)<0)_exit(55);') <
+    source.indexOf("if(read(gate[0],&child_approved,1)!=1"));
+  // A dead child reader must return EPIPE instead of asynchronously killing
+  // the direct probe process before its exact-PID cleanup path can execute.
+  assert.match(source,/int accepted=signal\(SIGPIPE,SIG_IGN\)!=SIG_ERR/);
+  assert.match(source,/if\(!accepted \|\| write\(gate\[1\],"Y",1\)!=1\)/);
   assert.match(source,/if\(pgid==pid\)/);
   assert.match(source,/kill\(-pid,SIGKILL\)/);
   assert.match(source,/if\(getpgid\(child\)!=child\)return -1/);
