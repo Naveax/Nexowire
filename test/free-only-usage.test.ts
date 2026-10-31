@@ -135,6 +135,77 @@ test('operator-pinned solkaun GitHub ID gets unlimited hosted credits but no spe
   assert.equal(noGrantDashboard.usage.monthlyCredits, 1_000);
 });
 
+test('SinsiVinci verified GitHub ID has unmetered hosted MCP credits only', async () => {
+  const store = new MemoryControlPlaneStore();
+  const service = new ControlPlaneService(store, {
+    freeOnly: true,
+    ownerGithubId: '79841922',
+    unmeteredGithubIds: ['55827920', '331287442'],
+  });
+  const { account: friend } = await service.loginExternalIdentity({
+    provider: 'github', subject: '331287442', displayName: 'SinsiVinci',
+  });
+  const dashboard = await service.dashboard({ accountId: friend.id, role: 'user' });
+  assert.equal(dashboard.planId, 'free');
+  assert.equal(dashboard.billingMode, 'free');
+  assert.equal(dashboard.usage.monthlyCredits, null);
+  assert.equal(dashboard.privateControlsIncluded, false);
+
+  const charged = await service.chargeUsage({
+    accountId: friend.id, eventId: 'sinsivinci-over-monthly-cap',
+    toolName: 'machine_health', baseCredits: 1_001,
+  });
+  assert.equal(charged.status, 'charged');
+  assert.equal(charged.chargedCredits, 1_001);
+  assert.equal(charged.remainingCredits, null);
+
+  const retry = await service.chargeUsage({
+    accountId: friend.id, eventId: 'sinsivinci-over-monthly-cap',
+    toolName: 'machine_health', baseCredits: 1_001,
+  });
+  assert.equal(retry.status, 'duplicate');
+  assert.equal(retry.chargedCredits, 0);
+
+  const premium = await service.chargeUsage({
+    accountId: friend.id, eventId: 'sinsivinci-no-premium',
+    toolName: 'windows_private_desktop_start',
+  });
+  assert.equal(premium.status, 'denied');
+  assert.equal(premium.reason, 'feature-not-in-plan');
+
+  const impersonator = await service.ensureAccount({
+    id: 'not-sinsivinci', displayName: 'SinsiVinci', admin: true,
+  });
+  const impersonatorDashboard = await service.dashboard({
+    accountId: impersonator.id, role: 'admin',
+  });
+  assert.equal(impersonatorDashboard.usage.monthlyCredits, 1_000);
+
+  const { account: wrongProvider } = await service.loginExternalIdentity({
+    provider: 'google', subject: '331287442', displayName: 'SinsiVinci',
+  });
+  const wrongProviderDashboard = await service.dashboard({
+    accountId: wrongProvider.id, role: 'user',
+  });
+  assert.equal(wrongProviderDashboard.usage.monthlyCredits, 1_000);
+
+  const { account: wrongGithubId } = await service.loginExternalIdentity({
+    provider: 'github', subject: '331287443', displayName: 'SinsiVinci',
+  });
+  const wrongGithubDashboard = await service.dashboard({
+    accountId: wrongGithubId.id, role: 'user',
+  });
+  assert.equal(wrongGithubDashboard.usage.monthlyCredits, 1_000);
+
+  const noGrant = new ControlPlaneService(store, {
+    freeOnly: true, ownerGithubId: '79841922',
+  });
+  const disabledDashboard = await noGrant.dashboard({
+    accountId: friend.id, role: 'user',
+  });
+  assert.equal(disabledDashboard.usage.monthlyCredits, 1_000);
+});
+
 test('free-only mode enforces 1,000 weighted calls, idempotency and UTC reset', async () => {
   let clock = new Date('2026-10-31T23:59:59.000Z');
   const store = new MemoryControlPlaneStore();
