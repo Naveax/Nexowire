@@ -141,3 +141,59 @@ test('new rows cannot bypass native claim gate by INSERT in dispatched or termin
     assert.deepEqual(row(db,'new-reserved'),{state:'reserved',nativeClaimVerified:0});
   }finally{db.close();}
 });
+
+test('operation identity and reserved_at_ms cannot change while reserved or after dispatch',()=>{
+  const db=makeDb();
+  try{
+    insert(db,'unchangeable');
+    const changed:ReadonlyArray<readonly [string,string|number]>=[
+      ['request_id','different'],
+      ['device_id','other-device'],
+      ['installation_id','other-installation'],
+      ['enrollment_id','other-enrollment'],
+      ['owner_epoch',2],
+      ['grant_generation',2],
+      ['revoke_epoch',1],
+      ['fingerprint','b'.repeat(64)],
+      ['reserved_at_ms',99999],
+    ];
+    for(const [column,value] of changed){
+      const stmt=db.prepare('UPDATE device_core_console_operations SET '+column+
+        '=? WHERE request_id=?');
+      assert.throws(()=>stmt.run(value,'unchangeable'),
+        /CORE_OPERATION_IDENTITY_IMMUTABLE/,column);
+    }
+    assert.deepEqual(row(db,'unchangeable'),{state:'reserved',nativeClaimVerified:0});
+    advance(db,'unchangeable','dispatched');
+    assert.throws(()=>db.prepare(`UPDATE device_core_console_operations
+      SET fingerprint='different' WHERE request_id='unchangeable'`).run(),
+      /CORE_OPERATION_IDENTITY_IMMUTABLE/);
+    assert.deepEqual(row(db,'unchangeable'),{state:'dispatched',nativeClaimVerified:0});
+  }finally{db.close();}
+});
+
+test('dispatched owner lease cannot be rolled back to reusable reserved state',()=>{
+  const db=makeDb();
+  try{
+    insert(db,'claimed');
+    advance(db,'claimed','dispatched');
+    assert.throws(()=>advance(db,'claimed','reserved'),/CORE_DISPATCHED_REPLAY_DENIED/);
+    assert.deepEqual(row(db,'claimed'),{state:'dispatched',nativeClaimVerified:0});
+    // Denial with uncertain native readback is still safely quarantined.
+    advance(db,'claimed','unknown');
+    assert.deepEqual(row(db,'claimed'),{state:'unknown',nativeClaimVerified:0});
+  }finally{db.close();}
+});
+
+test('historic denied/succeeded terminal records may quarantine but never replay',()=>{
+  const db=makeDb([['old-done','succeeded'],['old-rejected','denied']]);
+  try{
+    for(const id of ['old-done','old-rejected']){
+      assert.throws(()=>advance(db,id,'reserved'),/CORE_COMPLETED_OPERATION_TERMINAL/);
+      assert.throws(()=>advance(db,id,'dispatched'),/CORE_COMPLETED_OPERATION_TERMINAL/);
+      advance(db,id,'unknown');
+      assert.deepEqual(row(db,id),{state:'unknown',nativeClaimVerified:0});
+      assert.throws(()=>advance(db,id,'dispatched'),/CORE_UNKNOWN_TERMINAL/);
+    }
+  }finally{db.close();}
+});

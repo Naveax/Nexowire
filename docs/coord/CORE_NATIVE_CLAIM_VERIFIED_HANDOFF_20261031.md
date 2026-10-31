@@ -15,7 +15,15 @@ AI-08 #989 (head `6004e2b44c8a5c5f9374a74498e98288e4d8f5cb`, CI 41199793251) dem
 - A new operation may only be inserted as `reserved` with marker 0. Direct `dispatched`, `succeeded`, `denied`, and `unknown` INSERT states are rejected. Historical migrated rows remain unchanged.
 - The native verification marker may change from 0 to 1 **only on an already dispatched** operation, never in the same statement that transitions to terminal success.
 - A legacy Worker attempting `dispatched -> succeeded/denied` without marker 1 gets an SQL ABORT, even if it possesses a signed application payload.
-- `unknown` cannot become a dispatched/succeeded operation again. A denied/uncertain native claim may quarantine `dispatched` or early terminal audit evidence as `unknown`.
+- `unknown` cannot become a dispatched/succeeded operation again.
+- Immutable operation identity: no in-place UPDATE of request ID, fingerprint,
+  device/installation/enrollment, owner/grant/revoke epochs or reservation timestamp.
+  The native-verified marker does not authorize changing request scope.
+- Once `dispatched`, a claim cannot be returned to `reserved` and replayed.
+  Historical or newly completed `succeeded`/`denied` rows cannot return to
+  `reserved` or `dispatched`; conservative quarantine into terminal `unknown`
+  is allowed. Additive migration does not rewrite historical rows.
+ A denied/uncertain native claim may quarantine `dispatched` or early terminal audit evidence as `unknown`.
 - Existing `succeeded` audit rows remain historically recorded but **unverified** by this new marker. They must not be used as fresh native authorization; separate independent evidence/reconciliation is required.
 
 ## AI-06 required source integration
