@@ -1,0 +1,24 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { quotaExample, type ExampleInput } from '../../scripts/delegated/quota-examples.js';
+const base = (): ExampleInput => ({policyVersion:'free-monthly-weighted-example-v1',tier:'free',at:'2026-10-31T23:59:59.999Z',events:[]});
+const events = (n:number,kind:'ordinary'|'skill'='ordinary') => Array.from({length:n},(_,i)=>({invocationId:'synthetic-'+i,kind,quantity:1}));
+test('explicit policy required',()=>assert.throws(()=>quotaExample({...base(),policyVersion:undefined as never}),/policyVersion/));
+test('unknown policy rejected',()=>assert.throws(()=>quotaExample({...base(),policyVersion:'future' as never})));
+test('monthly ordinary 1x',()=>assert.equal(quotaExample({...base(),events:events(3)}).used,3));
+test('monthly skill 5x separate',()=>{const r=quotaExample({...base(),events:events(2,'skill')});assert.equal(r.used,10);assert.deepEqual(r.weightedIllustration,{ordinary1x:0,skill5x:10});});
+test('duplicate warns and does not count twice',()=>{const e=events(1);const r=quotaExample({...base(),events:[...e,...e]});assert.equal(r.used,1);assert.equal(r.decisions[1]?.status,'duplicate');assert.match(r.warnings.join(),/DUPLICATE_ID/);});
+test('negative quantity explicit rejection',()=>assert.throws(()=>quotaExample({...base(),events:[{...events(1)[0]!,quantity:-1}]}),/negative/));
+test('zero fraction and aggregate rejected',()=>{for(const quantity of [0,0.5,2,NaN,Infinity])assert.throws(()=>quotaExample({...base(),events:[{...events(1)[0]!,quantity}]}));});
+test('monthly reset not daily',()=>{const r=quotaExample(base());assert.equal(r.periodStartUtc,'2026-10-01T00:00:00.000Z');assert.equal(r.resetUtc,'2026-11-01T00:00:00.000Z');});
+test('December rollover',()=>assert.equal(quotaExample({...base(),at:'2026-12-31T00:00:00.000Z'}).resetUtc,'2027-01-01T00:00:00.000Z'));
+test('exhaustion denies before example charge',()=>{const r=quotaExample({...base(),events:events(201,'skill')});assert.equal(r.used,1000);assert.equal(r.remaining,0);assert.equal(r.decisions[200]?.status,'denied');});
+test('insufficient remaining for skill no partial charge',()=>{const r=quotaExample({...base(),events:[...events(998),{invocationId:'skill',kind:'skill',quantity:1}]});assert.equal(r.used,998);assert.equal(r.decisions.at(-1)?.status,'denied');});
+test('monthly Plus unavailable',()=>assert.throws(()=>quotaExample({...base(),tier:'plus'})));
+test('daily targets and skill count once',()=>{for(const [tier,limit] of [['free',1000],['plus',5000],['pro',10000]] as const){const r=quotaExample({...base(),policyVersion:'daily-logical-proposal-example-v1',tier,events:events(1,'skill')});assert.equal(r.limit,limit);assert.equal(r.used,1);assert.equal(r.weightedIllustration.skill5x,5);assert.match(r.warnings.join(),/PROPOSAL_NOT_ACTIVE/);}});
+test('daily midnight rollover leap day',()=>{const r=quotaExample({...base(),policyVersion:'daily-logical-proposal-example-v1',at:'2028-02-29T23:59:59.999Z'});assert.equal(r.resetUtc,'2028-03-01T00:00:00.000Z');});
+test('invalid dates and timezone ambiguity rejected',()=>{for(const at of ['bad','2026-02-30T00:00:00.000Z','2026-10-31T00:00:00+03:00'])assert.throws(()=>quotaExample({...base(),at}));});
+test('invalid ID and kind rejected',()=>{assert.throws(()=>quotaExample({...base(),events:[{invocationId:'',kind:'skill',quantity:1}]}));assert.throws(()=>quotaExample({...base(),events:[{invocationId:'x',kind:'bad' as never,quantity:1}]}));});
+test('pure deterministic and does not mutate frozen input',()=>{const input=base();Object.freeze(input.events);Object.freeze(input);assert.deepEqual(quotaExample(input),quotaExample(input));});
+
+test('ISO year below 100 remains same year',()=>assert.equal(quotaExample({...base(),at:'0099-10-31T00:00:00.000Z'}).periodStartUtc,'0099-10-01T00:00:00.000Z'));
