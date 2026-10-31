@@ -98,7 +98,7 @@ internal static partial class Protocol
         RejectDuplicates(doc.RootElement);
         return JsonSerializer.Deserialize<T>(bytes,Json) ?? throw new InvalidDataException("LOCAL_ENROLLMENT_REJECTED");
     }
-    private static void RejectDuplicates(JsonElement e)
+    internal static void RejectDuplicates(JsonElement e)
     {
         if (e.ValueKind == JsonValueKind.Object)
         {

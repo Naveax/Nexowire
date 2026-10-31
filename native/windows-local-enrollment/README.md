@@ -162,3 +162,13 @@ all original fail-closed SYSTEM/Administrators-only ACL requirements. A new
 Windows disposable self-test reads ACL on an exclusive handle and verifies
 contended second open fails by timeout. This is not proof of production SCM
 hosting or an enrolled owner; real installed service tests remain outstanding.
+
+## AI-02 strict diagnostic response field set
+
+The native `--status` and `--attest` clients now reject duplicate JSON
+properties at any depth, unknown or missing top-level v2 keys, unsupported
+key-provider strings, empty public-key encoding and incorrect witness shape.
+Both success envelopes must declare `mayDispatch:false` and are **still
+untrusted until independently cryptographically verified and pinned**.
+Disposable self-tests retain positive status/attest controls and explicit
+negative malformed/duplicate/downgrade cases; no enrollment or SCM actions.

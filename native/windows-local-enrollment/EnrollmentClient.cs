@@ -11,19 +11,34 @@ internal static class EnrollmentClient
     // must pin the installed device key and verify signed grant/witness scope.
     internal static void RequireAcceptedFrame(JsonElement root,string operation)
     {
-        Protocol.Require(operation is "status" or "attest");
-        Protocol.Require(root.ValueKind==JsonValueKind.Object &&
+        Protocol.Require(operation is "status" or "attest" &&
+            root.ValueKind==JsonValueKind.Object);
+        // A diagnostic pipe response is untrusted. Deny duplicate fields at
+        // every depth and any unknown/missing top-level v2 fields.
+        Protocol.RejectDuplicates(root);
+        var fields=new HashSet<string>(StringComparer.Ordinal);
+        foreach(var property in root.EnumerateObject())
+        {
+            Protocol.Require(property.Name is "version" or "verified" or
+                "mayDispatch" or "grant" or "spkiBase64" or "keyProvider" or
+                "evidence" or "witness");
+            fields.Add(property.Name);
+        }
+        Protocol.Require(fields.Count==8 &&
             root.TryGetProperty("version",out var version) &&
             version.ValueKind==JsonValueKind.Number && version.TryGetInt32(out var v) && v==2 &&
             root.TryGetProperty("verified",out var verified) && verified.ValueKind==JsonValueKind.True &&
             root.TryGetProperty("mayDispatch",out var dispatch) && dispatch.ValueKind==JsonValueKind.False &&
             root.TryGetProperty("grant",out var grant) && grant.ValueKind==JsonValueKind.Object &&
             root.TryGetProperty("evidence",out var evidence) && evidence.ValueKind==JsonValueKind.Object &&
-            !root.TryGetProperty("error",out _));
-        var hasWitness=root.TryGetProperty("witness",out var witness);
+            root.TryGetProperty("spkiBase64",out var key) && key.ValueKind==JsonValueKind.String &&
+            key.GetString() is {Length:>0 and <=1024} &&
+            root.TryGetProperty("keyProvider",out var provider) && provider.ValueKind==JsonValueKind.String &&
+            provider.GetString() is "Microsoft Platform Crypto Provider" or "Microsoft Software Key Storage Provider" &&
+            root.TryGetProperty("witness",out var witness));
         Protocol.Require(operation=="attest"
-            ? hasWitness && witness.ValueKind==JsonValueKind.Object
-            : !hasWitness || witness.ValueKind==JsonValueKind.Null);
+            ? witness.ValueKind==JsonValueKind.Object
+            : witness.ValueKind==JsonValueKind.Null);
     }
     [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)]
     private static extern SafePipeHandle CreateFileW(string name,uint access,uint share,IntPtr sa,

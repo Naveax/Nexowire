@@ -7,35 +7,36 @@ internal static class SelfTest
 {
     private static void VerifyIpcFraming()
     {
-        // Disposable parser-only tests: no SCM, pipe, grant or user approval.
-        using(var accepted=JsonDocument.Parse("""{"version":2,"verified":true,"mayDispatch":false,"grant":{},"evidence":{}}"""))
+        // Strict parser-only contract tests. No SCM, pipe, grant or consent.
+        const string goodStatus = """{"version":2,"verified":true,"mayDispatch":false,"grant":{},"spkiBase64":"dGVzdA==","keyProvider":"Microsoft Software Key Storage Provider","evidence":{},"witness":null}""";
+        const string missingWitness = """{"version":2,"verified":true,"mayDispatch":false,"grant":{},"spkiBase64":"dGVzdA==","keyProvider":"Microsoft Software Key Storage Provider","evidence":{}}""";
+        var goodAttest=goodStatus.Replace("\"witness\":null","\"witness\":{}");
+        using(var accepted=JsonDocument.Parse(goodStatus))
             EnrollmentClient.RequireAcceptedFrame(accepted.RootElement,"status");
-        using(var acceptedAttest=JsonDocument.Parse("""{"version":2,"verified":true,"mayDispatch":false,"grant":{},"evidence":{},"witness":{}}"""))
+        using(var acceptedAttest=JsonDocument.Parse(goodAttest))
             EnrollmentClient.RequireAcceptedFrame(acceptedAttest.RootElement,"attest");
-        foreach(var input in new[]{
-            """{"version":2,"verified":false,"mayDispatch":false,"grant":{},"evidence":{}}""",
-            """{"version":2,"verified":true,"mayDispatch":true,"grant":{},"evidence":{}}""",
-            """{"version":1,"verified":true,"mayDispatch":false,"grant":{},"evidence":{}}""",
-            """{"version":2,"verified":true,"mayDispatch":false,"grant":{},"evidence":{},"error":"LOCAL_ENROLLMENT_REJECTED"}""",
-            """{"version":2,"verified":true,"mayDispatch":false,"grant":{}}"""
+        foreach(var (json,operation) in new (string Json,string Operation)[]{
+            (goodStatus.Replace("\"verified\":true","\"verified\":false"),"status"),
+            (goodStatus.Replace("\"mayDispatch\":false","\"mayDispatch\":true"),"status"),
+            (goodStatus.Replace("\"version\":2","\"version\":1"),"status"),
+            (goodStatus.Replace("\"witness\":null","\"witness\":null,\"error\":\"REJECTED\""),"status"),
+            (goodStatus.Replace("\"verified\":true","\"verified\":true,\"verified\":true"),"status"),
+            (goodStatus.Replace("\"grant\":{}","\"grant\":{\"payload\":1,\"payload\":2}"),"status"),
+            (goodStatus.Replace("\"witness\":null","\"witness\":null,\"coreActive\":true"),"status"),
+            (goodStatus.Replace("\"keyProvider\":\"Microsoft Software Key Storage Provider\"",
+                "\"keyProvider\":\"unknown-provider\""),"status"),
+            (goodStatus.Replace("\"spkiBase64\":\"dGVzdA==\"","\"spkiBase64\":\"\""),"status"),
+            (missingWitness,"status"),
+            (goodAttest,"status"),
+            (goodStatus,"attest"),
+            (missingWitness,"attest")
         })
         {
-            using var doc=JsonDocument.Parse(input);
-            var denied=false;
-            try{EnrollmentClient.RequireAcceptedFrame(doc.RootElement,"status");}
-            catch(InvalidDataException){denied=true;}
-            Protocol.Require(denied);
-        }
-        foreach(var input in new[]{
-            """{"version":2,"verified":true,"mayDispatch":false,"grant":{},"evidence":{},"witness":null}""",
-            """{"version":2,"verified":true,"mayDispatch":false,"grant":{},"evidence":{}}"""
-        })
-        {
-            using var doc=JsonDocument.Parse(input);
-            var denied=false;
-            try{EnrollmentClient.RequireAcceptedFrame(doc.RootElement,"attest");}
-            catch(InvalidDataException){denied=true;}
-            Protocol.Require(denied);
+            using var doc=JsonDocument.Parse(json);
+            var rejected=false;
+            try{EnrollmentClient.RequireAcceptedFrame(doc.RootElement,operation);}
+            catch(InvalidDataException){rejected=true;}
+            Protocol.Require(rejected);
         }
     }
     private static void VerifyConsoleSnapshotPolicy()
