@@ -508,6 +508,18 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
     }finally{this.pending=false;}
   }
   execute(request:CoreConsoleDispatch,signal:AbortSignal):Promise<CoreConsoleReceipt>{
+    // Capture the *whole* dispatch synchronously, before queueing or any
+    // asynchronous authority/OS call. A caller can otherwise mutate nested
+    // input or binding after fingerprint verification, changing the native
+    // effect without changing the signed admission.
+    let fixed:CoreConsoleDispatch;
+    try {
+      fixed=JSON.parse(JSON.stringify(request)) as CoreConsoleDispatch;
+      if(!fixed||typeof fixed!=='object'||!fixed.binding||
+        typeof fixed.requestId!=='string'||typeof fixed.fingerprint!=='string'||
+        typeof fixed.capability!=='string')throw new Error('INVALID');
+    }catch{return Promise.reject(new Error('CORE_DISPATCH_SNAPSHOT_INVALID'));}
+    request=fixed;
     const work=this.tail.then(async()=>{
       if(this.revoked||signal.aborted)throw new Error('CORE_REVOKED');
       if(request.capability!=='windows.private_viewer.start')parseCoreNativeInput(request.capability,request.input);

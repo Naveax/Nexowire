@@ -25,3 +25,27 @@
 ## Gerçek kabul için gerekli kanıt
 
 İki Windows PC üzerinde owner-bound yetkili fiziksel approval, logoff/switch/lock/unlock/restart, native callback gerçek hedef doğrulaması, imzalı servis ve credential trust, uzak revoke ve claim ACK kaybında reboot sonrası tek-kullanım davranışı ayrı kaydedilmeli. Equal-HIGH veya read-only witness başarılı native yetki sayılmamalı. Bunlar olmadan **CORE NO-GO**.
+
+## AI-06 P0: D1 claim readback sırasında erken complete yarış riski
+
+`src/product/d1-core-console-authority.ts` şu anda `claim` işleminde
+`reserved -> dispatched` değişikliğini native `currentReadback()`
+tamamlanmadan **önce** yapıyor. Aynı credential + imzalama anahtarına erişen,
+eşzamanlı ikinci istemci `complete(succeeded)` çağrısını claim verifier
+henüz beklerken yollayabilir. `complete` SQL'i `state='dispatched'`
+görüp başarıya çevirebilir; native verifier daha sonra DENY dönerse claim
+catch yalnız `state='dispatched'` satırını tombstone yapar ve
+`succeeded` kaydını silemez. Bu senaryo henüz izole canlı testle
+doğrulanmadı, fakat mevcut SQL karşılaştırmaları bunu engellemiyor.
+
+**Koordinatör migration/AI-03 ledger talebi:** Operation şemasına terminal
+olmayan, `complete` tarafından kabul edilmeyen `claiming` durumu veya
+eşdeğer **persisted native-readback-approved CAS marker** eklenmeli.
+Readback sonrasında yalnız kazanan claim atomik `claiming -> dispatched`
+geçişini yapsın; hata/UNKNOWN terminal tombstone kalsın. `complete`
+yalnız readback onaylı state/marker üzerinden yürüsün. SQL CHECK durum
+kümesi `cloudflare/migrations/0019_core_console_authority.sql` içinde,
+bu migration koordinatör sahipliğindedir; AI-06 onu değiştirmedi.
+Mevcut duplicate-claim winner negatif testlerini gevşeterek veya belirsiz
+işlemleri yeniden kullanarak bu sorun kapatılamaz. Çözüm gelene kadar
+production CORE **NO-GO**.

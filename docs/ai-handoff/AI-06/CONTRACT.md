@@ -44,3 +44,12 @@ Bu çağrı JS önkontrolüne güvenemez; gerçek etkiyi üreten korumalı nativ
 ## AI-06 kalite sınırı
 
 `test/ai06-consent-claim-races.test.ts` D1'in asenkron race/tombstone davranışını **yalnız sentetik bellek içi SQL ve verifier** ile inceler. Windows/native consent, Windows enrollment, production D1, OS target readback ve fiziksel iki-PC kabulü bu testlerin kapsamı dışındadır. `CORE_EXECUTOR_DISPATCH_ENABLED=false`, Draft, production NO-GO korunur.
+
+## Giriş nesnesi değişmezliği
+
+`WindowsCoreConsoleProvider.execute()`, sıraya almadan önce bütün `CoreConsoleDispatch`
+girdisini JSON ile bağımsız bir nesneye dönüştürür; hem hash karşılaştırması hem
+son native effect **bu aynı snapshot** üzerinden çalışır. Deserialization
+başarısızsa `CORE_DISPATCH_SNAPSHOT_INVALID` döner. Bu koruma JS süreç içi
+mutation TOCTOU içindir; gerçek native etki öncesi bağımsız CAS/OS readback
+gerekliliğini kaldırmaz.

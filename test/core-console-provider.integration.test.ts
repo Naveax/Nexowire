@@ -88,6 +88,7 @@ function fixture(){
     beforeRequest?.(JSON.parse(String(init?.body)));return handler(request);}) as typeof fetch;
   const client=new CoreConsoleAuthorityClient('https://core.example',credential,fetcher);
   let record:Profile|null=null,stopped=false,blocked=false,consents=0,effects=0,desktop=true,bridge=true;
+  const nativeInputs:unknown[]=[];
   let forgedNativeReceipt:((value:NativeCoreConsentProof)=>NativeCoreConsentProof)|undefined;
   let onNative:(()=>Promise<void>)|undefined;
   const store:CoreProfileStore={stopFile:'fixture-only-STOP',load:async()=>structuredClone(record),
@@ -112,7 +113,10 @@ function fixture(){
         return proof;
       },
     },
-    native:async()=>{effects++;await onNative?.();return {data:{syntheticNativeEffect:true}};},
+    native:async(_capability:string,nativeInput:unknown)=>{
+      nativeInputs.push(structuredClone(nativeInput));
+      effects++;await onNative?.();return {data:{syntheticNativeEffect:true}};
+    },
     monitor:{desktopAllowed:()=>desktop,close:()=>{}},
   };
   const make=async(withNativeConsent=true)=>{
@@ -122,6 +126,7 @@ function fixture(){
     return {provider,controller:new CoreConsoleAdmission(undefined,provider)};
   };
   return {db,d1,authority,client,store,make,consents:()=>consents,effects:()=>effects,
+    nativeInputs:()=>structuredClone(nativeInputs),
     profile:()=>structuredClone(record)!,setProfile:(p:Profile)=>{record=structuredClone(p);},
     setDesktop:(v:boolean)=>{desktop=v;},setBridge:(v:boolean)=>{bridge=v;},
     setNativeReadback:(v:boolean)=>{readbackEnabled=v;},
@@ -427,6 +432,37 @@ test('a losing duplicate D1 claim cannot tombstone the winner during native read
     assert.equal(f.db.prepare('SELECT state FROM device_core_console_operations WHERE request_id=?')
       .get(requestId)?.state,'dispatched','replay remains terminal');
   }finally{releaseGate?.();f.db.close();}
+});
+
+test('AI-06: caller mutation during async claim cannot change the native effect payload',async()=>{
+  const f=fixture();
+  try{
+    const {provider}=await enable(f);
+    const profile=f.profile();
+    const e=profile.certificate!.enrollment;
+    const requestId=randomUUID(),capability='windows.pointer.move';
+    const input={hwnd:'0x123',x:0,y:0};
+    const binding={ownerAccountId:owner,deviceId,installationId:profile.installationId};
+    const fingerprint=createHash('sha256')
+      .update(JSON.stringify([requestId,capability,input,binding])).digest('hex');
+    let changed=false;
+    f.before(body=>{
+      if(body.action==='claim'){
+        // Interleave after fingerprint acceptance but before final native
+        // readback/actuation. This is a synthetic mutation of a shared object.
+        input.x=9999;input.hwnd='0x999';
+        changed=true;
+      }
+    });
+    const result=await provider.execute({requestId,capability,input,fingerprint,binding,
+      enrollmentId:e.enrollmentId,ownerEpoch:e.ownerEpoch,grantGeneration:e.grantGeneration,
+      revokeEpoch:e.revokeEpoch},new AbortController().signal);
+    assert.equal(changed,true,'interleaving must actually occur');
+    assert.equal(result.outcome,'succeeded');
+    assert.deepEqual(f.nativeInputs(),[{hwnd:'0x123',x:0,y:0}],
+      'native must see only the immutable authorized snapshot');
+    assert.equal(f.effects(),1);
+  }finally{f.db.close();}
 });
 
 test('CORE OFF in the reserve->claim race prevents the actual native callback',async()=>{

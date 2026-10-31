@@ -16,3 +16,12 @@
 **Yasaklara uyum:** Ana dala push, merge, tag, release, canlı Agent/Hub/Broker, UAC/ACL/DPAPI, D1/Cloudflare, token veya sahte consent oluşturma yapılmadı. CORE aktifleştirilmedi. Draft PR bağımsız AI-08 incelemesine hazır; gerçek native/physical kabul olmadan production NO-GO.
 
 **Ek inceleme:** #985 üzerinde D1 signing-key rotasyonu sonrası stale claim/status yetkisi saptandı; izinli D1 dosyasında fail-closed düzeltme ve 3 yeni negatif vaka eklendi. Son HEAD CI doğrulanana dek `READY_FOR_REVIEW` ilk 13 testin kanıtıdır, yeni düzeltme için `IN_PROGRESS`. Production NO-GO değişmez.
+
+- **İlave provider düzeltmesi:** `WindowsCoreConsoleProvider.execute`
+  için kuyruk/async öncesi derin JSON snapshot; `core-console-provider.integration.test.ts`
+  içinde mutation-negatif testi. CI doğrulaması yeni HEAD'e aittir.
+- **D1 ek P0:** Claim'in native readback onayı henüz gelmeden
+  `complete(succeeded)` kabul edebilmesi riskinin çözümü mevcut
+  SQL CHECK/operation migration sınırı dışında. Koordinatör ve AI-03'e
+  `INTEGRATION_REQUEST.md` üzerinden native-verified claim marker
+  talep edildi. Bu risk production NO-GO nedenidir.
