@@ -75,6 +75,14 @@ jobs:
             console.log("V108_REHEARSAL_PR_STATES:", JSON.stringify(
               (result.nodes ?? []).map(({pr,result:state})=>({pr,state})).slice(0,20)
             ));
+            // Only public repository paths from Git conflict lines; never print diffs.
+            const conflictPaths = (result.nodes ?? []).flatMap(n =>
+              typeof n.details === "string" ?
+                n.details.split(/\\r?\\n/).filter(line => line.startsWith("CONFLICT"))
+                  .map(line => line.includes(" in ") ? line.split(" in ").at(-1) : "UNKNOWN")
+                  .slice(0,15) : []
+            );
+            console.log("V108_REHEARSAL_CONFLICT_FILES:", JSON.stringify(conflictPaths));
             if (result.status !== "CLEAN_DRY_RUN" ||
                 result.mergeAuthorized !== false || result.productionCore !== "NO_GO" ||
                 result.deployAuthorized !== false) process.exit(2);
