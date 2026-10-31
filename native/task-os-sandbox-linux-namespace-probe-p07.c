@@ -12,6 +12,8 @@
 #include <errno.h>
 #include <signal.h>
 #include <stddef.h>
+#include <poll.h>
+#include <time.h>
 #include <linux/audit.h>
 #include <linux/filter.h>
 #include <linux/seccomp.h>
@@ -189,6 +191,51 @@ static int kernel_child(const char *root,int ready_fd,int resume_fd) {
   /* No stdout, stderr, inherited socket or host file remains here. */
   _exit(0);
 }
+/* Bound both readiness and final reaping. The only process we may signal
+ * is the direct child forked by this disposable diagnostic. Never target a
+ * caller-supplied PID, task or real Agent process. */
+static int monotonic_ms(long long *out) {
+  struct timespec now;
+  if(clock_gettime(CLOCK_MONOTONIC,&now)<0)return -1;
+  *out=(long long)now.tv_sec*1000LL+(long long)now.tv_nsec/1000000LL;
+  return 0;
+}
+static ssize_t read_ready_bounded(int fd,char *out) {
+  long long start,now;
+  if(monotonic_ms(&start)<0)return -1;
+  for(;;) {
+    if(monotonic_ms(&now)<0)return -1;
+    long long remaining=5000LL-(now-start);
+    if(remaining<=0)return -1;
+    struct pollfd pfd={.fd=fd,.events=POLLIN|POLLHUP,.revents=0};
+    int ready=poll(&pfd,1,(int)remaining);
+    if(ready<0&&errno==EINTR)continue;
+    if(ready<=0)return -1;
+    ssize_t n=read(fd,out,1);
+    if(n<0&&errno==EINTR)continue;
+    return n;
+  }
+}
+static int terminate_owned_child(pid_t pid,int *status) {
+  if(kill(pid,SIGKILL)<0&&errno!=ESRCH)return -1;
+  pid_t got;
+  do {got=waitpid(pid,status,0);}while(got<0&&errno==EINTR);
+  return got==pid?-2:-1;
+}
+static int wait_child_bounded(pid_t pid,int *status) {
+  long long start,now;
+  if(monotonic_ms(&start)<0)return terminate_owned_child(pid,status);
+  for(;;) {
+    pid_t got=waitpid(pid,status,WNOHANG);
+    if(got==pid)return 0;
+    if(got<0&&errno!=EINTR)return -1;
+    if(monotonic_ms(&now)<0||now-start>=12000LL)
+      return terminate_owned_child(pid,status);
+    const struct timespec pause={.tv_sec=0,.tv_nsec=20000000L};
+    (void)nanosleep(&pause,NULL);
+  }
+}
+
 int main(int argc,char **argv) {
   if(argc!=2||strcmp(argv[1],"--selftest-only")!=0) {
     fputs("NW07_SOURCE_ONLY_NO_TASK_EXEC\n",stderr);
@@ -218,9 +265,7 @@ int main(int argc,char **argv) {
   }
   (void)close(ready[1]);(void)close(resume[0]);
   char announcement=0;
-  ssize_t bytes;
-  do {bytes=read(ready[0],&announcement,1);}
-    while(bytes<0&&errno==EINTR);
+  ssize_t bytes=read_ready_bounded(ready[0],&announcement);
   int independently_observed=(bytes==1 && announcement=='R' &&
     observe_kernel_namespaces(pid,outer_uid)==0);
   (void)close(ready[0]);
@@ -233,10 +278,10 @@ int main(int argc,char **argv) {
   }
   (void)close(resume[1]);
   int status=0;
-  pid_t got;
-  do {got=waitpid(pid,&status,0);}while(got<0&&errno==EINTR);
+  int waited=wait_child_bounded(pid,&status);
   if(rmdir(root)<0)return 73;
-  if(got<0||!WIFEXITED(status))return 74;
+  if(waited==-2)return 78; /* Timed out: child killed, never PASS. */
+  if(waited!=0||!WIFEXITED(status))return 74;
   if(!independently_observed)return 77;
   int rc=WEXITSTATUS(status);
   if(rc!=0)fprintf(stderr,"NW07_NAMESPACE_PROBE_BLOCKED stage=%d\n",rc);

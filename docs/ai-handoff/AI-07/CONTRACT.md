@@ -18,3 +18,7 @@
 ## Native diagnostic restrictions (2026-10-31)
 - Linux disposable child has no inherited FD, including 0, 1, 2, before its seccomp fence; no write syscall is permitted after the fence. A passing marker comes from the probe's outer parent after waitpid/namespace observation, **never** from a child-emitted receipt. The diagnostic still has no cgroup v2 task lifecycle, independently protected attester, revoke, or user task execution.
 - Windows probe requires observed primary token, AppContainer, low integrity, non-elevation, Job without breakaway and with KILL_ON_JOB_CLOSE; the flag is **not** a proof of whole-tree drain and doesn't establish guardian job ownership. No native launch/exec API is exposed.
+
+
+## Bounded Linux diagnostic child lifetime
+The outer parent bounds kernel namespace readiness to 5 seconds and own child reaping to 12 seconds by monotonic clock, then signals SIGKILL only to its exact forked diagnostic child; timeout is exit 78, never success. This is source-only containment of the *probe itself*, not a supported task revoke/descendant runtime.

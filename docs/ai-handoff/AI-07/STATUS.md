@@ -17,3 +17,9 @@
 - Linux disposable probe now atomically closes **every** inherited fd (including 0/1/2), verifies EBADF on those streams, removes seccomp write permission, and prints the static success marker in the outer parent only after successful wait/readback. Existing native compile and opt-in smoke still distinguish physical execution from source.
 - Windows disposable probe now explicitly links Advapi32 for MSVC, requires TokenPrimary and a Job KILL_ON_JOB_CLOSE flag in addition to AppContainer/low-integrity/no-breakaway checks. None of these individual checks authorize production confinement.
 - Exact-head CI is tracked externally; no CI workflow reruns and no production permission.
+
+
+## 2026-10-31 source continuation
+- Added monotonic bounded readiness and bounded wait/kill of the disposable Linux probe's *own* child, no arbitrary PIDs.
+- Added a Windows-only isolated MSVC build and negative CLI test under test/ai07-sandbox-windows-msvc-p07.test.ts. It is unsupported on Linux, not physical PASS.
+- Existing PR #990 and AI-07 branch kept; all code remains deny-only, no service/Agent/production effects.

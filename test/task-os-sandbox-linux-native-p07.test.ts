@@ -33,6 +33,12 @@ test('#07 Linux diagnostic has no arbitrary shell entry point',()=>{
   // Never give task child a write syscall merely to print its own PASS marker.
   assert.doesNotMatch(source,/NW07_SC_ALLOW\(write\)/);
   assert.match(source,/else puts\("NW07_NAMESPACE_SECCOMP_SOURCE_SELFTEST_OK/);
+  // Missing/blocked kernel handshake must never hang the caller indefinitely.
+  assert.match(source,/read_ready_bounded\(ready\[0\],&announcement\)/);
+  assert.match(source,/poll\(&pfd,1,\(int\)remaining\)/);
+  assert.match(source,/waitpid\(pid,status,WNOHANG\)/);
+  assert.match(source,/terminate_owned_child\(pid,status\)/);
+  assert.match(source,/if\(waited==-2\)return 78/);
 });
 
 test('#07 probe seccomp cannot allow task exec, networking, process creation or mount syscalls',()=>{

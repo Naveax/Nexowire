@@ -9,3 +9,7 @@ AI-07 did **not** edit `src/agent/executors.ts`, Broker, package.json, workflows
 ## Coordinator CI verification request
 - In an **isolated Windows runner** with native MSVC environment, compile `native/task-os-sandbox-windows-appcontainer-probe-p07.c` with `cl /W4 /WX` (Advapi32 linked via pragma); invoke with invalid args and expect exit 64, and in an unprivileged non-AppContainer process with `--selftest-only` expect 77. A truly AppContainer Job selftest requires an independent test harness, not host Agent execution. Do not mark absent native execution PASS.
 - On disposable Linux namespace-capable container/VM run opt-in `NW07_RUN_NATIVE_NAMESPACE_PROBE=1` separately; unsupported namespace/close_range returns BLOCKED, never a fake PASS. Independently verify kernel isolation, inherited file descriptors, child process and cgroup drain; no task executable is permitted by this diagnostic.
+
+
+## AI-07 Windows native test handoff
+Coordinator should run `node --test --import tsx test/ai07-sandbox-windows-msvc-p07.test.ts` in an isolated Windows runner with VS C++ tools and record its exact HEAD. This is a safe native compilation/negative-CLI probe only, not a security authorization test and not evidence of AppContainer/SID/root/egress isolation. Shared `.github/workflows/**` is coordinator-owned: AI-07 does **not** edit workflows.
