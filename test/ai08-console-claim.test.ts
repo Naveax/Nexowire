@@ -5,10 +5,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync,type StatementSync} from 'node:sqlite';
 import {createHash,generateKeyPairSync,randomUUID,sign} from 'node:crypto';
-import {readFileSync} from 'node:fs';
+import {existsSync,readFileSync} from 'node:fs';
 import {D1CoreConsoleAuthority} from '../src/product/d1-core-console-authority.js';
 import type {D1DatabaseLike,D1PreparedStatementLike} from '../src/product/d1-control-plane-store.js';
 import {coreOperationBytes,type CoreAuthorityRequest} from '../src/protocol/core-console-authority.js';
+
+// Coordinator #996 owns this migration. The QA fixture consumes the actual
+// repository migration only when its integration branch contains it. An
+// absent migration must NEVER be silently accepted as a green P0 result.
+const NATIVE_CLAIM_MIGRATION=new URL(
+  '../cloudflare/migrations/0021_core_console_native_claim_verified.sql',
+  import.meta.url,
+);
+const HAS_NATIVE_CLAIM_MIGRATION=existsSync(NATIVE_CLAIM_MIGRATION);
 
 class Statement implements D1PreparedStatementLike {
   constructor(private readonly statement:StatementSync,private readonly values:unknown[]=[]){}
@@ -45,6 +54,8 @@ function fixture(nativeReadback:'allow'|'deny'|'unknown'='allow'){
     '0020_core_console_native_logon_binding.sql']){
     db.exec(readFileSync(new URL('../cloudflare/migrations/'+name,import.meta.url),'utf8'));
   }
+  if(HAS_NATIVE_CLAIM_MIGRATION)
+    db.exec(readFileSync(NATIVE_CLAIM_MIGRATION,'utf8'));
   db.prepare('INSERT INTO device_maintenance_preferences VALUES(?,?,?,?)')
     .run(device,owner,1,'2026-10-31');
   db.prepare('INSERT INTO device_bridge_preferences VALUES(?,?,?,?)')
@@ -140,6 +151,8 @@ test('AI-08: complete cannot acknowledge success before native claim readback',a
     assert.deepEqual({acceptedEarly,stateAfterDeniedReadback:f.state()},
       {acceptedEarly:false,stateAfterDeniedReadback:'unknown'},
       'readback-pending complete must be denied; rejected claim must tombstone');
+    assert.equal(HAS_NATIVE_CLAIM_MIGRATION,true,
+      'integrated P0 acceptance requires coordinator migration 0021; a source-only deny is insufficient');
   }finally{
     f.gate.release();
     if(claim)await claim.catch(()=>{});
