@@ -135,9 +135,12 @@ export function assessTaskSandboxSourceOnly(
   if (observation?.revokeDrainVerified !== true) {
     blockers.push('REVOKE_DRAIN_UNVERIFIED');
   }
-  const mayHaveMutated = observation?.mutationState === 'unknown' ||
-    observation?.mutationState === 'in_progress' ||
-    observation?.mutationState === 'ack_lost';
+  // No caller-supplied mutation state, including "not_started" or "done",
+  // is proof that a durable request did not already cause effects. A reported
+  // state field is enough to quarantine for external reconciliation. Inspect
+  // the descriptor, not the property value: do not execute an accessor getter.
+  const mayHaveMutated = observation !== null &&
+    Object.prototype.hasOwnProperty.call(observation, 'mutationState');
   if (mayHaveMutated) blockers.push('MUTATION_STATE_UNKNOWN_RECONCILE_REQUIRED');
   blockers.push('TRUSTED_NATIVE_SANDBOX_PROVIDER_UNAVAILABLE');
   return Object.freeze({
