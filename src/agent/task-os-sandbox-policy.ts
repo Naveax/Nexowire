@@ -251,6 +251,16 @@ export function assessTaskSandboxSourceOnly(
   const uncertainReportFields = [
     'mutationState', 'ackLost', 'ack_lost', 'lostAck', 'outcomeUnknown',
     'launchUnknown', 'revokeUnknown', 'drainUnknown', 'operationAttempted',
+    // A caller can omit mutationState while reporting a partial kernel
+    // readback, unsupported native isolation or an uncertain descendant/
+    // secret boundary. Such reports must not be mistaken for a clean,
+    // never-attempted operation. Even a false/null value is not proof.
+    'nativeReadbackUnknown', 'kernelReadbackUnknown', 'jobReadbackUnknown',
+    'appContainerReadbackUnknown', 'pidfdReadbackUnknown',
+    'cgroupReadbackUnknown', 'sandboxUnsupported',
+    'descendantCleanupUnknown', 'handleLeakageUnknown',
+    'environmentLeakageUnknown', 'pathIdentityUnknown',
+    'permissionReadbackUnknown', 'ipcReadbackUnknown',
   ] as const;
   const mayHaveMutated = reported != null &&
     (observation === null ||

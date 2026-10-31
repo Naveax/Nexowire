@@ -1,81 +1,11 @@
-# AI-07 scoped handoff (2026-10-31)
-**Decision: NO_GO for production, Draft source review only.**
-Changed files: `src/agent/task-os-sandbox-policy.ts`; `native/task-os-sandbox-windows-appcontainer-probe-p07.c`; `test/ai07-sandbox-windows-probe.test.ts`; `test/ai07-sandbox-mutation-state.test.ts`; `docs/ai-handoff/AI-07/{STATUS,CONTRACT,TEST_EVIDENCE,INTEGRATION_REQUEST,FINAL}.md`.
-- Source/static Windows C tests: 2/2 PASS on Linux Node 22.16.0, not OS proof.
-- New mutation test, full repo typecheck, Windows MSVC, native kernel/physical tests: not locally run; consult new exact-head Actions.
-- Existing #859 CI 40547392793 SUCCESS only applies to original SHA, not this branch.
-- Missing: production OS worker, AI-05 pre-effect executor/CAS admission, AI-04 independent Broker/Job/receipt gate, authenticated owner/device/session identity, independent AppContainer/Job handle/disk/network isolation, descendant cleanup and verified revoke.
-- No other-owner file mutation, merge, deploy, UAC/ACL/service, real Agent or OS policy changes.
-- Child Draft PR URL, final HEAD SHA, exact CI run IDs: read live Github metadata, not an embedded self-referential SHA.
+# AI-07 | FINAL — scoped source-only handoff
 
-## Follow-on source hardening
-- Linux selftest child closes *all* FDs rather than retaining stdin/out/err and no longer has seccomp write; outer parent owns the synthetic marker. Windows C includes Advapi32 and checks TokenPrimary, Job close semantics. Kernel acceptance remains separate and **NO_GO**.
-
-
-## 2026-10-31 continuation scope
-Added bounded Linux probe child lifetime and new Windows-only MSVC native regression; local Windows native compile still requires isolated runner. NO_GO persists.
-
-## Correct owner routing
-Per `NEXOWIRE_AI_TAKIM_PLANI_14_GUN.md`, AI-05 owns executor/CAS dispatch; AI-04 owns Broker-side admission/Job; AI-02 owns enrollment/protected Service; AI-03 owns mTLS/verifier; AI-08 independently validates native negatives. Any earlier handoff naming AI-03 as executor or AI-02 as Broker/CAS was erroneous and has been corrected. No out-of-owner code edited.
-
-
-## Native diagnostic additional hardening
-Linux selftest group termination and nested PID1 parent-death signal; Windows local readback of AppContainer SID and UIAccess. Exact OS acceptance still **NO_GO**, and these diagnostics remain non-executing task probes.
-
-
-### Forced teardown caveat
-A group kill is not a certified descendant-drain mechanism for an arbitrary task. Timeout cleanup failure is explicitly non-PASS; kernel-signed Job/cgroup readback, identity-fenced cancellation and external CAS remain P0.
-
-### Additional Linux evidence gate (31 Oct)
-The unshare caller's future-child PID namespace is now directly checked via `pid_for_children` and parent-owned process group identity. Post-seccomp file open attempts must fail with `EPERM`. No native task runner is enabled, and all external physical acceptance remains NO-GO.
-
-### Two-stage PID namespace witness
-A second bounded outer-parent kernel readback now precedes the gate for the test-only namespace PID 1. This corrects early `pid_for_children` inspection, keeps task execution disabled, and does not establish any release-ready OS sandbox.
-
-### PID1 gate hardening
-Addressed premature direct-parent SIGPIPE termination and late PR_SET_PDEATHSIG installation in disposable probe handshake. Deny-only OS task dispatch and external production NO-GO remain unchanged.
-
-### Additional denial/teardown hardening
-Eliminated inner Linux PID1 unbounded wait on both rejection and success paths; strict source-level NUL/length checks for task argv/path. Real OS kernel witness, Job/cgroup descendant drain and protected worker identity are still absent, therefore **NO_GO**.
-
-### Direct diagnostic child orphan-fencing
-Added pre-unshare parent-death signal + original parent PID race guard on the **disposable selftest** child only. No native worker launch or permission gate opened; OS-kernel independent verification, descendant drain and platform integration remain production NO-GO.
-
-### Aggregate input-boundary restriction
-Conservative combined argv length and targeted negative tests prevent source-only requests with excessive or NUL-truncated command parameters being mistaken for valid input. Real OS native request binding, independent caller authorization and kernel isolation remain **NO_GO**.
-
-### Isolated OS kernel evidence added
-Added reproducible `test/ai07-sandbox-linux-parent-death.test.ts`: native Linux PIDFD/subreaper parent-death behavior with a deliberate RED control when fence is disabled. Isolated Linux 6.18.57/GCC 14.2 validated positive exit 0 and negative exit 55; exact repository HEAD CI pending. Production worker, Windows MSVC/AppContainer, Linux task namespace/cgroup and descendant revoke remain NO-GO.
-
-### Native test process-cleanup guarantee
-The disposable Linux kernel negative test now avoids unbounded actor `waitpid` and attempts exact-owned PIDFD/fallback cleanup plus subreaper reap on failure paths, marking uncertainty BLOCKED. Still requires exact-head CI and independent worker acceptance.
-
-### Kernel FD/seccomp diagnostic (1 Nov 2026)
-Added disposable Linux native fixture `test/ai07-sandbox-linux-fd-seccomp.test.ts` with independently failing disabled-close_range and disabled-seccomp controls. Local isolated Linux 6.18.57/GCC 14.2 observations: protected exit 0, no-FD-close exit 53, no-seccomp exit 55; Node22 standalone test 1/1 PASS. Exact-head repository CI must still confirm this commit. No real task worker, Windows OS isolation or revoked process tree acceptance; production NO-GO stays.
-
-### Synthetic environment and bounded fixture teardown
-Test-only Linux fixture now also rejects inherited synthetic environment when `clearenv` is deliberately disabled (exit 59), and forcefully reaps only its test-owned exact child on timeout and clock error. No task-scope credential exposure tested. No production worker enable or authorization: NO-GO.
-
-### PID1 early-orphan kernel witness
-Added pre-fork direct-parent pidfd to close the race where a parent died before PID1 installed its kernel parent-death signal. Both pre/post-gate PID1 checks fail closed; unsupported PIDFD and errors deny. Only disposable selftest protected; production NO-GO and independent native OS/Broker/worker evidence still required.
-
-### Executable early-orphan test and kernel fallback
-Added `test/ai07-sandbox-linux-pidfd-orphan.test.ts` with an intentionally broken PIDFD-readback control; native source now declares its FD before feature detection so missing SYS_pidfd_open compiles to DENIED 86 instead of referring to an undefined variable. Full task isolation still unavailable, Production NO-GO.
-
-### Linux path root negative (2026-11-01)
-Added isolated `test/ai07-sandbox-linux-openat2-root.test.ts` with real Linux `openat2` traversal/symlink kernel denials and a deliberate hardlink bypass illustration; all four variants matched locally across 40 runs. This expands AI-07 negative OS evidence but DOES NOT establish a production filesystem sandbox or release CORE/UNKNOWN gates. NO_GO persists.
-
-### argv additional-own-key hardening
-Strict extra-key rejection and hostile argv negative regression added; preserves no execution permit, no fallbacks, UNKNOWN reconciliation and native OS production NO-GO.
-
-### Nested source-intent key inspection
-Added allowlisted exact own-data-key checks for top-level task, root, network, budgets and empty endpoints plus seven targeted negatives. Retains deny-only execution, no replay, and all native production blockers; PR still Draft / NO-GO.
-
-### Verified escape counterexample (2026-11-01)
-Added test-only Linux `setsid` descendant escape from process group; real kernel PIDFD witness confirms escaped child survives original group kill, then test-owned PIDFD cleanup reaps it. Deliberate no-escape control exits 55. This strengthens negative QA but does not implement cgroup/Job descendant confinement. Draft NO_GO remains; exact HEAD CI required.
-
-### Partial loss/revoke native report classification
-AI-07 source report parsing now treats explicit partial ACK/outcome/launch/revoke/drain signals as untrusted possible mutations even when `mutationState` is missing. Conservative external-reconciliation requirement is preserved; this does not enable native execution or prove drain. CORE disabled / NO-GO.
-
-### Disposable kernel Unix-domain IPC denial
-Added explicit AF_UNIX/socketpair/connect EPERM checks and true unfiltered host negative contrast to AI-07 Linux fixture. These are test-only native syscall denials, not production native Broker IPC protection. Keep NO-GO.
+- **Review verdict:** DENY-ONLY SOURCE/DIAGNOSTIC. **Production CORE NO_GO**.
+- **Existing Draft PR #990:** https://github.com/Naveax/Nexowire/pull/990; `ai/07-isolation-worker-20261031`, base `68ee74ce7e1e5a36c8ae2f9b065f49a5cb13cee9`. Latest exact branch HEAD must be read live from the PR.
+- **Prior source exact HEAD:** `a6900ab9695d3524ca8999d3bd62975c3d4bab59` and [CI #41249427088](https://github.com/Naveax/Nexowire/actions/runs/41249427088), 6/7 success with Windows still running at checkpoint; no full CI claim before terminal.
+- **This round's new code:** `src/agent/task-os-sandbox-policy.ts` extends partial lifecycle/OS readback UNKNOWN reconciliation when `mutationState` omitted. No task execution or native permit introduced.
+- **New disposable test:** `test/ai07-sandbox-readback-unknown.test.ts`; 13 uncertain keys and hostile getters/Proxy, plus ordinary report controls. No test assertion weakened, no existing skip changed. **New exact HEAD CI pending** until published and verified.
+- **Docs updated:** `docs/ai-handoff/AI-07/{STATUS,TEST_EVIDENCE,INTEGRATION_REQUEST,FINAL}.md`. No changes to coordinator #1004, #980, CI, shared Broker, CORE, runtime executors or real OS devices.
+- **Coordinator merge handoff:** refresh #1004 from stale `d4f034...` ancestor against newest frozen #990; preserve original #980 AppContainer fixture blob and AI-07 diagnostic C blob `7d569...` at renamed `native/task-os-sandbox-windows-token-job-readback-p07.c` (as child implementation). This does not establish kernel isolation.
+- **Remaining blockers:** exact new CI, protected native worker/independent verifier, AI-04/05 Broker/CAS pre-effect integration, cgroup/Job descendant-drain and revoke, file/network/handle isolation and real owner/device/session/physical acceptance.
+- **Restrictions:** no merge, deploy, live process/Agent, UAC/ACL, credentials, installer, cloud tunnel or CORE activation.
