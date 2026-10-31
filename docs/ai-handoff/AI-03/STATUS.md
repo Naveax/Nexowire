@@ -12,3 +12,5 @@
 - **Ownership:** all 10 files in Draft PR #988 are AI-03 allowlisted; no merge/rebase/force-push, unrelated branch edit or repeated same-SHA CI dispatch.
 - **Next:** track the resulting docs-only exact-HEAD CI, request independent AI-08 review of this exact AI-03 lineage, and hand off the P0 AI-02/coordinator integration gaps in `INTEGRATION_REQUEST.md`.
 - **Local execution:** repository checkout/dependency tree unavailable; project commands NOT RUN locally, exit N/A. Only CI evidence is reported.
+
+- New AI-03 hardening candidate after the previously proven source: ledger enrollment now checks the requested issuer hash against an independently protected native issuer readback before durable consume and on subsequent readback. Missing/substituted/rotated issuer negative tested with disposable PostgreSQL; exact new-HEAD CI required. CORE production NO_GO.

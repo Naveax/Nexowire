@@ -25,6 +25,10 @@ export interface CoreApprovalNativeReadback {
   /** Trusted composition must obtain this from the independent native witness,
    * never the approval caller's JSON, software signature or UI state. */
   readonly protectedNativeWitness:true;
+  /** From the independently protected local issuer/grant record, NOT from
+   * the HTTP expected object or SQL handoff row. Optional for v1 WebAuthn
+   * readback; REQUIRED for every v1 enrollment handoff/readback. */
+  readonly issuerSpkiSha256?:string;
 }
 export interface DurableCoreApprovalReceipt extends CoreWebAuthnConsumeReceipt {
   readonly receiptId:string;readonly assertionSha256:string;readonly consumedAtMs:number;
@@ -80,7 +84,7 @@ export class PostgresCoreApprovalLedger {
         },2000);})]);
     }finally{if(timer)clearTimeout(timer);abort.abort();}
   }
-  private async trusted(expected:Readonly<CoreApprovalBinding>):Promise<void>{
+  private async trusted(expected:Readonly<CoreApprovalBinding>,issuerSpkiSha256?:string):Promise<void>{
     let p,n;
     try{
       p=await this.bounded(()=>this.provenance());
@@ -92,6 +96,10 @@ export class PostgresCoreApprovalLedger {
     if(!n||n.protectedNativeWitness!==true||!sameBinding(n.binding,expected)||
       !Number.isSafeInteger(n.observedAtMs)||n.observedAtMs>now+1000||n.observedAtMs<now-3000)
       fail('NATIVE_BINDING_UNVERIFIED');
+    // The request-supplied issuer must never become "verified" merely because
+    // its hex value was persisted in an immutable PostgreSQL row.
+    if(issuerSpkiSha256!==undefined&&n.issuerSpkiSha256!==issuerSpkiSha256)
+      fail('ISSUER_UNVERIFIED');
   }
   private async transaction<T>(fn:(tx:Tx)=>Promise<T>):Promise<T>{
     let db:DispatchStoreConnection;
@@ -266,12 +274,12 @@ export class PostgresCoreApprovalLedger {
     const proof=Object.freeze(CoreNativeProofSchema.parse(value)),expected=binding(proof);
     const issuer=z.string().regex(/^[a-f0-9]{64}$/).parse(issuerSpkiSha256);
     const started=Date.now(),ticks=process.hrtime.bigint();
-    await this.trusted(expected);
+    await this.trusted(expected,issuer);
     await this.transaction(async tx=>{
       const stored=await this.stored(tx,proof.receiptId,expected);
       if(!Object.keys(proof).every(k=>proof[k as keyof CoreNativeProof]===stored.proof[k as keyof CoreNativeProof]))
         fail('ENROLLMENT_PROOF_MISMATCH');
-      await this.trusted(expected);await this.current(tx,expected);
+      await this.trusted(expected,issuer);await this.current(tx,expected);
       const time=await tx.now();
       if(time<proof.approvedAtMs||time-proof.approvedAtMs>=120000)fail('ENROLLMENT_PROOF_EXPIRED');
       const inserted=await tx.db.query('INSERT INTO core_approval.enrollment_consumptions '+
@@ -302,12 +310,15 @@ export class PostgresCoreApprovalLedger {
     await this.trusted(expected);
     return this.transaction(async tx=>{
       const {proof}=await this.stored(tx,receiptId,expected);
-      const row=(await tx.db.query('SELECT authority_id,device_id,proof_sha256,consumed_ms '+
+      const row=(await tx.db.query('SELECT authority_id,device_id,proof_sha256,issuer_spki_sha256,consumed_ms '+
         'FROM core_approval.enrollment_consumptions WHERE receipt_id=$1',[receiptId])).rows[0];
       if(!row||row.authority_id!==this.authorityId||row.device_id!==expected.deviceId||
-        row.proof_sha256!==this.proofHash(proof)||integer(row.consumed_ms,1)<proof.approvedAtMs)
+        row.proof_sha256!==this.proofHash(proof)||integer(row.consumed_ms,1)<proof.approvedAtMs||
+        typeof row.issuer_spki_sha256!=='string'||!/^[a-f0-9]{64}$/.test(row.issuer_spki_sha256))
         fail('ENROLLMENT_NOT_CONSUMED');
-      await this.trusted(expected);await this.current(tx,expected);
+      // Reconcile the durable issuer tombstone with a fresh independent native
+      // readback. Native issuer rotation/revoke may deny but never undo consume.
+      await this.trusted(expected,row.issuer_spki_sha256);await this.current(tx,expected);
       return proof;
     });
   }

@@ -25,3 +25,8 @@
 - `node --test --import tsx test/core-native-consent-transport.test.ts`: NOT RUN locally; exit N/A.
 - `npm run typecheck`: NOT RUN locally; exit N/A. CI Node22/24 typecheck/build steps returned SUCCESS.
 - Isolated disposable keys/CA/DB are not Windows CNG/TPM/DPAPI custody, live SID/session/LUID kernel readback, independent restore witness, two-device physical acceptance or production signing keys. **CORE production NO_GO.**
+
+## Follow-up ledger issuer-provenance regression (new commit needs exact CI)
+- Source: `src/security/postgres-core-approval-ledger.ts`; test: `test/postgres-core-approval-ledger.test.ts`.
+- New real disposable PostgreSQL negative verifies incorrect request `issuerSpkiSha256` is denied *before handoff consume*, an absent independent native issuer is denied, correct protected issuer allows exactly one consume, and a subsequently changed issuer denies current readback without reopening the durable one-use tombstone. Existing seven PostgreSQL enrollment tests remain enabled and not weakened; their native issuer fixture is now explicit.
+- The protected issuer record is STILL an isolated fixture, NOT a real CNG/TPM signed grant or Windows owner acceptance. Source SHA `aaf1cf93f3aca46da313ba513a9b0a524be043f0` has docs-only CI run #41211357704; no prior SHA outcome is acceptance for this new code. Read final exact SHA and CI after publication.

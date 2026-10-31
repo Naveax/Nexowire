@@ -67,13 +67,16 @@ async function fixture(){
       keys.publicKey.export({format:'pem',type:'spki'}).toString(),JSON.stringify(Object.fromEntries(
         Object.keys(CoreApprovalCredentialBindingSchema.shape).map(k=>[k,(binding as Record<string,unknown>)[k]])))]);
   const runtime=pool('nexowire_approval_runtime');let native:CoreApprovalBinding|null={...binding},trusted=true;
+  let protectedIssuer:string|null='a'.repeat(64);
   const config:ConstructorParameters<typeof PostgresCoreApprovalLedger>[0]={authorityId,pool:runtime as DispatchStorePool,
     verifyProvenance:async()=>({verified:trusted,authorityId,validUntil:Date.now()+10000}),
-    readProtectedNativeBinding:async()=>native?{binding:{...native},observedAtMs:Date.now(),protectedNativeWitness:true}:null};
+    readProtectedNativeBinding:async()=>native?{binding:{...native},observedAtMs:Date.now(),
+      protectedNativeWitness:true,issuerSpkiSha256:protectedIssuer??undefined}:null};
   const create=(overrides:Partial<typeof config>={})=>new PostgresCoreApprovalLedger({...config,...overrides});
   const issue=()=>create().issueChallenge({...binding,credentialId,rpId,challengeId:randomUUID()});
   return {authorityId,binding,keys,credentialId,rpId,admin,runtime,config,create,issue,
     setNative:(v:CoreApprovalBinding|null)=>{native=v},setTrusted:(v:boolean)=>{trusted=v},
+    setIssuer:(v:string|null)=>{protectedIssuer=v},
     close:async()=>{await runtime.end();await admin.end()}};
 }
 
@@ -291,7 +294,7 @@ test('real PostgreSQL enrollment: approval readback cannot replace the separate 
     assert.deepEqual(await f.create().consumeForEnrollment(p,'a'.repeat(64)),p);
     assert.deepEqual(await f.create().readEnrollmentProof(p.receiptId,f.binding),p);
     await assert.rejects(f.create().consumeForEnrollment(p,'a'.repeat(64)),/CORE_APPROVAL_ENROLLMENT_REPLAY/);
-    await assert.rejects(f.create().consumeForEnrollment(p,'b'.repeat(64)),/CORE_APPROVAL_ENROLLMENT_REPLAY/);
+    await assert.rejects(f.create().consumeForEnrollment(p,'b'.repeat(64)),/CORE_APPROVAL_ISSUER_UNVERIFIED/);
     assert.equal((await f.admin.query('SELECT issuer_spki_sha256 FROM core_approval.enrollment_consumptions '+
       'WHERE receipt_id=$1',[p.receiptId])).rows[0].issuer_spki_sha256,'a'.repeat(64));
     for(const sql of ['UPDATE core_approval.enrollment_consumptions SET consumed_ms=1',
@@ -300,6 +303,33 @@ test('real PostgreSQL enrollment: approval readback cannot replace the separate 
     }
     await assert.rejects(f.admin.query('UPDATE core_approval.enrollment_consumptions SET consumed_ms=consumed_ms+1 '+
       'WHERE receipt_id=$1',[p.receiptId]),/CORE_APPROVAL_ENROLLMENT_HISTORY_REWRITE_DENIED/);
+  }finally{await f.close()}
+});
+
+test('real PostgreSQL enrollment: requested issuer must match independent protected readback',integration,async()=>{
+  const f=await fixture();try{
+    const p=await approved(f);
+    // Caller-supplied issuer hashes cannot be proved by merely writing them
+    // into the immutable handoff row. Deny mismatch and absent native issuer
+    // before connecting or inserting any enrollment consumption.
+    await assert.rejects(f.create().consumeForEnrollment(p,'b'.repeat(64)),
+      /CORE_APPROVAL_ISSUER_UNVERIFIED/);
+    f.setIssuer(null);
+    await assert.rejects(f.create().consumeForEnrollment(p,'a'.repeat(64)),
+      /CORE_APPROVAL_ISSUER_UNVERIFIED/);
+    assert.equal((await f.admin.query('SELECT COUNT(*) AS n FROM core_approval.enrollment_consumptions '+
+      'WHERE receipt_id=$1',[p.receiptId])).rows[0].n,'0');
+    f.setIssuer('a'.repeat(64));
+    assert.deepEqual(await f.create().consumeForEnrollment(p,'a'.repeat(64)),p);
+    // After durable COMMIT, a mismatched or rotated protected issuer forbids
+    // readback but must never reopen the already-consumed one-use receipt.
+    f.setIssuer('b'.repeat(64));
+    await assert.rejects(f.create().readEnrollmentProof(p.receiptId,f.binding),
+      /CORE_APPROVAL_ISSUER_UNVERIFIED/);
+    await assert.rejects(f.create().consumeForEnrollment(p,'b'.repeat(64)),
+      /CORE_APPROVAL_ENROLLMENT_REPLAY/);
+    assert.equal((await f.admin.query('SELECT COUNT(*) AS n FROM core_approval.enrollment_consumptions '+
+      'WHERE receipt_id=$1',[p.receiptId])).rows[0].n,'1');
   }finally{await f.close()}
 });
 
@@ -356,7 +386,8 @@ test('real PostgreSQL enrollment: database-clock expiry and final-witness revoke
     await assert.rejects(f.create({pool:advanced}).consumeForEnrollment(p,'a'.repeat(64)),/CORE_APPROVAL_ENROLLMENT_PROOF_EXPIRED/);
     let reads=0;
     await assert.rejects(f.create({readProtectedNativeBinding:async()=>++reads===1?{binding:f.binding,
-      observedAtMs:Date.now(),protectedNativeWitness:true}:null}).consumeForEnrollment(p,'a'.repeat(64)),
+      observedAtMs:Date.now(),protectedNativeWitness:true,issuerSpkiSha256:'a'.repeat(64)}:null})
+      .consumeForEnrollment(p,'a'.repeat(64)),
       /CORE_APPROVAL_NATIVE_BINDING_UNVERIFIED/);
     assert.equal((await f.admin.query('SELECT COUNT(*) AS n FROM core_approval.enrollment_consumptions '+
       'WHERE receipt_id=$1',[p.receiptId])).rows[0].n,'0');
@@ -419,7 +450,8 @@ test('real PostgreSQL restart: native approval tombstone and counter survive act
     assert.ok(started.getTime()>new Date(saved.serverStarted).getTime(),'actual PostgreSQL process must restart');
     const ledger=new PostgresCoreApprovalLedger({authorityId:saved.authorityId,pool:runtime as DispatchStorePool,
       verifyProvenance:async()=>({verified:true,authorityId:saved.authorityId,validUntil:Date.now()+10000}),
-      readProtectedNativeBinding:async()=>({binding:saved.binding,observedAtMs:Date.now(),protectedNativeWitness:true})});
+      readProtectedNativeBinding:async()=>({binding:saved.binding,observedAtMs:Date.now(),
+        protectedNativeWitness:true,issuerSpkiSha256:'a'.repeat(64)})});
     await assert.rejects(ledger.consumeAssertion(saved.raw,saved.intent),/CORE_APPROVAL_CHALLENGE_REPLAY_OR_SCOPE/);
     const receipt=await ledger.readConsumed(saved.receipt.receiptId,saved.binding);
     assert.equal(receipt.coreAuthority,false);assert.equal(receipt.consumed,true);
