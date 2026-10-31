@@ -58,7 +58,11 @@ export function createCoreNativeMtlsFetch(config:{
           return Error('CORE_MTLS_SERVER_IDENTITY_INVALID');
         },
       },res=>{
-        if(res.statusCode!==200||res.headers['content-encoding']&&res.headers['content-encoding']!=='identity'){
+        const responseTypes=res.headersDistinct['content-type'];
+        const encodings=res.headersDistinct['content-encoding'];
+        if(res.statusCode!==200||responseTypes?.length!==1||
+          !/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(responseTypes[0]??'')||
+          (encodings!==undefined&&(encodings.length!==1||encodings[0]!=='identity'))){
           res.destroy();fail();return;
         }
         const chunks:Buffer[]=[];let length=0;

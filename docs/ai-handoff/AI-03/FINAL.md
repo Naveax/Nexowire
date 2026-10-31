@@ -1,0 +1,27 @@
+# AI-03 | FINAL: source-only review handoff
+
+- **Verdict:** `READY_FOR_REVIEW` for AI-03-owned source; **production CORE `NO_GO`**, physical consent `NOT_PROVEN`.
+- **Branch:** `ai/03-native-verifier-20261031`, [Draft PR #988](https://github.com/Naveax/Nexowire/pull/988), state OPEN/DRAFT.
+- **Base:** `5e52b756cc6959ffacb7bcd25f2fc1ad2beccc39` (#982, with #981/#970 upstream).
+- **Last fully verified *source* HEAD:** `7ee900583eaf103603ea8534460a6708cd6b0465`.
+- **Matching source CI:** workflow `369213208`, [run #41243629237](https://github.com/Naveax/Nexowire/actions/runs/41243629237), **7/7 SUCCESS**. Node22/24 each **2,403 PASS, 0 FAIL, 355 SKIP, 2 TODO**, typecheck and build SUCCESS; Linux native real disposable PostgreSQL **10/10 enrollment tests PASS**, browser-live SUCCESS.
+- **PR diff:** 12 changed files, only AI-03 owned paths:
+  - `src/protocol/core-native-consent-transport.ts`;
+  - `src/security/core-native-mtls-fetch.ts`;
+  - `src/security/postgres-core-approval-ledger.ts`;
+  - `test/core-native-consent-transport.test.ts`;
+  - `test/core-native-enrollment-verifier-handler.test.ts`;
+  - `test/core-native-verifier-server.test.ts`;
+  - `test/postgres-core-approval-ledger.test.ts`;
+  - `docs/ai-handoff/AI-03/{CONTRACT,STATUS,TEST_EVIDENCE,INTEGRATION_REQUEST,FINAL}.md`.
+- **Acceptance:** TLS1.3 mTLS disposable socket pin/revocation/expiry/identity negatives; strict HTTP 200 signed response/metadata, no ambient fetch, bounded noncooperative transport; real ephemeral PostgreSQL receipt one-use/replay/late ACK/revoke and pre-INSERT/post-COMMIT issuer races. **Test keys, synthetic native witness, disposable PG and hosted CI are not physical owner approval or production trust custody.**
+- **Project commands locally:** NOT RUN, exit N/A (no repository checkout/dependency tree). Positive test claims are GitHub exact-SHA CI only, not local runs.
+- **Current external P0 blockers:** AI-02 independently verified and signed v2 CNG ES256 issuer/grant binding to v1 proof; independent bearer/client-certificate principal resolver; protected mTLS credential/pin custody and production transport composition; fresh Windows owner/SID/logon session/LUID/grant/revoke generations; rollback-resistant independent restore gate; AI-08 adversarial review of exact AI-03 HEAD and two real Windows devices with reboot/revoke/session-switch/offline acceptance.
+- **Critical SHA caveat:** This synchronization is a docs-only child commit, not `7ee900583eaf103603ea8534460a6708cd6b0465`. Its own exact SHA/run must be checked independently after publication. Historical `7ee900583eaf103603ea8534460a6708cd6b0465` success cannot be copied into the child until CI completes.
+- **No merge, rebase, deploy, release, real UAC/ACL/TPM/DPAPI, live device/service or other agent file changes.** See `CONTRACT.md`, `TEST_EVIDENCE.md` and `INTEGRATION_REQUEST.md`.
+
+## Candidate round 2026-11-01, not yet independently accepted
+
+- Task file `04_AI_03_MTLS.md` negative coverage adds disposable **CA-verified, SPKI-pinned but wrong-hostname** TLS failure, exact ownerEpoch/revokeEpoch/grantGeneration and protected live session mismatch rejection in the existing handler test. This candidate still requires fresh CI on its own exact SHA.
+- Versioned bridge handoff: [`AI02_ES256_TO_ED25519_BRIDGE_V1.md`](./AI02_ES256_TO_ED25519_BRIDGE_V1.md) defines separated device CNG ES256 grant, authority-signed challenge, CNG witness, independently signed Ed25519 verifier response and all missing protected custody/generation/CAS fields. It is **design only**, not a production API.
+- Parent `5915eb1980ca92430401e79d0bed410a94d0cfce` run #41249314952 last observed 6/7 successful, browser-live in progress; no inherited PASS claim. CORE production `NO_GO`, Draft and no device/SCM/UAC/secret action.
