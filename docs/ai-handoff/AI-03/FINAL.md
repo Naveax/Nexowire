@@ -1,10 +1,11 @@
-# AI-03 | FINAL (source handoff, exact-head CI in progress)
+# AI-03 | FINAL (source handoff)
 
-- Verdict: `READY_FOR_REVIEW` for source pending this commit's exact CI; **NO_GO** for production CORE.
-- Draft PR [#988](https://github.com/Naveax/Nexowire/pull/988), branch `ai/03-native-verifier-20261031`, base `5e52b756cc6959ffacb7bcd25f2fc1ad2beccc39`.
-- Prior candidate `a1cea7e58a853d9e598477e0f2efd64a65c361f5` CI run [41197111450](https://github.com/Naveax/Nexowire/actions/runs/41197111450): 6/7 SUCCESS while browser-live still running; Node 22/24 each 2399 PASS, 0 FAIL, 352 SKIP, 2 TODO. **Not proof for the follow-up HEAD.**
-- New work: `src/protocol/core-native-consent-transport.ts` now requires explicit protected `fetchImpl`; no global fetch fallback; rejects ambiguous signed JSON HTTP metadata. `test/core-native-consent-transport.test.ts` adds associated denial/positive cases.
-- Existing AI-03 work: `src/security/core-native-mtls-fetch.ts` strict pinned TLS1.3 client and metadata, `test/core-native-verifier-server.test.ts`, `test/core-native-enrollment-verifier-handler.test.ts` expired cert, CA-valid alternate client credential binding, explicit SPKI rotation, replay, owner/session/nonce bounds, timeout/size and bad response negatives.
-- Changed paths limited to allowed AI-03 files. All changes remain on the same Draft PR; no merge/deploy/live device/production keys.
-- New exact commit SHA and its new exact-SHA CI are to be read from GitHub PR once published. Local repository tests NOT RUN, exit N/A (no clone/dependencies); no physical acceptance claimed.
-- Blockers: coordinator production protected transport composition, AI-02 signed v2 grant issuer provenance and restore witness, protected cert/bearer resolver, real Windows kernel readback, independent AI-08 review, physical two-device session/revoke/reboot acceptance. `CONTRACT.md` / `INTEGRATION_REQUEST.md` specify external interfaces; CORE remains disabled.
+- Status: `REVIEW` for source, **production `NO_GO`**; no full device acceptance, release or merge.
+- Branch `ai/03-native-verifier-20261031`; [Draft PR #988](https://github.com/Naveax/Nexowire/pull/988); base `5e52b756cc6959ffacb7bcd25f2fc1ad2beccc39`.
+- **Verified previous code HEAD:** `85df4259de234ddcebd8e73277df979d878db921`; CI [41198185416](https://github.com/Naveax/Nexowire/actions/runs/41198185416), workflow 369213208, **7/7 SUCCESS**, Node 22/24 each **2,401 PASS / 0 FAIL / 352 SKIP / 2 TODO**, typecheck/build SUCCESS, Linux native PostgreSQL seven enrollment negatives PASS, Windows browser-live SUCCESS.
+- **This follow-up:** strict HTTP 200-only verified authority response; new 201/202/206 negative test and 200 positive. Only AI-03 protocol/test and handoff docs changed. **Follow-up exact SHA and CI are pending independent verification after commit**. Do not borrow the previous HEAD's result.
+- Earlier source changes on this branch: pinned mTLS client fail-closed response validation, server/expired client and server cert tests, server SPKI rotation, alternate CA-valid client credential binding, explicit protected transport dependency (no ambient fetch), nonce/replay/owner/session/expiry and durable DB checks.
+- Local project tests NOT RUN, exit N/A (no clone/dependency tree). CI uses disposable TLS and PostgreSQL; these are source-level acceptance only.
+- Integration remains BLOCKED on AI-02 versioned protected local v2 ES256 issuer/grant readback and current Windows session evidence, protected certificate/credential mapping, independent revoke/restore witness, authenticated Worker or mTLS deployment composition, AI-08 independent security review and two-device physical acceptance.
+- No change to CORE flags/dispatch, Agent/Broker, Windows service, real UAC/ACL/DPAPI/TPM, live devices, production database, workflow, other AI branches or `main`. No merge, deploy or force push.
+- Remaining interfaces documented in `CONTRACT.md` and `INTEGRATION_REQUEST.md`.

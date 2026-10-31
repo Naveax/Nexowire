@@ -178,6 +178,30 @@ test('shared authority transport rejects ambiguous HTTP media metadata even with
   }
 });
 
+test('signed non-200 success responses are terminal and never accepted as verifier ACK',async()=>{
+  const p=proofFor(challenge());
+  const wire:CoreNativeWireRequest={version:1,operation:'current-readback',nonce:randomUUID(),
+    expected:{receiptId:p.receiptId}};
+  const trust={origin:'https://127.0.0.1:18764',
+    credential:'fixture-valid-bearer-only',pinnedSpkiBase64:pin};
+  for(const status of [201,202,206] as const){
+    let dispatched=0;
+    const fake=(async(_url,init)=>{
+      dispatched++;
+      const request=JSON.parse(String(init?.body)) as CoreNativeWireRequest;
+      return Response.json(signed(request,p),{status});
+    }) as typeof fetch;
+    await assert.rejects(callProtectedCoreNativeAuthority({...trust,fetchImpl:fake},wire),
+      /CORE_NATIVE_AUTHORITY_UNAVAILABLE/,String(status));
+    assert.equal(dispatched,1,'non-200 response never permits a retry');
+  }
+  const ok=(async(_url,init)=>{
+    const request=JSON.parse(String(init?.body)) as CoreNativeWireRequest;
+    return Response.json(signed(request,p),{status:200});
+  }) as typeof fetch;
+  assert.deepEqual((await callProtectedCoreNativeAuthority({...trust,fetchImpl:ok},wire)).proof,p);
+});
+
 test('approval response cannot follow a caller owner/session change during transport await',async()=>{
   const c=challenge(),original={...c};
   const forged=proofFor({...c,ownerAccountId:'other-owner-account',grantGeneration:22});

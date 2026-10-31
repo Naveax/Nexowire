@@ -127,7 +127,10 @@ export async function callProtectedCoreNativeAuthority(
     headers:{'content-type':'application/json','authorization':'Bearer '+credential},
     body:JSON.stringify(original),signal:abort,
   });
-  if(!response.ok||response.redirected)throw new Error('CORE_NATIVE_AUTHORITY_UNAVAILABLE');
+  // HTTP 201/202/206 are not the one documented verifier acknowledgement.
+  // Even a correctly signed payload must not redefine a 200-only operation.
+  if(response.status!==200||!response.ok||response.redirected)
+    throw new Error('CORE_NATIVE_AUTHORITY_UNAVAILABLE');
   // Defense in depth: reject malformed media type/encoding even if a custom
   // transport wrongly treats that HTTP 200 as trusted. Headers normalizes repeated
   // fields to comma-separated values, which must also fail this exact match.
