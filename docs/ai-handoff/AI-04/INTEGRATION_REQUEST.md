@@ -31,3 +31,10 @@
 - Aynı prensip `revoke-and-drain` için de geçerlidir: ilk TLS/Bearer Broker principal ve immutable owner/device/session kapsamı ile `verifyOwnerRevocation` gerçek owner imzası zorunlu kalır; ancak istek gövdesinden sonra ikinci **canlı grant** kabulü yapılmaz. Arada credential expire/revoke olursa signed owner iptali fail-open bir mutasyon değildir.
 - Mevcut owner signature negatif testi korunur; pozitif revoke aşamasında ilk authenticate'den hemen sonra credential invalid olmasını taklit eden regresyon eklendi. Signed owner kanıtı yoksa revocation CAS çağrısı yine reddedilir.
 - İlk authenticate öncesi iptal edilmiş credential veya revocation sırasında ayrı güvenli yetkili kanal gereksinimi koordinatör kapsamındadır. Doğrulanmış OS SID, dağıtım veya uzun ömürlü token uydurulmadı; CORE production NO-GO.
+
+## AI-04 signed receipt envelope snapshot (source-only, post 46909dd)
+
+- `BrokerExternalDispatchFence.decode` no longer reads `raw.payload` or `raw.signature` repeatedly from a provider-owned object. It copies only two own enumerable data descriptors from a plain/null-prototype object once, rejects extra/symbol keys, accessors, inherited fields and trapping proxies, freezes the primitive snapshot, and then validates the **original UTF-8 signed bytes**.
+- `test/ai04-broker-claim-snapshot.test.ts` adds a canonical signed positive and ten signed-envelope negatives covering reserve/commit for accessor, inherited, Proxy, extra-own-key and symbol-key; no provider getter or mutation callback may run. No regression tests removed or skipped.
+- This is a JS read-boundary guard, not proof of real independent CAS, OS protected Broker, High token, Job isolation, or owner-approved devices. A malicious Proxy can synthesize correct immutable descriptor values; source-only checks cannot certify the operating-system trust boundary.
+- Prior exact HEAD `46909dd677188396646681605959792ae81091e3` run `41243950808` SUCCESS 7/7; the follow-up commit needs a **separate exact-HEAD CI**. The expected trust publisher/ABI/fail-closed integration remains coordinator-owned and production CORE NO-GO.

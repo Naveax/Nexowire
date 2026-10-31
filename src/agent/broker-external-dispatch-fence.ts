@@ -237,15 +237,38 @@ export class BrokerExternalDispatchFence {
     return broker;
   }
   private decode(raw:DispatchClaim):unknown {
-    if(typeof raw?.payload!=='string'||raw.payload.length>4096||
-       typeof raw?.signature!=='string'||raw.signature.length>1024)
+    // The external authority/transport may return a provider-owned object,
+    // including an accessor or Proxy that changes the signed bytes on each
+    // read. Copy only own, enumerable DATA descriptors once, before verifying
+    // the exact primitive UTF-8 payload and signature. No getter may run.
+    let claim:Readonly<DispatchClaim>;
+    try {
+      if(!raw || typeof raw!=='object' || Array.isArray(raw))
+        deny('DISPATCH_PROOF_INVALID');
+      const prototype=Object.getPrototypeOf(raw);
+      if(prototype!==Object.prototype && prototype!==null)
+        deny('DISPATCH_PROOF_INVALID');
+      const descriptors=Object.getOwnPropertyDescriptors(raw);
+      if(Reflect.ownKeys(descriptors).length!==2)
+        deny('DISPATCH_PROOF_INVALID');
+      const payload=descriptors.payload,signature=descriptors.signature;
+      if(!payload || !signature ||
+         !Object.hasOwn(payload,'value') || !Object.hasOwn(signature,'value') ||
+         payload.enumerable!==true || signature.enumerable!==true ||
+         typeof payload.value!=='string' || typeof signature.value!=='string')
+        deny('DISPATCH_PROOF_INVALID');
+      claim=Object.freeze({payload:payload.value as string,
+        signature:signature.value as string});
+    }catch{return deny('DISPATCH_PROOF_INVALID')}
+    if(claim.payload.length===0 || claim.payload.length>4096 ||
+       claim.signature.length===0 || claim.signature.length>1024)
       deny('DISPATCH_PROOF_INVALID');
     let bytes:Buffer,signature:Buffer;
     try{
-      bytes=Buffer.from(raw.payload,'base64url');
-      signature=Buffer.from(raw.signature,'base64url');
-      if(bytes.toString('base64url')!==raw.payload||
-         signature.toString('base64url')!==raw.signature||
+      bytes=Buffer.from(claim.payload,'base64url');
+      signature=Buffer.from(claim.signature,'base64url');
+      if(bytes.toString('base64url')!==claim.payload||
+         signature.toString('base64url')!==claim.signature||
          signature.length!==64||
          !verify(null,bytes,this.publicKey,signature))
         deny('DISPATCH_SIGNATURE_UNTRUSTED');
