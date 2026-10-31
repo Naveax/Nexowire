@@ -19,3 +19,7 @@
 - Source modifications and Git objects made via authenticated GitHub connector. No local clone exists in this runtime (github.com DNS unavailable), so local `npm run typecheck`, `npm run build`, or local `git diff --check` exit codes are **NOT RUN / NOT CLAIMED**.
 - Current commit's exact-head CI workflow/job results must be verified from its own GitHub Actions run and appended to PR evidence; do not infer from earlier HEAD.
 - No physical Windows restart, real WAL, user data, original credentials or CORE authorization accessed during AI-01.
+
+## New pending exact-HEAD negative
+- Source-review finding: an all-current WAL with a fully checksummed final frame whose DB-size commit marker is zero was accepted by the previous validator; SQLite can ignore this uncommitted suffix. New regression independently verifies every frame checksum after rewriting only the last commit marker and refuses mutation while retaining all snapshot bytes.
+- Current staging parent `8e44c3aff6be486de8ffd0a9a9830243eaf7fbac`. This new commit has **NOT** been pushed to the PR branch or validated by CI yet; previous run `41196318562` was still active at the last check. Do not infer PASS or physical validation.

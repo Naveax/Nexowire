@@ -232,3 +232,64 @@ test('byte-identical WAL pathname replacement is rejected by inode identity',asy
   assert.deepEqual(await fs.readFile(wal),f.wal,
     'denial must be based on identity, not merely byte differences');
 });
+
+
+test('checksum-valid current WAL with a missing final commit marker fails closed',async t=>{
+  const f=await fixture(t,false);
+  const tampered=Buffer.from(f.wal);
+  const rawPage=tampered.readUInt32BE(8);
+  const pageSize=rawPage===1?65536:rawPage;
+  const stride=24+pageSize;
+  const count=(tampered.length-32)/stride;
+  assert.ok(Number.isInteger(count)&&count>=2,
+    'fixture must have prior commits and a distinct last transaction');
+  const last=32+(count-1)*stride;
+  assert.notEqual(tampered.readUInt32BE(last+4),0,
+    'the last SQLite-generated frame must originally commit UNKNOWN');
+  // Remove only the commit marker; recalculate a fully consistent WAL checksum
+  // so a plain checksum-mismatch test cannot satisfy this negative.
+  tampered.writeUInt32BE(0,last+4);
+  const big=tampered.readUInt32BE(0)===0x377f0683;
+  function fold(buffer:Buffer,seed:{s0:number;s1:number}){
+    let {s0,s1}=seed;
+    assert.equal(buffer.length%8,0);
+    for(let offset=0;offset<buffer.length;offset+=8){
+      const a=big?buffer.readUInt32BE(offset):buffer.readUInt32LE(offset);
+      const b=big?buffer.readUInt32BE(offset+4):buffer.readUInt32LE(offset+4);
+      s0=(s0+a+s1)>>>0;
+      s1=(s1+b+s0)>>>0;
+    }
+    return {s0,s1};
+  }
+  const previous=last-stride;
+  let digest={
+    s0:tampered.readUInt32BE(previous+16),
+    s1:tampered.readUInt32BE(previous+20),
+  };
+  digest=fold(tampered.subarray(last,last+8),digest);
+  digest=fold(tampered.subarray(last+24,last+24+pageSize),digest);
+  tampered.writeUInt32BE(digest.s0,last+16);
+  tampered.writeUInt32BE(digest.s1,last+20);
+
+  // Independently walk every frame checksum to exclude accidental checksum
+  // corruption from the rejection reason. The final frame is well-formed but
+  // no longer a COMMIT, so SQLite would not retain that terminal record.
+  let checked=fold(tampered.subarray(0,24),{s0:0,s1:0});
+  assert.equal(checked.s0,tampered.readUInt32BE(24));
+  assert.equal(checked.s1,tampered.readUInt32BE(28));
+  for(let i=0;i<count;i++){
+    const at=32+i*stride;
+    assert.ok(tampered.subarray(at+8,at+16).equals(tampered.subarray(16,24)));
+    checked=fold(tampered.subarray(at,at+8),checked);
+    checked=fold(tampered.subarray(at+24,at+24+pageSize),checked);
+    assert.equal(checked.s0,tampered.readUInt32BE(at+16));
+    assert.equal(checked.s1,tampered.readUInt32BE(at+20));
+  }
+  assert.equal(tampered.readUInt32BE(last+4),0);
+  await fs.writeFile(f.file+'-wal',tampered);
+  await assert.rejects(verifyAgentJournalWal(f.file),
+    {code:'AGENT_JOURNAL_WAL_CORRUPT'});
+  assert.deepEqual(await fs.readFile(f.file+'-wal'),tampered);
+  assert.deepEqual(await fs.readFile(f.file),f.main);
+  assert.deepEqual(await fs.readFile(f.file+'-shm'),f.shm);
+});

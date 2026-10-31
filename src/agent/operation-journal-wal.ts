@@ -179,6 +179,11 @@ export async function verifyAgentJournalWal(dbFile:string):Promise<void>{
       currentFrames++;
       lastCommitPages=frame.readUInt32BE(4);
     }
+    // A checksummed but uncommitted current-generation suffix may be ignored
+    // during SQLite recovery. Do not silently discard possible reservation
+    // history: every nonempty current generation must end at a commit frame.
+    // Ordinary RESTART/reuse tails remain valid after their committed prefix.
+    if(currentFrames>0&&lastCommitPages===0)fail();
     const after=await handle.stat();
     if(after.size!==opened.size||after.mtimeMs!==opened.mtimeMs||
        after.ctimeMs!==opened.ctimeMs)fail();
