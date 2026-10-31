@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
+import {X509Certificate} from 'node:crypto';
 import {mkdtemp,writeFile,readFile,rm} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -22,14 +23,14 @@ test('bounded native verifier host: actual mTLS, admission, deadlines and overlo
   run(['req','-x509','-newkey','ec','-pkeyopt','ec_paramgen_curve:P-256','-nodes',
     '-keyout','ca.key','-out','ca.crt','-days','1','-subj','/CN=Disposable Host Test CA',
     '-addext','basicConstraints=critical,CA:TRUE','-addext','keyUsage=critical,keyCertSign,cRLSign']);
-  for(const name of ['server','client']){
+  for(const name of ['server','client','expired-client']){
     await writeFile(path.join(root,name+'.ext'),'basicConstraints=critical,CA:FALSE\n'+
       'keyUsage=critical,digitalSignature\nextendedKeyUsage='+
       (name==='server'?'serverAuth\nsubjectAltName=DNS:localhost,IP:127.0.0.1\n':'clientAuth\n'));
     run(['req','-new','-newkey','ec','-pkeyopt','ec_paramgen_curve:P-256','-nodes',
       '-keyout',name+'.key','-out',name+'.csr','-subj','/CN=Disposable '+name]);
     run(['x509','-req','-in',name+'.csr','-CA','ca.crt','-CAkey','ca.key','-CAcreateserial',
-      '-out',name+'.crt','-days','1','-extfile',name+'.ext']);
+      '-out',name+'.crt','-days',name==='expired-client'?'0':'1','-extfile',name+'.ext']);
   }
   const pem=async(n:string)=>readFile(path.join(root,n),'utf8');
   const material={keyPem:await pem('server.key'),certificatePem:await pem('server.crt'),
@@ -55,6 +56,24 @@ test('bounded native verifier host: actual mTLS, admission, deadlines and overlo
     await t.test('valid peer reaches handler; missing certificate and TLS downgrade never do',async()=>{
       assert.equal(await call(),200);assert.equal(calls,1);
       await assert.rejects(call(false));await assert.rejects(call(true,'TLSv1.2'));assert.equal(calls,1);
+    });
+    await t.test('expired client certificate cannot authenticate or reach authority',async()=>{
+      const expiredCert=await pem('expired-client.crt');
+      const expires=Date.parse(new X509Certificate(expiredCert).validTo);
+      assert.ok(Number.isFinite(expires),'disposable certificate must have a parseable expiration');
+      while(Date.now()<=expires)await new Promise(r=>setTimeout(r,25));
+      const awaitedExpiredKey=await pem('expired-client.key');
+      const before=calls;
+      await assert.rejects(new Promise<void>((resolve,reject)=>{
+        const req=request({hostname:'127.0.0.1',port,path:'/v1/core-native-consent',
+          method:'POST',agent:false,key:awaitedExpiredKey,cert:expiredCert,ca:client.ca,
+          minVersion:'TLSv1.3',maxVersion:'TLSv1.3'},res=>{
+            res.resume();resolve();
+          });
+        req.setTimeout(2000,()=>req.destroy(Error('expired certificate handshake deadline')));
+        req.once('error',reject);req.end('{}');
+      }));
+      assert.equal(calls,before,'expired peer must not dispatch');
     });
     await t.test('configuration is detached; concurrent excess is rejected without dispatch',async()=>{
       config.maxActiveRequests=64;config.handler=()=>{throw Error('alias must not replace handler')};
