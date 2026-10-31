@@ -148,7 +148,7 @@ test('Windows native service entry refuses standalone non-SYSTEM invocation',{
     encoding:'utf8',timeout:30000,maxBuffer:1024,windowsHide:true,
   });
   assert.ifError(sid.error);assert.equal(sid.status,0,sid.stderr);
-  assert.match(sid.stdout.trim(),/^S-1-\\d+(?:-\\d+)+$/);
+  assert.match(sid.stdout.trim(),/^S-1-\d+(?:-\d+)+$/);
   assert.notEqual(sid.stdout.trim(),'S-1-5-18',
     'Diagnostic must not invoke --service from a LocalSystem test process');
   const exe=fileURLToPath(new URL('../native/windows-local-enrollment/bin/qa/Nexowire.LocalEnrollment.exe',import.meta.url));
