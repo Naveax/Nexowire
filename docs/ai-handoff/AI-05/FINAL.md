@@ -43,3 +43,7 @@ Validated HTTPS CAS authorities are now fixed immutable string routes and runtim
 ## Source CAS constructor snapshot hardening follow-up
 
 Configuration getter/Proxy execution at construction is now denied before the binding of HTTPS authority, witness token provider and PostgreSQL CAS dependencies. Three additional source-only negative tests bring the candidate to 37 AI-05 cases. Production CORE remains disabled. Source acceptance requires matching exact HEAD CI evidence; prior failures outside AI-05 are unchanged. No live device, deploy or merge.
+
+## Immutable original provider-method boundary
+
+The PostgreSQL witness adapter now binds the originally enrolled pool connect and independent CAS reserve methods before any asynchronous readbacks; two negative tests block swapping borrowed provider methods across awaited authorization. **39 source-only AI-05 regression cases** are authored. Await new exact-HEAD CI. This does not authorize actual physical CORE dispatch or remove the Broker/CAS/sandbox NO-GO constraints.

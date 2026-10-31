@@ -286,6 +286,9 @@ function immutablePgConfig<T extends object>(raw:T):Readonly<T>{
  * remains NO-GO until that controller and PG hosting are attested/tested.
  */
 export class PostgresBoundGrantCas implements MonotonicTrustRoot {
+  /** Bound before any async provenance/owner readback; method swaps cannot redirect CAS. */
+  private readonly connectWitness:WitnessPgPool['connect'];
+  private readonly reserveWitness:ExternalGrantCas['reserveIfCurrent'];
   constructor(private readonly config:{
     pool:WitnessPgPool;
     authorityId:string;
@@ -305,11 +308,19 @@ export class PostgresBoundGrantCas implements MonotonicTrustRoot {
        typeof pinned.verifyProvenance!=='function'||
        typeof pinned.resolveAuthenticatedScope!=='function')
       reject('BOUND_CAS_AUTHORITY_INVALID');
-    if(!pinned.pool||!pinned.externalCas)
-
+    if(!pinned.pool||!pinned.externalCas||
+       typeof pinned.pool.connect!=='function'||
+       typeof pinned.externalCas.reserveIfCurrent!=='function')
       reject('BOUND_CAS_AUTHORITY_INVALID');
+    // Pin the *methods* as well as their object references. Mutating a
+    // retained pool/external-CAS object's method during an await must not
+    // switch the authority that performs the one-use UUID reservation.
+    this.connectWitness=pinned.pool.connect.bind(pinned.pool);
+    this.reserveWitness=pinned.externalCas.reserveIfCurrent.bind(pinned.externalCas);
     this.config=pinned;
     Object.defineProperty(this,'config',{writable:false,configurable:false});
+    Object.defineProperty(this,'connectWitness',{writable:false,configurable:false});
+    Object.defineProperty(this,'reserveWitness',{writable:false,configurable:false});
   }
   private async trusted():Promise<void>{
     let p;
@@ -329,7 +340,7 @@ export class PostgresBoundGrantCas implements MonotonicTrustRoot {
   private async reserveExternally(input:CasRequest,
     scope:AuthenticatedGrantScope):Promise<ExternalGrantCasReceipt>{
     let proof:ExternalGrantCasReceipt;
-    try{proof=await this.config.externalCas.reserveIfCurrent(input,scope)}
+    try{proof=await this.reserveWitness(input,scope)}
     catch{return reject('BOUND_CAS_EXTERNAL_RESERVATION_UNKNOWN')}
     // Detached before the next awaited PostgreSQL read. Never let a
     // provider mutate a validated created:false into a fresh reservation.
@@ -347,7 +358,7 @@ export class PostgresBoundGrantCas implements MonotonicTrustRoot {
   }
   private async transaction<T>(fn:(db:WitnessPgConnection)=>Promise<T>):Promise<T>{
     let db:WitnessPgConnection;
-    try{db=await this.config.pool.connect()}
+    try{db=await this.connectWitness()}
     catch{return reject('BOUND_CAS_PG_UNAVAILABLE')}
     let started=false;
     try{

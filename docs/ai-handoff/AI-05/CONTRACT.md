@@ -41,3 +41,7 @@ The remote CAS and external grant CAS clients normalize their HTTPS authority to
 ## Descriptor-only CAS constructor binding
 
 The four AI-05 CAS authority constructors now capture configuration using descriptor-only own enumerable fields before validation. Proxy-backed configs, getter-backed endpoint/token/authority/provider inputs, inherited/hidden fields, symbol keys and unknown fields are rejected rather than executing caller-owned getter/trap code during `{...config}` spread. The original endpoint and resolver remain runtime-pinned and immutable across awaits. This narrows JavaScript-source trust boundary only; external credentials, protected Broker and physical CAS provenance are separate and required.
+
+## Original provider-method binding across async waits
+
+PostgresBoundGrantCas now binds both its PostgreSQL pool `connect` method and independent external-CAS `reserveIfCurrent` method at construction. Pinning only the config object pointer is insufficient: a retained provider object can have its method overwritten during provenance, identity, SQL or readback awaits. Dedicated non-reassignable bound function fields preserve the original provider target, while the external service must still authenticate current owner/session and supply genuine atomic CAS. The adapter does not claim OS-level isolation or make attacker-controlled providers trustworthy.

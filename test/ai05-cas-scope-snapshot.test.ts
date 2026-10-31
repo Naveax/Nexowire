@@ -404,3 +404,42 @@ test('AI-05 PostgreSQL CAS constructor rejects accessor and Proxy provider confi
   assert.equal(getters,0);
   assert.equal(traps,0);
 });
+
+test('AI-05 external CAS method cannot be swapped during the PostgreSQL readback await',async()=>{
+  let substitutionCalls=0;
+  let fixtureRef!:ReturnType<typeof fixture>;
+  fixtureRef=fixture({
+    resolve:async()=>scope(),
+    onClock:()=>{
+      fixtureRef.settings.externalCas.reserveIfCurrent=async()=>{
+        substitutionCalls++;
+        throw new Error('swapped CAS method after grant checks');
+      };
+    },
+  });
+  const receipt=await fixtureRef.cas.reserve(request());
+  assert.equal(receipt.created,true);
+  assert.equal(receipt.requestId,ids.request);
+  assert.equal(fixtureRef.evidence.externalCalls,1);
+  assert.equal(substitutionCalls,0);
+  assert.equal(fixtureRef.evidence.queries.at(-1),'COMMIT');
+});
+
+test('AI-05 PostgreSQL connection method cannot be replaced after identity await',async()=>{
+  let substitutionCalls=0;
+  let fixtureRef!:ReturnType<typeof fixture>;
+  fixtureRef=fixture({
+    resolve:async()=>{
+      fixtureRef.settings.pool.connect=async()=>{
+        substitutionCalls++;
+        throw new Error('swapped PostgreSQL pool method after trusted identity');
+      };
+      return scope();
+    },
+  });
+  const receipt=await fixtureRef.cas.reserve(request());
+  assert.equal(receipt.created,true);
+  assert.equal(fixtureRef.evidence.externalCalls,1);
+  assert.equal(substitutionCalls,0);
+  assert.equal(fixtureRef.evidence.queries.at(-1),'COMMIT');
+});

@@ -54,3 +54,7 @@ Two new AI-05 source-only negative cases assert `Reflect.set` cannot replace the
 ## Adversarial constructor config snapshots
 
 Three additional source-only negative tests reject Proxy/getter/hidden/extra constructor configuration for RemoteMutationCasClient, HttpsMonotonicTrustRoot, HttpsExternalGrantCas and PostgresBoundGrantCas before any getter/trap or credential callback executes. Expected new AI-05 authored count: **37 (13 PostgreSQL, 11 executor, 8 HTTPS, 5 remote)**. New source SHA and exact CI TypeScript/test/build must be verified; prior 34-case PASS at SHA `7e402e4efc3d82166a9f26721983b7bb61aa01aa` does not apply to this patch. Linux PostgreSQL 57P03 and Windows WAL 30s worker timeout remain coordinator-owned red results from prior CI.
+
+## Provider method substitution after awaited authorization
+
+Two additional negative regressions mutate `externalCas.reserveIfCurrent` during the clock query and `pool.connect` during authenticated owner resolution. They assert that only constructor-bound original methods are called, exactly one original external reservation occurs and the committed receipt retains the original request ID. New source-authored AI-05 count: **39 (15 PG, 11 executor, 8 HTTPS, 5 remote)**. This SHA requires matching Node22/24 typecheck/test/build and all CI jobs; previous-run PASS or cross-owner RED must not be transferred.
