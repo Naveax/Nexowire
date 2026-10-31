@@ -172,6 +172,7 @@ export function assertCoreApprovedDispatchRequest(
   expected:Readonly<BrokerDispatchRequest>,
   prepared:PreparedCoreWindowsMutation,
 ):void{
+  if(!approved)deny('CORE_DISPATCH_APPROVED_REQUEST_MISMATCH');
   assertFrozenPlainDispatchRecord(approved,
     ['requestId','capability','fingerprint','scope']);
   assertFrozenPlainDispatchRecord(approved!.scope,
