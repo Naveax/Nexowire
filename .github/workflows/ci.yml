@@ -27,6 +27,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+      - name: Verify coordinator PR dependency and exact-head CI gates
+        run: node --test --import tsx test/qa-v108-integration-gates.test.ts
       - run: npm run build
 
   browser-live:
@@ -50,6 +52,9 @@ jobs:
       - name: Compile native Windows Job guardian
         shell: pwsh
         run: ./scripts/build-windows-job-owner.ps1
+      - name: Verify disposable Windows WAL namespace kernel identity
+        shell: pwsh
+        run: ./scripts/coord-build-wal-namespace-probe.ps1
       - name: Physical Windows Job Object regressions
         run: node --test --import tsx --test-concurrency=1 test/windows-job-owner.test.ts test/windows-job-capacity-128.test.ts test/process-manager-tree-cleanup.test.ts test/process-manager.test.ts
       - name: Verify Windows native-agent singleton lease on a real runner

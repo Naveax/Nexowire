@@ -1,6 +1,13 @@
-# Windows için kolay kurulum dosyası
+# Windows için arşivlenmiş v1.0.7 kurulum dosyası
 
-**[Nexowire-Setup.cmd indir](Nexowire-Setup.cmd?raw=true)** ve normal çift tıkla.
+**Yeni kurulum için [resmî v1.0.8 Nexowire-Setup.cmd](https://github.com/Naveax/Nexowire/releases/download/v1.0.8/Nexowire-Setup.cmd) dosyasını kullan.**
+
+Bu klasördeki `Nexowire-Setup.cmd` **eski v1.0.7'ye sabitlenmiştir**;
+mevcut sürümün yerine sunulmaz. Eski kurucuyu yalnızca hash/provenance ve
+geçmiş sürüm uyumluluğu incelemesi için tutuyoruz. WAL #974 nedeniyle
+eski journal binary'sine kontrolsüz dönüş güvenli bir çözüm değildir.
+
+**[Arşivlenmiş v1.0.7 kurucuyu görüntüle](Nexowire-Setup.cmd?raw=true)** ve normal çift tıkla.
 GitHub dosya içeriğini gösterirse sağ üstteki **Download raw** düğmesini kullan.
 Önceden Node, npm veya Git kurulması gerekmez.
 

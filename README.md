@@ -8,18 +8,21 @@
 
 ### 1. İndir ve aç
 
-**[Nexowire-Setup.cmd dosyasını indir](installers/Nexowire-Setup.cmd?raw=true)**, ardından indirilen dosyaya çift tıkla.
+**[Resmî Nexowire v1.0.8 kurucusunu indir](https://github.com/Naveax/Nexowire/releases/download/v1.0.8/Nexowire-Setup.cmd)**, ardından indirilen `Nexowire-Setup.cmd` dosyasına çift tıkla.
 
-Bu depodaki kurucu, yayımlanmış **v1.0.7** uygulama paketini indirir. Türkçe
-karakter içeren kullanıcı yolları için kısayol oluşturma düzeltmesi içerir;
-yeni bir uygulama yayını veya imzalı installer değildir. [Dosyanın kaynağı ve doğrulaması](installers/README.md).
+**v1.0.8** 30 Ekim 2026'da yayımlandı ve SQLite WAL tekrar kullanımı düzeltmesini içerir.
+`installers/Nexowire-Setup.cmd` ise değişmez bir **v1.0.7 arşiv kurucusudur**;
+yeni kurulum için kullanılmamalıdır. [Eski kurucunun kaynak/hash kanıtı](installers/README.md).
+Resmî indirme dosyasının SHA-256 değeri:
+`8f39a1954eb22131ed516d32acfad1fe17e3ccb9766eda3883b90595a9135694`.
+Hash, bağımsız yayıncı imzasının yerini almaz.
 
 - GitHub’daki **Code → Download ZIP** düğmesi kurulum paketi değildir.
 - Dosyanın adı `Nexowire-Setup.cmd` olmalı; `Nexowire-Setup.cmd.txt` olmamalı.
 - Kurulum kendi Node.js çalıştırıcısını indirilen paketin içinden kullanır. Terminalde `npm install` çalıştırma.
 - Windows dosyayı engellerse yayının kaynağını kontrol et. Kurumsal güvenlik politikasını veya antivirüsü kapatma. [Ayrıntılı yardım](docs/INSTALL_WINDOWS.md#sorun-yaşarsan).
 
-[Resmî yayınlar ve önceki kurulum dosyası](https://github.com/Naveax/Nexowire/releases/latest).
+[Resmî yayınlar, önceki sürümler ve doğrulama dosyaları](https://github.com/Naveax/Nexowire/releases/latest).
 
 ### 2. Bilgisayarı hesabına bağla
 
