@@ -1,45 +1,48 @@
 # AI-01 | TEST_EVIDENCE
 
-## Latest verified source baseline
+## Exact source and CI snapshot
 
-| Item | Exact evidence |
+| Item | Evidence |
 | --- | --- |
-| Repo / Draft PR | `Naveax/Nexowire`, [#986](https://github.com/Naveax/Nexowire/pull/986), branch `ai/01-wal-v108` |
-| Base SHA | `a19a228dc6f19fd484cf935e941a00ea625233f8` |
-| Latest source/test HEAD | `eaff829784f10306066cc4714a2eaa3b7cc79282` |
-| Exact-HEAD CI | [run #41243619101](https://github.com/Naveax/Nexowire/actions/runs/41243619101), **COMPLETED SUCCESS, 7/7 jobs** |
-| Node 24 job | `124662419848`, **2,339 tests / 2,047 PASS / 0 FAIL / 292 SKIP / 0 TODO** |
-| Node 22 job | `124662419800`, **SUCCESS**, full checks/build and AI-01 negatives `ok` |
-| Windows browser-live | `124662419597`, **SUCCESS**; `npm run typecheck` and recycled WAL/consecutive journal process restart step SUCCESS |
-| Other jobs | Linux-native, WSL2, macOS agent lifecycle, security-operational **SUCCESS** |
+| Draft PR / branch | [#986](https://github.com/Naveax/Nexowire/pull/986), `ai/01-wal-v108` |
+| Base main | `a19a228dc6f19fd484cf935e941a00ea625233f8` |
+| Current source/test HEAD | `236d256224724e1df1b4da1431b60c4a27b896ea` |
+| Exact-source workflow | [#41247613793](https://github.com/Naveax/Nexowire/actions/runs/41247613793); **COMPLETED SUCCESS, 7/7 jobs** on exact source SHA. |
+| Node 24 | job `124674231463`: **SUCCESS**, 2,341 tests / 2,049 PASS / 0 FAIL / 292 SKIP / 0 TODO |
+| Node 22 | job `124674231474`: **SUCCESS**, new negatives `ok 132` and `ok 133`; check/build passed |
+| macOS / Linux native / WSL2 / security-operational | jobs `124674231323`, `124674231542`, `124674231586`, `124674231502`: **SUCCESS** |
+| Windows runner | job `124674231529`: `npm run typecheck` and dedicated recycled WAL/restart regression **SUCCESS**; DPAPI/pre-logon Hub and CORE-console contract steps also **SUCCESS** |
 
-Evidence originates from the exact GitHub Actions job logs/steps for `eaff829784f10306066cc4714a2eaa3b7cc79282`, not a local `npm ci`/clone. This delivery-docs-only successor HEAD must have its **own CI** checked independently.
+These records come from GitHub-hosted jobs for the **exact SHA** above. They are not a claim of local `npm ci`, a physical Agent run, or a real-device acceptance. A future docs-only head needs its **own** CI.
 
-## Disposable WAL coverage
+## Exact CI test commands and exit status
 
-- **16 isolated `test/ai01-wal-snapshot-races.test.ts` cases:** SQLite-authentic hot/recycled/empty WAL positive checks; post-scan WAL-header and SHM mutation; POSIX pathname/inode swap including byte-identical file; recycled truncated frame and partial appended frame; damaged current salt; `UNKNOWN` preservation and request ID non-replay on independent SQLite reopen; checksum-valid but uncommitted final frame; pre-open WAL truncation; byte-identical SHM timestamp drift; and WAL/SHM disappearance after first `lstat` but before `open`.
-- The last two negatives assert stable `AgentJournalWalError.code = AGENT_JOURNAL_WAL_CORRUPT` rather than a raw `ENOENT`. Ordinary WAL absence at the initial `lstat` is still permitted.
-- The same-source [job log](https://github.com/Naveax/Nexowire/actions/runs/41243619101) explicitly lists the four newest pre-open negative cases as PASS in Node 24 and `ok` in Node 22. **No negative skips or weakened assertion were introduced.** POSIX open-file rename test skips on Windows remain explicitly OS-dependent, not physical Windows PASS.
-- Original cross-suite regression fixture `test/agent-journal-restart-regression.test.ts`: 709 current + 295 retained old-generation WAL frames, 473 commit-marked frames and 1,307 synthetic journal rows. Six simulated crash/restarts plus one clean restart; retained `UNKNOWN` / duplicate request ID denial. Shared fixture file remains unchanged by AI-01.
-- Existing `test/qa-journal-wal-recycle-p11.test.ts` verifies SQLite-authentic RESTART/reuse, multiple old generations, checksum/salt/frame geometry and WAL-index mismatches. Its source was not modified.
-- Tests use disposable SQLite files; the verifier itself does not delete, checkpoint, truncate, reset credentials or mutate the user's journal.
+- **Ubuntu Node 22 and Node 24 GitHub-hosted runners:** `npm ci` → `npm run check` → `npm run build`; each workflow step `success` (**exit 0**). The `check` script runs `npm run typecheck`, continuation/launch audits and `npm test`, which is `node --test --import tsx test/**/*.test.ts`. This test glob includes the 18 AI-01 tests.
+- **Windows GitHub-hosted runner:** `npm run typecheck` and `node --test --import tsx --test-concurrency=1 test/qa-journal-wal-recycle-p11.test.ts test/agent-operation-wal-integrity.test.ts test/agent-journal-restart-regression.test.ts test/native-agent-startup-diagnostic.test.ts`, both `success` (**exit 0**). GitHub Windows DPAPI/pre-logon contract and CORE-console contract steps also `success`, but are **not** owner-enrolled physical device evidence.
+- These are **CI runner exit outcomes**, not commands claimed to have been executed from this chat machine.
 
-## Historical failure attribution (never rewritten as PASS)
+## Positive + negative matrix
 
-- [run #41197139627](https://github.com/Naveax/Nexowire/actions/runs/41197139627), source SHA `f33bc494fe4efe2a75d5a4a91917661afba8fa4b`: original Windows `browser-live` attempt timed out on IPC worker in coordinator-owned `test/agent-journal-restart-regression.test.ts:44` with empty stderr. Direct corrupted-WAL rejection succeeded. **Only the failed job** was rerun, and the same run ID reached final **7/7 SUCCESS**. The precise first-attempt worker hang was not proved from the logs; tests/timeouts were not relaxed.
-- [run #41199721229](https://github.com/Naveax/Nexowire/actions/runs/41199721229), docs-only SHA `0f6e35e5abbd0bfee006e0757f7477c2f69b2834`: **7/7 SUCCESS**.
-- [run #41211304023](https://github.com/Naveax/Nexowire/actions/runs/41211304023), source SHA `9b6464f034d67d3ade059585fe8739932733f319`: **7/7 SUCCESS**, Node 24 **2,337 / 2,045 PASS / 0 FAIL / 292 SKIP**. Pre-open WAL truncation and SHM metadata race negatives PASS.
-- [run #41243619101](https://github.com/Naveax/Nexowire/actions/runs/41243619101), current source SHA `eaff829784f10306066cc4714a2eaa3b7cc79282`: **7/7 SUCCESS**, Node 24 **2,339 / 2,047 PASS / 0 FAIL / 292 SKIP**. Two additional observed-then-vanished WAL/SHM diagnostic negatives PASS.
+- **18 new disposable AI-01 test cases** in `test/ai01-wal-snapshot-races.test.ts`, plus existing unchanged `test/qa-journal-wal-recycle-p11.test.ts` and coordinator-owned journal test suites.
+- Positive: authentic hot and RESTART/recycled SQLite WAL with retained prior-generation allocation, stable zero-length WAL, WAL-only `UNKNOWN` on independent SQLite reopen and non-replay, both WAL and SHM sidecars absent for a fresh clean journal.
+- Negative: current salt/checksum/corrupt header, partial and truncated physical WAL frames, checksum-valid uncommitted final frame, SHM/WAL header and pathname/inode/metadata races, pre-open truncate, observed-then-vanished WAL or SHM, and a missing WAL with **orphaned SHM**.
+- Two newest tests: `orphaned SHM after WAL loss denies silent UNKNOWN replay-data loss` and `clean absence of both WAL and SHM permits a new journal`; actual Node 24 **PASS** and Node 22 `ok 132`/`ok 133`. No weakened assertions or newly introduced skips.
+- Previously existing isolated #974 regression: 709 current and 295 retained old physical WAL frames, 473 committed frames and 1,307 synthetic records; six simulated crashes/restarts plus one clean restart, `UNKNOWN` terminal records and duplicate UUID denial. This shared test's source was not modified.
+- POSIX open-file rename test skips on Windows are explicit OS-dependent cases; GitHub Windows contract tests do **not** prove these physical Windows namespace races.
+- Source preflight never deletes/checkpoints/copies over a user's WAL, database, token or credentials.
+- Independent disposable SQLite (Node 22.16.0 / SQLite 3.49.1) reproduction showed: `old=committed` in checkpointed base and `new-unknown=unknown` only in WAL; removing `-wal` with `-shm` left behind caused an ordinary SQLite reopen to display only `old`. This is **not** evidence of a real user's database failure.
 
-## Evidence limits / blockers
+## Historical exact SHA / run attribution
 
-- CI Windows tests are GitHub-hosted runner/contract evidence, **not** the user's registered NAVEAX/Work-PC physical proof. No live journal, Agent restart, UAC, DPAPI, ACL, real session/owner, CORE execution, device enrollment, or 24h soak was performed by AI-01.
-- `verifyAgentJournalWal` cannot make the separate `AgentOperationJournal.initialize()` call to SQLite's `new DatabaseSync(path)` atomic; the final path readback is not an independently trusted rollback/replay authority.
-- Full clone and local `git status`/`npm ci`/`npm run build` were unavailable in this runtime. GitHub source, per-file diff, exact CI SHA and runner logs are used instead.
-- AI-08 independent exact-HEAD/combined integration QA and coordinator-owned journal API change remain open. Source-only `READY_FOR_REVIEW`; production `NO_GO`.
+- `f33bc494fe4efe2a75d5a4a91917661afba8fa4b`, [#41197139627](https://github.com/Naveax/Nexowire/actions/runs/41197139627): first Windows attempt had 30s child IPC timeout with empty stderr in coordinator-owned journal restart test; only failed job rerun, final CI 7/7 SUCCESS. Exact worker hang cause not proven; no test timeout changed.
+- `0f6e35e5abbd0bfee006e0757f7477c2f69b2834`, [#41199721229](https://github.com/Naveax/Nexowire/actions/runs/41199721229): 7/7 SUCCESS.
+- `9b6464f034d67d3ade059585fe8739932733f319`, [#41211304023](https://github.com/Naveax/Nexowire/actions/runs/41211304023): 7/7 SUCCESS; Node24 2,337 / 2,045 PASS / 0 FAIL / 292 SKIP.
+- `eaff829784f10306066cc4714a2eaa3b7cc79282`, [#41243619101](https://github.com/Naveax/Nexowire/actions/runs/41243619101): 7/7 SUCCESS; Node24 2,339 / 2,047 PASS / 0 FAIL / 292 SKIP.
+- `7875ba77fe0f33be393cbf3c49d16ae9e839b5ff`, [#41246634670](https://github.com/Naveax/Nexowire/actions/runs/41246634670): **CANCELLED** after newer source push; 6 completed jobs SUCCESS at last checkpoint do not equal total workflow PASS.
+- `236d256224724e1df1b4da1431b60c4a27b896ea`, [#41247613793](https://github.com/Naveax/Nexowire/actions/runs/41247613793): latest source, **COMPLETED SUCCESS, 7/7 jobs**, Node24 **2,341 total / 2,049 PASS / 0 FAIL / 292 SKIP**.
 
-## Pending orphaned WAL/SHM fail-closed regression (new source commit)
-- Independent, disposable SQLite WAL-mode reproduction: checkpointed base contained `old=committed`, a later WAL-only `new-unknown=unknown`; deleting WAL while leaving SHM made a normal SQLite reopen return only `old`. This is a data-loss/replay risk for the Agent journal, **not** a physical user database finding.
-- The previous verifier returned success on the initial `-wal` ENOENT and did not check the orphaned `-shm`. Candidate fix refuses that state with `AGENT_JOURNAL_WAL_CORRUPT`; a genuine clean/brand-new journal with both sidecars absent still passes.
-- Two new deterministic disposable tests are appended to the AI-01 suite; no existing assertions are relaxed or skipped. **These two cases must not be claimed PASS until the new exact-HEAD CI succeeds.** Parent documentation-only SHA `7875ba77fe0f33be393cbf3c49d16ae9e839b5ff` has its own CI tracked independently.
-- SQLite upstream reference: https://www.sqlite.org/wal.html and https://www.sqlite.org/tempfiles.html (WAL contains persistent DB state and sidecar lifetimes). No live device/Agent/credential actions.
+## Limits
+
+- GitHub-hosted Windows runner and disposable SQLite tests are **not** the registered NAVEAX / Work-PC physical reboot, owner consent, UAC/ACL/DPAPI, credential custody, or full CORE acceptance.
+- Journal owner `src/agent/operation-journal.ts` calls `verifyAgentJournalWal` and `new DatabaseSync(path)` in separate steps. This cannot guarantee atomic identity/namespace continuity nor prevent a double-deleted WAL/SHM rollback without a separately trusted reservation witness.
+- The repository was read via GitHub connector; local full clone/`npm ci`/`npm run build` are not claimed. Independent AI-08 adversarial QA and coordinator's integration remain open. Production **NO_GO**.

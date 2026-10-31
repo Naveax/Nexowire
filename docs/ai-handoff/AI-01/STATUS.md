@@ -1,12 +1,12 @@
 # AI-01 | STATUS
 
-- **Module verdict:** `READY_FOR_REVIEW` (source-only); **CORE / production:** `NO_GO`.
-- **Branch / PR:** `ai/01-wal-v108` / [Draft #986](https://github.com/Naveax/Nexowire/pull/986) (open, mergeable at the latest GitHub readback).
-- **Base `main` SHA:** `a19a228dc6f19fd484cf935e941a00ea625233f8`.
-- **Latest source/test HEAD validated:** `eaff829784f10306066cc4714a2eaa3b7cc79282`.
-- **CI for that exact source HEAD:** [#41243619101](https://github.com/Naveax/Nexowire/actions/runs/41243619101), **completed SUCCESS 7/7**. Linux native, WSL2, macOS, security operational, Node 22, Node 24 and Windows browser-live all SUCCESS.
-- **Node 24:** 2,339 tests / 2,047 PASS / 0 FAIL / 292 SKIP / 0 TODO. Node 22 job SUCCESS, all 4 latest race negatives confirmed `ok`; Windows `npm run typecheck` and recycled WAL/restart step SUCCESS.
-- **Scope:** only `src/agent/operation-journal-wal.ts`, `test/ai01-wal-snapshot-races.test.ts` and `docs/ai-handoff/AI-01/**` changed. No shared test or other AI file modified.
-- **This handoff revision:** documentation only. Because a commit cannot include its own SHA, the latest current **PR HEAD and its exact CI** must be read from the linked Draft PR/GitHub Actions; previous source HEAD's 7/7 is not automatically counted as the new doc-only commit's CI.
-- **Waiting on:** independent AI-08 read-only adversarial/combined-HEAD QA; coordinator-owned atomic preflight-to-SQLite-open journal namespace/API; two physical Windows devices only under a separate explicitly authorized acceptance plan.
-- **No:** real Agent/Broker/device, credentials, DPAPI, UAC, CORE activation, `main` push, merge, release or deploy.
+- **Source verdict:** `REVIEW / READY_FOR_REVIEW` subject to current exact-SHA CI and independent QA. **CORE production: NO_GO.**
+- **Branch / Draft PR:** `ai/01-wal-v108` / https://github.com/Naveax/Nexowire/pull/986.
+- **Exact source HEAD:** `236d256224724e1df1b4da1431b60c4a27b896ea`. **Base `main`:** `a19a228dc6f19fd484cf935e941a00ea625233f8`.
+- **Current workflow:** [CI #41247613793](https://github.com/Naveax/Nexowire/actions/runs/41247613793), exact SHA. **COMPLETED SUCCESS, 7/7 jobs**, including GitHub Windows `browser-live` and Windows DPAPI/pre-logon Hub contracts. Exact source SHA and run verified independently.
+- **Node 24:** 2,341 total / 2,049 PASS / 0 FAIL / 292 SKIP / 0 TODO, including the orphaned-SHM denial and clean-both-sidecars-absent acceptance.
+- **Node 22:** job SUCCESS, both new cases `ok 132` and `ok 133`; macOS, Linux native, WSL2 and security operational all SUCCESS. Windows `npm run typecheck`, recycled WAL/consecutive journal restart, CORE-console contracts and DPAPI/pre-logon steps SUCCESS.
+- **Allowed changed paths:** `src/agent/operation-journal-wal.ts`, `test/ai01-wal-snapshot-races.test.ts` and five documents under `docs/ai-handoff/AI-01/**`. No shared test or other agent's source modified.
+- **This handoff update:** documentation-only successor to verified source SHA `236d256224724e1df1b4da1431b60c4a27b896ea`. Its **own exact HEAD CI** must be verified separately after promotion; source 7/7 cannot be reused as doc-only HEAD CI proof.
+- **Blockers:** independent AI-08 review against this source and a composed integration SHA; coordinator-owned atomic WAL verify-to-SQLite-open continuity and rollback-resistant reservation authority; separate authorized two-device physical acceptance.
+- **Restrictions:** no merge/deploy, `main` push, live Agent/DB/Hub/Broker, credentials, DPAPI, UAC, CORE enable or real device work.

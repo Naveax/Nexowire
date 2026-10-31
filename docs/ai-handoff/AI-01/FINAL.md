@@ -1,26 +1,20 @@
-# AI-01 | FINAL / Handoff
+# AI-01 | FINAL / Source-only handoff
 
 ## Decision
-- **Source module:** `READY_FOR_REVIEW` (not merged).
-- **CORE production and real-device admission:** `NO_GO`. CI PASS does **not** establish actual owner consent, physical replay immunity or real OS authority.
-- **Draft PR:** [#986](https://github.com/Naveax/Nexowire/pull/986), branch `ai/01-wal-v108`, base `a19a228dc6f19fd484cf935e941a00ea625233f8`.
-- **Latest source/test HEAD validated:** `eaff829784f10306066cc4714a2eaa3b7cc79282`.
-- **Matching CI:** [#41243619101](https://github.com/Naveax/Nexowire/actions/runs/41243619101), completed **SUCCESS 7/7**. Node 24 **2,339 total / 2,047 PASS / 0 FAIL / 292 SKIP**; Node 22 SUCCESS; Windows WAL/restart regression, typecheck and other GitHub runner jobs SUCCESS.
-- **Changed paths:** `src/agent/operation-journal-wal.ts`, new `test/ai01-wal-snapshot-races.test.ts`, and `docs/ai-handoff/AI-01/{STATUS,CONTRACT,TEST_EVIDENCE,INTEGRATION_REQUEST,FINAL}.md`. No other AI/coordination-owned source changed.
-- **This document-only follow-up has a distinct GitHub HEAD:** read it and its CI from the PR, not by assuming the latest source HEAD is the latest commit.
+- **Source:** `READY_FOR_REVIEW` subject to current exact-HEAD CI and independent integration QA.
+- **CORE production and registered physical devices:** **NO_GO**.
+- **Draft PR:** https://github.com/Naveax/Nexowire/pull/986; branch `ai/01-wal-v108`, base `a19a228dc6f19fd484cf935e941a00ea625233f8`.
+- **Source/test HEAD:** `236d256224724e1df1b4da1431b60c4a27b896ea`; matching CI [#41247613793](https://github.com/Naveax/Nexowire/actions/runs/41247613793).
+- **Verified exact-source CI:** [#41247613793](https://github.com/Naveax/Nexowire/actions/runs/41247613793) **COMPLETED SUCCESS 7/7**. Node22 SUCCESS; Node24 SUCCESS (2,341 total, 2,049 PASS, 0 FAIL, 292 SKIP); Linux-native, macOS, WSL2, security-operational and GitHub Windows browser-live SUCCESS, including WAL/restart, typecheck, CORE-console and DPAPI/pre-logon contract steps.
+- **Files in Draft PR (7):** `src/agent/operation-journal-wal.ts`, `test/ai01-wal-snapshot-races.test.ts`, `docs/ai-handoff/AI-01/{CONTRACT,STATUS,TEST_EVIDENCE,INTEGRATION_REQUEST,FINAL}.md`.
+- **Disposable regression:** 18 AI-01 tests. Authentic RESTART/reuse succeeds; checksum/salt/torn/uncommitted suffix and metadata/inode/path races deny; missing WAL + orphaned SHM deny; clean absence of both sidecars succeeds. `UNKNOWN` preserved and replay denial tested.
+- **This doc-only follow-up:** its own **exact HEAD CI** must be checked after promotion, even though production/test code is unchanged; do not borrow the source SHA's successful run.
 
-## What was verified
+## External blockers
 
-- Accept SQLite-authentic current committed WAL prefix and retained prior-generation physical allocation only with matching WAL-index readbacks; normal hot, empty and recycled WAL are not silently treated as corruption.
-- Reject invalid WAL header/version/geometry, frame checksum/salt/sequence, torn or partial write, corrupted WAL-index, check-summed terminal uncommitted suffix, stale/replaced inode and metadata drift.
-- After a previously observed WAL or required recycled SHM disappears before `open`, fail closed with `AGENT_JOURNAL_WAL_CORRUPT`; initial absence of WAL remains non-corrupt.
-- Real SQLite-source `UNKNOWN` data and duplicate request IDs survive isolated restart/reopen tests. No automatic recovery, checkpoint, WAL deletion, credential reset or permission weakening is part of this PR.
+1. **Coordinator-owned `src/agent/operation-journal.ts`:** atomic WAL verify-to-SQLite-open continuity / native exclusive namespace, plus independently rollback-resistant reservation authority if two deleted sidecars could otherwise erase WAL-only `UNKNOWN` state. See `INTEGRATION_REQUEST.md`.
+2. **AI-08:** adversarial read-only review on AI-01 exact source and one combined AI-01…AI-07 integration HEAD. No review/approval is inferred from a green source PR.
+3. **#974 P0 / release:** incident may only be closed after coordinator integration and real-device acceptance. GitHub-hosted Windows runner tests are not owner-approved UAC/DPAPI/ACL or installed Agent proof.
+4. **Physical scope:** registered NAVEAX and Work-PC reboot/restart/soak, mutation non-replay, consent and OS worker isolation remain untested here. User authorization for live device changes is outside this AI's assignment.
 
-## Unresolved external handoffs
-
-1. **Coordinator / `src/agent/operation-journal.ts`:** make validation and subsequent SQLite opening a trustworthy atomic namespace/open handshake under native singleton ownership; consider externally rollback-resistant mutation reservation authority. Simply repeating `stat()` does not close the final TOCTOU gap. See `INTEGRATION_REQUEST.md`.
-2. **AI-08:** adversarial review on this PR's exact source and on one composed AI-01…AI-07 integration HEAD, preserving fail-closed and `UNKNOWN` test expectations.
-3. **Physical acceptance owner:** registered NAVEAX and Work-PC reboot/restart/24h journal integrity/consent and native isolation verification, separately authorized and outside this assignment.
-4. **#974:** P0 issue remains for coordinator closure after final integration/physical evidence; a green standalone PR is not evidence of release acceptance.
-
-No merge, deploy, release, live device/service/database/credential/CORE operation was performed. Existing Draft PR preserved.
+No changes to any other agent's files, real database, Windows device, credentials, CORE setting, workflow, `main`, merge or deployment.
