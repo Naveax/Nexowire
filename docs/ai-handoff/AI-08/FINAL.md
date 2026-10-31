@@ -39,3 +39,11 @@
 - **New file in next commit** `test/ai08-enrollment-cross-proof.test.ts`: 6 additional independent negative tests using disposable ECDSA P-256 signing keys: signed session from another enrollment, validly signed wrong enrollment hash, foreign signature with matching scope, signer public-key pin substitution including internally coherent re-signed proof pair, strict `validUntilMs` expiry boundary and foreign Windows SID/session/LUID re-signing. Fixture proves only `SYNTHETIC_UNIT` protocol behavior. **These 6 tests are NOT_TESTED until their own exact-HEAD CI logs are verified.**
 - **D1 P0 unchanged**: `complete(succeeded)` before native readback can persist as `succeeded` after rejected claim. Existing red regression is kept unchanged; source `src/product/d1-core-console-authority.ts` and migration are AI-06/koordinatör-owned. Until a real durable native-verified claim-CAS marker/commit gate is integrated and independently re-tested: **CORE production NO_GO**.
 - **Acceptance boundary**: signed indefinite enrollment is not a protected native owner approval, device permission or effect permit. No live device, UAC, DPAPI, machine enrollment, kernel sandbox or actual offhost CAS was exercised. No merge/deploy/other-agent writes.
+
+
+## 1 Kasım QA devam notu
+
+- Ölçülmüş `0b6a0a8a50f8c8c0b3b59fd2ab2951ea127e3c3c` / run `41207549485` **FAILURE**: Node22 2.814 / 2.457 PASS / 1 FAIL / 354 SKIP / 2 TODO; Node24 cancelled ama aynı test özeti mevcut. AI-08 43 PASS / 1 FAIL, 6/6 enrollment çapraz proof testi PASS. Windows browser dahil altı diğer job SUCCESS.
+- Yeni `test/ai08-sandbox-escape.test.ts` **5 kaynak-düzeyi güvenlik negatifi** eklenmiştir. Bu değişiklik için current exact-SHA run sonucu henüz **NOT_TESTED**. Önceki CI'ı yeni HEAD'e PASS olarak aktarma.
+- **Açık güvenlik kapısı**: D1 premature `complete(succeeded)` P0. Owner AI-06/koordinatör-owned migration readback-verified CAS atomik kapısı kurulmadan kırmızı QA testi korunacak, CORE production **NO-GO**.
+- Yalnız AI-08 izinli test/handoff dosyaları; diğer owner diff, deploy, merge, cihaz, UAC/DPAPI yapılmadı.

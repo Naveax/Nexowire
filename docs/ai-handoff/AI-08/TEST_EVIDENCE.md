@@ -134,3 +134,17 @@ Bu PR'ların yeni üretim deltalari AI-08'in #984 üzerine oturan test HEAD'inde
 - **New file in next commit** `test/ai08-enrollment-cross-proof.test.ts`: 6 additional independent negative tests using disposable ECDSA P-256 signing keys: signed session from another enrollment, validly signed wrong enrollment hash, foreign signature with matching scope, signer public-key pin substitution including internally coherent re-signed proof pair, strict `validUntilMs` expiry boundary and foreign Windows SID/session/LUID re-signing. Fixture proves only `SYNTHETIC_UNIT` protocol behavior. **These 6 tests are NOT_TESTED until their own exact-HEAD CI logs are verified.**
 - **D1 P0 unchanged**: `complete(succeeded)` before native readback can persist as `succeeded` after rejected claim. Existing red regression is kept unchanged; source `src/product/d1-core-console-authority.ts` and migration are AI-06/koordinatör-owned. Until a real durable native-verified claim-CAS marker/commit gate is integrated and independently re-tested: **CORE production NO_GO**.
 - **Acceptance boundary**: signed indefinite enrollment is not a protected native owner approval, device permission or effect permit. No live device, UAC, DPAPI, machine enrollment, kernel sandbox or actual offhost CAS was exercised. No merge/deploy/other-agent writes.
+
+
+## 1 Kasım | Sandbox escape / handle/env/child kapsamı ve exact-SHA ayrımı
+
+**Önceki ölçülmüş SHA `0b6a0a8a50f8c8c0b3b59fd2ab2951ea127e3c3c`**, run [#41207549485](https://github.com/Naveax/Nexowire/actions/runs/41207549485), **COMPLETED FAILURE**: Node22 2.814 total / 2.457 pass / 1 fail / 354 skip / 2 TODO, AI-08 43 PASS / 1 FAIL. Node24 job CANCELLED, eldeki test logunda 2.814 / 2.457 / 1 / 354 / 2 ve 6/6 yeni enrollment PASS. Windows browser-live, WSL2, macOS, Linux-native, security-operational, local-enrollment-native SUCCESS. P0 `test/ai08-console-claim.test.ts:135` ayrı QA'da doğru şekilde RED tutuluyor.
+
+**Yeni kaynak**: `test/ai08-sandbox-escape.test.ts`, **5 bağımsız negatif**, `node --test --import tsx test/ai08-sandbox-escape.test.ts` (bu komutun lokal exit code'u **NOT_RUN**, kendi exact-HEAD CI discovery sonucu henüz **NOT_TESTED**):
+1. Win32/Linux/macOS için `kernelAttested`, `launchAllowed`, `trustedNativeProviderInstalled` gibi untrusted tüm-yeşil raporlar dahi `launchAllowed=false` ve `workerLaunchEnabled=false` bırakmalı.
+2. `brokerHandleInherited`, `guardianJobHandleDuplicable`, `privilegedHandleAccessible`, `breakawayAllowed`, `nestedJobUnverified`, `descendantsContained=false` ve `revokeDrainVerified=false` ilgili blocker'ları bildirmeli; sahte raporu kernel readback saymamalı.
+3. Ambient env allowlist, ağ `default=allow`, HIGH worker privilege kabul edilmemeli.
+4. Kullanıcı `command` getter'ı hiç çağrılmadan denied-capability entrypoint başarısız dönmeli.
+5. `unknown` / `ack_lost` / `in_progress` kontrolü `RECONCILE_REQUIRED` bırakmalı; revoke/drain `workerStoppedVerified=false`, `descendantsStoppedVerified=false`, `brokerHandlesClosedVerified=false`, `quotaOrGrantReleaseAllowed=false` ve `replayAllowed=false`.
+
+**Kanıt türü**: `SOURCE_ONLY_UNTRUSTED` / `SYNTHETIC_UNIT`. Herhangi bir Windows Job/Token/DACL, Linux namespace/cgroup, macOS VM, gerçek süreç spawn, handle/env leak, kernel enforcement, fiziksel consent, iki-PC veya 24h test kanıtı üretilmez. AI-07 owner PR #990 yeni kaynakları bu AI-08 HEAD'de otomatik mevcut değildir. Birleşik exact HEAD ve OS kabulü koordinatörde **BLOCKED**.
