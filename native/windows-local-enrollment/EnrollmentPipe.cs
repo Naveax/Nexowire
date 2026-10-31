@@ -95,7 +95,33 @@ internal static class EnrollmentPipe
                 await pipe.FlushAsync(deadline.Token);
             }
             catch(Exception e) when(e is not OutOfMemoryException and not StackOverflowException)
-            { if(stop.IsCancellationRequested)break; }
+            {
+                if(stop.IsCancellationRequested)break;
+                // A rejected operation must not look like a successful empty
+                // response. Send only a bounded, non-sensitive denial; nonce
+                // claims made before a lost ACK remain consumed.
+                try
+                {
+                    if(pipe.IsConnected)
+                    {
+                        using var rejectDeadline=CancellationTokenSource.CreateLinkedTokenSource(stop);
+                        rejectDeadline.CancelAfter(TimeSpan.FromMilliseconds(500));
+                        var denied=JsonSerializer.SerializeToUtf8Bytes(new {
+                            version=2,verified=false,error="LOCAL_ENROLLMENT_REJECTED",mayDispatch=false
+                        },Protocol.Json);
+                        var prefix=new byte[4];
+                        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(prefix,denied.Length);
+                        await pipe.WriteAsync(prefix,rejectDeadline.Token);
+                        await pipe.WriteAsync(denied,rejectDeadline.Token);
+                        await pipe.FlushAsync(rejectDeadline.Token);
+                    }
+                }
+                catch(Exception writeError) when(writeError is not OutOfMemoryException and not StackOverflowException)
+                {
+                    // Peer disconnect/timeout is still denial; no retry of an
+                    // already claimed one-use challenge is performed here.
+                }
+            }
             finally{if(pipe.IsConnected)pipe.Disconnect();}
         }
     }
