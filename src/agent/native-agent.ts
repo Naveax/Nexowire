@@ -31,6 +31,7 @@ import { acquireNativeAgentSingleton } from './native-agent-singleton.js';
 import {createWindowsCoreConsoleAdmission} from './windows-core-console-provider.js';
 import {revokePhysicalConsoleGrant} from './windows-console-grant.js';
 import {initializeNativeAgentState} from './native-agent-startup-diagnostic.js';
+import {verifyAgentJournalWal} from './operation-journal-wal.js';
 
 export interface AgentIdentity {
   id: string;
@@ -374,10 +375,9 @@ export async function runNativeAgent(
     activePrivilegeMode,
   );
   const requestCache = new AgentRequestCache<AgentResponse>();
-  const operationJournal = new AgentOperationJournal(
-    env.NEXOWIRE_AGENT_OPERATION_JOURNAL_FILE?.trim() ||
-      path.join(os.homedir(), '.nexowire', 'agent-operations.sqlite'),
-  );
+  const operationJournalFile=env.NEXOWIRE_AGENT_OPERATION_JOURNAL_FILE?.trim() ||
+    path.join(os.homedir(), '.nexowire', 'agent-operations.sqlite');
+  const operationJournal = new AgentOperationJournal(operationJournalFile);
   const advertisedCapabilities = await capabilitiesForAgent(
     process.platform,
     env,
@@ -422,7 +422,10 @@ export async function runNativeAgent(
         processes.initialize(),
         taskGraphs.initialize(),
         runbooks.initialize(),
-        operationJournal.initialize(),
+        // Read-only connectivity must not claim mutation journal ownership.
+        // The first mutation still requires begin() to verify/claim the owner
+        // before markDispatched() and before any executor is called.
+        verifyAgentJournalWal(operationJournalFile),
       ]);
       const failed = initialized.find(result => result.status === 'rejected');
       if (failed?.status === 'rejected') throw failed.reason;

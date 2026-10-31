@@ -4,6 +4,7 @@ import {promises as fs} from 'node:fs';
 import path from 'node:path';
 import * as z from 'zod';
 import {verifyAgentJournalWal} from './operation-journal-wal.js';
+import {readJournalOwnerProcess} from './journal-owner-process.js';
 
 const Fingerprint=z.string().regex(/^[a-f0-9]{64}$/);
 const Rec=z.object({
@@ -186,23 +187,42 @@ export class AgentOperationJournal{
           throw new AgentOperationJournalError('AGENT_JOURNAL_CORRUPT',
             'SQLite integrity check failed. Refusing mutations.');
         }
+        this.transaction(db,()=>{
+          const ownerColumns=db.prepare('PRAGMA table_info(agent_operation_owner)').all() as {name:string}[];
+          if(!ownerColumns.some(c=>c.name==='process_identity'))
+            db.exec('ALTER TABLE agent_operation_owner ADD COLUMN process_identity TEXT');
+        });
+        type Owner={pid:number;nonce:string;process_identity:string|null};
+        const before=db.prepare('SELECT pid,nonce,process_identity FROM agent_operation_owner WHERE id=1').get() as Owner|undefined;
+        const self=await readJournalOwnerProcess(process.pid);
+        const observed=before?await readJournalOwnerProcess(before.pid):undefined;
         // BEGIN IMMEDIATE serializes independent connections/processes.
         // Never misclassify another live process's in-flight request.
         this.transaction(db,()=>{
-          const previous=db.prepare('SELECT pid FROM agent_operation_owner WHERE id=1')
-            .get() as {pid:number}|undefined;
+          const previous=db.prepare('SELECT pid,nonce,process_identity FROM agent_operation_owner WHERE id=1')
+            .get() as Owner|undefined;
+          if(JSON.stringify(previous)!==JSON.stringify(before))throw new AgentOperationJournalError(
+            'AGENT_JOURNAL_IN_USE','Journal owner changed during process identity readback.');
           if(previous){
-            let stillAlive=true;
-            try{process.kill(previous.pid,0)}catch(e){
-              stillAlive=(e as NodeJS.ErrnoException).code!=='ESRCH';
+            if(!Number.isSafeInteger(previous.pid)||previous.pid<=0||previous.pid>0x7fffffff||
+                !z.string().uuid().safeParse(previous.nonce).success)
+              throw new AgentOperationJournalError('AGENT_JOURNAL_IN_USE','Stored journal owner identity is invalid; takeover denied.');
+            let stillAlive=observed?.state!=='dead';
+            const knownIdentity=typeof previous.process_identity==='string'&&
+              /^(?:win32:[a-f0-9]{16}|linux:[a-f0-9-]{36}:\d+)$/.test(previous.process_identity);
+            if(observed?.state==='alive'&&knownIdentity&&
+                previous.process_identity!.split(':')[0]===observed.identity.split(':')[0]&&
+                observed.identity!==previous.process_identity)stillAlive=false;
+            if(observed?.state==='unknown'){
+              try{process.kill(previous.pid,0);}catch(e){if((e as NodeJS.ErrnoException).code==='ESRCH')stillAlive=false;}
             }
             if(stillAlive){
               throw new AgentOperationJournalError('AGENT_JOURNAL_IN_USE',
                 'Another journal owner may be executing mutations.');
             }
           }
-          db.prepare('INSERT OR REPLACE INTO agent_operation_owner(id,pid,nonce) '+
-            'VALUES(1,?,?)').run(process.pid,this.leaseId);
+          db.prepare('INSERT OR REPLACE INTO agent_operation_owner(id,pid,nonce,process_identity) '+
+            'VALUES(1,?,?,?)').run(process.pid,this.leaseId,self.state==='alive'?self.identity:null);
           // Only a new exclusive owner may recover incomplete reservations.
           db.prepare(
             "UPDATE agent_operation_journal SET status='unknown',updated_at=? "+
