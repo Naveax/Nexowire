@@ -77,10 +77,7 @@ jobs:
             ));
             // Only public repository paths from Git conflict lines; never print diffs.
             const conflictPaths = (result.nodes ?? []).flatMap(n =>
-              typeof n.details === "string" ?
-                n.details.split(/\\r?\\n/).filter(line => line.startsWith("CONFLICT"))
-                  .map(line => line.includes(" in ") ? line.split(" in ").at(-1) : "UNKNOWN")
-                  .slice(0,15) : []
+              Array.isArray(n.conflictFiles) ? n.conflictFiles.slice(0,15) : []
             );
             console.log("V108_REHEARSAL_CONFLICT_FILES:", JSON.stringify(conflictPaths));
             if (result.status !== "CLEAN_DRY_RUN" ||

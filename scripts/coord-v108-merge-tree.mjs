@@ -161,8 +161,15 @@ export function simulateMerges({repository,snapshot,specs=DEFAULT_STACK}) {
       const merger=callGit(['merge-tree','--write-tree',
         simulatedTip,step.headSha],{cwd:isolated,timeout:60000});
       if(merger.code!==0){
+        // Git merge-tree prints conflict paths in deterministic CONFLICT lines.
+        // Log only public repository paths, never raw conflict hunks/contents.
+        const conflictFiles=merger.stdout.split(/\r?\n/)
+          .filter(line=>line.startsWith('CONFLICT'))
+          .map(line=>line.includes(' in ')?
+            line.slice(line.lastIndexOf(' in ')+4).trim().slice(0,512):'UNKNOWN')
+          .slice(0,15);
         nodes.push({pr:step.number,result:'CONFLICT_OR_MERGE_ERROR',
-          details:merger.stdout.slice(0,1200)});
+          conflictFiles});
         findings.push('PR_'+step.number+'_MERGE_TREE_NONZERO_'+merger.code);
         return provenance('BLOCKED',findings,nodes);
       }
