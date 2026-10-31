@@ -10,17 +10,19 @@ tamamlamaz. Aşağıdaki sırayı takip et.
 
 ## 1. Kurulum dosyasını indir
 
-**[Nexowire-Setup.cmd indir](../installers/Nexowire-Setup.cmd?raw=true)**
+**[Resmî v1.0.8 Nexowire-Setup.cmd indir](https://github.com/Naveax/Nexowire/releases/download/v1.0.8/Nexowire-Setup.cmd)**
 
-Bu, depodaki düzeltilmiş kurucudur. **Yayımlanmış v1.0.7** sürümünün değişmeyen
-`Nexowire-Windows-x64.zip` dosyasını indirir ve
-paketin SHA-256 değerini kontrol eder. Node çalıştırıcısı ve uygulama bağımlılıkları
-bu pakettedir; boş bir PC’ye önce Node/npm kurman gerekmez.
+Bu bağlantı GitHub'da yayımlanmış **v1.0.8** kurucusuna gider; kendisi
+sürümüne sabitlenmiş `Nexowire-Windows-x64.zip` paketini SHA-256 ile doğrular.
+Kurulumda gereken Node çalıştırıcısı ve uygulama bağımlılıkları pakettedir.
+Boş bir PC’ye önce Node/npm kurman gerekmez.
 
-Bu kurucu kısayol kaydını Türkçe kullanıcı yollarına uygun Windows Unicode API’siyle
-yapar. Önceki resmî yayın dosyaları değiştirilmedi. Bu dosya yeni bir uygulama
-yayını veya Nexowire yayıncısı tarafından imzalanmış installer olarak sunulmaz.
-[Kaynak ve dosya doğrulaması](../installers/README.md).
+Önceki `../installers/Nexowire-Setup.cmd` dosyası v1.0.7'ye sabitlenmiş,
+denetlenebilir tarihsel arşivdir; **yeni kurulum için kullanma**.
+[Arşiv kaynağı ve hash bilgisi](../installers/README.md).
+Resmî v1.0.8 setup SHA-256:
+`8f39a1954eb22131ed516d32acfad1fe17e3ccb9766eda3883b90595a9135694`.
+Bu checksum, yayıncı imzası veya CORE fiziksel yetki kanıtı değildir.
 
 GitHub **Code → Download ZIP** kaynak kodu indirir ve bu kurulumun yerine geçmez.
 `nexowire-*.tgz` geliştirici paketidir. Ayrı Broker yardımcı ZIP’i ilk kurulum
