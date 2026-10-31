@@ -51,7 +51,7 @@ function makeFixture() {
 }
 
 type Fixture=ReturnType<typeof makeFixture>;
-function check(snapshot:Fixture) {
+function check(snapshot:Fixture & {changedFiles?:Record<string,string[]>;rechecked?:unknown}) {
   const dir=mkdtempSync(path.join(os.tmpdir(),'nw-v108-coordinator-'));
   try {
     const filename=path.join(dir,'fixture.json');
