@@ -176,3 +176,7 @@ until matching exact new SHA and test log are checked.
 ## Late completion current-state fence (additional AI-06 tests)
 
 Four synthetic in-memory D1 negatives introduce a race **after** a successful independently read-back claim and `native_claim_verified=1`, then immediately **before** signed `complete(succeeded)` SQL UPDATE: Broker readiness loss, logon LUID rotation, platform switch away from Windows, and owner re-pair. The expected result is signed completion rejection, operation remaining non-replayable in `dispatched`, and no false `succeeded` record. The fixture hook only intercepts its own D1DatabaseLike; it does not modify a production DB or claim physical native proof. **Expected 52 AI-06 cases; exact new-head CI verification required before PASS.**
+
+## Controller vs inconsistent provider evidence: six new synthetic cases
+
+Six AI-06 regressions in the owned `test/core-console-admission.test.ts` cover Linux/missing `devicePlatform`, false/missing `deviceReady` and false/missing `brokerVersionVerified`, even when a test provider asserts a cryptographically eligible certificate and `nativeAdmission='verified'`. Every mismatch must deny ACTIVE, reject native dispatch and perform zero effects. Fixture now supplies explicit positive runtime fields, not a relaxed eligibility rule. Expected **58/58 AI-06 named synthetic tests**, awaiting the new exact HEAD CI result. No physical native UAC/OS boundary has been proven.

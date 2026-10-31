@@ -161,8 +161,15 @@ export class CoreConsoleAdmission {
       const enrollment=evidence.desktop==='default'?evaluation:
         evaluateCoreConsoleEnrollment({...evaluationInput,desktop:'default'});
       const nativeProviderPresent=evidence.nativeConsentProviderPresent===true;
+      // The native provider's "verified" assertion is not sufficient if its
+      // independent runtime evidence disagrees or is missing. Requiring all
+      // three fields here prevents an alternate/buggy provider from reporting
+      // ACTIVE with a Linux device, unready Broker or unverified local probe.
+      const runtimeVerified=evidence.devicePlatform==='win32'&&
+        evidence.deviceReady===true&&evidence.brokerVersionVerified===true;
       const localEnrolled=nativeProviderPresent&&enrollment.policyEligible;
-      const active = nativeProviderPresent&&evaluation.policyEligible&&evidence.nativeAdmission === 'verified';
+      const active = nativeProviderPresent&&runtimeVerified&&
+        evaluation.policyEligible&&evidence.nativeAdmission === 'verified';
       return {evidence,status:{
         preferenceEnabled: typeof evidence.current?.coreEnabled === 'boolean'
           ? evidence.current.coreEnabled : null,
@@ -171,11 +178,12 @@ export class CoreConsoleAdmission {
         state:active ? 'ACTIVE'
           : evidence.nativeConsentProviderPresent !== true ? 'LOCAL_ENROLLMENT_REQUIRED'
           : evidence.current?.coreEnabled === false ? 'CORE_NOT_EFFECTIVE'
-          : evidence.brokerVersionVerified === false &&
-            evidence.current?.coreEnabled === true &&
-            evidence.current.accessMode === 'full' &&
-            !evidence.certificate
+          : evidence.brokerVersionVerified !== true
             ? 'CORE_BROKER_VERIFICATION_REQUIRED'
+          : evidence.devicePlatform !== 'win32'
+            ? 'CORE_DEVICE_PLATFORM_NOT_VERIFIED'
+          : evidence.deviceReady !== true
+            ? 'CORE_DEVICE_NOT_READY'
           : evaluation.policyEligible
             ? 'NATIVE_ADMISSION_UNAVAILABLE' : evaluation.reason,
       }};

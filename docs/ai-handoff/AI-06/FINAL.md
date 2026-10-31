@@ -118,3 +118,7 @@ Owned D1 source now requires an atomic second native-verified claim CAS after cu
 ## Final completion admission regressions
 
 Four source-only, in-memory tests check the transition `native_claim_verified=1` to `complete(succeeded)` against late changes to owner, device platform, Broker readiness and Windows logon LUID. The D1 SQL final CAS already binds current state; test coverage is added without weakening it. This is not physical Windows effect proof. Exact new HEAD/CI and integration with coordinator #996 and AI-08 acceptance remain pending. Draft + CORE NO-GO.
+
+## Top-level runtime evidence consistency fix
+
+`src/agent/core-console-admission.ts` now independently refuses ACTIVE/dispatch if Win32 platform, READY device or verified Broker version is missing/false, regardless of the provider's `nativeAdmission='verified'` assertion. Six new isolated negatives preserve the old secure path and make any contradictory runtime metadata fail closed. This is source-only, not physical Windows authority and not a substitute for coordinator migration #996 or AI-08 independent acceptance. Draft + CORE NO-GO.

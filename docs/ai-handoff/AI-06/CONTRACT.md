@@ -178,3 +178,7 @@ This remains a source-level guard, not a native OS effect permit.
 ## Verified claim != permission to ignore final D1 state
 
 The persistent `native_claim_verified=1` proves a winning D1 claim followed an independent native readback; it does **not** certify a later OS effect, and it is not an unconditional right to complete. A separately signed `complete(succeeded|denied)` is still a current-state CAS bound to the original owner, current Windows platform, Broker readiness, original device key and native logon SID/session/LUID/epoch. A change between initial signed complete verification and its SQL UPDATE must fail closed and cannot create a terminal success. No verified D1 marker substitutes for a protected native effect-boundary receipt.
+
+## Top-level controller runtime evidence gate
+
+The controller must NOT interpret `nativeAdmission='verified'` as enough for ACTIVE or dispatch. The independently supplied runtime evidence must also say `devicePlatform='win32'`, `deviceReady===true` and `brokerVersionVerified===true`; absent or contradictory fields fail closed. The signed enrollment and independent D1 readback remain necessary but are not an OS effect grant. `localEnrolled` remains the certificate/readback policy status and is not equivalent to ACTIVE. Only protected native effect-boundary OS checks could authorize physical input.
