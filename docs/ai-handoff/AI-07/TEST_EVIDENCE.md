@@ -65,3 +65,33 @@ Added AI-07 test cases with 32768-character single argument, two 20000-character
 
 ### FD/seccomp fixture extra negative and failure-path teardown
 - **Isolated local container** Linux 6.18.57/GCC 14.2, `cc -O2 -Wall -Wextra -Werror`, 4 variants: protected exit `0`, disabled close_range exit `53`, disabled seccomp exit `55`, disabled synthetic environment clearing exit `59`. All four reproduced after changing the fixture to use bounded exact-child SIGKILL/reap even on monotonic-clock failure. Real local kernel FD/seccomp readback and userspace environment test are separate from task/credential production acceptance; new exact-HEAD CI required after commit.
+
+### Early parent-death race mitigation source review
+- Added native probe pre-fork self `pidfd_open`, inherited parent pidfd post-`PR_SET_PDEATHSIG` checks before/after gate and explicit FD cleanup. Local isolated Linux 6.18.57 / GCC 14.2 proof of mechanism: six standalone kernel fixture runs simulated parent death **before** child-installed `PR_SET_PDEATHSIG`; inherited pidfd `poll(POLLIN)` detected it and fixture exited `87` in all 6, with process reaped by a subreaper. This does **not** execute the native namespace selftest in CI or independently attest a task worker.
+- Exact-head native compile and Node source assertion CI remain pending. Protected production descendant cleanup, cgroup v2 and Windows native worker still unavailable.
+
+### Early-orphan PIDFD: independent real Linux kernel test
+- Local isolated Linux 6.18.57 x86_64 / GCC 14.2, `cc -O2 -Wall -Wextra -Werror`. Prior standalone fixture verified 4 protected `exit 0` and 4 intentionally disabled guard `exit 55`; both require subreaper and bounded wait. The new repository test reproduces this scenario and must pass exact-HEAD CI; no assumption that this proves native OS worker identity or descendant drain.
+
+### Kernel without pidfd syscall macro (2026-11-01)
+- New Linux native build negative compiles a test-only transformed C diagnostic after undefining `SYS_pidfd_open` immediately before its feature guard; `-Wall -Wextra -Werror` must succeed, and unsupported arbitrary CLI input still exits 64. This is **only a compile/deny negative**, not execution of rootless namespace selftest or real production kernel proof. Exact-head CI required.
+
+### 2026-11-01 independent disposable openat2 negative
+- **Isolated local kernel:** Linux 6.18.57 x86_64, GCC 14.2.0, C11 `-O2 -Wall -Wextra -Werror`. Fixture only operates under a new `/tmp/nw07-openat2-source-XXXXXX` and removes its own files. Four variants: guard flags `exit 0`; no RESOLVE_BENEATH `exit 55`; no RESOLVE_NO_SYMLINKS `exit 56`; missing hardlink-inode warning `exit 57`. 10 repetitions each, **40/40 expected**. Unsupported `openat2` returns BLOCKED 70. The test does NOT prove production OS root confinement. Exact-head CI still required.
+- Repository test command: `node --test --import tsx test/ai07-sandbox-linux-openat2-root.test.ts`. Tests are not run on non-Linux and cannot be counted as physical Windows PASS.
+
+### Hidden argv metadata negatives (1 Nov 2026)
+New `test/ai07-sandbox-hostile-input.test.ts` negative cases assert `INVALID_TASK_INTENT` with a hidden throwing getter, symbol-keyed metadata, nonindexed field, and a throwing Proxy ownKeys trap, without evaluating the getter. Exact HEAD CI required; never interpret source-only blocked status as native worker isolation.
+
+### Strict nested own-keys regression (2026-11-01)
+New `test/ai07-sandbox-structured-ownkeys.test.ts`: baseline source-only task shape is well formed yet execution denied. Seven negatives reject non-enumerable top/root/network/budget fields, symbolic root/endpoints, an unknown top-level permit and a throwing network Proxy ownKeys without invoking hidden getters. Native worker remains unavailable; exact HEAD CI and tests must be verified separately, not inferred from prior SHA.
+
+### Disposable Linux escaped-grandchild regression (2026-11-01)
+- Host: isolated Linux 6.18.57 x86_64, Debian GCC 14.2.0 / Node 22.16.0. `cc -std=c11 -O2 -Wall -Wextra -Werror`: `setsid()` breakaway child remains live after original group SIGKILL, fixture returns exit **0** with `NOT_CGROUP_OR_WORKER_ACCEPTANCE`. Deliberately disabled breakaway variant returns expected **55**; five repeats each (5/5 + 5/5). `node --experimental-strip-types --test` of the standalone fixture: **1/1 PASS**, exit 0. Original group leader and escaped child are both reaped within bounded waits; no live task, service or external process touched.
+- Repository command: `node --test --import tsx test/ai07-sandbox-linux-setsid-breakaway.test.ts`. Missing PIDFD or subreaper ability is BLOCKED, not a fake pass. This test is **negative evidence of insufficient process-group containment**, not proof cgroup v2 worker/revoke and not physical Windows acceptance. New exact-head CI required.
+
+### Lifecycle report alias negative regressions (2026-11-01)
+- Added `test/ai07-sandbox-mutation-state.test.ts` checks for 8 ambiguous ACK/launch/revoke/drain markers with false/true/undefined/null (32 negative readbacks), plus a getter and throwing Proxy descriptor trap. All must return `RECONCILE_REQUIRED` without readback execution or replay. Control with unrelated synthetic provider booleans remains BLOCKED, never permitted. Exact HEAD CI required to confirm new source changes.
+
+### AF_UNIX/socketpair/connect syscall regression (2026-11-01)
+- Extended `test/ai07-sandbox-linux-fd-seccomp.test.ts` to reject three additional local IPC syscalls under the disposable C child's BPF seccomp with `EPERM`; fail-closed returns 66/67/68 on unexpected allow. Disabled-seccomp control probes actual unfiltered kernel semantics, never assuming external host restrictions prove the fixture. Exact new HEAD CI needed; no authenticated production OS worker/IPC acceptance.

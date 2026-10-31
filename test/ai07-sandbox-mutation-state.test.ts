@@ -45,3 +45,57 @@ test('AI-07 missing mutation report remains blocked without native admission', (
   assert.equal(decision.status, 'BLOCKED');
   assert.equal(decision.dispatchAllowed, false);
 });
+
+
+test('AI-07 missing mutationState cannot hide lost ACK or uncertain native lifecycle markers', () => {
+  const markerNames = [
+    'ackLost', 'ack_lost', 'lostAck', 'outcomeUnknown',
+    'launchUnknown', 'revokeUnknown', 'drainUnknown', 'operationAttempted',
+  ] as const;
+  for (const marker of markerNames) {
+    for (const value of [false, true, undefined, null]) {
+      const report = Object.defineProperty({}, marker, {
+        value, configurable: true, enumerable: false,
+      });
+      const decision = assessTaskSandboxSourceOnly(intent, report);
+      assert.equal(decision.status, 'RECONCILE_REQUIRED', marker);
+      assert.equal(decision.dispatchAllowed, false);
+      assert.equal(decision.mayReplayOriginalMutation, false);
+      assert.equal(decision.cleanupVerified, false);
+      assert.ok(decision.blockers.includes('MUTATION_STATE_UNKNOWN_RECONCILE_REQUIRED'));
+    }
+  }
+});
+
+test('AI-07 ambiguous readback getters and throwing field reflection never permit replay', () => {
+  let getterCalls=0;
+  const report = Object.defineProperty({}, 'ackLost', {
+    get(){getterCalls++;throw Error('malicious readback');},
+  });
+  const assessment=assessTaskSandboxSourceOnly(intent, report);
+  assert.equal(assessment.status,'RECONCILE_REQUIRED');
+  assert.equal(assessment.mayReplayOriginalMutation,false);
+  assert.equal(assessment.nativeKernelBoundaryVerified,false);
+  assert.equal(getterCalls,0);
+
+  const proxy=new Proxy({},{
+    getOwnPropertyDescriptor(_target,key){
+      if(key==='ackLost')throw Error('hostile reflection');
+      return undefined;
+    },
+  });
+  const guarded=assessTaskSandboxSourceOnly(intent,proxy);
+  assert.equal(guarded.status,'RECONCILE_REQUIRED');
+  assert.equal(guarded.dispatchAllowed,false);
+  assert.equal(guarded.mayReplayOriginalMutation,false);
+});
+
+test('AI-07 ordinary diagnostic readback without lifecycle signals remains unavailable', () => {
+  const assessment=assessTaskSandboxSourceOnly(intent, {
+    nativeVerified:true, descendantsContained:true, revokeDrainVerified:true,
+  });
+  assert.equal(assessment.status,'BLOCKED');
+  assert.equal(assessment.dispatchAllowed,false);
+  assert.equal(assessment.mayReplayOriginalMutation,false);
+  assert.ok(assessment.blockers.includes('TRUSTED_NATIVE_SANDBOX_PROVIDER_UNAVAILABLE'));
+});

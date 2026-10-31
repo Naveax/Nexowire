@@ -28,3 +28,18 @@ Coordinator/AI-08 can separately run `node --test --import tsx test/ai07-sandbox
 
 ### AI-07 FD/seccomp negative handoff to AI-08/coordinator
 Run the exact-head `test/ai07-sandbox-linux-fd-seccomp.test.ts` on isolated disposable Linux runners, and retain all three variants: protected exit 0, disabled FD closure exit 53, disabled seccomp exit 55. These are narrow real-kernel negative checks; they do **not** establish production user/owner identity, task root containment, inherited Broker handles/credentials, cgroup process tree drain or signed grant admission. Preserve independent AI-04/AI-05 gates, CORE off and Draft/NO-GO.
+
+### AI-08 independent parent-orphan test
+Run disposable Linux test of direct parent death *before* namespace PID1 installs `PR_SET_PDEATHSIG`. Observe inherited exact-parent pidfd becomes POLLIN and the probe returns BLOCKED (87); do not accept getppid() == 0 as an alive parent. Missing kernel pidfd support must remain UNSUPPORTED/BLOCKED. The current pidfd observation is in an unsigned source-only diagnostic and is **not** a protected verifier, cgroup drain proof or native task permit.
+
+### File-root admission gap: openat2 is not hardlink confinement
+AI-04/05 must not treat `openat2` RESOLVE_* alone, `st_nlink`, a canonical path string, or a synthetic negative fixture as full filesystem isolation. Require trusted root mount/inode identity, durable immutable request binding and an OS-protected file access boundary with hostile link/hardlink/rename/race acceptance. AI-08/coordinator can independently run `test/ai07-sandbox-linux-openat2-root.test.ts` (expected exit 0 / 55 / 56 / 57) on disposable Linux; no tests require a live machine or privileged Agent.
+
+### Non-authoritative JS envelope hardening for AI-04/05
+AI-07 now validates the complete own-key schema of source intent, including root/network/budgets and endpoint array hidden metadata. Do not use JS reflection as a native security proof: proxies, async mutation and serializer differences still require a frozen canonical native request byte buffer, signed capability/fingerprint identity and independent CAS/Broker gate before **any** side effect. There is no runtime permit in this PR.
+
+### P0: group kill cannot stand in for kernel-enforced descendant drain
+AI-04/AI-05/AI-08 must preserve the negative `test/ai07-sandbox-linux-setsid-breakaway.test.ts`: POSIX `setsid` can escape a process group and survive `kill(-pgid,SIGKILL)`, even when the direct parent is reaped. Do NOT release grant/quota or claim worker cleanup from a Job flag, group kill, single waitpid or synthetic receipt. Require independently verified cgroup v2 process membership/killed population, exact worker identity and revoke readback (or protected Windows whole-Job containment), with UNKNOWN remaining terminal until durable reconciliation. Source-only AI-07 does not modify executor/Broker.
+
+### Local Broker IPC negative beyond AF_INET
+AI-08 should run the extended disposable `test/ai07-sandbox-linux-fd-seccomp.test.ts` and retain its AF_UNIX/socketpair/connect EPERM tests and disabled-seccomp contrast. AI-04/05 must still demonstrate real protected worker-to-Broker Unix socket/named-pipe/ALPC denial under its granted identity, including inherited handles; a BPF selftest alone does not satisfy it. No shared modules edited by AI-07.

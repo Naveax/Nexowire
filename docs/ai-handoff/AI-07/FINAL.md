@@ -55,3 +55,27 @@ Added disposable Linux native fixture `test/ai07-sandbox-linux-fd-seccomp.test.t
 
 ### Synthetic environment and bounded fixture teardown
 Test-only Linux fixture now also rejects inherited synthetic environment when `clearenv` is deliberately disabled (exit 59), and forcefully reaps only its test-owned exact child on timeout and clock error. No task-scope credential exposure tested. No production worker enable or authorization: NO-GO.
+
+### PID1 early-orphan kernel witness
+Added pre-fork direct-parent pidfd to close the race where a parent died before PID1 installed its kernel parent-death signal. Both pre/post-gate PID1 checks fail closed; unsupported PIDFD and errors deny. Only disposable selftest protected; production NO-GO and independent native OS/Broker/worker evidence still required.
+
+### Executable early-orphan test and kernel fallback
+Added `test/ai07-sandbox-linux-pidfd-orphan.test.ts` with an intentionally broken PIDFD-readback control; native source now declares its FD before feature detection so missing SYS_pidfd_open compiles to DENIED 86 instead of referring to an undefined variable. Full task isolation still unavailable, Production NO-GO.
+
+### Linux path root negative (2026-11-01)
+Added isolated `test/ai07-sandbox-linux-openat2-root.test.ts` with real Linux `openat2` traversal/symlink kernel denials and a deliberate hardlink bypass illustration; all four variants matched locally across 40 runs. This expands AI-07 negative OS evidence but DOES NOT establish a production filesystem sandbox or release CORE/UNKNOWN gates. NO_GO persists.
+
+### argv additional-own-key hardening
+Strict extra-key rejection and hostile argv negative regression added; preserves no execution permit, no fallbacks, UNKNOWN reconciliation and native OS production NO-GO.
+
+### Nested source-intent key inspection
+Added allowlisted exact own-data-key checks for top-level task, root, network, budgets and empty endpoints plus seven targeted negatives. Retains deny-only execution, no replay, and all native production blockers; PR still Draft / NO-GO.
+
+### Verified escape counterexample (2026-11-01)
+Added test-only Linux `setsid` descendant escape from process group; real kernel PIDFD witness confirms escaped child survives original group kill, then test-owned PIDFD cleanup reaps it. Deliberate no-escape control exits 55. This strengthens negative QA but does not implement cgroup/Job descendant confinement. Draft NO_GO remains; exact HEAD CI required.
+
+### Partial loss/revoke native report classification
+AI-07 source report parsing now treats explicit partial ACK/outcome/launch/revoke/drain signals as untrusted possible mutations even when `mutationState` is missing. Conservative external-reconciliation requirement is preserved; this does not enable native execution or prove drain. CORE disabled / NO-GO.
+
+### Disposable kernel Unix-domain IPC denial
+Added explicit AF_UNIX/socketpair/connect EPERM checks and true unfiltered host negative contrast to AI-07 Linux fixture. These are test-only native syscall denials, not production native Broker IPC protection. Keep NO-GO.

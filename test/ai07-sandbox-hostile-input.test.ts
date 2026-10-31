@@ -149,3 +149,36 @@ test('AI-07 aggregate argv and NUL native-truncation inputs are explicit INVALID
         e.safeBlueprint.assessment.blockers.includes('INVALID_TASK_INTENT'));
   }
 });
+
+
+test('AI-07 argv rejects extra hidden or symbolic own fields without evaluating accessors', async () => {
+  let getterRuns=0;
+  const hidden=['--version'];
+  Object.defineProperty(hidden,'hiddenSecret',{
+    configurable:true,enumerable:false,
+    get(){getterRuns++;throw new Error('untrusted hidden argv getter');},
+  });
+  const symbolic=['--version'];
+  Object.defineProperty(symbolic,Symbol('secret-token'),{
+    value:'fixture-only',enumerable:false,configurable:true,
+  });
+  const extra=['--version'];
+  Object.defineProperty(extra,'nonIndexed',{value:'ignored-if-not-checked'});
+
+  const blockedOwnKeys=Proxy.revocable(['--version'],{
+    ownKeys(){throw Error('adversarial argv reflection');},
+  });
+  for(const args of [hidden,symbolic,extra,blockedOwnKeys.proxy]){
+    const input={...valid(),args};
+    const result=assessTaskSandboxSourceOnly(input);
+    assert.equal(result.status,'BLOCKED');
+    assert.equal(result.dispatchAllowed,false);
+    assert.equal(result.mayReplayOriginalMutation,false);
+    assert.ok(result.blockers.includes('INVALID_TASK_INTENT'),
+      'additional argv keys and reflection failures must invalidate input shape');
+    await assert.rejects(executeTaskWithOsSandbox(input),
+      (error:unknown)=>error instanceof OsTaskSandboxBlockedError &&
+        error.safeBlueprint.assessment.blockers.includes('INVALID_TASK_INTENT'));
+  }
+  assert.equal(getterRuns,0,'hidden own accessor must not be invoked');
+});

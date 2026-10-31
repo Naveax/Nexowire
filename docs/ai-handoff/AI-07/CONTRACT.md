@@ -72,3 +72,24 @@ The new `ai07-sandbox-linux-fd-seccomp` test exercises disposable Linux child cl
 
 ### Test-only inherited environment negative
 The Linux disposable fixture checks actual inherited environment bytes with a **synthetic sentinel** and forces `clearenv()` before its own seccomp/FD test. A build without clearing must return exit 59. This is no real secret/credential proof and cannot replace protected native child environment generation, owner-scoped OS authorization, or independent readback. Even fixture teardown uses an exact owned PID and finite reap loops.
+
+### Namespace PID1 early-orphan gap: exact kernel pidfd
+The parent opens its own `pidfd_open` *before* the namespace PID1 fork. PID1 installs `PR_SET_PDEATHSIG(SIGKILL)`, checks the inherited pidfd before and after approval, then closes the pidfd before filesystem pivot and complete `close_range`. This closes the pre-prctl parent-death window without relying on `getppid` inside CLONE_NEWPID. A missing syscall or readable/error pidfd rejects the **test-only** probe; this remains an unsigned local observation, not a trusted native launcher/worker grant.
+
+### Linux openat2 filesystem evidence is bounded, hardlink escape remains open
+The disposable `test/ai07-sandbox-linux-openat2-root.test.ts` tests `RESOLVE_BENEATH`, `RESOLVE_NO_SYMLINKS`, `RESOLVE_NO_MAGICLINKS` and `RESOLVE_NO_XDEV` against fixture-owned `../outside`, in-root symlink and an out-of-root hardlinked inode. The first two can be kernel denied; `openat2` **does not constrain a hardlink to a distinct inode origin**. The test-only `st_nlink>1` probe documents this gap but is not independently protected inode admission, path immutability, mount confinement or a production OS permit. AI-04/05 must not infer task-root confinement from string paths or the fixture.
+
+### Strict source-only argv shape
+In `boundedArgs`, `Reflect.ownKeys(args).length` must exactly match `args.length+1` alongside each own indexed data descriptor check. This rejects hidden or symbolic fields and throwing Proxy ownKeys traps so additional JS metadata cannot be silently ignored in source validation. It is no proof of actual native argv serialization; immutable signed input/OS grant remains AI-05/04-owned.
+
+### Strict nested source-only own-data schema
+`exactOwnDataKeys` rejects unexpected, symbol, hidden and accessor own keys for the declared top-level task, taskRoot, network and budgets objects; the zero-endpoint list must have only its native array length property. Unexpected top/root keys add INVALID_TASK_INTENT; unexpected network/endpoint keys add NETWORK_MUST_BE_DEFAULT_DENY; unexpected budget keys add INVALID_RESOURCE_BUDGET. This is **not** a deep immutable snapshot or safe Proxy execution boundary; AI-05/AI-04 must bind signed exact native serialization across asynchronous admission.
+
+### Why process-group cleanup cannot satisfy descendant revoke
+`test/ai07-sandbox-linux-setsid-breakaway.test.ts` proves the adversarial case: a child-grandchild can call `setsid()` and leave the original process group. After a verified `kill(-group,SIGKILL)` and parent `waitpid`, the **grandchild remains alive**, independently observed through its PIDFD; the fixture explicitly reaps it through subreaper custody. It cannot be counted as a cgroup/Job whole-tree cleanup receipt. Production requires a separately enforced cgroup v2/Job boundary and independent zero-descendant readback before quota/grant release.
+
+### Partial lifecycle/ACK report also requires reconciliation
+A source-only readback with an own `mutationState` OR own `ackLost`/`ack_lost`/`lostAck`/`outcomeUnknown`/`launchUnknown`/`revokeUnknown`/`drainUnknown`/`operationAttempted` is a **possible mutation**, not proof of a safe-to-retry status. Even false/null/accessor content cannot discharge the external durable CAS obligation. `status=RECONCILE_REQUIRED`, `dispatchAllowed=false`, `mayReplayOriginalMutation=false`, `cleanupVerified=false`. This is an additional fail-closed source classification, not a native authenticated report.
+
+### Disposable local IPC syscall denial evidence
+The Linux native FD/seccomp fixture now checks `socket(AF_UNIX)`, `socketpair(AF_UNIX)` and invalid-FD `connect` each fail with kernel `EPERM`. The external-host negative control first demonstrates those syscalls ordinarily succeed (or `connect(-1)` returns `EBADF`) without AI-07 seccomp; if host policy blocks them, fixture returns 58 instead of fake PASS. A production Broker IPC boundary still needs independent native token/handle and AF_UNIX/Windows named-pipe/ALPC access enforcement plus exact worker identity.
