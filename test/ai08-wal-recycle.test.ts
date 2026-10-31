@@ -84,3 +84,51 @@ test('AI-08: mismatched duplicate WAL-index header cannot truncate replay tombst
   assert.deepEqual(await readFile(f.file+'-shm'),damaged);
   assert.deepEqual(await readFile(f.file+'-wal'),f.wal);
 });
+
+
+test('AI-08: WAL header checksum tampering denies without rewriting evidence',async t=>{
+  const f=await reused(t);
+  const damaged=Buffer.from(f.wal);
+  // Header checksum field, not a valid SQLite-recalculated checksum.
+  damaged[24]!^=0x40;
+  await writeFile(f.file+'-wal',damaged);
+  await assert.rejects(verifyAgentJournalWal(f.file),{
+    code:'AGENT_JOURNAL_WAL_CORRUPT',
+  });
+  assert.deepEqual(await readFile(f.file+'-wal'),damaged);
+  assert.deepEqual(await readFile(f.file+'-shm'),f.shm);
+  assert.deepEqual(await readFile(f.file),f.before);
+});
+
+test('AI-08: torn recycled WAL allocation tail cannot be silently ignored',async t=>{
+  const f=await reused(t);
+  const torn=f.wal.subarray(0,f.wal.length-1);
+  assert.notEqual(torn.length,f.wal.length);
+  await writeFile(f.file+'-wal',torn);
+  await assert.rejects(verifyAgentJournalWal(f.file),{
+    code:'AGENT_JOURNAL_WAL_CORRUPT',
+  });
+  assert.deepEqual(await readFile(f.file+'-wal'),torn);
+  assert.deepEqual(await readFile(f.file+'-shm'),f.shm);
+  assert.deepEqual(await readFile(f.file),f.before);
+});
+
+test('AI-08: forged stale-generation first frame cannot replace current UNKNOWN prefix',async t=>{
+  const f=await reused(t);
+  const damaged=Buffer.from(f.wal);
+  const oldFrameOffset=32+f.current*f.stride;
+  assert.ok(oldFrameOffset+16<=damaged.length);
+  const oldSalt=damaged.subarray(oldFrameOffset+8,oldFrameOffset+16);
+  assert.equal(oldSalt.equals(damaged.subarray(16,24)),false,
+    'fixture requires a different, genuinely stale generation');
+  // The first live frame is now mislabelled as a stale-generation frame,
+  // while the database still contains the authoritative UNKNOWN receipt.
+  oldSalt.copy(damaged,32+8);
+  await writeFile(f.file+'-wal',damaged);
+  await assert.rejects(verifyAgentJournalWal(f.file),{
+    code:'AGENT_JOURNAL_WAL_CORRUPT',
+  });
+  assert.deepEqual(await readFile(f.file+'-wal'),damaged);
+  assert.deepEqual(await readFile(f.file+'-shm'),f.shm);
+  assert.deepEqual(await readFile(f.file),f.before);
+});
