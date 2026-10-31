@@ -126,3 +126,18 @@ test('marking verified cannot change state to succeeded in the same SQL statemen
     assert.deepEqual(row(db,'r5'),{state:'dispatched',nativeClaimVerified:0});
   }finally{db.close();}
 });
+
+test('new rows cannot bypass native claim gate by INSERT in dispatched or terminal states',()=>{
+  const db=makeDb([['historic-terminal','succeeded'],['historic-unknown','unknown']]);
+  try{
+    assert.deepEqual(row(db,'historic-terminal'),{state:'succeeded',nativeClaimVerified:0});
+    assert.deepEqual(row(db,'historic-unknown'),{state:'unknown',nativeClaimVerified:0});
+    for(const state of ['dispatched','succeeded','denied','unknown'] as const){
+      assert.throws(()=>insert(db,'forged-'+state,state),
+        /CORE_NEW_OPERATION_MUST_BEGIN_RESERVED/);
+      assert.equal(row(db,'forged-'+state),undefined);
+    }
+    insert(db,'new-reserved');
+    assert.deepEqual(row(db,'new-reserved'),{state:'reserved',nativeClaimVerified:0});
+  }finally{db.close();}
+});

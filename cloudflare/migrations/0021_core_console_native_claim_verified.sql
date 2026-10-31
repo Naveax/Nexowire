@@ -14,6 +14,16 @@ BEGIN
   SELECT RAISE(ABORT, 'CORE_NATIVE_CLAIM_INSERT_DENIED');
 END;
 
+-- New operations must enter as reserved; a direct terminal INSERT with the
+-- default unverified marker must not create an apparently completed record.
+-- Historical terminal rows migrated from old schema remain untouched.
+CREATE TRIGGER IF NOT EXISTS core_console_new_operation_reserved_only
+BEFORE INSERT ON device_core_console_operations
+WHEN NEW.native_claim_verified = 0 AND NEW.state <> 'reserved'
+BEGIN
+  SELECT RAISE(ABORT, 'CORE_NEW_OPERATION_MUST_BEGIN_RESERVED');
+END;
+
 -- Verification is a second transaction/CAS, AFTER native readback. A caller
 -- cannot turn a reserved, UNKNOWN, or terminal row into a verified claim.
 -- The trusted Worker must additionally check immutable owner/device/session,

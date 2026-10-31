@@ -12,6 +12,7 @@ AI-08 #989 (head `6004e2b44c8a5c5f9374a74498e98288e4d8f5cb`, CI 41199793251) dem
 
 - Add `native_claim_verified INTEGER NOT NULL DEFAULT 0 CHECK (native_claim_verified IN (0,1))`. Existing rows remain zero; do not backfill `1` from `state`, signed JSON, synthetic receipt, admin role or old installer status.
 - A fresh INSERT cannot seed `native_claim_verified=1`.
+- A new operation may only be inserted as `reserved` with marker 0. Direct `dispatched`, `succeeded`, `denied`, and `unknown` INSERT states are rejected. Historical migrated rows remain unchanged.
 - The native verification marker may change from 0 to 1 **only on an already dispatched** operation, never in the same statement that transitions to terminal success.
 - A legacy Worker attempting `dispatched -> succeeded/denied` without marker 1 gets an SQL ABORT, even if it possesses a signed application payload.
 - `unknown` cannot become a dispatched/succeeded operation again. A denied/uncertain native claim may quarantine `dispatched` or early terminal audit evidence as `unknown`.
