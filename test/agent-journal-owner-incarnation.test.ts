@@ -82,7 +82,7 @@ test('concurrent startup has exactly one owner and rejected contenders can retry
     next.close();
   }
 });
-test('Agent connects for diagnosis under live journal contention and blocks writes before execution',
+test('Agent stays online under live journal contention and rejects unprovisioned CORE CAS before execution',
   {timeout:120000},async t=>{
   const {dir,file,cleanup}=await fixture(t);const owner=new AgentOperationJournal(file);await owner.initialize();cleanup(()=>owner.close());
   const hub=new WebSocketServer({host:'127.0.0.1',port:0});
@@ -119,7 +119,13 @@ test('Agent connects for diagnosis under live journal contention and blocks writ
   child.once('exit',code=>failed(new Error('Agent exited before journal-contention response: '+code)));
   const exited=new Promise<void>(r=>child.once('exit',()=>r()));
   cleanup(async()=>{clearTimeout(timer);if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');await exited;});
-  const result=await response;assert.equal(result.ok,false);assert.equal(result.error?.code,'AGENT_JOURNAL_IN_USE');
+  const result=await response;
+  assert.equal(result.ok,false);
+  // CORE #980 requires an independently trusted CAS before journal begin.
+  // This E2E intentionally uses no remote CAS credentials. Its refusal must
+  // preempt the journal lease without making an effect. The separate direct
+  // live-owner/legacy-owner tests above still require AGENT_JOURNAL_IN_USE.
+  assert.equal(result.error?.code,'CAS_CONFIGURATION_REQUIRED');
   await assert.rejects(access(target),{code:'ENOENT'});
   assert.equal(child.exitCode,null,'Agent must remain connected, not fatal-exit on the owner guard');
 });
