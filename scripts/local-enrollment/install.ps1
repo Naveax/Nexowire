@@ -57,8 +57,14 @@ $owner=[Security.Principal.WindowsIdentity]::GetCurrent()
 # and owner account as the independent Agent identity, not just its device UUID.
 # Missing fields intentionally fail closed until the coordinator supplies a
 # protected, independently authenticated Agent identity export.
-if($null -eq $identity.installationId -or $null -eq $identity.ownerAccountId -or
-    $null -eq $request.installationId -or $null -eq $request.ownerAccountId){
+if('installationId' -notin $identity.PSObject.Properties.Name -or
+    'ownerAccountId' -notin $identity.PSObject.Properties.Name -or
+    'installationId' -notin $request.PSObject.Properties.Name -or
+    'ownerAccountId' -notin $request.PSObject.Properties.Name -or
+    [string]::IsNullOrWhiteSpace([string]$identity.installationId) -or
+    [string]::IsNullOrWhiteSpace([string]$identity.ownerAccountId) -or
+    [string]::IsNullOrWhiteSpace([string]$request.installationId) -or
+    [string]::IsNullOrWhiteSpace([string]$request.ownerAccountId)){
     throw 'AGENT_IDENTITY_BINDING_INCOMPLETE'
 }
 if([Guid]$identity.id -ne $ExpectedDeviceId -or [Guid]$request.deviceId -ne $ExpectedDeviceId -or
