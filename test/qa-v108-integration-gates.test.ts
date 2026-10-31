@@ -152,3 +152,41 @@ test('an active exact-SHA run blocks even when another run is green',()=>{
   assert.equal(result.status,2,result.stderr);
   assert.match(result.stdout,/EXACT_HEAD_CI_ACTIVE/);
 });
+
+test('two AI PRs changing the same source file block integration',()=>{
+  const original=makeFixture();
+  const changedFiles:Record<string,string[]>={
+    '986':['src/agent/operation-journal-wal.ts'],
+    '993':['native/windows-local-enrollment/EnrollmentClient.cs'],
+    '988':['src/security/core-native-mtls-fetch.ts'],
+    '987':['src/agent/privileged-broker-effect-admission.ts'],
+    '992':['src/agent/postgres-bound-grant-cas.ts'],
+    '985':['src/product/d1-core-console-authority.ts'],
+    '990':['src/agent/task-os-sandbox-policy.ts'],
+    '989':['test/ai08-wal-recycle.test.ts'],
+  };
+  changedFiles['989']!.push('src/agent/operation-journal-wal.ts');
+  const result=check({...original,changedFiles});
+  assert.equal(result.status,2,result.stderr);
+  assert.match(result.stdout,/SOURCE_FILE_OWNERSHIP_COLLISION/);
+  assert.match(result.stdout,/src\/agent\/operation-journal-wal\.ts/);
+});
+
+test('agent may update own handoff folder but not another agent handoff',()=>{
+  const original=makeFixture();
+  const changedFiles:Record<string,string[]>={
+    '986':['docs/ai-handoff/AI-01/STATUS.md'],
+    '993':['docs/ai-handoff/AI-02/STATUS.md'],
+    '988':['docs/ai-handoff/AI-03/STATUS.md'],
+    '987':['docs/ai-handoff/AI-04/STATUS.md'],
+    '992':['docs/ai-handoff/AI-05/STATUS.md'],
+    '985':['docs/ai-handoff/AI-06/STATUS.md'],
+    '990':['docs/ai-handoff/AI-07/STATUS.md'],
+    '989':['docs/ai-handoff/AI-08/STATUS.md'],
+  };
+  assert.equal(check({...original,changedFiles}).status,0);
+  changedFiles['990']!.push('docs/ai-handoff/AI-05/FINAL.md');
+  const violation=check({...original,changedFiles});
+  assert.equal(violation.status,2);
+  assert.match(violation.stdout,/CROSS_AGENT_HANDOFF_WRITE/);
+});
