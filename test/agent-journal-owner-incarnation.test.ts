@@ -3,13 +3,19 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm,access} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import {spawn} from 'node:child_process';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath,pathToFileURL} from 'node:url';
 import {DatabaseSync} from 'node:sqlite';
 import os from 'node:os';
 import path from 'node:path';
 import {WebSocketServer} from 'ws';
-import {AgentOperationJournal} from '../src/agent/operation-journal.js';
-import {readJournalOwnerProcess} from '../src/agent/journal-owner-process.js';
+// QA-only payload selection; the production Agent has no module override.
+const payloadRoot=process.env.NEXOWIRE_JOURNAL_TEST_APP_ROOT;
+const {AgentOperationJournal}=await import(payloadRoot?
+  pathToFileURL(path.join(payloadRoot,'dist/src/agent/operation-journal.js')).href:
+  new URL('../src/agent/operation-journal.js',import.meta.url).href) as typeof import('../src/agent/operation-journal.js');
+const {readJournalOwnerProcess}=await import(payloadRoot?
+  pathToFileURL(path.join(payloadRoot,'dist/src/agent/journal-owner-process.js')).href:
+  new URL('../src/agent/journal-owner-process.js',import.meta.url).href) as typeof import('../src/agent/journal-owner-process.js');
 
 async function fixture(t:import('node:test').TestContext){
   const dir=await mkdtemp(path.join(os.tmpdir(),'nw-owner-incarnation-'));
@@ -69,8 +75,9 @@ test('Agent connects for diagnosis under live journal contention and blocks writ
   });
   const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>!k.startsWith('NEXOWIRE_')&&k!=='NODE_OPTIONS'));
   const source=import.meta.url.endsWith('.ts');
-  const child=spawn(process.execPath,[...(source?['--import','tsx']:[]),
-    process.env.NEXOWIRE_OWNER_CLI_TEST_ROOT?path.join(process.env.NEXOWIRE_OWNER_CLI_TEST_ROOT,'src/cli.ts'):
+  const child=spawn(process.execPath,[...(!payloadRoot&&source?['--import','tsx']:[]),
+    payloadRoot?path.join(payloadRoot,'dist/src/cli.js'):
+      process.env.NEXOWIRE_OWNER_CLI_TEST_ROOT?path.join(process.env.NEXOWIRE_OWNER_CLI_TEST_ROOT,'src/cli.ts'):
       fileURLToPath(new URL('../src/cli.'+(source?'ts':'js'),import.meta.url)),'agent','run'],{
     env:{...env,HOME:dir,USERPROFILE:dir,LOCALAPPDATA:path.join(dir,'local'),APPDATA:path.join(dir,'roaming'),
       NEXOWIRE_AGENT_IDENTITY_FILE:path.join(dir,'identity.json'),NEXOWIRE_AGENT_OPERATION_JOURNAL_FILE:file,
