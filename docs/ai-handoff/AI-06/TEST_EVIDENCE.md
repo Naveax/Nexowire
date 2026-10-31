@@ -1,0 +1,35 @@
+# AI-06 | Test kanıtı ve sınırlar
+
+**İlk test içeren exact HEAD:** `f958e4136a4e1378c2279efe9e29436bf3adbcf2` (PR #985).  
+**Base SHA:** `7e4093c30c1ead3cd22888184450c34aef4737da` (#980).  
+**Workflow:** GitHub CI `369213208`, **run #41194595574**, attempt 1; ilk kaynak HEAD'i üzerinde otomatik açıldı. Başka dispatch yapılmadı.
+
+## CI ile doğrudan doğrulanan
+
+- Node 24, job `124518109021`: **SUCCESS**, test toplamı `2752`, **2398 PASS / 0 FAIL / 352 SKIP / 2 TODO**. Yeni `AI-06:` önekli 13 testin 13'ü PASS. Typecheck, continuation ve build adımları başarılı (job SUCCESS). GitHub logundaki test özeti; yerel komut çıkış kodu olarak sunulmuyor.
+- Node 22, job `124518109061`: **SUCCESS**, `2752` total, **2398 PASS / 0 FAIL / 352 SKIP / 2 TODO**. Yeni 13 test, 13 PASS. GitHub job exit sonucu: success.
+- macOS job `124518108917`: SUCCESS.
+- WSL2 job `124518109007`: SUCCESS.
+- Linux-native job `124518109033`: SUCCESS.
+- Security-operational job `124518109035`: SUCCESS.
+- Windows browser-live `124518109143`: bu dosyanın ilk derlendiği gözlemde **in_progress**, final PASS iddia edilmedi.
+
+## Kapsam: 13 sentetik regresyon
+
+`test/ai06-consent-claim-races.test.ts`: 10 asenkron native readback esnasında D1 satırı değişimi, 1 readback DENY/locked/logout, 1 paralel kazanan/kaybeden claim, 1 tek-kullanım pozitif claim. Mutasyon sonrası `unknown` tombstone ve yeniden oynatılmayan request ID; duplicate loser'ın winner `dispatched` durumunu bozamaması.
+
+Test fixture: `node:sqlite` bellek-içi D1 taklidi, sentetik Ed25519 test anahtarı, sentetik `currentReadback`. Native çağrı, UAC, fiziksel konsol, gerçek oturum, Windows servis, production Cloudflare/D1 ve gerçek owner consent hiç kullanılmadı.
+
+## Komut kanıtları
+
+CI'nin test keşfi yeni `test/ai06-*.test.ts` dosyasını otomatik çalıştırdı ve iki Node sürümünde 13/13 PASS raporladı. İstekteki doğrudan lokal komutlar bu oturumda **çalıştırılmadı**:
+
+```text
+node --test --import tsx test/core-console-admission.test.ts        NOT_RUN
+node --test --import tsx test/core-console-provider.integration.test.ts NOT_RUN
+node --test --import tsx test/qa-core-claim-readiness-race-p11.test.ts NOT_RUN
+node --test --import tsx test/ai06-consent-claim-races.test.ts       NOT_RUN
+npm run typecheck                                                   NOT_RUN locally; CI job PASS
+```
+
+Bunlar için **yerel exit code yoktur**; başarılı gibi sunulmaz. CI testleri Node 22 ve 24 Linux runners'ında doğrulandı. Windows gerçek OS readback sınıflandırması ve fiziksel user acceptance ayrı kapıdır. `CORE_EXECUTOR_DISPATCH_ENABLED=false`, `localEnrolled=false` ve physical consent NO-GO varsayımı korunur.
