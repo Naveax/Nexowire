@@ -36,7 +36,7 @@ function normalize(pr){
     base:{ref:pr.base.ref,sha:pr.base.sha}};
 }
 
-try{
+async function captureConsistentSnapshot(){
   const start=await read('/commits/main');
   if(!sha(start?.sha))throw Error('MAIN_SHA_MISSING');
   const prs=[];
@@ -51,12 +51,31 @@ try{
       throw Error('PR_MOVED_DURING_SNAPSHOT_'+original.number);
     }
   }
-  process.stdout.write(JSON.stringify({
+  return {
     schemaVersion:1,repository:repo,source:'READ_ONLY_GITHUB_API_SNAPSHOT',
     capturedAt:new Date().toISOString(),mainSha:start.sha,prs,
-  },null,2)+'\n');
-}catch(error){
-  process.stderr.write('NEXOWIRE_MERGE_SNAPSHOT_BLOCKED: '+
-    (error instanceof Error?error.message:'UNKNOWN')+'\n');
-  process.exitCode=2;
+  };
+}
+
+// Active AI writers may advance their HEAD during the ~28 API reads.
+// Retry the entire immutable snapshot a bounded number of times, never mix
+// partially verified snapshots and never treat a moving ref as a success.
+const maxAttempts=3;
+for(let attempt=1;attempt<=maxAttempts;attempt++){
+  try{
+    const snapshot=await captureConsistentSnapshot();
+    process.stdout.write(JSON.stringify(snapshot,null,2)+'\n');
+    break;
+  }catch(error){
+    const code=error instanceof Error?error.message:'UNKNOWN';
+    const moving=code==='MAIN_MOVED_DURING_SNAPSHOT'||
+      code.startsWith('PR_MOVED_DURING_SNAPSHOT_');
+    if(moving&&attempt<maxAttempts){
+      process.stderr.write('NEXOWIRE_MERGE_SNAPSHOT_MOVED_RETRY '+attempt+'/'+maxAttempts+'\n');
+      continue;
+    }
+    process.stderr.write('NEXOWIRE_MERGE_SNAPSHOT_BLOCKED: '+code+'\n');
+    process.exitCode=2;
+    break;
+  }
 }
