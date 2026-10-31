@@ -24,3 +24,9 @@ Son AI-08 ek testleri yalnızca kaynakta DB owner/grant/revoke ve Windows logon 
 
 ## 31.10.2026 için owner-PR entegrasyon sınırı
 AI-08'nin #984 tabanında çalıştırdığı önceki 32 sentetik negatif, AI-01 #986, AI-03 #988, AI-04 #987, AI-05 #992, AI-06 #985, AI-07 #990 üzerinde sonradan değişen `src/**` ve `native/**` dosyalarını otomatik olarak kapsamaz. Koordinatör bu exact HEAD'leri doğru bağımlılık grafiğiyle **tek yeni isolated integration SHA** üzerinde test etmeli; owner PR'ların aktif `browser-live` run'larına aynı SHA'da duplicate dispatch yapılmamalı. Gerçek owner-approved Windows kernel/session ve iki-PC, 24h sleep/reboot provası ile native sandbox file/network/handle/child/revoke-drain kabulü açık `BLOCKED` kapılarıdır.
+
+
+## P0 handoff: native readback beklerken early complete / terminal-state laundering
+**AI-08 source review, 31.10.2026, base #984**: `src/product/d1-core-console-authority.ts:186-197` native readback'ten önce `reserved -> dispatched` commit ediyor; `:219-224` eşzamanlı `complete(succeeded)` ile `dispatched -> succeeded` olabiliyor; `:166-169,213-217` readback olumsuz dönerse yalnız `dispatched -> unknown` yapıp `succeeded` state'i tombstone edemiyor. Bu bir kaynak düzeyi P0 yarış riskidir; gerçek reproducibility yeni `test/ai08-console-claim.test.ts` CI'sında doğrulanacaktır.
+
+**Beklenen atomik sözleşme:** Native readback **tamamlanıp** bağımsız authority tarafından onaylanıncaya kadar `complete` işlemi **başarı yazamamalı**. Yeni persisted `claiming` / `native_verified` CAS marker veya eşdeğer rollback-independent admission gereklidir; migration `cloudflare/migrations/0019_core_console_authority.sql` ve production `src/product/d1-core-console-authority.ts` **AI-08 yetkisi dışında**. Mevcut ack-loss/replay/UNKNOWN tombstone semantiğini gevşetme. **Sahip:** AI-06 / koordinatör. Yerel QA bug çıktısı kırmızı kalırsa kaydı fail olarak tut; güvenlik kabulü NO_GO.

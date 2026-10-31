@@ -94,3 +94,20 @@ Aşağıdaki üç ek test yalnızca AI-08 dosyalarına hazırlanmıştır; **bu 
 | AI-07 sandbox | #990 | `237ad6d11317f93d032d3040d99b0936b9a16ea5` | `41197172377`: 6 SUCCESS, browser-live aktif | fake native permit, UNKNOWN deny PASS | BLOCKED |
 
 Bu PR'ların yeni üretim deltalari AI-08'in #984 üzerine oturan test HEAD'inde **birleşik olarak yoktur**. Owner PR CI'sı başarı gösterse bile birleşik HEAD ve native kernel kabulü yerine kullanılamaz. Gözlem anındaki aktif işler için yeni final sonucu ayrıca aranır; bu tablo sonradan otomatik SUCCESS'e dönmez.
+
+
+## 31.10.2026 | Bağımsız kanıt güncellemesi ve erken complete yarışı
+
+### Doğrulanmış önceki exact-SHA Node CI
+- **HEAD:** `13ea5e612942f9464ab88ab4e30d8d2974e813fe`, **run:** [41198517077](https://github.com/Naveax/Nexowire/actions/runs/41198517077).
+- **Node 22 job:** `124529671456` SUCCESS; **34/34 AI-08 PASS**, full suite `2804 total / 2448 PASS / 0 FAIL / 354 SKIP / 2 TODO`; typecheck ve build başarılı.
+- **Node 24 job:** `124529671427` SUCCESS; **34/34 AI-08 PASS**, aynı test toplamı, typecheck/build başarılı.
+- Workflow `browser-live` bu rapor oluşturulurken `in_progress`: **tüm-run SUCCESS yazılmadı**. Bu SHA'dan sonraki yeni kod için sonuç **NOT_TESTED**, geçmiş SHA PASS devredilmez.
+- Önceki bölümün `NOT_TESTED` dediği Broker transport raw mutation, CAS same-UUID concurrency ve pre-abort TLS kontrollerinin tamamı bu run içindeki Node test job'larında **PASS**. **Üç kontrol, iki yeni test vakası:** 32 -> 34 test.
+
+### AI-08 D1 premature complete (yeni ve henüz ölçülmemiş)
+- **Dosya:** `test/ai08-console-claim.test.ts`.
+- **Üretim source incelenen HEAD:** `13ea5e612942f9464ab88ab4e30d8d2974e813fe` (PR #989 base #984). `src/product/d1-core-console-authority.ts:186-197` claim, bağımsız native `currentReadback` henüz beklenirken `reserved -> dispatched` yapıyor. `:219-224` `complete(succeeded)` yalnız `state='dispatched'` şartıyla sonuca geçebiliyor. `:166-169,213-217` readback reddedilirse yalnız `dispatched` state'ini UNKNOWN'a çeviriyor. Kaynakta bu üç adım arasında **yarış riski** var.
+- **Gerçek yeniden üretim:** `node --test --import tsx test/ai08-console-claim.test.ts`; in-memory `node:sqlite` + iki imzalı request + bekletilen sentetik readback. Reserve, readback-pending claim, eşzamanlı complete(succeeded), ardından cihaz offline ve native readback'in reddi. `complete` erken kabul edilmemeli; reddedilen claim'in state'i `unknown` kalmalı.
+- **Beklenen:** `{acceptedEarly:false,stateAfterDeniedReadback:'unknown'}`. **31 Ekim kaynak incelemesiyle olası fiilî:** `{acceptedEarly:true,stateAfterDeniedReadback:'succeeded'}`. **Yeni exact-HEAD test koşusu sonucu henüz gelmedi; bu satır gözlem değil kaynak çıkarımıdır.**
+- **Kanıt türü:** `SYNTHETIC_SQLITE`; gerçek D1 transaction, native UAC, Win32 token ya da iki-PC kabulü **değildir**. Kırmızı sonuç varsa testi gevşetme veya `skip` etme; kapsam dışı migration/claim-state fix'i koordinatöre ve #06 sahibine aktar. **CORE production NO_GO**.

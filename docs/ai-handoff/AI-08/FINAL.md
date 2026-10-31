@@ -18,3 +18,7 @@
 
 ## 31.10.2026 QA devam eki
 Mevcut 32 ölçülmüş testi silmeden, AI-08 üç regresyon daha ekledi: immutable Broker signed receipt üzerine raw transport substitution, CAS aynı UUID eşzamanlı admission/replay ve pre-aborted mTLS. Bu testler için **yeni HEAD CI bekleniyor**; yeni SHA/runs sonucu GitHub'dan alınmadan 35/35 PASS yazılmaz. Başka ajan kaynağı değiştirilmedi; Draft / CORE production NO_GO.
+
+
+## 31 Ekim | Premature complete/claim-denial handoff
+AI-08 `test/ai08-console-claim.test.ts` içinde readback-pending `claim` + ayrı imzalı `complete(succeeded)` + native readiness loss yarışına adversarial regresyon ekledi. **Yeni exact HEAD CI sonucu bekleniyor, PASS iddia edilmez.** Önceki `13ea5e612942f9464ab88ab4e30d8d2974e813fe` için Node22/24 34/34 AI-08 PASS; bu P0 vakasını içermez. Koordinatör-owned migration / AI-06 D1 state transition ihtiyacı `INTEGRATION_REQUEST.md` içinde dosya+satır ile açıklandı. Üretim CORE NO_GO; testin RED olması güvenlik kapısını gevşetme gerekçesi değildir.

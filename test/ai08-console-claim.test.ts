@@ -67,9 +67,10 @@ function fixture(){
     verifyAndConsume:async()=>false,
     currentReadback:async()=>{nativeReads++;await gate.wait();return true;},
   });
-  const call=async(action:'reserve'|'claim')=>{
+  const call=async(action:'reserve'|'claim'|'complete')=>{
     const request:CoreAuthorityRequest={action,deviceId:device,installationId,
       nonce:randomUUID(),issuedAtMs:Date.now(),requestId,fingerprint};
+    if(action==='complete')request.outcome='succeeded';
     request.signature=sign(null,coreOperationBytes(request),signer.privateKey).toString('base64');
     return auth.handle(credential,request);
   };
@@ -112,3 +113,31 @@ for(const scenario of [
     }finally{f.gate.release();f.db.close();}
   });
 }
+
+test('AI-08: complete cannot acknowledge success before native claim readback',async()=>{
+  // Deterministic source-only interleaving. Same valid device credential and
+  // signing key, two independent signed messages, no production D1 or OS calls.
+  const f=fixture();
+  let claim:Promise<unknown>|undefined;
+  try{
+    await f.call('reserve');
+    claim=f.call('claim');
+    await f.gate.entered;
+    // The first claim is awaiting an independent native session check.
+    // A competing complete(succeeded) must be rejected until that check
+    // atomically authorizes the dispatch, not just because state=dispatched.
+    let acceptedEarly=false;
+    try{await f.call('complete');acceptedEarly=true;}catch{}
+    // Simulate revocation/readiness loss before the native readback resolves.
+    f.db.exec('UPDATE devices SET online=0');
+    f.gate.release();
+    await assert.rejects(claim,/CORE_NATIVE_CONSENT_SESSION_CHANGED/);
+    assert.deepEqual({acceptedEarly,stateAfterDeniedReadback:f.state()},
+      {acceptedEarly:false,stateAfterDeniedReadback:'unknown'},
+      'readback-pending complete must be denied; rejected claim must tombstone');
+  }finally{
+    f.gate.release();
+    if(claim)await claim.catch(()=>{});
+    f.db.close();
+  }
+});

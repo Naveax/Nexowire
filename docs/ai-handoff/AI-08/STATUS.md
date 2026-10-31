@@ -23,3 +23,10 @@ Koordinatör, onaylı AI-01...AI-07 deltasını ayrı birleşik HEAD'de test etm
 
 ## 31 Ekim 2026 | QA genişletme
 Üç yeni bağımsız regresyon eklendi (Broker signed-receipt transport mutation, CAS same-UUID concurrency/replay, pre-aborted TLS). Bu yeni testler için **yeni exact HEAD CI: NOT_TESTED / pending**. Önceki `e30b3fe39cd74dc279b32a7e5ed1691d4cd7d591` üzerinde **32/32 PASS**, Node22/24 build/typecheck SUCCESS; bu sayı gelecekteki testlere devredilmez. AI-01..07'nin güncel SHA/CI/sınır kanıtı için `TEST_EVIDENCE.md` tablosuna bak. CORE production NO_GO; gerçek kernel/physical kanıt BLOCKED.
+
+
+## 31 Ekim | Yeni adversarial P0 incelemesi
+- **Ölçülmüş kod SHA:** `13ea5e612942f9464ab88ab4e30d8d2974e813fe`; Node22+24 **34/34 AI-08 PASS**; run `41198517077`, browser-live son sorguda aktif.
+- **Sonraki AI-08 kaynak/test değişikliği:** `test/ai08-console-claim.test.ts` içinde readback bekleyen `claim` üzerinde eşzamanlı `complete(succeeded)` negatif testi. **Bu yeni test için CI henüz ölçülmedi**; yeni commitin HEAD'i ve run ID'si ayrıca doğrulanacak.
+- **İnceleme bulgusu:** D1 `dispatched` state'i native readback **önce** veriyor; `complete` bunu `succeeded` yapabilir, ret sonrası `unknown` tombstone yalnız `dispatched`e koşullu. `INTEGRATION_REQUEST.md` içindeki koordinatör/AI-06 handoff P0'dır.
+- **Durum:** `BLOCKED` söz konusu native-verified dispatch/complete CAS; sentetik QA'da failing test oluşursa PASS diye raporlanmayacak. CORE production NO_GO; Draft, no merge/deploy/live device.
