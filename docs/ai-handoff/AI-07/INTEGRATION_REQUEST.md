@@ -40,3 +40,6 @@ AI-07 now validates the complete own-key schema of source intent, including root
 
 ### P0: group kill cannot stand in for kernel-enforced descendant drain
 AI-04/AI-05/AI-08 must preserve the negative `test/ai07-sandbox-linux-setsid-breakaway.test.ts`: POSIX `setsid` can escape a process group and survive `kill(-pgid,SIGKILL)`, even when the direct parent is reaped. Do NOT release grant/quota or claim worker cleanup from a Job flag, group kill, single waitpid or synthetic receipt. Require independently verified cgroup v2 process membership/killed population, exact worker identity and revoke readback (or protected Windows whole-Job containment), with UNKNOWN remaining terminal until durable reconciliation. Source-only AI-07 does not modify executor/Broker.
+
+### Local Broker IPC negative beyond AF_INET
+AI-08 should run the extended disposable `test/ai07-sandbox-linux-fd-seccomp.test.ts` and retain its AF_UNIX/socketpair/connect EPERM tests and disabled-seccomp contrast. AI-04/05 must still demonstrate real protected worker-to-Broker Unix socket/named-pipe/ALPC denial under its granted identity, including inherited handles; a BPF selftest alone does not satisfy it. No shared modules edited by AI-07.

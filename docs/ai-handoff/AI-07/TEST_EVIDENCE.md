@@ -92,3 +92,6 @@ New `test/ai07-sandbox-structured-ownkeys.test.ts`: baseline source-only task sh
 
 ### Lifecycle report alias negative regressions (2026-11-01)
 - Added `test/ai07-sandbox-mutation-state.test.ts` checks for 8 ambiguous ACK/launch/revoke/drain markers with false/true/undefined/null (32 negative readbacks), plus a getter and throwing Proxy descriptor trap. All must return `RECONCILE_REQUIRED` without readback execution or replay. Control with unrelated synthetic provider booleans remains BLOCKED, never permitted. Exact HEAD CI required to confirm new source changes.
+
+### AF_UNIX/socketpair/connect syscall regression (2026-11-01)
+- Extended `test/ai07-sandbox-linux-fd-seccomp.test.ts` to reject three additional local IPC syscalls under the disposable C child's BPF seccomp with `EPERM`; fail-closed returns 66/67/68 on unexpected allow. Disabled-seccomp control probes actual unfiltered kernel semantics, never assuming external host restrictions prove the fixture. Exact new HEAD CI needed; no authenticated production OS worker/IPC acceptance.

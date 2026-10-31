@@ -76,3 +76,6 @@ Added test-only Linux `setsid` descendant escape from process group; real kernel
 
 ### Partial loss/revoke native report classification
 AI-07 source report parsing now treats explicit partial ACK/outcome/launch/revoke/drain signals as untrusted possible mutations even when `mutationState` is missing. Conservative external-reconciliation requirement is preserved; this does not enable native execution or prove drain. CORE disabled / NO-GO.
+
+### Disposable kernel Unix-domain IPC denial
+Added explicit AF_UNIX/socketpair/connect EPERM checks and true unfiltered host negative contrast to AI-07 Linux fixture. These are test-only native syscall denials, not production native Broker IPC protection. Keep NO-GO.

@@ -81,6 +81,16 @@ static int child_probe(int inherited){
  int s=socket(AF_INET,SOCK_STREAM|SOCK_CLOEXEC,0);
  if(s<0)return 58;
  close(s);
+ /* The host must permit local AF_UNIX and socketpair in the negative control,
+  * otherwise an external sandbox could falsely get credit for OUR seccomp. */
+ s=socket(AF_UNIX,SOCK_STREAM|SOCK_CLOEXEC,0);
+ if(s<0)return 58;
+ close(s);
+ int pair[2]={-1,-1};
+ if(socketpair(AF_UNIX,SOCK_STREAM|SOCK_CLOEXEC,0,pair)<0)return 58;
+ close(pair[0]);close(pair[1]);
+ errno=0;
+ if(connect(-1,NULL,0)!=-1 || errno!=EBADF)return 58;
  int fd=openat(AT_FDCWD,"/dev/null",O_RDONLY|O_CLOEXEC);
  if(fd<0)return 58;
  close(fd);
@@ -90,6 +100,19 @@ static int child_probe(int inherited){
  errno=0;
  int s=socket(AF_INET,SOCK_STREAM|SOCK_CLOEXEC,0);
  if(s!=-1 || errno!=EPERM)return 55;
+ /* A local Broker socket must not be possible merely because network is
+  * otherwise denied. Assert actual syscall EPERM, not missing endpoints. */
+ errno=0;
+ s=socket(AF_UNIX,SOCK_STREAM|SOCK_CLOEXEC,0);
+ if(s!=-1 || errno!=EPERM)return 66;
+ errno=0;
+ int pair[2]={-1,-1};
+ if(socketpair(AF_UNIX,SOCK_STREAM|SOCK_CLOEXEC,0,pair)!=-1 ||
+    errno!=EPERM)return 67;
+ /* No inherited socket is assumed safe. Even an invalid descriptor must
+  * reach the seccomp syscall fence before the kernel validates its FD. */
+ errno=0;
+ if(connect(-1,NULL,0)!=-1 || errno!=EPERM)return 68;
  errno=0;
  int fd=openat(AT_FDCWD,"/dev/null",O_RDONLY|O_CLOEXEC);
  if(fd!=-1 || errno!=EPERM)return 56;

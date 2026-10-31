@@ -97,3 +97,7 @@ Linux diagnostic forced termination no longer abandons direct-child cleanup afte
 
 ## 2026-11-01 ambiguous lifecycle markers without mutationState
 - Source-only reported evidence now quarantines any own `ackLost`, `ack_lost`, `lostAck`, `outcomeUnknown`, `launchUnknown`, `revokeUnknown`, `drainUnknown`, or `operationAttempted` field as `RECONCILE_REQUIRED`, even without `mutationState` and regardless of a forged false/null value. No getter is executed; a throwing reflection trap remains reconciliation-only. No native cleanup/replay permission, signed OS attestation or grant release is inferred.
+
+## 2026-11-01 Unix-domain IPC syscall negatives
+- Strengthened disposable `test/ai07-sandbox-linux-fd-seccomp.test.ts` protected child to require `EPERM` on `socket(AF_UNIX)`, `socketpair(AF_UNIX)`, and `connect(-1, NULL, 0)`, in addition to AF_INET/openat/getpid. The disabled-seccomp control must first prove these otherwise harmless local syscalls work on the runner (or return BLOCKED 58). Existing exit 0/53/55/59 negative variants and source-only execution deny stay unchanged.
+- No real Broker IPC is accessed, no network address or user task is used; this is kernel syscall fencing evidence in a disposable test, NOT Windows WFP or actual Nexowire IPC containment.

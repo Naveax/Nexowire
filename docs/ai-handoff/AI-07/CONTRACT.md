@@ -90,3 +90,6 @@ In `boundedArgs`, `Reflect.ownKeys(args).length` must exactly match `args.length
 
 ### Partial lifecycle/ACK report also requires reconciliation
 A source-only readback with an own `mutationState` OR own `ackLost`/`ack_lost`/`lostAck`/`outcomeUnknown`/`launchUnknown`/`revokeUnknown`/`drainUnknown`/`operationAttempted` is a **possible mutation**, not proof of a safe-to-retry status. Even false/null/accessor content cannot discharge the external durable CAS obligation. `status=RECONCILE_REQUIRED`, `dispatchAllowed=false`, `mayReplayOriginalMutation=false`, `cleanupVerified=false`. This is an additional fail-closed source classification, not a native authenticated report.
+
+### Disposable local IPC syscall denial evidence
+The Linux native FD/seccomp fixture now checks `socket(AF_UNIX)`, `socketpair(AF_UNIX)` and invalid-FD `connect` each fail with kernel `EPERM`. The external-host negative control first demonstrates those syscalls ordinarily succeed (or `connect(-1)` returns `EBADF`) without AI-07 seccomp; if host policy blocks them, fixture returns 58 instead of fake PASS. A production Broker IPC boundary still needs independent native token/handle and AF_UNIX/Windows named-pipe/ALPC access enforcement plus exact worker identity.
