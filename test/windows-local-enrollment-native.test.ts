@@ -110,14 +110,17 @@ test('Windows installer read-only preflight rejects owner and installation ident
 });
 
 test('Windows opt-in service uninstall defaults to read-only without touching SCM',{
-  skip:process.platform!=='win32',timeout:15000,
+  skip:process.platform!=='win32',timeout:45000,
 },()=>{
   // Disposable CI runners have no installed NexowireLocalEnrollment service.
   // This is a no-service preflight, NOT a service stop/delete or physical test.
   const script=fileURLToPath(new URL('../scripts/local-enrollment/uninstall.ps1',import.meta.url));
-  const result=spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-File',script,
+  // Use CI's provisioned PowerShell 7 (like the installer preflight).
+  // Cold CI startup may exceed 10 seconds under parallel Windows tests;
+  // bound the process without weakening the assertions below.
+  const result=spawnSync('pwsh.exe',['-NoProfile','-NonInteractive','-File',script,
     '-ExpectedManifestSha256','9'.repeat(64),'-ExpectedDeviceId',randomUUID()],{
-    encoding:'utf8',timeout:10000,maxBuffer:4096,windowsHide:true,
+    encoding:'utf8',timeout:30000,maxBuffer:4096,windowsHide:true,
   });
   assert.ifError(result.error);
   assert.equal(result.status,0,result.stderr);

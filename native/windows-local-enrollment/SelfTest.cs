@@ -86,6 +86,10 @@ internal static class SelfTest
             var path=Path.Combine(root,"fence.lock");
             using(var first=ProtectedStore.OpenExclusiveFence(path,CancellationToken.None))
             {
+                // ACL read must use this exact open handle, since a separate
+                // FileInfo.GetAccessControl open can violate FileShare.None.
+                var heldAcl=first.GetAccessControl();
+                Protocol.Require(heldAcl.GetOwner(typeof(System.Security.Principal.SecurityIdentifier)) is not null);
                 using var cancelled=new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
                 var denied=false;
                 try

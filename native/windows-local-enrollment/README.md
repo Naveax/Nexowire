@@ -151,3 +151,14 @@ an atomic OS-to-remote-dispatch guarantee: AI-03 must independently enforce
 current external revoke/generation/one-use admission at the last execution
 boundary. Synthetic self-test exercises late-expiry and changed-session
 rejections; it is not an installed Windows Service or physical consent test.
+
+## AI-02 exclusive fence ACL handle readback
+
+The local revoke/IPC lock file uses `FileShare.None`; opening its path a
+second time to read the ACL can produce an OS sharing violation. The protected
+owner/DACL check now reads from the **same already-open exclusive FileStream**,
+while checking bounded file size and absence of reparse attributes, and retains
+all original fail-closed SYSTEM/Administrators-only ACL requirements. A new
+Windows disposable self-test reads ACL on an exclusive handle and verifies
+contended second open fails by timeout. This is not proof of production SCM
+hosting or an enrolled owner; real installed service tests remain outstanding.

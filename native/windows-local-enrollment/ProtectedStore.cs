@@ -58,7 +58,10 @@ internal static class ProtectedStore
     {
         var info=new FileInfo(path);
         Protocol.Require(info.Exists && (info.Attributes & FileAttributes.ReparsePoint)==0 && info.Length<=16384);
-        var acl=info.GetAccessControl(AccessControlSections.Owner|AccessControlSections.Access);
+        AssertFileAcl(info.GetAccessControl(AccessControlSections.Owner|AccessControlSections.Access));
+    }
+    private static void AssertFileAcl(FileSecurity acl)
+    {
         Protocol.Require(acl.GetOwner(typeof(SecurityIdentifier))?.Value is "S-1-5-18" or "S-1-5-32-544");
         var found=new HashSet<string>();
         foreach(FileSystemAccessRule ace in acl.GetAccessRules(true,true,typeof(SecurityIdentifier)))
@@ -166,7 +169,16 @@ internal static class ProtectedStore
         AssertPath(Root);
         var path=FileName("revocation-fence.lock");
         var handle=OpenExclusiveFence(path,stop);
-        try{AssertFile(path);return handle;}
+        try
+        {
+            // FileShare.None prevents reopening by path to query its ACL.
+            // Read the security descriptor through the *same* trusted
+            // exclusive handle, preserving the lock and its object identity.
+            Protocol.Require(!handle.SafeFileHandle.IsInvalid && handle.Length<=16384 &&
+                (System.IO.File.GetAttributes(path)&FileAttributes.ReparsePoint)==0);
+            AssertFileAcl(handle.GetAccessControl());
+            return handle;
+        }
         catch{handle.Dispose();throw;}
     }
     internal static (StoreConfig Config,SignedGrant Grant) Load()
