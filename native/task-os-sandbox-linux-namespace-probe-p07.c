@@ -93,7 +93,13 @@ static int install_probe_seccomp(void) {
  * hence is NOT a trusted production verifier or protected principal.
  */
 static int observe_kernel_namespaces(pid_t child,uid_t outer_uid) {
-  const char *names[]={"user","mnt","net","ipc","uts"};
+  /* Readiness is emitted after setpgid(0,0). If that invariant is missing,
+   * the outer parent cannot safely signal only its own isolated probe group. */
+  if(getpgid(child)!=child)return -1;
+  /* Direct unshare(CLONE_NEWPID) changes only the namespace for *future*
+   * children. /proc/<pid>/ns/pid would still show the host PID namespace.
+   * Read the actual kernel pid_for_children namespace from outside instead. */
+  const char *names[]={"user","mnt","net","ipc","uts","pid_for_children"};
   for(size_t i=0;i<sizeof(names)/sizeof(names[0]);++i) {
     char path[96];
     struct stat observed, host;
@@ -193,6 +199,11 @@ static int kernel_child(const char *root,int ready_fd,int resume_fd) {
   errno=0;
   int s=socket(AF_INET,SOCK_STREAM|SOCK_CLOEXEC,0);
   if(s!=-1 || errno!=EPERM)_exit(52);
+  /* Verify a real kernel denial of openat, not merely an ENOENT result due
+   * to the empty tmpfs root. This probe has no arbitrary file operation. */
+  errno=0;
+  int filefd=openat(AT_FDCWD,"/etc/passwd",O_RDONLY|O_CLOEXEC);
+  if(filefd!=-1 || errno!=EPERM)_exit(56);
   /* No stdout, stderr, inherited socket or host file remains here. */
   _exit(0);
 }
@@ -227,8 +238,13 @@ static int terminate_owned_child(pid_t pid,int *status) {
    * A group-signal failure must NOT prevent attempting direct-child cleanup. */
   int signals_ok=1;
   pid_t pgid=getpgid(pid);
-  if(pgid==pid && kill(-pid,SIGKILL)<0 && errno!=ESRCH)signals_ok=0;
-  if(pgid<0 && errno!=ESRCH)signals_ok=0;
+  if(pgid==pid) {
+    if(kill(-pid,SIGKILL)<0 && errno!=ESRCH)signals_ok=0;
+  } else {
+    /* Either child exited or never established its own group. No group
+     * signal may be sent in this case, and cleanup cannot be certified. */
+    signals_ok=0;
+  }
   if(kill(pid,SIGKILL)<0 && errno!=ESRCH)signals_ok=0;
   /* SIGKILL itself is not a verified reaping receipt: bounded WNOHANG
    * prevents a stuck child from hanging the diagnostic indefinitely. */

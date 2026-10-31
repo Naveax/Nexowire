@@ -25,3 +25,6 @@ Linux selftest group termination and nested PID1 parent-death signal; Windows lo
 
 ### Forced teardown caveat
 A group kill is not a certified descendant-drain mechanism for an arbitrary task. Timeout cleanup failure is explicitly non-PASS; kernel-signed Job/cgroup readback, identity-fenced cancellation and external CAS remain P0.
+
+### Additional Linux evidence gate (31 Oct)
+The unshare caller's future-child PID namespace is now directly checked via `pid_for_children` and parent-owned process group identity. Post-seccomp file open attempts must fail with `EPERM`. No native task runner is enabled, and all external physical acceptance remains NO-GO.

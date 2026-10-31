@@ -19,3 +19,6 @@ Coordinator should run `node --test --import tsx test/ai07-sandbox-windows-msvc-
 ## Native cleanup and token identity follow-up
 - AI-04/AI-05 cannot treat the source-only Linux test's process-group kill as durable process-tree cleanup: real worker children may break away, cross groups, inherit handles, and affect external CAS; require independent cgroup/Job/namespace readback, no unreaped descendants, and escrow fencing before releasing grants.
 - AI-08 negative QA should check parent death while namespace PID 1 is alive, child breakaway, inherited descriptors 0/1/2, and missing AppContainer SID or UIAccess. The test-only probe does not authorize production worker launch.
+
+### Independent PID namespace evidence and FS negative
+AI-08 should verify real `pid_for_children` namespace identity from the kernel outside the worker, and distinguish `EPERM` syscall denial from merely absent path. AI-05/AI-04 must never treat a successful unsigned namespace diagnostic as a grant, Job/CMF ownership, protected handle readback or permission to execute. Real cgroup task descendant drain and filesystem/network IPC negative remain separate acceptance blockers.

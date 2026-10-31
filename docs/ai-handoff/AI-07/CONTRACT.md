@@ -45,3 +45,6 @@ AI-05 must invoke the above **before** shell, process and nested task effects. A
 
 ### Bounded forced cleanup cannot claim completion on signal failure
 A failure to signal the disposable Linux process group still attempts termination of its exact direct child. A bounded `waitpid(WNOHANG)` poll (5 seconds) is used after SIGKILL. An unobserved reap, group signal failure or child termination error produces BLOCKED and never authorizes revoke, quota release or execution.
+
+### PID namespace / process-group diagnostic semantics
+The outer source-only diagnostic requires `/proc/<probe-pid>/ns/pid_for_children` to differ from the host observer namespace, because unshare(CLONE_NEWPID) applies to subsequently forked children; the caller's `/proc/<pid>/ns/pid` is not sufficient. Parent also checks `getpgid(probe-pid)==probe-pid` before releasing the selftest barrier; a mismatch never permits signalling arbitrary host process groups. A post-seccomp `openat` must return `EPERM` (not mere ENOENT), independently of the mounted empty test root. These are unsigned test-program observations, not a secured OS grant or production worker identity.

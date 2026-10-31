@@ -31,3 +31,7 @@
 
 ### Forced cleanup negative regression
 The Linux source negative test now checks that group signal errors do not short-circuit direct child SIGKILL; that forced waitpid is bounded, and success is contingent on observed reap. CI Linux compilation/negative CLI and full Node tests must be confirmed on this exact SHA. No lab cgroup, physical Windows native or installed Agent acceptance is implied.
+
+### Additional native regression gates
+- Linux native C and `test/task-os-sandbox-linux-native-p07.test.ts`: assert parent `pid_for_children` kernel namespace identity, exact isolated process group, and post-seccomp syscall `openat` explicit `EPERM`. Requires current exact-HEAD Node22/24 CI run after commit; no local host namespace execution or installed Agent permission.
+- Linux C source-only compile/negative CLI success is insufficient evidence for an actual namespace+seccomp kernel PASS, because selftest is opt-in and may return BLOCKED on runners without unprivileged user namespace support.

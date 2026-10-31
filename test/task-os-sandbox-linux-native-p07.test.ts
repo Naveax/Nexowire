@@ -41,7 +41,11 @@ test('#07 Linux diagnostic has no arbitrary shell entry point',()=>{
   assert.match(source,/if\(waited==-2\)return 78/);
   assert.match(source,/if\(setpgid\(0,0\)<0\)_exit\(80\)/);
   assert.match(source,/if\(prctl\(PR_SET_PDEATHSIG,SIGKILL\)<0\)_exit\(55\)/);
-  assert.match(source,/pgid==pid && kill\(-pid,SIGKILL\)/);
+  assert.match(source,/if\(pgid==pid\)/);
+  assert.match(source,/kill\(-pid,SIGKILL\)/);
+  assert.match(source,/if\(getpgid\(child\)!=child\)return -1/);
+  assert.match(source,/"pid_for_children"/);
+  assert.match(source,/signals_ok=0;/);
   assert.match(source,/if\(pid<=1\)return -1/);
   // Group kill failure cannot bypass direct-child kill or wait verification.
   assert.match(source,/if\(kill\(pid,SIGKILL\)<0 && errno!=ESRCH\)signals_ok=0/);
@@ -56,6 +60,8 @@ test('#07 probe seccomp cannot allow task exec, networking, process creation or 
   assert.match(source,/SECCOMP_RET_KILL_PROCESS/);
   assert.match(source,/SECCOMP_RET_ERRNO\|EPERM/);
   assert.match(source,/if\(s!=-1 \|\| errno!=EPERM\)_exit\(52\)/);
+  assert.match(source,/filefd=openat\(AT_FDCWD,"\/etc\/passwd",O_RDONLY\|O_CLOEXEC\)/);
+  assert.match(source,/if\(filefd!=-1 \|\| errno!=EPERM\)_exit\(56\)/);
   assert.match(source,/observe_kernel_namespaces\(pid,outer_uid\)/);
   for(const denied of [
     'execve','execveat','socket','connect','sendmsg','recvmsg',

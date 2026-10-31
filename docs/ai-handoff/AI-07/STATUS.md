@@ -35,3 +35,7 @@ Current team plan assigns dispatcher/CAS to AI-05, Broker/Job/receipt to AI-04, 
 
 ### Follow-up negative cleanup path
 Linux diagnostic forced termination no longer abandons direct-child cleanup after group signal errors. The post-SIGKILL reap is bounded and reports failure when it cannot verify completion. The code remains a selftest-only process, not a production worker.
+
+## Linux PID namespace external-readback gap fixed (31 Oct 2026)
+- The disposable probe's outer parent now observes **pid_for_children** namespace identity, not just user/mnt/net/ipc/uts. CLONE_NEWPID does not move the unshare caller into the new PID namespace; the child-of-unshare must be checked separately. The group leader must match the exact unreaped child PID before successful parent attestation.
+- Probe runs a post-seccomp `openat` and requires **EPERM**, rejecting misleading ENOENT from an empty pivoted root. Group mismatch is not accepted as verified forced cleanup. Source-only worker status remains BLOCKED.
