@@ -73,3 +73,6 @@ Added allowlisted exact own-data-key checks for top-level task, root, network, b
 
 ### Verified escape counterexample (2026-11-01)
 Added test-only Linux `setsid` descendant escape from process group; real kernel PIDFD witness confirms escaped child survives original group kill, then test-owned PIDFD cleanup reaps it. Deliberate no-escape control exits 55. This strengthens negative QA but does not implement cgroup/Job descendant confinement. Draft NO_GO remains; exact HEAD CI required.
+
+### Partial loss/revoke native report classification
+AI-07 source report parsing now treats explicit partial ACK/outcome/launch/revoke/drain signals as untrusted possible mutations even when `mutationState` is missing. Conservative external-reconciliation requirement is preserved; this does not enable native execution or prove drain. CORE disabled / NO-GO.

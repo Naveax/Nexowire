@@ -87,3 +87,6 @@ In `boundedArgs`, `Reflect.ownKeys(args).length` must exactly match `args.length
 
 ### Why process-group cleanup cannot satisfy descendant revoke
 `test/ai07-sandbox-linux-setsid-breakaway.test.ts` proves the adversarial case: a child-grandchild can call `setsid()` and leave the original process group. After a verified `kill(-group,SIGKILL)` and parent `waitpid`, the **grandchild remains alive**, independently observed through its PIDFD; the fixture explicitly reaps it through subreaper custody. It cannot be counted as a cgroup/Job whole-tree cleanup receipt. Production requires a separately enforced cgroup v2/Job boundary and independent zero-descendant readback before quota/grant release.
+
+### Partial lifecycle/ACK report also requires reconciliation
+A source-only readback with an own `mutationState` OR own `ackLost`/`ack_lost`/`lostAck`/`outcomeUnknown`/`launchUnknown`/`revokeUnknown`/`drainUnknown`/`operationAttempted` is a **possible mutation**, not proof of a safe-to-retry status. Even false/null/accessor content cannot discharge the external durable CAS obligation. `status=RECONCILE_REQUIRED`, `dispatchAllowed=false`, `mayReplayOriginalMutation=false`, `cleanupVerified=false`. This is an additional fail-closed source classification, not a native authenticated report.

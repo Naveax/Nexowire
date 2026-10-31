@@ -242,8 +242,19 @@ export function assessTaskSandboxSourceOnly(
   // the descriptor, not the property value: do not execute an accessor getter.
   // The presence of any untrusted mutation report, even `completed` or
   // `not_started`, does not establish that an effect never happened.
+  // A lost ACK, uncertain revoke/drain or partially observed launch can be
+  // reported without mutationState. Treat the PRESENCE of any such untrusted
+  // signal as ambiguous even when its value is false, null or an accessor.
+  // Hostile field reflection is caught by ownFieldExists; it cannot authorize
+  // release/replay by omitting mutationState. Independent durable CAS is
+  // required to resolve these states; this source parser never does so.
+  const uncertainReportFields = [
+    'mutationState', 'ackLost', 'ack_lost', 'lostAck', 'outcomeUnknown',
+    'launchUnknown', 'revokeUnknown', 'drainUnknown', 'operationAttempted',
+  ] as const;
   const mayHaveMutated = reported != null &&
-    (observation === null || ownFieldExists(observation, 'mutationState'));
+    (observation === null ||
+      uncertainReportFields.some(field => ownFieldExists(observation, field)));
   if (mayHaveMutated) blockers.push('MUTATION_STATE_UNKNOWN_RECONCILE_REQUIRED');
   blockers.push('TRUSTED_NATIVE_SANDBOX_PROVIDER_UNAVAILABLE');
   return Object.freeze({
