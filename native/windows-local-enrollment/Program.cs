@@ -33,8 +33,20 @@ internal static class Program
                 ProtectedStore.RequireAdministrator();
                 var (c,g)=ProtectedStore.Load();RequireOwner(c.OwnerSid);
                 Protocol.Require(Environment.UserInteractive && Process.GetCurrentProcess().SessionId>0);
-                Protocol.Require(MessageBoxW(IntPtr.Zero,"Bu bilgisayardaki kalıcı Nexowire kaydı iptal edilsin mi?\n"+
-                    "Yeniden etkinleştirme yeni yerel onay gerektirir.","Nexowire — Kaydı iptal et",0x00010000|0x00000100|0x00000004|0x00000030)==6);
+                WindowsSessionEvidence.RequireActiveLocalConsole(Process.GetCurrentProcess().SessionId);
+                Protocol.Require(IsExplicitOwnerConsent(MessageBoxW(IntPtr.Zero,
+                    RevocationConsentSummary(g.Payload),
+                    "Nexowire — Kaydı iptal et",0x00010000|0x00000100|0x00000004|0x00000030)));
+                RequireOwner(c.OwnerSid);
+                WindowsSessionEvidence.RequireActiveLocalConsole(Process.GetCurrentProcess().SessionId);
+                // A lock can be contested for seconds after the visible UI.
+                // Repeat real owner/console and protected grant readback after
+                // acquiring it, immediately before the irreversible marker.
+                using var fence=ProtectedStore.AcquireRevocationFence(CancellationToken.None);
+                ProtectedStore.RequireAdministrator();
+                RequireOwner(c.OwnerSid);
+                WindowsSessionEvidence.RequireActiveLocalConsole(Process.GetCurrentProcess().SessionId);
+                Protocol.Require(ProtectedStore.Load()==(c,g));
                 ProtectedStore.WriteNew("revoked.json",new {version=1,enrollmentId=g.Payload.EnrollmentId,
                     generation=g.Payload.Generation,revokedAtMs=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()});
                 return 0;
@@ -45,26 +57,82 @@ internal static class Program
         }
         catch { Console.Error.WriteLine("LOCAL_ENROLLMENT_REJECTED");return 1; }
     }
+    // Pure decision gate: only Win32 MessageBox IDYES (6) permits a local
+    // enrollment or revoke ceremony. Closing, Cancel (2), No (7), and
+    // unexpected results are denial; no UAC automation or override exists.
+    internal static bool IsExplicitOwnerConsent(int dialogResult) => dialogResult==6;
     private static void RequireOwner(string sid)
     {
         using var current=WindowsIdentity.GetCurrent();
         Protocol.Require(current.User?.Value==sid && current.User?.Value!="S-1-5-18");
     }
+    internal static string RequireCanonicalAuthoritySpki(string? encoded)
+    {
+        // A public-key blob is a transport input, not a trust anchor by itself.
+        // Keep its exact bytes stable for the displayed fingerprint and the
+        // independently pinned authority that later verifies challenges.
+        // Explicit null rejection also gives the compiler a non-null
+        // value; Protocol.Require is deliberately not a flow annotation.
+        var input=encoded ?? throw new InvalidDataException("LOCAL_ENROLLMENT_REJECTED");
+        Protocol.Require(input.Length is >0 and <=1024);
+        byte[] der;
+        try { der=Convert.FromBase64String(input); }
+        catch(FormatException) {throw new InvalidDataException("LOCAL_ENROLLMENT_REJECTED");}
+        Protocol.Require(der.Length is >0 and <=512 &&
+            Convert.ToBase64String(der)==input);
+        using var authority=ECDsa.Create();
+        try { authority.ImportSubjectPublicKeyInfo(der,out var used);
+            Protocol.Require(used==der.Length && authority.KeySize==256 &&
+                authority.ExportParameters(false).Curve.Oid.Value=="1.2.840.10045.3.1.7" &&
+                authority.ExportSubjectPublicKeyInfo().AsSpan().SequenceEqual(der)); }
+        catch(CryptographicException) {throw new InvalidDataException("LOCAL_ENROLLMENT_REJECTED");}
+        return Protocol.Hash(der);
+    }
+    internal static string RevocationConsentSummary(Grant g)
+    {
+        Protocol.Validate(g);
+        // Confirm exactly which owner, installation, enrollment and generation
+        // will be revoked, without displaying any key material or signing data.
+        return "Bu kalıcı Nexowire kaydı iptal edilsin mi?\n\n"+
+            "Cihaz: "+g.DeviceId+
+            "\nKurulum: "+g.InstallationId+
+            "\nSahip hesabı: "+g.OwnerAccountId+
+            "\nWindows sahibi: "+g.OwnerSid+
+            "\nKayıt: "+g.EnrollmentId+
+            "\nNesil: "+g.Generation+
+            "\n\nYeni kayıt için yeniden yerel onay gerekir."+
+            "\nBu işlem tek başına CORE izni veya UAC otomasyonu vermez.";
+    }
+    internal static string EnrollmentConsentSummary(Grant g,string mode,string authoritySha256)
+    {
+        Protocol.Validate(g);
+        Protocol.Require(mode is "tpm" or "software" &&
+            authoritySha256 is {Length:64} &&
+            authoritySha256.All(c=>c is >= '0' and <= '9' or >= 'a' and <= 'f'));
+        // Visible owner review of precisely the scope and issuer to persist.
+        // A displayed fingerprint is not proof of a pinned outside verifier.
+        return "Bu bilgisayar için süresiz ve iptal edilebilir Nexowire kaydı oluşturulsun mu?\n\n"+
+            "Cihaz: "+g.DeviceId+"\nKurulum: "+g.InstallationId+
+            "\nSahip hesabı: "+g.OwnerAccountId+
+            "\nWindows sahibi: "+g.OwnerSid+
+            "\nDoğrulayıcı public key SHA-256: "+authoritySha256+
+            "\nAnahtar: "+(mode=="tpm"?"TPM (dışa aktarılamaz)":"YAZILIM — TPM koruması yok")+
+            "\n\nYeniden başlatma veya internet kesintisi yeniden onay gerektirmez.\n"+
+            "İptal komutu: Nexowire.LocalEnrollment.exe --revoke\n"+
+            "Bu kayıt tek başına uzaktan komut yetkisi veya UAC otomasyonu vermez.";
+    }
     private static void Enroll(string path,string mode)
     {
         ProtectedStore.RequireAdministrator();
         Protocol.Require(Environment.UserInteractive && Process.GetCurrentProcess().SessionId>0);
+        WindowsSessionEvidence.RequireActiveLocalConsole(Process.GetCurrentProcess().SessionId);
         var info=new FileInfo(path);Protocol.Require(info.Exists&&info.Length<=16384&&
             (info.Attributes&FileAttributes.ReparsePoint)==0);
         var request=Protocol.Read<EnrollmentRequest>(File.ReadAllBytes(path));RequireOwner(request.OwnerSid);
         var provider=mode=="tpm"?"Microsoft Platform Crypto Provider":"Microsoft Software Key Storage Provider";
         // Independent verifier trust must be explicitly provisioned. Fixture
         // keys are never installed automatically by this executable.
-        using var authority=ECDsa.Create();
-        var authorityDer=Convert.FromBase64String(request.AuthoritySpkiBase64);
-        authority.ImportSubjectPublicKeyInfo(authorityDer,out var consumed);
-        Protocol.Require(consumed==authorityDer.Length && authority.KeySize==256 &&
-            authority.ExportParameters(false).Curve.Oid.Value=="1.2.840.10045.3.1.7");
+        var authoritySha256=RequireCanonicalAuthoritySpki(request.AuthoritySpkiBase64);
         var enrollmentId=Guid.NewGuid().ToString("D");
         var g=new Grant(2,"ES256-P1363","physical-console",request.OwnerAccountId,request.OwnerSid,
             request.DeviceId,request.InstallationId,enrollmentId,ProtectedStore.MachineBinding(),
@@ -75,14 +143,14 @@ internal static class Program
         if(Directory.Exists(ProtectedStore.Root))
         { ProtectedStore.AssertPath(ProtectedStore.Root);Protocol.Require(!Directory.EnumerateFileSystemEntries(ProtectedStore.Root).Any()); }
         var approved=MessageBoxW(IntPtr.Zero,
-            "Bu bilgisayar için süresiz ve iptal edilebilir Nexowire kaydı oluşturulsun mu?\n\n"+
-            "Cihaz: "+request.DeviceId+"\nWindows sahibi: "+request.OwnerSid+
-            "\nAnahtar: "+(mode=="tpm"?"TPM (dışa aktarılamaz)":"YAZILIM — TPM koruması yok")+
-            "\n\nYeniden başlatma veya internet kesintisi yeniden onay gerektirmez.\n"+
-            "İptal komutu: Nexowire.LocalEnrollment.exe --revoke\n"+
-            "Bu kayıt tek başına uzaktan komut yetkisi veya UAC otomasyonu vermez.",
+            EnrollmentConsentSummary(g,mode,authoritySha256),
             "Nexowire — Kalıcı yerel kayıt",0x00010000|0x00000100|0x00000004|0x00000030);
-        Protocol.Require(approved==6);
+        Protocol.Require(IsExplicitOwnerConsent(approved));
+        // The same elevated owner must still control the active local
+        // console after consent; an RDP switch or logoff denies.
+        ProtectedStore.RequireAdministrator();
+        RequireOwner(request.OwnerSid);
+        WindowsSessionEvidence.RequireActiveLocalConsole(Process.GetCurrentProcess().SessionId);
         ProtectedStore.CreateRoot();
         using var key=ProtectedStore.CreateKey(keyName,provider);
         using var signer=new ECDsaCng(key);
@@ -92,6 +160,12 @@ internal static class Program
             ConsentedAtMs=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()};
         var config=new StoreConfig(1,request.OwnerSid,request.DeviceId,request.InstallationId,
             request.OwnerAccountId,keyName,provider,request.AuthoritySpkiBase64);
+        // Key creation can take time (especially TPM). The original visible
+        // consent is not sufficient if the local console or owner changed
+        // before the first persistent write. Partial key/root remains deny-only.
+        ProtectedStore.RequireAdministrator();
+        RequireOwner(request.OwnerSid);
+        WindowsSessionEvidence.RequireActiveLocalConsole(Process.GetCurrentProcess().SessionId);
         ProtectedStore.WriteNew("config.json",config);
         ProtectedStore.WriteNew("grant.json",new SignedGrant(g,Convert.ToBase64String(signer.SignData(
             Protocol.GrantBytes(g),HashAlgorithmName.SHA256,DSASignatureFormat.IeeeP1363FixedFieldConcatenation))));

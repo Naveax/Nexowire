@@ -6,10 +6,13 @@ param(
     [Parameter(Mandatory=$true)][Guid]$ExpectedDeviceId,
     [Parameter(Mandatory=$true)][Guid[]]$AllowedDeviceIds,
     [ValidateSet('tpm','software')][string]$KeyProvider='tpm',
-    [switch]$PreflightOnly
+    [switch]$PreflightOnly,
+    [switch]$Execute
 )
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
+# Explicit mode selection. Never install from an accidental preflight call.
+if($PreflightOnly -and $Execute){throw 'CONFLICTING_INSTALL_MODES'}
 function Assert-PlainPath([string]$path){
     $item=Get-Item -LiteralPath $path -Force
     while($null -ne $item){
@@ -53,7 +56,23 @@ $requestText=[IO.File]::ReadAllText((Resolve-Path -LiteralPath $EnrollmentReques
 $request=$requestText|ConvertFrom-Json
 $identity=Get-Content -LiteralPath $AgentIdentityFile -Raw -Encoding UTF8|ConvertFrom-Json
 $owner=[Security.Principal.WindowsIdentity]::GetCurrent()
+# The provisioning request must be bound to the same exact installation
+# and owner account as the independent Agent identity, not just its device UUID.
+# Missing fields intentionally fail closed until the coordinator supplies a
+# protected, independently authenticated Agent identity export.
+if('installationId' -notin $identity.PSObject.Properties.Name -or
+    'ownerAccountId' -notin $identity.PSObject.Properties.Name -or
+    'installationId' -notin $request.PSObject.Properties.Name -or
+    'ownerAccountId' -notin $request.PSObject.Properties.Name -or
+    [string]::IsNullOrWhiteSpace([string]$identity.installationId) -or
+    [string]::IsNullOrWhiteSpace([string]$identity.ownerAccountId) -or
+    [string]::IsNullOrWhiteSpace([string]$request.installationId) -or
+    [string]::IsNullOrWhiteSpace([string]$request.ownerAccountId)){
+    throw 'AGENT_IDENTITY_BINDING_INCOMPLETE'
+}
 if([Guid]$identity.id -ne $ExpectedDeviceId -or [Guid]$request.deviceId -ne $ExpectedDeviceId -or
+    [Guid]$identity.installationId -ne [Guid]$request.installationId -or
+    [string]$identity.ownerAccountId -cne [string]$request.ownerAccountId -or
     $request.ownerSid -cne $owner.User.Value){throw 'LOCAL_OWNER_DEVICE_MISMATCH'}
 $runtime=Join-Path (Resolve-Path -LiteralPath $BundleDirectory).Path 'runtime'
 Assert-PlainPath $runtime
@@ -78,6 +97,9 @@ $destination=Join-Path $env:ProgramFiles ('NexowireLocalEnrollment-'+$ExpectedMa
 if(Test-Path -LiteralPath $destination){throw 'INSTALL_DESTINATION_ALREADY_EXISTS'}
 if($PreflightOnly){[ordered]@{preflight='passed';deviceId=$ExpectedDeviceId.ToString();files=$seen.Count;
     manifestSha256=$ExpectedManifestSha256;installed=$false}|ConvertTo-Json -Compress;exit 0}
+# The mutation path is unreachable without a deliberate -Execute flag.
+# Existing owner/UAC/identity checks remain necessary but not sufficient.
+if(-not $Execute){throw 'INSTALL_EXECUTE_OPT_IN_REQUIRED'}
 if($PSVersionTable.PSEdition -ne 'Desktop'){throw 'USE_WINDOWS_POWERSHELL_5_1_FOR_INSTALL'}
 if(-not [Security.Principal.WindowsPrincipal]::new($owner).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){
     throw 'RUN_REVIEWED_INSTALLER_WITH_STANDARD_LOCAL_UAC'

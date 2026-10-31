@@ -81,3 +81,38 @@ test('session zero cannot represent physical console enrollment',()=>{
   const f=fixture();
   assert.throws(()=>persistentSessionBytes({...f.session.payload,windowsSessionId:0}));
 });
+
+test('native-compatible account ID grammar rejects Unicode, spaces and JSON escaping ambiguities',()=>{
+  const f=fixture();
+  for(const invalid of ['owner ünicode','owner\\n0001','owner account','owner/000001','x'.repeat(129),'short']){
+    const altered={...f.grant.payload,ownerAccountId:invalid};
+    assert.throws(()=>persistentEnrollmentBytes(altered));
+    assert.throws(()=>verifyPersistentEnrollmentSession({
+      ...f,grant:{...f.grant,payload:altered},
+    }),/V2_REJECTED/);
+  }
+  // Both runtimes accept the exact same bounded ASCII character set.
+  for(const valid of ['owner-account_01','owner.account:01','owner@domain01']){
+    assert.doesNotThrow(()=>persistentEnrollmentBytes({...f.grant.payload,ownerAccountId:valid}));
+  }
+});
+
+test('cross-runtime signed wire values reject actual terminal newline',()=>{
+  const f=fixture();
+  for(const bad of [
+    {...f.grant.payload,ownerAccountId:f.grant.payload.ownerAccountId+'\n'},
+    {...f.grant.payload,ownerSid:f.grant.payload.ownerSid+'\n'},
+    {...f.grant.payload,machineBindingSha256:f.grant.payload.machineBindingSha256+'\n'},
+    {...f.grant.payload,issuerSpkiSha256:f.grant.payload.issuerSpkiSha256+'\n'},
+  ]){
+    assert.throws(()=>persistentEnrollmentBytes(bad));
+    assert.throws(()=>verifyPersistentEnrollmentSession({
+      ...f,grant:{...f.grant,payload:bad},
+    }),/V2_REJECTED/);
+  }
+  for(const bad of [
+    {...f.session.payload,ownerSid:f.session.payload.ownerSid+'\n'},
+    {...f.session.payload,enrollmentSha256:f.session.payload.enrollmentSha256+'\n'},
+    {...f.session.payload,logonLuid:f.session.payload.logonLuid+'\n'},
+  ])assert.throws(()=>persistentSessionBytes(bad));
+});

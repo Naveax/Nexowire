@@ -7,7 +7,10 @@ const epoch=z.number().int().positive().safe();
 const sid=z.string().regex(/^S-1-\d+(?:-\d+)+$/);
 export const PersistentEnrollmentV2Schema=z.strictObject({
   version:z.literal(2),algorithm:z.literal('ES256-P1363'),
-  scope:z.literal('physical-console'),ownerAccountId:z.string().min(8).max(128),
+  scope:z.literal('physical-console'),
+  // Match the native C# signer exactly: non-ASCII account IDs can produce
+  // cross-runtime canonical JSON differences and must never be admitted.
+  ownerAccountId:z.string().regex(/^[A-Za-z0-9._:@-]{8,128}$/),
   ownerSid:sid,deviceId:id,installationId:id,enrollmentId:id,
   machineBindingSha256:hash,issuerSpkiSha256:hash,
   generation:epoch,consentedAtMs:epoch,expiresAt:z.null(),

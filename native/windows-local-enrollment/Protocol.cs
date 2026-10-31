@@ -28,11 +28,13 @@ internal static partial class Protocol
         MaxDepth = 8,
         RespectRequiredConstructorParameters = true
     };
-    [GeneratedRegex("^[a-f0-9]{64}$")] private static partial Regex Hex();
-    [GeneratedRegex("^S-1-[0-9]+(?:-[0-9]+)+$")] private static partial Regex Sid();
+    [GeneratedRegex("^[a-f0-9]{64}\\z")] private static partial Regex Hex();
+    [GeneratedRegex("^S-1-[0-9]+(?:-[0-9]+)+\\z")] private static partial Regex Sid();
     // Restrict deployment account IDs to ASCII, avoiding cross-language JSON
     // escaping differences. This is stricter than the generic TS wire schema.
-    [GeneratedRegex("^[A-Za-z0-9._:@-]{8,128}$")] private static partial Regex Account();
+    [GeneratedRegex("^[A-Za-z0-9._:@-]{8,128}\\z")] private static partial Regex Account();
+    // Unlike the '$' anchor, '\\z' is strict at the end of input.
+    [GeneratedRegex("^[a-f0-9]{16}\\z")] private static partial Regex Luid();
     internal static void Require(bool ok)
     { if (!ok) throw new InvalidDataException("LOCAL_ENROLLMENT_REJECTED"); }
     internal static bool Uuid(string? s) => s is not null && Guid.TryParseExact(s,"D",out _);
@@ -58,13 +60,24 @@ internal static partial class Protocol
         Require(s.Version == 2 && Hex().IsMatch(s.EnrollmentSha256) && Uuid(s.Nonce) &&
             s.Audience == "nexowire.local-enrollment.session" && Uuid(s.BootId) &&
             s.WindowsSessionId > 0 && Sid().IsMatch(s.OwnerSid) &&
-            Regex.IsMatch(s.LogonLuid,"^[a-f0-9]{16}$") && s.LogonLuid != "0000000000000000" &&
+            Luid().IsMatch(s.LogonLuid) && s.LogonLuid != "0000000000000000" &&
             s.ObservedAtMs > 0 && s.ValidUntilMs <= 9007199254740991 &&
             s.ValidUntilMs > s.ObservedAtMs && s.ValidUntilMs - s.ObservedAtMs <= 30000);
         return Encoding.UTF8.GetBytes("nexowire.local.session.v2\0" + JsonSerializer.Serialize(new object[] {
             s.Version,s.EnrollmentSha256,s.Nonce,s.Audience,s.BootId,s.WindowsSessionId,
             s.OwnerSid,s.LogonLuid,s.ObservedAtMs,s.ValidUntilMs
         },Json));
+    }
+    // Repeat the OS/session/freshness check after CNG signing and immediately
+    // before emitting an attestation frame. A signer delay may exhaust TTL.
+    internal static void RequireFreshSession(Session s,SessionEvidence expected,
+        SessionEvidence? current,long nowMs)
+    {
+        Require(current is not null && current==expected &&
+            s.BootId==expected.BootId && s.OwnerSid==expected.OwnerSid &&
+            s.WindowsSessionId==expected.WindowsSessionId &&
+            s.LogonLuid==expected.LogonLuid &&
+            s.ObservedAtMs<=nowMs && nowMs<s.ValidUntilMs);
     }
     internal static byte[] ChallengeBytes(Session s) =>
         Encoding.UTF8.GetBytes("nexowire.local.session.challenge.v2\0").Concat(SessionBytes(s)).ToArray();
@@ -87,7 +100,7 @@ internal static partial class Protocol
         RejectDuplicates(doc.RootElement);
         return JsonSerializer.Deserialize<T>(bytes,Json) ?? throw new InvalidDataException("LOCAL_ENROLLMENT_REJECTED");
     }
-    private static void RejectDuplicates(JsonElement e)
+    internal static void RejectDuplicates(JsonElement e)
     {
         if (e.ValueKind == JsonValueKind.Object)
         {

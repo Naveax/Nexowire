@@ -58,7 +58,10 @@ internal static class ProtectedStore
     {
         var info=new FileInfo(path);
         Protocol.Require(info.Exists && (info.Attributes & FileAttributes.ReparsePoint)==0 && info.Length<=16384);
-        var acl=info.GetAccessControl(AccessControlSections.Owner|AccessControlSections.Access);
+        AssertFileAcl(info.GetAccessControl(AccessControlSections.Owner|AccessControlSections.Access));
+    }
+    private static void AssertFileAcl(FileSecurity acl)
+    {
         Protocol.Require(acl.GetOwner(typeof(SecurityIdentifier))?.Value is "S-1-5-18" or "S-1-5-32-544");
         var found=new HashSet<string>();
         foreach(FileSystemAccessRule ace in acl.GetAccessRules(true,true,typeof(SecurityIdentifier)))
@@ -142,11 +145,65 @@ internal static class ProtectedStore
         }
         Protocol.Require(found.Count==2);
     }
+    // A process-crash-safe kernel file-sharing fence for the local revoke
+    // marker and an in-flight attestation. No secret or approval is stored in
+    // the lock file. Only SYSTEM/Administrators can open it in production.
+    internal static FileStream OpenExclusiveFence(string path,CancellationToken stop)
+    {
+        var elapsed=System.Diagnostics.Stopwatch.StartNew();
+        while(true)
+        {
+            stop.ThrowIfCancellationRequested();
+            try{return new FileStream(path,FileMode.OpenOrCreate,FileAccess.ReadWrite,
+                FileShare.None,4096,FileOptions.WriteThrough);}
+            catch(IOException) when(elapsed.Elapsed<TimeSpan.FromSeconds(5))
+            {
+                // Bounded, monotonic wait. A stuck or contested fence denies
+                // admission; it never ignores a previous revoke.
+                if(stop.WaitHandle.WaitOne(25))stop.ThrowIfCancellationRequested();
+            }
+        }
+    }
+    internal static FileStream AcquireRevocationFence(CancellationToken stop)
+    {
+        AssertPath(Root);
+        var path=FileName("revocation-fence.lock");
+        var handle=OpenExclusiveFence(path,stop);
+        try
+        {
+            // FileShare.None prevents reopening by path to query its ACL.
+            // Read the security descriptor through the *same* trusted
+            // exclusive handle, preserving the lock and its object identity.
+            Protocol.Require(!handle.SafeFileHandle.IsInvalid && handle.Length<=16384 &&
+                (System.IO.File.GetAttributes(path)&FileAttributes.ReparsePoint)==0);
+            AssertFileAcl(handle.GetAccessControl());
+            return handle;
+        }
+        catch{handle.Dispose();throw;}
+    }
+    internal static void RequireNoRevocationMarker(string root)
+    {
+        // File.Exists can return false on access denied / I/O failure.
+        // Enumeration throws instead of treating an inaccessible revoke
+        // marker as absent; even malformed files or directories deny.
+        Protocol.Require(!Directory.EnumerateFileSystemEntries(
+            root,"revoked.json",SearchOption.TopDirectoryOnly).Any());
+    }
+    internal static void RequireCanonicalAuthorityConfig(StoreConfig config)
+    {
+        // StoreConfig is ACL-protected but is not itself signed. Reject
+        // malformed/noncanonical authority SPKI during EVERY local read,
+        // not only during the initial visible approval.
+        Protocol.Require(config.Version==1);
+        Program.RequireCanonicalAuthoritySpki(config.AuthoritySpkiBase64);
+        // This is NOT independent issuer provenance or anti-rollback.
+    }
     internal static (StoreConfig Config,SignedGrant Grant) Load()
     {
         AssertPath(Root);
-        Protocol.Require(!System.IO.File.Exists(FileName("revoked.json")));
+        RequireNoRevocationMarker(Root);
         var c=Read<StoreConfig>("config.json");var g=Read<SignedGrant>("grant.json");
+        RequireCanonicalAuthorityConfig(c);
         Protocol.Require(c.Version==1 && c.OwnerSid==g.Payload.OwnerSid &&
             c.OwnerAccountId==g.Payload.OwnerAccountId && c.DeviceId==g.Payload.DeviceId &&
             c.InstallationId==g.Payload.InstallationId && g.Payload.MachineBindingSha256==MachineBinding());
