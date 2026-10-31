@@ -56,7 +56,7 @@ test('Windows installer read-only preflight rejects owner and installation ident
   assert.ifError(sidResult.error);
   assert.equal(sidResult.status,0,sidResult.stderr);
   const ownerSid=sidResult.stdout.trim();
-  assert.match(ownerSid,/^S-1-\\d+(?:-\\d+)+$/);
+  assert.match(ownerSid,/^S-1-\d+(?:-\d+)+$/);
   const root=mkdtempSync(join(tmpdir(),'nexowire-ai02-preflight-'));
   try{
     const bundle=join(root,'bundle'),runtime=join(bundle,'runtime');
@@ -90,7 +90,7 @@ test('Windows installer read-only preflight rejects owner and installation ident
     const ok=execute(identity,request);
     assert.ifError(ok.error);
     assert.equal(ok.status,0,ok.stderr);
-    assert.match(ok.stdout,/"installed"\\s*:\\s*false/);
+    assert.match(ok.stdout,/"installed"\s*:\s*false/);
     for(const [id,req,error] of [
       [identity,{...request,installationId:randomUUID()},'LOCAL_OWNER_DEVICE_MISMATCH'],
       [identity,{...request,ownerAccountId:'other-account-01'},'LOCAL_OWNER_DEVICE_MISMATCH'],
