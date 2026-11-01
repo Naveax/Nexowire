@@ -11,6 +11,20 @@ For a source checkout, use Node.js 22+ with `npm ci` and `npm run build`; invoke
 
 The onboarding command creates a safe deployment starting point without writing plaintext bearer tokens into repository files, launcher arguments, or Nexowire state.
 
+## Which operation changes what?
+
+| Operation | Risk category | Expected effect |
+| --- | --- | --- |
+| `nexowire node status`, `nexowire hub status`, `nexowire agent doctor` | Diagnostic | Inspect local state or probe health; no repair/credential rotation |
+| `nexowire onboard plan`, `nexowire doctor --remote` | Readiness (possible local initialization) | Evaluate checks; first run may create credential-state files |
+| `nexowire node bootstrap` | Changes local system state | Creates protected credentials, installs/starts per-user Scheduled Tasks |
+| `nexowire onboard bootstrap` | Issues credentials | Emits one-time token values to the current terminal output |
+| `nexowire node connector` | **Reveals secret** | Decrypts the self-host MCP bearer token; never use for routine diagnostics |
+| `nexowire tailscale funnel` | Changes remote exposure | Requests Funnel configuration; requires the auth preconditions |
+| `nexowire onboard bootstrap --force` | **Rotates/overlaps credentials** | Issues a new pair even when current credentials work |
+
+Do not run a state-changing, secret-revealing or exposure-changing command to collect a routine support report. See [self-host diagnostic-first recovery](SELF_HOST.md#after-a-disconnection-diagnostic-first-recovery); no `node connector` output is needed for that sequence.
+
 ## Plan
 
 ```text
@@ -56,6 +70,10 @@ Repeated bootstrap does not create duplicates while usable credentials already e
 Store the one-time native-agent credential through a protected source on the target machine, then configure only its reference in the agent environment.
 
 For the MCP credential, place the one-time token in the ChatGPT/client connector's secret configuration rather than a repository file.
+
+Supported reference names in the operator next-step report include `NEXOWIRE_AGENT_TOKEN_FILE`, `NEXOWIRE_AGENT_TOKEN_DPAPI_FILE`, and `NEXOWIRE_AGENT_TOKEN_PLATFORM_NAME`. These are **references**, not places to paste literal credentials in a README, PR, process argument or public command transcript. Windows self-host bootstrap instead manages its own same-user DPAPI protected copies; do not combine these two credential recipes casually. On Linux, confirm that the selected protected secret source and permissions really work; macOS protected-store read/status support does not imply unattended write support. Do not share real one-time token output in support requests.
+
+If a first-run attempt is interrupted, inspect readiness and existing credential state before considering another issuance. `--force` is a rotation decision, not a connectivity troubleshooting flag.
 
 For remote deployments, `nexowire doctor --remote` remains the readiness gate. Onboarding does not pretend a loopback/plaintext/missing-TLS deployment is production-ready merely because credentials now exist. Linux/manual hosting requires its own supported, separately verified Agent secret source and lifecycle; the Windows Scheduled Task/DPAPI recipe does not transfer automatically.
 
