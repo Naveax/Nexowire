@@ -27,6 +27,7 @@ async function postFolderAction(action, body) {
 function syncFolders(folders) {
   const select = $('folder-filter');
   select.replaceChildren(new Option('Tüm klasörler', 'all'), new Option('Klasörsüz', 'unassigned'));
+  select.disabled = false;
   for (const folder of folders) select.add(new Option(folder.name, folder.id));
   if (selectedFolder !== 'all' && selectedFolder !== 'unassigned' &&
       !folders.some(folder => folder.id === selectedFolder)) selectedFolder = 'all';
@@ -50,6 +51,7 @@ function getDeviceTier(device) {
 
 function syncDeviceToolbar(devices) {
   for (const button of document.querySelectorAll('[data-filter]')) {
+    button.disabled = false;
     const tier = button.dataset.filter;
     const selected = tier === selectedDeviceFilter;
     button.classList.toggle('selected', selected);
@@ -59,6 +61,7 @@ function syncDeviceToolbar(devices) {
     );
   }
   for (const button of document.querySelectorAll('[data-layout]')) {
+    button.disabled = false;
     const selected = button.dataset.layout === selectedDeviceLayout;
     button.classList.toggle('selected', selected);
     button.setAttribute('aria-pressed', String(selected));
@@ -86,6 +89,43 @@ function setPill(label, tone) {
   const pill = $('connection-pill');
   pill.textContent = label;
   pill.className = 'pill ' + tone;
+}
+
+// Announce one concise list update without making screen readers repeat every
+// device card and its controls when the list is refreshed.
+function setDeviceListMessage(message, loading = false) {
+  const root = $('devices');
+  root.replaceChildren();
+  const empty = document.createElement('div');
+  empty.className = 'empty';
+  empty.textContent = message;
+  root.appendChild(empty);
+  root.setAttribute('aria-busy', String(loading));
+  $('device-list-status').textContent = message;
+}
+
+function resetDashboardPresentation() {
+  currentSnapshot = null;
+  $('connect-device').disabled = true;
+  for (const button of document.querySelectorAll('[data-filter]')) {
+    button.disabled = true;
+    button.querySelector('.filter-count').textContent = '—';
+  }
+  for (const button of document.querySelectorAll('[data-layout]')) button.disabled = true;
+  $('folder-filter').disabled = true;
+  $('devices-count').textContent = '—';
+  $('devices-count').removeAttribute('title');
+  $('devices-detail').textContent = 'Cihaz durumu doğrulanmadı';
+  $('plan').textContent = '—';
+  $('plan-detail').textContent = 'Hesap bilgisi bekleniyor';
+  $('usage').textContent = '—';
+  $('usage').removeAttribute('title');
+  $('usage-detail').textContent = 'Kullanım bilgisi bekleniyor';
+  $('usage-bar').style.width = '0%';
+  $('auto-toggle').disabled = true;
+  $('auto-toggle').textContent = 'Kontrol ediliyor…';
+  $('auto-status').textContent = '';
+  setDeviceListMessage('Cihaz listesi yükleniyor…', true);
 }
 
 function explainApiError(code) {
@@ -368,7 +408,7 @@ function render(snapshot) {
   }
 
   const devices = snapshot.devices ?? [];
-  const onlineCount = devices.filter((device) => device.online).length;
+  const onlineCount = devices.filter((device) => device.online === true).length;
   $('devices-count').textContent = formatCompact(devices.length);
   $('devices-count').title = formatNumber(devices.length);
   $('devices-detail').textContent = formatCompact(onlineCount) + ' çevrimiçi';
@@ -388,20 +428,28 @@ function render(snapshot) {
 
   const root = $('devices');
   root.textContent = '';
+  root.setAttribute('aria-busy', 'false');
   if (!visibleDevices.length) {
     const empty = document.createElement('div');
     empty.className = 'empty';
     empty.textContent = !devices.length
       ? 'Henüz bağlı cihaz yok. Yeni cihaz bağlayarak başlayabilirsin.'
-      : selectedDeviceFilter === 'persistent'
-        ? 'CORE etkin cihaz bulunmuyor. Tümü filtresinden ilgili cihazın CORE düğmesini aç.'
-        : 'Bu erişim düzeyinde cihaz bulunmuyor.';
+      : selectedFolder !== 'all'
+        ? 'Seçilen klasör ve erişim filtresine uyan cihaz bulunmuyor.'
+        : selectedDeviceFilter === 'persistent'
+          ? 'CORE durumu doğrulanmış cihaz bulunmuyor. Diğer cihazlar için Tümü filtresini seç.'
+          : 'Seçilen erişim düzeyinde cihaz bulunmuyor.';
     root.appendChild(empty);
+    $('device-list-status').textContent = empty.textContent;
   } else {
+    $('device-list-status').textContent =
+      visibleDevices.length + ' cihaz gösteriliyor; ' +
+      visibleDevices.filter((device) => device.online === true).length + ' çevrimiçi.';
     for (const device of visibleDevices) {
       const row = document.createElement('article');
       row.className = 'device' + (device.online ? '' : ' offline');
       row.dataset.deviceId = device.id;
+      row.setAttribute('aria-label', 'Cihaz: ' + device.name);
       row.innerHTML = [
         '<div class="device-header">',
         ' <div class="device-identity">',
@@ -420,7 +468,7 @@ function render(snapshot) {
         '  <span class="pc-settings-arrow" aria-hidden="true">⌄</span>',
         ' </button>',
         '<div class="pc-settings-panel"><div class="pc-settings-inner">',
-        '<div class="device-folder-manage"><label>Klasör <select class="folder-assign" aria-label="Cihaz klasörünü değiştir"></select></label><small class="folder-assign-status"></small></div>',
+        '<div class="device-folder-manage"><label>Klasör <select class="folder-assign" aria-label="Cihaz klasörünü değiştir"></select></label><small class="folder-assign-status" role="status" aria-live="polite"></small></div>',
         '<div class="device-access">',
         ' <div class="access-heading"><span class="access-title">Erişim düzeyi</span><span class="access-mode"></span></div>',
         ' <button type="button" class="secondary access-toggle"></button>',
@@ -467,7 +515,10 @@ function render(snapshot) {
       ].join('');
       row.querySelector('.device-name').textContent = device.name;
       row.querySelector('.platform').textContent = device.platform;
+      row.querySelector('.core-shortcut').setAttribute('aria-label', device.name + ' CORE ayarlarını aç');
+      row.querySelector('.bridge-quick-toggle').setAttribute('aria-label', device.name + ' Admin Bridge tercihini değiştir');
       const folderSelect = row.querySelector('.folder-assign');
+      folderSelect.setAttribute('aria-label', device.name + ' cihazının klasörü');
       folderSelect.add(new Option('Klasörsüz', ''));
       for (const folder of snapshot.folders ?? []) folderSelect.add(new Option(folder.name, folder.id));
       folderSelect.value = device.folderId ?? '';
@@ -504,6 +555,7 @@ function render(snapshot) {
       const pcSettings = row.querySelector('.pc-settings');
       const pcButton = row.querySelector('.pc-settings-button');
       const pcPanel = row.querySelector('.pc-settings-panel');
+      pcButton.setAttribute('aria-label', device.name + ' PC ayarları');
       pcPanel.id = 'pc-settings-' + devices.indexOf(device);
       pcButton.setAttribute('aria-controls', pcPanel.id);
       const setSettingsOpen = (open) => {
@@ -751,6 +803,7 @@ async function load() {
   $('error-panel').classList.add('hidden');
   $('login').classList.add('hidden');
   setPill('Kontrol ediliyor', 'muted');
+  resetDashboardPresentation();
   try {
     const response = await fetch('/api/v1/me/dashboard', {
       credentials: 'include',
@@ -761,6 +814,7 @@ async function load() {
       $('error-message').textContent = 'Kontrol paneli için GitHub hesabınla giriş yap.';
       $('login').classList.remove('hidden');
       $('error-panel').classList.remove('hidden');
+      setDeviceListMessage('Cihazları görüntülemek için GitHub hesabınla giriş yap.');
       return;
     }
     if (!response.ok) throw new Error('HTTP ' + response.status);
@@ -770,6 +824,7 @@ async function load() {
     $('error-message').textContent =
       error instanceof Error ? error.message : String(error);
     $('error-panel').classList.remove('hidden');
+    setDeviceListMessage('Cihaz listesi yüklenemedi. Bağlantını kontrol edip yeniden dene.');
   }
 }
 
