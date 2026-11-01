@@ -29,7 +29,8 @@ export function summarizeS5Latencies(samples:readonly number[]):
     throw new Error('S5 latency samples must be non-empty finite positive durations');
   }
   const sorted=[...samples].sort((a,b)=>a-b);
-  const at=(p:number)=>Number(sorted[Math.ceil(sorted.length*p)-1]!.toFixed(3));
+  // Positive observations below 0.0005 ms must not be rounded into a false zero.
+  const at=(p:number)=>Math.max(.001,Number(sorted[Math.ceil(sorted.length*p)-1]!.toFixed(3)));
   return {p50:at(.5),p95:at(.95),p99:at(.99),max:at(1)};
 }
 function integer(n:number,min:number,max:number,name:string):void{

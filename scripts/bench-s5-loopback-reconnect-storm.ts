@@ -12,6 +12,11 @@ export interface S5StormOptions{
   socketsPerRound:number;rounds:number;queueLimit:number;processingLimit:number;
   /** Cancellation is local to this synthetic fixture; no native operation exists. */
   signal?:AbortSignal;
+  /** Test-only snapshot after bounded teardown, including on abort/error. */
+  onTeardown?:(state:Readonly<S5StormTeardown>)=>void;
+}
+export interface S5StormTeardown{
+  openClients:number;openServerSockets:number;queued:number;processing:number;
 }
 
 export interface S5ReconnectStormResult{
@@ -24,7 +29,7 @@ export interface S5ReconnectStormResult{
 }
 export async function runS5ReconnectStorm(input:S5StormOptions):
   Promise<S5ReconnectStormResult>{
-  const {socketsPerRound,rounds,queueLimit,processingLimit,signal}=input;
+  const {socketsPerRound,rounds,queueLimit,processingLimit,signal,onTeardown}=input;
   const checkAbort=()=>{if(signal?.aborted)throw new Error('S5 storm aborted')};
   checkAbort();
   if(!Number.isSafeInteger(socketsPerRound)||socketsPerRound<1||socketsPerRound>128||
@@ -156,6 +161,18 @@ export async function runS5ReconnectStorm(input:S5StormOptions):
     for(const ws of clients)try{ws.terminate()}catch{}
     for(const ws of serverSockets)try{ws.terminate()}catch{}
     if(server)await new Promise<void>(resolve=>server!.close(()=>resolve()));
+    // Peer-close and already-scheduled queue work can lag server.close().
+    // Bound the wait and report a failure instead of silently leaking handles.
+    const state=():S5StormTeardown=>({
+      openClients:[...clients].filter(ws=>ws.readyState!==WebSocket.CLOSED).length,
+      openServerSockets:serverSockets.size,queued:queue.length,processing:active,
+    });
+    for(let i=0;i<50&&Object.values(state()).some(n=>n>0);i++)await sleep(10);
+    const remaining=state();
+    onTeardown?.(remaining);
+    if(Object.values(remaining).some(n=>n>0)){
+      throw new Error('S5 storm fixture teardown exceeded bounded deadline');
+    }
     // Cancellation wins even when it races a handshake, RPC response or teardown.
     checkAbort();
   }
