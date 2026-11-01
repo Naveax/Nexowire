@@ -1,0 +1,32 @@
+[
+  {
+    "id": "NC-001",
+    "description": "Connection failure shows an actionable retry state without claiming device access",
+    "pr": "https://github.com/Naveax/Nexowire/pull/1011",
+    "status": "DRAFT"
+  },
+  {
+    "id": "NC-002",
+    "description": "Narrow display preserves visible focus, labels, and non-overflowing navigation",
+    "pr": "https://github.com/Naveax/Nexowire/pull/1010",
+    "status": "DRAFT"
+  },
+  {
+    "id": "NC-003",
+    "description": "Admin overview announces loading completion and labels its KPI values",
+    "pr": "https://github.com/Naveax/Nexowire/pull/1015",
+    "status": "DRAFT"
+  },
+  {
+    "id": "NC-004",
+    "description": "Windows setup guide distinguishes dashboard URL from MCP and safety prerequisites",
+    "pr": "https://github.com/Naveax/Nexowire/pull/1013",
+    "status": "DRAFT"
+  },
+  {
+    "id": "NC-005",
+    "description": "MCP reference documentation distinguishes read-only tools from CORE capability",
+    "pr": "https://github.com/Naveax/Nexowire/pull/1014",
+    "status": "DRAFT"
+  }
+]
