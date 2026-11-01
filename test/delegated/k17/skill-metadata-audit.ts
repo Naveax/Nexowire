@@ -42,6 +42,20 @@ export function auditSkillMetadata(
       });
     }
   }
+  for (const key of ['requires', 'platforms', 'mutation', 'privilege', 'trust']) {
+    if (header.some((line) => new RegExp(`^\\s*${key}\\s*:\\s*$`, 'i').test(line))) {
+      issues.push({
+        code: 'blank-declaration',
+        detail: `${directory}: explicit ${key} declaration is empty; do not infer permission or support`,
+      });
+    }
+  }
+  if (!header.some((line) => /^\s*platforms\s*:\s*\S/i.test(line))) {
+    issues.push({
+      code: 'platform-unknown',
+      detail: `${directory}: no explicit platform support declaration; support is UNKNOWN for this audit`,
+    });
+  }
 
   try {
     const manifest = parseSkillManifest(markdown, directory);
@@ -143,6 +157,19 @@ export async function auditLocalMarkdownLinks(
       stat = await fs.stat(target);
     } catch {
       issues.push({ code: 'link-missing', detail: `${markdownPath}: ${raw}` });
+      continue;
+    }
+    // A path may be lexically inside the checkout yet resolve through a
+    // symlink to a different filesystem subtree. Never follow such links.
+    const resolvedRoot = await fs.realpath(repositoryRoot);
+    const resolvedTarget = await fs.realpath(target);
+    const resolvedRelative = path.relative(resolvedRoot, resolvedTarget);
+    if (
+      resolvedRelative === '..' ||
+      resolvedRelative.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(resolvedRelative)
+    ) {
+      issues.push({ code: 'link-outside-repo', detail: `${markdownPath}: ${raw} follows a link outside repo` });
       continue;
     }
     if (!fragment) continue;
