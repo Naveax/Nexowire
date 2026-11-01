@@ -3,7 +3,7 @@
  * Dependency-free, read-only checks for the public static web shell.
  * This does NOT run JavaScript, a browser, an authenticated session or a layout engine.
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -33,12 +33,21 @@ function checkResource(webDir, file, reference) {
   if (/^(?:\/|#|[a-z][a-z\d+.-]*:|\/\/)/i.test(reference)) return null;
   const pathname = reference.split(/[?#]/, 1)[0];
   if (!pathname) return null;
+  // A static file contract should not depend on a host's interpretation of
+  // encoded dot/slash characters, Windows backslashes or symlink targets.
+  if (/%(?:2e|2f|5c)/i.test(pathname) || pathname.includes('\\')) {
+    return `ambiguous encoded path or backslash: ${reference}`;
+  }
   const target = resolve(webDir, dirname(file), pathname);
   const withinWeb = relative(webDir, target);
   if (isAbsolute(withinWeb) || withinWeb === '..' || withinWeb.startsWith(`..${sep}`)) {
     return `path escapes web/: ${reference}`;
   }
   if (!existsSync(target)) return `missing static asset: ${reference}`;
+  const actual = relative(realpathSync(webDir), realpathSync(target));
+  if (isAbsolute(actual) || actual === '..' || actual.startsWith(`..${sep}`)) {
+    return `symlink escapes web/: ${reference}`;
+  }
   return null;
 }
 

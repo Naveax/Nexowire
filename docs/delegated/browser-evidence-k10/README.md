@@ -60,6 +60,11 @@ The optional capture blocks HTTP(S). Its result is `PARTIAL` at best, not a
 login, keyboard, state-mutation or device acceptance. Keep screenshots outside
 the repository and reference sanitized artifact hashes/paths in the ledger.
 
+The optional PNG validator rejects incomplete/chunk-CRC-corrupt or truncated
+RGB/RGBA 8-bit screenshot files, mismatched viewport dimensions and invalid
+compressed pixels. Test-generated PNG buffers are **only validator fixtures**,
+never evidence that a browser rendered Nexowire.
+
 ## Reviewer decision
 
 - `ACCEPT_STATIC_ONLY`: exact source checks passed, browser/physical remain

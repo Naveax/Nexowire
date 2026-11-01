@@ -47,6 +47,11 @@ enumerates loading/empty/error/success for each page. Its anchor checks prove
 the corresponding static IDs exist, **not** that a live API reaches or paints
 those states. Visual verification and screenshot collection are still pending.
 
+The related [offline state snapshots](../test/delegated/k10/offline-state-snapshots.json)
+are deliberately labeled synthetic and do not represent captured screen pixels.
+The [focus-target inventory](../test/delegated/k10/focus-targets.json) identifies
+conditional keyboard checks; it leaves browser focus order as `NOT_RUN`.
+
 An **optional** browser runner is also available after Playwright and a local
 Chromium executable have been installed separately:
 
@@ -55,8 +60,8 @@ node scripts/delegated/k10/browser-visual-smoke.mjs --out /tmp/nexowire-visual-s
 ```
 
 Use a temporary output directory appropriate for your OS. The runner blocks
-HTTP(S) requests, visits only `file://` pages, checks the PNG header and
-viewport-sized dimensions, and evaluates horizontal overflow. It returns
+HTTP(S) requests, visits only `file://` pages, checks PNG chunk CRCs,
+compressed pixel data and viewport-sized dimensions, and evaluates horizontal overflow. It returns
 `PARTIAL` even when all nine static screenshots succeed: API-rendered states,
 real login, keyboard tab order, and device behavior remain `NOT_RUN`. Missing
 Playwright/Chromium returns `NOT_RUN` with exit code 2; a detected screenshot

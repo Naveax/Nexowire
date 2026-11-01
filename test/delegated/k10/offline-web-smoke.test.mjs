@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { deflateSync } from 'node:zlib';
 import { auditWebShell, PAGES, VIEWPORTS } from '../../../scripts/delegated/k10/offline-web-smoke.mjs';
-import { inspectPng } from '../../../scripts/delegated/k10/browser-visual-smoke.mjs';
+import { captureLocalStaticViews, inspectPng } from '../../../scripts/delegated/k10/browser-visual-smoke.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const realWeb = join(root, 'web');
@@ -53,6 +54,22 @@ test('asset directory escape is rejected even if its target exists', (t) => {
   assert.ok(auditWebShell(webDir).static.checks.some((c) => c.status === 'FAIL' && c.detail.startsWith('path escapes web/')));
 });
 
+test('encoded and nested local asset traversal cannot pass static smoke', (t) => {
+  for (const bad of ['../../package.json', './%2e%2e/package.json', './..%2fpackage.json', '.\\..\\package.json']) {
+    const webDir = fixture(t, 'index.html', (html) => html.replace('./styles.css', bad));
+    assert.equal(auditWebShell(webDir).static.status, 'FAIL', bad);
+  }
+  const okay = fixture(t, 'index.html', (html) => html.replace('./styles.css', './styles.css?v=1#css'));
+  assert.equal(auditWebShell(okay).static.status, 'PASS');
+});
+
+test('symbolic link escaping web root cannot pass even if target exists', (t) => {
+  const webDir = fixture(t, 'index.html', (html) => html.replace('./styles.css', './linked.css'));
+  try { symlinkSync(join(root, 'package.json'), join(webDir, 'linked.css')); }
+  catch (error) { if (['EPERM', 'EACCES', 'ENOTSUP'].includes(error.code)) return t.skip('symlink creation unavailable'); throw error; }
+  assert.ok(auditWebShell(webDir).static.checks.some((c) => c.status === 'FAIL' && c.detail.startsWith('symlink escapes web/')));
+});
+
 test('test widths do not imply a browser, overflow, focus or screenshot PASS', () => {
   const report = auditWebShell(realWeb);
   assert.deepEqual(VIEWPORTS.map(({ width }) => width), [375, 768, 1440]);
@@ -98,20 +115,100 @@ test('twelve state fixtures bind to existing DOM anchors but retain NOT_RUN brow
   }
 });
 
-test('PNG evidence validation rejects incorrect dimensions and missing headers', (t) => {
+test('twelve synthetic DOM snapshots match the scenario inventory without claiming runtime', () => {
+  const inventory = JSON.parse(readFileSync(join(root, 'test/delegated/k10/state-scenarios.json'), 'utf8'));
+  const set = JSON.parse(readFileSync(join(root, 'test/delegated/k10/offline-state-snapshots.json'), 'utf8'));
+  assert.equal(set.evidenceKind, 'SYNTHETIC_DOM_SNAPSHOT_NOT_A_BROWSER_CAPTURE');
+  assert.equal(set.cases.length, 12);
+  const expected = new Set(inventory.cases.map(({ page, state }) => `${page}/${state}`));
+  for (const sample of set.cases) {
+    const key = `${sample.page}/${sample.state}`;
+    assert.ok(expected.delete(key), `unknown or duplicate synthetic state: ${key}`);
+    assert.equal(sample.runtimeStatus, 'NOT_RUN');
+    assert.ok(sample.snapshot.text.length >= 5);
+    assert.ok(['status', 'alert', 'region', 'list'].includes(sample.snapshot.role));
+    assert.ok(readFileSync(join(realWeb, PAGES[sample.page].file), 'utf8').includes(`id="${sample.rootId}"`));
+  }
+  assert.equal(expected.size, 0);
+});
+
+test('focus target inventory anchors exist but keyboard tab order remains browser-only', () => {
+  const inventory = JSON.parse(readFileSync(join(root, 'test/delegated/k10/focus-targets.json'), 'utf8'));
+  assert.equal(inventory.browserKeyboardTest, 'NOT_RUN');
+  assert.ok(inventory.targets.some((item) => item.page === 'admin' && item.targetId === null));
+  for (const target of inventory.targets) {
+    assert.equal(target.browserStatus, 'NOT_RUN');
+    assert.ok(target.expected.length > 15 && target.precondition.length > 15);
+    if (target.targetId) {
+      assert.ok(readFileSync(join(realWeb, PAGES[target.page].file), 'utf8').includes(`id="${target.targetId}"`));
+    }
+  }
+});
+
+test('absence of Playwright returns NOT_RUN without a screenshot or false PASS', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'nexowire-k10-browser-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const report = await captureLocalStaticViews({ outputDir: join(dir, 'screenshots'), playwrightModule: 'k10-missing-playwright-fixture-613901' });
+  assert.equal(report.status, 'NOT_RUN');
+  assert.match(report.reason, /Playwright is unavailable/);
+  assert.deepEqual(report.scenarios, []);
+});
+
+function crc32ForTest(buffer) {
+  let value = 0xffffffff;
+  for (const byte of buffer) {
+    value ^= byte;
+    for (let bit = 0; bit < 8; bit++) value = (value >>> 1) ^ (value & 1 ? 0xedb88320 : 0);
+  }
+  return (value ^ 0xffffffff) >>> 0;
+}
+
+function pngChunk(type, content) {
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(content.length);
+  const payload = Buffer.concat([Buffer.from(type), content]);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32ForTest(payload));
+  return Buffer.concat([length, payload, crc]);
+}
+
+function realSyntheticPng(width, height) {
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8;
+  header[9] = 6;
+  const pixels = Buffer.alloc((width * 4 + 1) * height);
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    pngChunk('IHDR', header),
+    pngChunk('IDAT', deflateSync(pixels)),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+test('PNG evidence requires intact compressed pixels, chunks and viewport dimensions', (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'nexowire-k10-png-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const image = join(dir, 'preview.png');
-  const header = Buffer.alloc(24);
-  Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(header);
-  header.write('IHDR', 12);
-  header.writeUInt32BE(375, 16);
-  header.writeUInt32BE(812, 20);
-  writeFileSync(image, header);
+  const intact = realSyntheticPng(375, 812);
+  writeFileSync(image, intact);
   assert.equal(inspectPng(image, 375, 812).status, 'PASS');
   assert.equal(inspectPng(image, 768, 1024).status, 'FAIL');
-  writeFileSync(image, Buffer.alloc(24));
+  writeFileSync(image, intact.subarray(0, 24));
   assert.equal(inspectPng(image, 375, 812).status, 'FAIL');
+  writeFileSync(image, intact.subarray(0, -12));
+  assert.equal(inspectPng(image, 375, 812).status, 'FAIL');
+  const corrupt = Buffer.from(intact);
+  corrupt[40] ^= 1;
+  writeFileSync(image, corrupt);
+  assert.match(inspectPng(image, 375, 812).reason, /CRC/);
+  writeFileSync(image, Buffer.concat([intact, Buffer.from('junk')]));
+  assert.equal(inspectPng(image, 375, 812).status, 'FAIL');
+  writeFileSync(image, realSyntheticPng(768, 1024));
+  assert.equal(inspectPng(image, 768, 1024).status, 'PASS');
+  writeFileSync(image, realSyntheticPng(1440, 900));
+  assert.equal(inspectPng(image, 1440, 900).status, 'PASS');
 });
 
 test('review template never promotes empty browser evidence to PASS', () => {
