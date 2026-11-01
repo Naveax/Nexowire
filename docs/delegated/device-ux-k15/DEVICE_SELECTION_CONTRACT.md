@@ -48,8 +48,10 @@ Neither displaying a card nor choosing a folder grants permission.
   different devices. The card's displayed name is not linked with those
   buttons via an accessible naming relation. To resolve, the owner of
   `web/app.js` should add device-specific accessible context to per-card
-  controls without modifying capability/routing logic. This task's path
-  ownership does not permit editing `web/app.js`.
+  controls without modifying capability/routing logic. A focused test
+  documents the **expected failing condition as TODO** until the UI owner
+  resolves it. This task's path ownership does not permit editing
+  `web/app.js`.
 
 ## Copy proposal for one / many / filtered devices (T-088)
 
@@ -108,5 +110,6 @@ node --test test/delegated/k15/device-card-contract.test.mjs
 This runs a limited synthetic DOM surface around the real `web/app.js`
 `render()` implementation without external dependencies or network. It
 tests registered/filtered/duplicate ID/offline/ready/Unicode/AUTO display
-contracts. It deliberately excludes browser layout, keyboard accessibility,
+contracts: eight PASS cases plus one explicitly TODO accessible-label case.
+It deliberately excludes browser layout, keyboard accessibility,
 MCP route admission and actual device operations.
