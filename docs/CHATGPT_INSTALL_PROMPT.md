@@ -17,26 +17,33 @@ adımlar kendi başına da kullanılabilir; yayımlanmamış bir özelliği var 
 Yapılacak sıra:
 1. Windows’un desteklenen x64 sürümünde olduğumu doğrula. Normal kullanıcı
    kurulumunu kullan; kendi sunucumu, Tailscale’i veya yönetici Broker’ı kurdurma.
-2. Bu kılavuzla aynı dalın README'sindeki Nexowire-Setup.cmd indirmesini kullan.
-   Düzeltilmiş kurucu: installers/Nexowire-Setup.cmd (dosya görünümünde Download raw).
-   Bu kılavuzun yayımlandığı dal:
-   https://github.com/Naveax/Nexowire/tree/fix/first-pc-onboarding-guide-20261029
-   Kurucu yayımlanmış v1.0.7 uygulamasını kullanır; yeni sürüm veya imzalı
-   installer diye sunma. Önceki resmî yayın:
-   https://github.com/Naveax/Nexowire/releases/tag/v1.0.7
+2. Güncel README'deki resmî yayımlanmış v1.0.8 kurucusunu kullan:
+   https://github.com/Naveax/Nexowire/releases/download/v1.0.8/Nexowire-Setup.cmd
+   README'de gösterilen SHA-256 ile dosyayı doğrulamama yardımcı ol; hash'i
+   yayıncı imzası veya güvenlik onayı gibi sunma. Depodaki
+   installers/Nexowire-Setup.cmd önceki v1.0.7'nin arşiv kurucusudur;
+   yeni kurulum için onu indirtme.
    Kaynak ZIP’ini veya geliştirici .tgz paketini ilk kurulum gibi kullanma.
    Paket kendi Node çalıştırıcısını getirir; önceden npm/Node kurdurma.
+   İndirilen dosyanın gerçek uzantısı .cmd olmalı, .cmd.txt olmamalı.
 3. Bilgisayarımda yetkili yerel araçların varsa indirme ve kurulum durumunu
    onlarla incele. Böyle araçların yoksa bilgisayarıma erişebiliyormuşsun gibi
    konuşma; indirilecek tek dosyayı ve sıradaki kısa adımı göster.
 4. Açılan resmî tarayıcı ekranında kendi GitHub hesabımla giriş yapmamı ve
-   BAĞLA’ya basmamı sağla. Şifre veya doğrulama kodumu sohbete isteme.
+   cihaz adını doğruladıktan sonra BAĞLA’ya basmamı sağla. Genel indirme
+   ekranını eşleme onay ekranı sanma. BAĞLA tepki vermiyorsa ekranda hata,
+   BAĞLANIYOR… veya TEKRAR DENE durumunu sor; aynı kurulumdan Başlat →
+   Nexowire ile yeni bağlantı ekranı açtır. Şifre veya kod isteme.
 5. Kontrol panelinde bu PC çevrimiçi görünmeden bağlantı tamamlandı deme.
 6. ChatGPT’de Nexowire eklentisi yoksa resmî OpenAI kılavuzuna göre özel MCP
-   bağlantısı eklememe yol göster. Sunucu URL’sini Nexowire’ın herkese açık
+   bağlantısı eklememe yol göster. Kontrol panelinin URL'si bir MCP sunucu
+   URL'si değildir. Sunucu URL’sini Nexowire’ın herkese açık
    .well-known/oauth-protected-resource belgesindeki resource alanından al;
    https://nexowire-control-plane.nexowire-naveax.workers.dev/.well-known/oauth-protected-resource
-   giriş paneline /mcp ekleyip tahmin etme. Kimlik doğrulama OAuth olmalı.
+   resource alanı yoksa adres uydurma; giriş paneline /mcp ekleyip tahmin etme.
+   Kimlik doğrulama OAuth olmalı. ChatGPT'de Oluştur başarısızsa görünen
+   hatayı, hesabın/çalışma alanının eklenti iznini ve doğrulanmış adresi
+   kontrol et; OAuth'u kapatma veya API anahtarı isteme.
    Eklenti ile cihaz eşlemesinde aynı GitHub hesabını kullanmalıyım.
 7. Yeni sohbette eklenti seçildikten sonra devices_list ile doğru PC’yi doğrula.
    Gerekli cihaz seçimi tamamlandıktan sonra yalnız machine_snapshot ve
@@ -50,6 +57,9 @@ Engel çıkarsa tam adımı ve gizlenmiş hata metnini kullan; politika/antivir�
 kapatma, yönetici yükseltme veya işlem günlüğünü silme gibi kestirmeler üretme.
 Mevcut kurulumu, çalışan diğer cihazları veya projeleri değiştirme.
 Agent bağlantısını CORE/yönetici veya fiziksel masaüstü yetkisi gibi sunma.
+Kurulum sırasında önce yalnız Windows sürümü, gerçek kurucu dosyası,
+cihazın panelde çevrimiçi durumu, MCP adresi ve görünen hata durumlarını
+kontrol et. Gizli bilgileri, token'ları veya tam tanı klasörlerini isteme.
 ```
 
 ChatGPT bağlantısının resmî kılavuzu:
