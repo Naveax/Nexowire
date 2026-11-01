@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { auditHtml, auditErrorBindings } from '../../../scripts/delegated/k05/audit-html.mjs';
+import { normalizeFixturePath } from '../../../scripts/delegated/k05/fixture-path.mjs';
 
 const rootUrl = new URL('../../../', import.meta.url);
 const source = (path) => readFileSync(new URL(path, rootUrl), 'utf8');
@@ -9,9 +11,11 @@ const page = (body) => `<html lang="tr"><head><meta name="viewport" content="wid
 const rules = (html) => auditHtml(page(html)).findings.map((item) => item.rule);
 
 test('T-025: live pages expose named static form fields, buttons and links', () => {
-  for (const path of ['web/index.html', 'web/connect.html', 'web/custom-usage-consent-preview.html']) {
+  for (const path of ['web/index.html', 'web/custom-usage-consent-preview.html']) {
     assert.deepEqual(auditHtml(source(path), path).findings, [], path);
   }
+  assert.deepEqual(auditHtml(source('web/connect.html'), 'web/connect.html').findings.map(({ rule }) => rule),
+    ['nested-live-region']); // Source finding owned by K01, not waived as PASS.
 });
 
 test('T-025: missing explicit label is caught even when input has a placeholder', () => {
@@ -109,4 +113,50 @@ test('T-029: CSS includes visible keyboard focus and mobile rules (not pixel evi
 test('T-030: source parser ignores markup-like text in scripts and comments', () => {
   const fixture = page('<!-- <input id="bad"> --><script>const x = "<input id=\\"bad\\">";</script><button>OK</button>');
   assert.deepEqual(auditHtml(fixture).findings, []);
+});
+
+test('T-136: fixture paths normalize POSIX, Windows drive and UNC inputs', () => {
+  assert.equal(normalizeFixturePath('/repo/nexowire/test/delegated/a.test.mjs', '/repo/nexowire'),
+    'test/delegated/a.test.mjs');
+  assert.equal(normalizeFixturePath('C:\\Work\\Nexowire\\test\\data.html', 'c:\\work\\nexowire'),
+    'test/data.html');
+  assert.equal(normalizeFixturePath('\\\\server\\share\\project\\test\\file.html',
+    '\\\\server\\share\\project'), 'test/file.html');
+  assert.equal(normalizeFixturePath('test\\fixtures\\..\\case.html', '/repo/nexowire'), 'test/case.html');
+});
+
+test('T-136: outside, traversal, empty and malformed fixture paths cannot expose absolute paths', () => {
+  for (const value of ['/repo/private/file.html', 'D:\\secret\\file.html',
+    '../other/token.txt', 'test/../../secret', '/repo/nexowire2/file.html']) {
+    assert.equal(normalizeFixturePath(value, '/repo/nexowire'), '<external-fixture>', value);
+  }
+  assert.equal(normalizeFixturePath('', '/repo/nexowire'), '<unknown-fixture>');
+  assert.equal(normalizeFixturePath('bad\0file', '/repo/nexowire'), '<unknown-fixture>');
+});
+
+test('T-136: actual CLI labels are repo-relative even when absolute paths are passed', () => {
+  const rootPath = fileURLToPath(rootUrl);
+  const fixture = fileURLToPath(new URL('../../../web/index.html', import.meta.url));
+  assert.equal(normalizeFixturePath(fixture, rootPath), 'web/index.html');
+});
+
+test('T-158: duplicate and nested live announcements fail, distinct statuses do not', () => {
+  assert.ok(rules('<p role="status">Hazır</p><p role="status">Hazır</p>').includes('repeated-live-text'));
+  assert.ok(rules('<div role="status"><p role="alert">Hata</p></div>').includes('nested-live-region'));
+  assert.deepEqual(rules('<p role="status">Yükleniyor</p><p role="status">Bitti</p>'), []);
+});
+
+test('T-159: long Turkish Unicode labels and combining sequences remain meaningful', () => {
+  const long = 'Şube, depo, gönderim, ücret ve teslimat bilgilerini doğrula '.repeat(8);
+  assert.deepEqual(rules(`<label for="s">${long.normalize('NFD')}</label><input id="s">`), []);
+  assert.deepEqual(rules('<label for="s">Şu\u00a0an\u0131n\u200b durumu</label><input id="s">'), []);
+  assert.ok(rules('<input aria-label="\u200b\u200d\ufeff">').includes('unnamed-control'));
+  assert.ok(rules('<label for="s">\u200b\u200d</label><input id="s">').includes('unnamed-control'));
+});
+
+test('T-160: disabled controls still need names but do not create false keyboard-focus findings', () => {
+  assert.ok(rules('<button disabled aria-hidden="true"></button>').includes('unnamed-action'));
+  assert.ok(!rules('<button disabled aria-hidden="true">Bekle</button>').includes('hidden-focusable'));
+  assert.deepEqual(rules('<button disabled>Bekle</button><input disabled aria-label="Kod">'), []);
+  assert.ok(rules('<input disabled placeholder="Ara">').includes('unnamed-control'));
 });

@@ -2,8 +2,9 @@
 // Dependency-free, intentionally conservative source-HTML accessibility audit.
 // This is not a browser, accessibility-tree, or JavaScript-rendered DOM test.
 import { readFileSync } from 'node:fs';
-import { resolve, relative } from 'node:path';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { normalizeFixturePath } from './fixture-path.mjs';
 
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 const DEFAULT_PAGES = [
@@ -62,11 +63,16 @@ function parseStaticHtml(html) {
   return nodes;
 }
 
+function normalizedText(value) {
+  return value.normalize('NFC').replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/\p{White_Space}+/gu, ' ').trim();
+}
+
 function plainText(node, includeHidden = false) {
   if (typeof node === 'string') return node;
   if (!includeHidden && (node.attrs['aria-hidden'] === 'true' || 'hidden' in node.attrs)) return '';
   if (node.tag === 'img') return node.attrs.alt ?? '';
-  return node.children.map((child) => plainText(child, includeHidden)).join(' ').replace(/\s+/g, ' ').trim();
+  return normalizedText(node.children.map((child) => plainText(child, includeHidden)).join(' '));
 }
 
 function ancestor(node, tag) {
@@ -83,6 +89,8 @@ function isNativeKeyboard(node) {
 }
 
 function isFocusable(node) {
+  // Native disabled controls are not keyboard-focusable, but still need names.
+  if ('disabled' in node.attrs && isNativeKeyboard(node)) return false;
   return isNativeKeyboard(node) || ('tabindex' in node.attrs && Number(node.attrs.tabindex) >= 0);
 }
 
@@ -97,6 +105,7 @@ export function auditHtml(html, file = '<fixture>') {
   const nodes = parseStaticHtml(html);
   const ids = new Map();
   const labels = nodes.filter((node) => node.tag === 'label');
+  const liveText = new Set();
   const findings = [];
   const stats = { elements: nodes.length, formControls: 0, buttons: 0,
     links: 0, liveRegions: 0, errorPanels: 0, keyboardCandidates: 0 };
@@ -116,7 +125,7 @@ export function auditHtml(html, file = '<fixture>') {
     const ref = node.attrs['aria-labelledby'];
     // An explicit aria-labelledby may reference text within a hidden subtree.
     if (ref !== undefined) return ref.split(/\s+/).map((id) => plainText(ids.get(id) ?? '', true)).join(' ').trim();
-    if (node.attrs['aria-label'] !== undefined) return node.attrs['aria-label'].trim();
+    if (node.attrs['aria-label'] !== undefined) return normalizedText(node.attrs['aria-label']);
     return '';
   }
 
@@ -148,6 +157,23 @@ export function auditHtml(html, file = '<fixture>') {
       add('suppressed-live', node, `role="${attrs.role}" overrides its live announcement with off`);
     }
     if (attrs.role === 'status' || attrs.role === 'alert' || 'aria-live' in attrs) stats.liveRegions++;
+    if (['status', 'alert'].includes(attrs.role) && !isHiddenFromAssistiveTech(node) &&
+        !('hidden' in attrs) && !attrs.class?.split(/\s+/).includes('hidden')) {
+      const isNested = (() => {
+        for (let parent = node.parent; parent; parent = parent.parent) {
+          if (['status', 'alert'].includes(parent.attrs.role) ||
+              ['polite', 'assertive'].includes(parent.attrs['aria-live'])) return true;
+        }
+        return false;
+      })();
+      if (isNested) add('nested-live-region', node, `role=${attrs.role} nested inside another live region`);
+      const value = normalizedText(plainText(node));
+      if (value) {
+        const key = `${attrs.role}:${value}`;
+        if (liveText.has(key)) add('repeated-live-text', node, `role=${attrs.role} repeats initial announcement`);
+        liveText.add(key);
+      }
+    }
 
     if (tag === 'label' && 'for' in attrs) {
       const target = ids.get(attrs.for);
@@ -232,7 +258,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   for (const page of pages) {
     const path = resolve(page);
     const html = readFileSync(path, 'utf8');
-    const file = relative(ROOT, path);
+    const file = normalizeFixturePath(path, ROOT);
     const matchingJs = new Map([
       ['web/index.html', ['web/app.js', 'error-panel', 'error-message']],
       ['web/connect.html', ['web/connect.js', 'error-panel', 'error-message']],

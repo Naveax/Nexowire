@@ -12,11 +12,12 @@ Repo kökünde, Node.js 22+ ile ve **npm paketi yüklemeden**:
 
 ```sh
 node test/delegated/k05/audit-html.test.mjs
+node test/delegated/k05/dynamic-id-contract.test.mjs
 node scripts/delegated/k05/audit-html.mjs
 ```
 
-- İlk komut 14 otomatik olumlu/olumsuz regresyonu çalıştırır. Bu testlerin PASS olması canlı arayüzün erişilebilirlik kabulü anlamına gelmez.
-- İkinci komut mevcut statik sayfa bulgularını sayar; bir bulgu varsa **exit code 1** döner. Gerçek bir uyarıyı gizlemek için ignore/waiver uygulanmadı.
+- İlk iki komut toplam 24 otomatik olumlu/olumsuz regresyonu çalıştırır (20 HTML/hata, 4 dinamik kart ID kaynak sözleşmesi). Bu testlerin PASS olması canlı arayüzün erişilebilirlik kabulü anlamına gelmez.
+- Üçüncü komut mevcut statik sayfa bulgularını sayar; bir bulgu varsa **exit code 1** döner. Gerçek bir uyarıyı gizlemek için ignore/waiver uygulanmadı.
 - CLI yalnız kaynak HTML etiketleri, ID bağları, ad/label, etkileşimli native türler, `aria-live`, hata panelleri ve sınırlı hata JS `textContent` sözleşmesini denetler. HTML parser'ı genel amaçlı değildir; malformed HTML ve JavaScript ile oluşan gerçek DOM için tarayıcı gerekir.
 - Genel `npm test` komutuna veya CI workflow'una dokunulmadı; mevcut repo komutu `.test.ts` dosyalarını hedefler. K13'ten bağımsız runner entegrasyonu istenmeli.
 
@@ -30,12 +31,19 @@ node scripts/delegated/k05/audit-html.mjs
 | T-028 — hata/metin ID | Panel/mesaj iç içeliği, message `textContent` ve `innerHTML` regresyon negatifi, HTML ID eşleşmeleri | Sunucu hata akışının gerçek kullanıcı hesabıyla çalışması |
 | T-029 — dokunma/viewport | 4 sayfada `width=device-width` varlığı; CSS'de mobil media ve `:focus-visible` kaynak sözleşmesi | Gerçek 24/44 CSS px hedef boyutları, yakınlık, pinch/zoom, mobil taşma |
 | T-030 — kanıt matrisi | Bu dosya; kalan testler ve sahipler aşağıda | Gerçek browser/Windows/Android/VoiceOver/NVDA kabulü |
+| T-136 — fixture path | POSIX/Windows/UNC relatif etiket, kök dışı/geçiş/dengesiz ad için negatifler; CLI göreli dosya etiketi | Windows işletim sistemi dosya semantiğinin kendisi |
+| T-158 — tekrarlı live bölge | İki aynı `status` metni veya iç içe live bölge negatifleri | Gerçek çift seslendirme ölçümü |
+| T-159 — uzun Unicode label | Uzun Türkçe NFD/Unicode boşluk label pozitif, yalnız görünmez karakter ad negatifleri | Tarayıcı adı hesaplama algoritması |
+| T-160 — disabled kontrol | Devre dışı düğmede ad zorunluluğu; yanlış gizli-focus sonucunu engelleme | Gerçek Tab/focus sırası |
+| T-161 — dinamik panel ID | `web/app.js` şablonu içinde sabit tekrarlanan ID negatifi; indexed panel ID/aria-controls source sözleşmesi | Canlı JS DOM ve sunucu duplicate cihaz nesnesi |
+| T-162 — owner devri | `OWNER_HANDOFF.md`: K01/K02/K04/K03 takip ve yeniden üretim bağlantıları | Diğer sahiplerin çözümünün tamamlanması |
 
 ## Açık, tekrar üretilebilir kaynak bulgusu
 
-1. **K04'ün sahibi olduğu `web/admin.html`**: `#admin-error` sınıfı `error-panel`, ancak `role="alert"`, `role="status"` veya `aria-live` bulunmuyor. Kullanıcıya gösterilen hata, ekran okuyucu tarafından otomatik bildirilmeyebilir. `node scripts/delegated/k05/audit-html.mjs` tam bu sayfada `silent-error-panel` döndürür; diğer üç HTML sayfasında statik bulgu yoktur. **K05 bu HTML'i değiştiremez**; K04 `role="alert"` ve ilgili gerçek ekran okuyucu durumunu ele almalı.
-2. **K02 CSS değerlendirmesi**: `web/styles.css` içinde `.filter-button,.layout-button` `min-height:36px`, `.connect-back,.connect-cancel` `min-height:39px` ve diğer küçük kontrol örnekleri var. Tek başına bu deklarasyonlar erişilebilirlik ihlali kanıtı değildir (genişlik, aralık ve istisnalar önemlidir). Mobil gerçek hedef boyutları ve yakınlıkları ölçülmeli; değişiklik gerekiyorsa yalnız K02 yazmalı.
-3. **K03 dinamik cihaz kartları**: `web/app.js` içinde `row.innerHTML` ile üretilen UI'nin erişilebilirlik ağacı bu statik scanner tarafından analiz edilmez. JS şablonunda native `<button>`/`<label>` örnekleri mevcut, fakat başarılı tarayıcı testi veya cihaz kartı erişilebilirlik PASS'i ilan edilmiyor.
+1. **K04'ün sahibi olduğu `web/admin.html`**: `#admin-error` sınıfı `error-panel`, ancak `role="alert"`, `role="status"` veya `aria-live` bulunmuyor. Kullanıcıya gösterilen hata, ekran okuyucu tarafından otomatik bildirilmeyebilir. `node scripts/delegated/k05/audit-html.mjs` `silent-error-panel` bulgusunu döndürür. **K05 bu HTML'i değiştiremez**; K04 karar vermeli.
+2. **K01'in sahibi olduğu `web/connect.html`**: `#install-content` üst kapsayıcısı `aria-live="polite"` iken altındaki `#copy-status` ayrıca `role="status" aria-live="polite"`. İç içe canlı bölge kaynak denetimi `nested-live-region` döndürür. Çift seslendirme olasılığı vardır; gerçek NVDA/VoiceOver kanıtı yoktur. K01 yapısal düzeltme/karar sahibidir.
+3. **K02 CSS değerlendirmesi**: `web/styles.css` içinde `.filter-button,.layout-button` `min-height:36px`, `.connect-back,.connect-cancel` `min-height:39px` ve diğer küçük kontrol örnekleri var. Tek başına bu deklarasyonlar erişilebilirlik ihlali kanıtı değildir (genişlik, aralık ve istisnalar önemlidir). Mobil gerçek hedef boyutları ve yakınlıkları ölçülmeli; değişiklik gerekiyorsa yalnız K02 yazmalı.
+4. **K03 dinamik cihaz kartları**: `web/app.js` içinde `row.innerHTML` ile üretilen UI'nin erişilebilirlik ağacı bu statik scanner tarafından analiz edilmez. Yeni kaynak denetimi `pcPanel.id` ve `aria-controls` sözleşmesini kontrol eder; ancak başarılı tarayıcı testi veya cihaz kartı erişilebilirlik PASS'i ilan edilmez.
 
 ## Gerçek tarayıcı/cihaz kabul matrisi — NOT_RUN
 
