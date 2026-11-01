@@ -93,7 +93,30 @@ test("mobile shell and metrics use two columns at 620px and narrower", () => {
     assert.equal(property(rules, ".metrics", "grid-template-columns", viewport), "repeat(2,minmax(0,1fr))");
     assert.equal(property(rules, ".usage-card", "grid-column", viewport), "1/-1");
     assert.equal(property(rules, ".shell", "width", viewport), "calc(100% - 30px)");
-    assert.equal(property(rules, ".topbar", "padding", viewport), "0 16px");
+    assert.equal(property(rules, ".topbar", "padding", viewport), "10px 16px");
+  }
+});
+
+test("narrow headers and connection cards wrap instead of forcing horizontal scrolling", () => {
+  for (const viewport of [320, 375, 620]) {
+    assert.equal(property(rules, ".topbar", "height", viewport), "auto");
+    assert.equal(property(rules, ".topbar", "min-height", viewport), "62px");
+    assert.equal(property(rules, ".topbar", "flex-wrap", viewport), "wrap");
+    assert.equal(property(rules, ".topbar-right", "min-width", viewport), "0");
+    assert.equal(property(rules, ".topbar-right", "flex-wrap", viewport), "wrap");
+    assert.equal(property(rules, ".topbar .pill", "white-space", viewport), "normal");
+    assert.equal(property(rules, ".topbar .pill", "overflow-wrap", viewport), "anywhere");
+    assert.equal(property(rules, ".connect-title-row", "flex-wrap", viewport), "wrap");
+    assert.equal(property(rules, ".connect-title-row > *", "min-width", viewport), "0");
+  }
+  assert.notEqual(property(rules, ".topbar", "flex-wrap", 621), "wrap");
+  assert.notEqual(property(rules, ".connect-title-row", "flex-wrap", 621), "wrap");
+});
+
+test("form controls have a consistent visible keyboard focus outline", () => {
+  for (const selector of ["button:focus-visible", "input:focus-visible", "select:focus-visible", "textarea:focus-visible"]) {
+    assert.equal(property(rules, selector, "outline", 375), "2px solid var(--accent)");
+    assert.equal(property(rules, selector, "outline-offset", 375), "3px");
   }
 });
 
