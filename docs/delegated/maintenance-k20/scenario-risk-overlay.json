@@ -1,0 +1,37 @@
+[
+  {
+    "id": "NC-001",
+    "risk": "Misleading retry or permission bypass messaging",
+    "negativeCase": "403/device-limit denial must not be presented as a harmless retry or successful pairing",
+    "evidenceNeeded": "Offline UI state regression plus browser/OAuth denial acceptance",
+    "acceptance": "NOT_RUN"
+  },
+  {
+    "id": "NC-002",
+    "risk": "Lost keyboard focus or clipped controls on narrow screens",
+    "negativeCase": "375px viewport and keyboard-only traversal must not hide focused actions",
+    "evidenceNeeded": "Browser screenshot, focus path and assistive-technology check",
+    "acceptance": "NOT_RUN"
+  },
+  {
+    "id": "NC-003",
+    "risk": "Admin panel falsely announces completion or stale status",
+    "negativeCase": "Failed API response must not leave aria-busy true or announce success",
+    "evidenceNeeded": "DOM fixture and authorized/denied admin browser acceptance",
+    "acceptance": "NOT_RUN"
+  },
+  {
+    "id": "NC-004",
+    "risk": "Unsafe installation guidance or confusion between web and MCP URLs",
+    "negativeCase": "Setup failure instructions must not ask for secrets or disable Windows security gates",
+    "evidenceNeeded": "Docs smoke plus owner-approved clean Windows installation review",
+    "acceptance": "NOT_RUN"
+  },
+  {
+    "id": "NC-005",
+    "risk": "Read-only MCP capability described as privileged CORE access",
+    "negativeCase": "Public MCP listing must not imply unauthorized mutation or native authority",
+    "evidenceNeeded": "Source/read-only contract comparison and owner security review",
+    "acceptance": "NOT_RUN"
+  }
+]
