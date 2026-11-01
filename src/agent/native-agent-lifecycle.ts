@@ -88,6 +88,8 @@ export interface NativeAgentLifecycleOptions {
   rootDir?: string;
   homeDir?: string;
   windowsTaskName?: string;
+  /** Fixed, bundled native Job guardian; used for installed Windows task only. */
+  windowsTaskJobOwnerPath?: string;
   linuxUnitName?: string;
   macLabel?: string;
   uid?: number;
@@ -296,14 +298,35 @@ export function buildNativeAgentLauncher(
     )) {
       lines.push('$env:' + name + '=' + psLiteral(value));
     }
-    lines.push(
-      '& ' +
-        psLiteral(rt.executable) +
-        ' ' +
-        rt.args.map(psLiteral).join(' '),
-      'exit $LASTEXITCODE',
-      '',
-    );
+    if (options.windowsTaskJobOwnerPath) {
+      // Scheduled Task kills the PowerShell parent, not necessarily its Node
+      // child. The native guardian pins the PowerShell HANDLE and owns a
+      // KILL_ON_JOB_CLOSE Job containing Node and all its descendants.
+      if (!path.win32.isAbsolute(options.windowsTaskJobOwnerPath)) {
+        throw new Error('NATIVE_AGENT_TASK_JOB_HELPER_PATH_UNCONFIRMED');
+      }
+      lines.push(
+        '# NEXOWIRE_AGENT_TASK_JOB_GUARD_V1',
+        '$jobHelper=' + psLiteral(options.windowsTaskJobOwnerPath),
+        "if (-not (Test-Path -LiteralPath $jobHelper -PathType Leaf)) { throw 'NATIVE_AGENT_TASK_JOB_HELPER_UNAVAILABLE' }",
+        "$jobMarker=Join-Path $PSScriptRoot ('agent-job-'+[guid]::NewGuid().ToString('N')+'.status')",
+        '& $jobHelper ' +
+          "'--status' $jobMarker '--cwd' '-' '--parent' ([string]$PID) '--' " +
+          [rt.executable, ...rt.args].map(psLiteral).join(' '),
+        'if ($null -eq $LASTEXITCODE) { exit 70 }',
+        'exit $LASTEXITCODE',
+        '',
+      );
+    } else {
+      // Standalone launcher rendering for legacy/synthetic consumers only.
+      // installWindows always supplies a pinned guardian and fails if missing.
+      lines.push(
+        '& ' + psLiteral(rt.executable) + ' ' +
+          rt.args.map(psLiteral).join(' '),
+        'exit $LASTEXITCODE',
+        '',
+      );
+    }
     // This file is executed by Windows PowerShell 5.1, whose BOM-less
     // script decoder otherwise uses the machine's ANSI code page.
     return '\uFEFF' + lines.join('\r\n');
@@ -486,17 +509,40 @@ async function windowsStatus(
   });
 }
 
+function bundledNativeAgentJobHelper(options: NativeAgentLifecycleOptions): string {
+  const entry = options.cliEntrypoint ?? process.argv[1];
+  if (!entry || !path.win32.isAbsolute(entry)) {
+    throw new Error('NATIVE_AGENT_TASK_CLI_PATH_UNCONFIRMED');
+  }
+  // Source: src/cli.ts -> native/. Bundle: dist/src/cli.js -> dist/native/.
+  // Never accept PATH, a free-form environment override or global helpers.
+  return path.win32.resolve(
+    path.win32.dirname(entry), '..', 'native', 'windows-job-owner.exe',
+  );
+}
+
 async function installWindows(
   options: NativeAgentLifecycleOptions,
 ): Promise<NativeAgentLifecycleStatus> {
   const root = lifecycleRoot(options);
   const launcher = launcherPath(options, 'win32');
+  const helper = bundledNativeAgentJobHelper(options);
+  if (!(await fs.stat(helper).catch(() => null))?.isFile()) {
+    throw new Error('NATIVE_AGENT_TASK_JOB_HELPER_UNAVAILABLE');
+  }
+  // Do not overwrite a running legacy task: its unmanaged Node descendant
+  // might survive Register-ScheduledTask -Force and collide with new Agent.
+  const existing = await windowsStatus(options);
+  if (existing.installed && existing.state === 'running') {
+    throw new Error('NATIVE_AGENT_TASK_PREEXISTING_OWNER_UNCONFIRMED');
+  }
   await fs.mkdir(root, { recursive: true, mode: 0o700 });
   await fs.writeFile(
     launcher,
     buildNativeAgentLauncher({
       ...options,
       platform: 'win32',
+      windowsTaskJobOwnerPath: helper,
     }),
     { encoding: 'utf8', mode: 0o600 },
   );
