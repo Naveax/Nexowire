@@ -61,3 +61,31 @@ These were deliberately picked among old Drafts with **no identified child** in 
 Read-only GitHub connector calls: branch pagination, date-partitioned open-PR searches, `get_pr_info`, `compare_commits`, changed filenames, per-ref `fetch_file` SHA/existence, commit workflow runs and run jobs. Snapshot files are only historical comparators. No local `git status` or `git fetch --prune` was performed because this session had no cloned repository and external git fetch was DNS-blocked. Full DAG/patch-id certainty is **not** claimed. The documentation branch/PR contains no runtime source change. **No existing PR/issue closure, branch deletion, merge, CI dispatch, deploy, UAC, device restart or CORE state change.**
 
 **Safety disposition:** Source integration remains review-only; signed Windows and production CORE acceptance remain **NO-GO**.
+
+## 7. Second live pass: complete ref/PR identity inventory and orphan ancestry
+
+This section supersedes the **earlier count** but does not retroactively change its historical capture. GitHub REST GET `git/refs/heads` and four paginated `pulls?state=open&per_page=100&page=N` lists captured **397 origin branch ref/SHA pairs** and **371 open PR exact head/base SHA pairs** (370 Draft / 1 ready). All **335 origin-hosted** open PR head SHA values matched their current origin branch ref SHA. **36 PR heads are from SinsiVinci/Nexowire-fork**, requiring explicit fork handling; origin branch enumeration cannot substitute for their head identities.
+
+- **89 direct-main PRs**; **282 stacked PRs**; **279 stacked links lead to another open origin PR**. The remaining three target an existing origin branch without an open parent PR:
+  - [#920](https://github.com/Naveax/Nexowire/pull/920) bases on `qa/11-core-ci-source-evidence-boundary-20261027`, tip `b1bb45f74d298ce10610f59412be17f77df9bcb6`; former [#912](https://github.com/Naveax/Nexowire/pull/912) is **merged**. Base ref is still required.
+  - [#776](https://github.com/Naveax/Nexowire/pull/776) bases on `test/21-isolated-integration-768-770-20261022`, tip `3247ed65133a548730c77330b795a5a1e05d28f3`; no parent PR found in the branch-head search. Retain branch and evidence.
+  - [#715](https://github.com/Naveax/Nexowire/pull/715) bases on `feat/parallel-10-broker-preflight-20261021`, **PR-reported base SHA** `54d5451d38aa3bb008640f9913bdabbd44980138`, **current ref tip** `6c85683014156b32f7daf4da6a768d23ab72a203`; former [#665](https://github.com/Naveax/Nexowire/pull/665) is **merged**. This is a **stale PR base snapshot**, not permission to delete the branch.
+- **58 origin branches** have neither an open PR head nor open PR base edge (excluding `main`). All 58 were compared by immutable tip SHA with `main@29205069924259af78b7075216fd5132248de9fb`: **5 are actual commit ancestors (ahead=0)** and **53 are diverged (ahead>0)**. Divergence does not prove patch uniqueness; patch-id is still `NOT_PROVEN`.
+- The five *commit-ancestor* branch tips are:
+  - `ai/01-wal-v108` `b5ff33a77af931edcd6c64ef41ca2114eeb2a037`, 0 ahead / 31 behind, 2026-10-31T22:44:07Z, **48h protected**.
+  - `coord/v108-exact-head-integration-gates-20261031` `7a36fdcf7cce208c87889e830f2e470a84a701a0`, 0/25, 2026-10-31T13:14:15Z, **48h protected**.
+  - `feat/solkaun-unmetered-hosted-tool-credits-20261030` `0818411b9d07bf9efbc75ba94fe28d1e94ac1ccc`, 0/70, 2026-10-29T21:55:30Z, older than the frozen 48h cutoff, but **active-CI/owner final check still missing, so no deletion proposed**.
+  - `fix/agent-journal-startup-preflight-serialize-20261101` `8a9e7c814529b462c5d3b93728202a5ca0561c8d`, 0/3, 2026-10-31T23:29:58Z, **48h protected**.
+  - `fix/journal-owner-restart-20261031` `bce2dbdfca93d3537657c37e15d9248f17106a8a`, 0/35, 2026-10-31T20:56:54Z, **48h protected**.
+
+**Full reproducibility artifacts on this Draft only:** [open PR exact-SHA DAG](AI12_OPEN_PRS_DAG_20261102.csv), [397 branch ref/role/ancestry inventory](AI12_BRANCH_REFS_20261102.csv), and [58 independently compared orphan branches](AI12_UNLINKED_BRANCH_COMPARE_20261102.csv). Fields not independently fetched are explicitly `NOT_CHECKED` / `NOT_PROVEN`; no unverifiable PASS or patch-equivalence labels.
+
+## 8. Source-level triage correction
+
+The old conditional closure-review row for [#599](https://github.com/Naveax/Nexowire/pull/599) is **superseded**: in `src/mcp/create-server.ts`, its diff adds `operationId` specifically inside the error-path idempotency response; the `main@29205069924259af78b7075216fd5132248de9fb` version lacks that field in the corresponding response. **Remove #599 from any closure shortlist, keep the RED regression and route to Error Contract owner for a scoped fix.** This is a source distinction, not proof the entire PR is merge-ready.
+
+For [#610](https://github.com/Naveax/Nexowire/pull/610), main has `TrustedDurableChunkReceipt` and `verifyWriterFence`, but lacks the historical `ArtifactDurableProofVerifier` interface. Treat as **semantic-compatibility check**, neither automatically duplicate nor safe to cherry-pick. For [#615](https://github.com/Naveax/Nexowire/pull/615), `probeGzipUnderLoad` / `gzipSync` were present on the PR HEAD but absent in the corresponding main benchmark; retain the parent/child chain.
+
+**No actual closure is supported by this review.** The five originally listed rows were *review targets*, not five proven safe closures; after #599's correction there are only four unresolved stale-RED closure-review rows, all HOLD. Do not make up a fifth to satisfy a quota.
+
+**Automation boundary:** no workflow dispatch/retry, merge, deletion, issue closure or deploy. This CSV/doc revision uses the existing Draft documentation branch only. Old and new CI runs remain SHA-specific and must not be treated as the same run.
