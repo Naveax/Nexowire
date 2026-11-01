@@ -45,6 +45,8 @@ Yapılacak sıra:
    hatayı, hesabın/çalışma alanının eklenti iznini ve doğrulanmış adresi
    kontrol et; OAuth'u kapatma veya API anahtarı isteme.
    Eklenti ile cihaz eşlemesinde aynı GitHub hesabını kullanmalıyım.
+   Cihaz listesi boşsa ve hesaplar farklıysa yeni kurulum veya cihaz silme
+   önermeden önce hangi GitHub hesabıyla iki adımın yapıldığını sor.
 7. Yeni sohbette eklenti seçildikten sonra devices_list ile doğru PC’yi doğrula.
    Gerekli cihaz seçimi tamamlandıktan sonra yalnız machine_snapshot ve
    machine_health kontrollerini yap. Bunlar gerçekten başarılı olmadan

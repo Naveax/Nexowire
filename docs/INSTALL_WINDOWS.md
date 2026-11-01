@@ -38,9 +38,24 @@ doğrulamış olmazsın. Kaynak/uzantı şüpheliyse resmî yayın bağlantısı
 indir; başka bir kaynaktan gelen `.cmd` dosyasını çalıştırma.
 
 İstersen indirdiğin kurucunun bütünlüğünü Windows PowerShell'de
-`Get-FileHash -Algorithm SHA256` ile kontrol et. Dosyanın yerini kendin seç;
-sonucu yukarıdaki resmî SHA-256 ile **tam** karşılaştır. Farklıysa çalıştırma;
-bir hash eşleşmesi de tek başına yayıncı kimliğini kanıtlamaz.
+`Get-FileHash` ile kontrol et. Dosya normal **İndirilenler** konumundaysa
+şu salt-okunur komutu kullanabilirsin:
+
+```powershell
+Get-FileHash -LiteralPath (Join-Path $env:USERPROFILE 'Downloads\Nexowire-Setup.cmd') -Algorithm SHA256
+```
+
+Dosya başka yerdeyse komuttaki yolu kendi indirme konumunla değiştir.
+Sonucu yukarıdaki resmî SHA-256 ile **tam** karşılaştır. Farklıysa
+çalıştırma; bir hash eşleşmesi de tek başına yayıncı kimliğini kanıtlamaz.
+
+**SmartScreen / kurumsal engel:** Windows uyarısı geldiğinde işlemi durdur.
+Önce resmî GitHub yayınına gittiğini, dosyanın gerçek adını/uzantısını ve
+yayınlanan SHA-256 bilgisini kontrol et. Dosyanın kaynağı doğrulanamıyorsa
+çalıştırma. Kurum bilgisayarında BT/yönetici politikasını takip et;
+SmartScreen'i, antivirüsü veya uygulama denetimini devre dışı bırakma.
+`Yine de çalıştır` gibi güvenlik uyarısını atlayan adımlar otomatik çözüm
+değildir. Uyarı metnini gizli bilgi içermeyecek biçimde kaydet.
 
 ## 2. İndirdiğin dosyayı aç
 
@@ -72,6 +87,16 @@ metni not et, Başlat → Nexowire ile **yeni** eşleme oturumu aç ve yeni
 tarayıcı ekranını kullan. Eski eşleme sekmesini, yerel uygulama klasörünü
 veya cihaz kayıtlarını silme. `Bu hesap için cihaz limiti dolu` hatasında
 tekrar tekrar denemek limiti kaldırmaz; hesap/cihaz limitini kontrol et.
+
+### Cihaz başka GitHub hesabında görünüyorsa
+
+Cihazı **BAĞLA** ile onayladığın GitHub hesabını kendi tarayıcı ekranında
+kontrol et. ChatGPT'de Nexowire için OAuth girişinde **farklı bir GitHub
+hesabı** kullanıldıysa cihaz listesi boş görünebilir. Cihazı yeniden kurma
+veya mevcut cihazları silme. Bağlantı işlemini durdur, hangi hesapla giriş
+yaptığını doğrula ve ChatGPT bağlantısını **cihazı bağladığın hesapla**
+yeniden yetkilendirmeyi dene. Sohbete kullanıcı adı dışında hesap bilgisi,
+cookie, OAuth kodu, oturum URL'si veya ekranın gizli kısmını gönderme.
 
 Kurucu kapanmış olması, kısayol oluşması veya bir görevin `Running` görünmesi
 cihaz bağlantısının sağlıklı olduğu anlamına gelmez.
@@ -117,6 +142,21 @@ ChatGPT hesabındaki bu özelliği açmaz.
 belgeden veya bağlantı sayfasındaki kopyala düğmesinden al. Bu adresi
 başkasıyla paylaşırken de gizli parametre içermediğinden emin ol.
 
+Örneğin aşağıdaki JSON **yalnız biçimi anlatır, gerçek Nexowire adresi
+değildir ve kopyalanıp ChatGPT'ye girilmez**:
+
+```json
+{
+  "resource": "https://example.invalid/nexowire-mcp",
+  "authorization_servers": ["https://example.invalid"]
+}
+```
+
+Burada sunucu adresi yalnız `resource` değeridir; `authorization_servers`
+giriş hizmetini belirtir. Gerçekte yalnız yukarıdaki canlı `.well-known`
+belgesinde gördüğün HTTPS `resource` değerini kullan. Panel kök adresini,
+`/connect.html` adresini veya örnekteki `example.invalid` alanını girme.
+
 ### ChatGPT adresini bulma
 
 **[Nexowire’ın herkese açık bağlantı bilgisini aç](https://nexowire-control-plane.nexowire-naveax.workers.dev/.well-known/oauth-protected-resource).**
@@ -157,6 +197,19 @@ demesi veya bilgisayar adını tahmin etmesi bağlantı kanıtı değildir.
 Normal Agent kurulumu, fiziksel masaüstü veya CORE/yönetici yetkisinin ayrıca
 doğrulandığı anlamına gelmez. Bu durumlar bağlantı kontrolünden ayrı gösterilir.
 
+### Ne kanıtlanmış sayılır?
+
+| Gözlem | Kanıtladığı | Henüz kanıtlamadığı |
+| --- | --- | --- |
+| Windows kurucusu tamamlandı | Kurulum adımı hata vermeden sona erdi | Cloudflare bağlantısı veya çevrimiçi cihaz |
+| Cihaz kontrol panelinde çevrimiçi | Agent hesabınla görünen bağlantı kurdu | ChatGPT eklentisi/OAuth ve araç çağrısı |
+| ChatGPT eklentisi oluşturuldu ve OAuth tamamlandı | ChatGPT bağlantı hesabı yetkilendirildi | Seçili cihazda `machine_health` başarısı |
+| `devices_list`, `machine_snapshot`, `machine_health` başarılı | Bu sohbet ve seçili cihaz için temel okuma kontrolü yapıldı | CORE, UAC, fiziksel Windows yetkisi veya iki-PC kabulü |
+
+Bir GitHub Actions/Node statik testi, canlı Cloudflare oturumu, gerçek
+ChatGPT OAuth girişi, Windows 10/11 kurulum ekranı veya cihazın fiziksel
+yetkisi yerine geçmez. Bunlar yapılmadıysa **NOT_RUN** olarak kalır.
+
 ## Sorun yaşarsan
 
 | Gördüğün durum | Yapılacak işlem |
@@ -174,6 +227,7 @@ doğrulandığı anlamına gelmez. Bu durumlar bağlantı kontrolünden ayrı g�
 | `Bu hesap için cihaz limiti dolu` çıktı. | Hesap limitini doğrula; tekrarlanan BAĞLA limiti değiştirmez. Mevcut cihazları veya verilerini rastgele silme. |
 | Cihaz panelde çevrimdışı. | PC’nin açık ve internete bağlı olduğunu kontrol et. ChatGPT eklentisini yeniden yüklemek Agent’ın başlamama nedenini çözmez. |
 | Panelde cihaz var, ChatGPT’de yok. | İki tarafta da aynı GitHub hesabını kullandığını, eklentinin bağlandığını ve yeni sohbette seçildiğini kontrol et. |
+| Bilgisayar başka GitHub hesabına bağlı olabilir. | Yukarıdaki hesap eşleşmesi bölümünü izle; yeniden kurma veya cihazları silme, doğru hesapla OAuth'u tekrar dene. |
 | ChatGPT sunucu adresini kabul etmiyor. | Yukarıdaki `resource` değerinin tamamını ve OAuth seçimini kontrol et; panel veya `localhost` adresini kullanma. |
 | ChatGPT'de Oluştur başarısız veya eklenti seçeneği yok. | Hesap/çalışma alanı izinlerini ve gerçek hata metnini kontrol et; OAuth'u devre dışı bırakma, API anahtarı paylaşma veya kurucuyu yeniden çalıştırma. |
 | `403`, `Access denied` veya `1010` görünüyor. | Hizmete erişim ağ/Cloudflare tarafında reddedilmiş olabilir. Hangi adreste olduğunu ve hata kodunu kaydet. Node kurmak veya Agent verisini silmek bu engeli çözmez. |
