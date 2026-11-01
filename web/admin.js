@@ -33,13 +33,15 @@ async function load() {
 
     const pill = $('admin-pill');
     pill.textContent = zeroSpend ? 'Zero-spend aktif' : 'Policy ihlali';
-    pill.className = 'pill ' + (zeroSpend ? 'good' : 'bad');
+    pill.className = 'pill admin-status ' + (zeroSpend ? 'good' : 'bad');
   } catch (error) {
     $('admin-pill').textContent = 'Offline';
-    $('admin-pill').className = 'pill bad';
+    $('admin-pill').className = 'pill admin-status bad';
     $('admin-error-message').textContent =
       error instanceof Error ? error.message : String(error);
     $('admin-error').classList.remove('hidden');
+  } finally {
+    $('admin-metrics').setAttribute('aria-busy', 'false');
   }
 }
 
