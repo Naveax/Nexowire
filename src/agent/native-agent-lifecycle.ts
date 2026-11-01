@@ -533,8 +533,15 @@ async function installWindows(
   // Do not overwrite a running legacy task: its unmanaged Node descendant
   // might survive Register-ScheduledTask -Force and collide with new Agent.
   const existing = await windowsStatus(options);
-  if (existing.installed && existing.state === 'running') {
-    throw new Error('NATIVE_AGENT_TASK_PREEXISTING_OWNER_UNCONFIRMED');
+  if (existing.installed) {
+    // Legacy tasks have no child-ownership evidence even when Scheduler says
+    // Ready. Explicit migration is required; never assume no orphan exists.
+    const prior = await windowsAgentTaskOwnerReadback(options);
+    if (!prior.guarded || prior.receipts === 0 ||
+        prior.liveRoots !== 0 || prior.liveGuardians !== 0 ||
+        prior.state === 'running') {
+      throw new Error('NATIVE_AGENT_TASK_PREEXISTING_OWNER_UNCONFIRMED');
+    }
   }
   await fs.mkdir(root, { recursive: true, mode: 0o700 });
   await fs.writeFile(
@@ -571,7 +578,7 @@ async function installWindows(
   return await windowsStatus(options);
 }
 
-interface WindowsAgentTaskOwnerReadback {
+export interface WindowsAgentTaskOwnerReadback {
   installed: boolean;
   state: string;
   guarded: boolean;
@@ -611,8 +618,1165 @@ async function windowsAgentTaskOwnerReadback(
       "  if (-not $guardian.CommandLine) { throw 'NATIVE_AGENT_TASK_GUARDIAN_IDENTITY_UNKNOWN' }",
       '}',
       'foreach ($marker in $markers) {',
-      '  $data=[IO.File]::ReadAllText($marker.FullName).Trim()',
-      "  if ($data -cnotmatch '^NWJOB3 ([1-9][0-9]*) ([1-9][0-9]*)$') { throw 'NATIVE_AGENT_TASK_RECEIPT_INVALID' }",
+      "  $data=''",
+      '  for ($attempt=0; $attempt -lt 4; $attempt++) {',
+      '    $data=[IO.File]::ReadAllText($marker.FullName).Trim()',
+      "    if ($data -cmatch '^NWJOB3 ([1-9][0-9]*) ([1-9][0-9]*)
+      '  $ownedPid=[long]$Matches[1]',
+      '  $created=$Matches[2]',
+      "  if ($ownedPid -gt 4294967295) { throw 'NATIVE_AGENT_TASK_RECEIPT_PID_INVALID' }",
+      '  $proc=Get-CimInstance Win32_Process -Filter ("ProcessId="+$ownedPid) -ErrorAction Stop',
+      '  if ($null -ne $proc) {',
+      "    if ($null -eq $proc.CreationDate) { throw 'NATIVE_AGENT_TASK_ROOT_BIRTH_UNKNOWN' }",
+      '    $actual=$proc.CreationDate.ToUniversalTime().ToFileTimeUtc().ToString()',
+      '    if ($actual -ceq $created) { $liveRoots++; $rootPid=$ownedPid }',
+      '  }',
+      '  foreach ($guardian in $guardianProcesses) {',
+      '    if ($guardian.CommandLine.IndexOf($marker.FullName,[StringComparison]::OrdinalIgnoreCase) -ge 0) {',
+      '      $liveGuardians++',
+      '    }',
+      '  }',
+      '}',
+      '[pscustomobject]@{installed=$true;state=([string]$task.State).ToLowerInvariant();guarded=$guarded;receipts=$markers.Count;liveRoots=$liveRoots;liveGuardians=$liveGuardians;rootPid=$rootPid} | ConvertTo-Json -Compress',
+    ].join('\n'),
+    windowsEnv(options),
+  );
+}
+
+export function nativeAgentTaskStopConfirmed(state: WindowsAgentTaskOwnerReadback): boolean {
+  return state.guarded && state.receipts > 0 &&
+    state.state !== 'running' && state.liveRoots === 0 &&
+    state.liveGuardians === 0;
+}
+
+export function nativeAgentTaskStartConfirmed(state: WindowsAgentTaskOwnerReadback): boolean {
+  return state.guarded && state.state === 'running' &&
+    state.liveRoots === 1 && state.liveGuardians === 1 &&
+    state.rootPid !== null && state.rootPid > 0;
+}
+
+async function controlWindows(
+  action: 'start' | 'stop' | 'restart',
+  options: NativeAgentLifecycleOptions,
+): Promise<NativeAgentLifecycleStatus> {
+  const before = await windowsAgentTaskOwnerReadback(options);
+  if (!before.installed || !before.guarded) {
+    throw new Error('NATIVE_AGENT_TASK_JOB_GUARD_REQUIRED');
+  }
+  if (action !== 'stop' &&
+      (before.liveRoots > 0 || before.liveGuardians > 0) &&
+      before.state !== 'running') {
+    throw new Error('NATIVE_AGENT_TASK_PREEXISTING_OWNER_UNCONFIRMED');
+  }
+  if (action === 'start' && before.state === 'running') {
+    if (!nativeAgentTaskStartConfirmed(before)) {
+      throw new Error('NATIVE_AGENT_TASK_RUNNING_OWNER_UNCONFIRMED');
+    }
+    return {...await windowsStatus(options), pid: before.rootPid};
+  }
+
+  if (action !== 'start') {
+    await runPowerShellJson<{ok:boolean}>(
+      [
+        "$ErrorActionPreference='Stop'",
+        '$name=$env:NEXOWIRE_AGENT_TASK_NAME',
+        '$task=Get-ScheduledTask -TaskName $name -ErrorAction Stop',
+        "if ($task.State -eq 'Running') { Stop-ScheduledTask -TaskName $name -ErrorAction Stop }",
+        '[pscustomobject]@{ok=$true} | ConvertTo-Json -Compress',
+      ].join('\n'),
+      windowsEnv(options),
+    );
+    let stopped = false;
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline) {
+      const state = await windowsAgentTaskOwnerReadback(options);
+      // A just-stopped PowerShell can leave the Job guardian active for
+      // milliseconds; do not start a second Agent until BOTH have exited.
+      if (nativeAgentTaskStopConfirmed(state)) {
+        stopped = true;
+        break;
+      }
+      await new Promise(resolve => setTimeout(resolve, 150));
+    }
+    if (!stopped) {
+      throw new Error('NATIVE_AGENT_TASK_DESCENDANT_STOP_UNCONFIRMED');
+    }
+    if (action === 'stop') return await windowsStatus(options);
+  }
+
+  await runPowerShellJson<{ok:boolean}>(
+    [
+      "$ErrorActionPreference='Stop'",
+      '$name=$env:NEXOWIRE_AGENT_TASK_NAME',
+      'Start-ScheduledTask -TaskName $name -ErrorAction Stop',
+      '[pscustomobject]@{ok=$true} | ConvertTo-Json -Compress',
+    ].join('\n'),
+    windowsEnv(options),
+  );
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const state = await windowsAgentTaskOwnerReadback(options);
+    if (nativeAgentTaskStartConfirmed(state)) {
+      return {...await windowsStatus(options), pid: state.rootPid};
+    }
+    if (state.liveRoots > 1 || state.liveGuardians > 1) {
+      throw new Error('NATIVE_AGENT_TASK_MULTIPLE_OWNERS_UNCONFIRMED');
+    }
+    await new Promise(resolve => setTimeout(resolve, 150));
+  }
+  throw new Error('NATIVE_AGENT_TASK_START_READBACK_UNCONFIRMED');
+}
+
+async function uninstallWindows(
+  options: NativeAgentLifecycleOptions,
+): Promise<{ removed: boolean; name: string }> {
+  const result = await runPowerShellJson<{ removed: boolean }>(
+    [
+      "$ErrorActionPreference='Stop'",
+      '$name=$env:NEXOWIRE_AGENT_TASK_NAME',
+      '$task=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue',
+      'if ($null -ne $task) {',
+      '  Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue',
+      '  Unregister-ScheduledTask -TaskName $name -Confirm:$false',
+      '  [pscustomobject]@{removed=$true} | ConvertTo-Json -Compress',
+      '} else {',
+      '  [pscustomobject]@{removed=$false} | ConvertTo-Json -Compress',
+      '}',
+    ].join('\n'),
+    windowsEnv(options),
+  );
+  await fs.rm(lifecycleRoot(options), {
+    recursive: true,
+    force: true,
+  });
+  return {
+    removed: result.removed,
+    name: windowsTaskName(options),
+  };
+}
+
+async function linuxStatus(
+  options: NativeAgentLifecycleOptions,
+): Promise<NativeAgentLifecycleStatus> {
+  const definition = linuxUnitPath(options);
+  let installed = false;
+  try {
+    await fs.access(definition);
+    installed = true;
+  } catch {
+    // Not installed.
+  }
+
+  if (!installed) {
+    return StatusSchema.parse({
+      installed: false,
+      platform: 'linux',
+      name: linuxUnitName(options),
+      state: 'not-installed',
+      autostart: false,
+      pid: null,
+      launcher: launcherPath(options, 'linux'),
+      definition,
+    });
+  }
+
+  const result = await runCommand(
+    'systemctl',
+    [
+      '--user',
+      'show',
+      linuxUnitName(options),
+      '--property=ActiveState',
+      '--property=SubState',
+      '--property=UnitFileState',
+      '--property=MainPID',
+      '--no-pager',
+    ],
+    options.env ?? process.env,
+    true,
+  );
+  const values = new Map<string, string>();
+  for (const line of result.stdout.split(/\r?\n/)) {
+    const index = line.indexOf('=');
+    if (index > 0) {
+      values.set(line.slice(0, index), line.slice(index + 1));
+    }
+  }
+  const pid = Number(values.get('MainPID') ?? '0');
+  return StatusSchema.parse({
+    installed: true,
+    platform: 'linux',
+    name: linuxUnitName(options),
+    state:
+      result.code === 0
+        ? (values.get('ActiveState') ?? 'unknown') +
+          '/' +
+          (values.get('SubState') ?? 'unknown')
+        : 'unknown',
+    autostart:
+      values.get('UnitFileState') === 'enabled' ||
+      values.get('UnitFileState') === 'enabled-runtime',
+    pid: Number.isInteger(pid) && pid > 0 ? pid : null,
+    launcher: launcherPath(options, 'linux'),
+    definition,
+  });
+}
+
+async function installLinux(
+  options: NativeAgentLifecycleOptions,
+): Promise<NativeAgentLifecycleStatus> {
+  const launcher = launcherPath(options, 'linux');
+  const unitFile = linuxUnitPath(options);
+  await fs.mkdir(path.dirname(launcher), {
+    recursive: true,
+    mode: 0o700,
+  });
+  await fs.mkdir(path.dirname(unitFile), {
+    recursive: true,
+    mode: 0o700,
+  });
+  await fs.writeFile(
+    launcher,
+    buildNativeAgentLauncher({
+      ...options,
+      platform: 'linux',
+    }),
+    { encoding: 'utf8', mode: 0o700 },
+  );
+  await fs.chmod(launcher, 0o700);
+  await fs.writeFile(
+    unitFile,
+    buildLinuxUserUnit(options),
+    { encoding: 'utf8', mode: 0o600 },
+  );
+  await runCommand(
+    'systemctl',
+    ['--user', 'daemon-reload'],
+    options.env ?? process.env,
+  );
+  await runCommand(
+    'systemctl',
+    ['--user', 'enable', '--now', linuxUnitName(options)],
+    options.env ?? process.env,
+  );
+  await writeManifest(options, 'linux');
+  return await linuxStatus(options);
+}
+
+async function controlLinux(
+  action: 'start' | 'stop' | 'restart',
+  options: NativeAgentLifecycleOptions,
+): Promise<NativeAgentLifecycleStatus> {
+  await runCommand(
+    'systemctl',
+    ['--user', action, linuxUnitName(options)],
+    options.env ?? process.env,
+  );
+  return await linuxStatus(options);
+}
+
+async function uninstallLinux(
+  options: NativeAgentLifecycleOptions,
+): Promise<{ removed: boolean; name: string }> {
+  const installed = (
+    await linuxStatus(options)
+  ).installed;
+  if (installed) {
+    await runCommand(
+      'systemctl',
+      ['--user', 'disable', '--now', linuxUnitName(options)],
+      options.env ?? process.env,
+      true,
+    );
+  }
+  await fs.rm(linuxUnitPath(options), { force: true });
+  await runCommand(
+    'systemctl',
+    ['--user', 'daemon-reload'],
+    options.env ?? process.env,
+    true,
+  );
+  await fs.rm(lifecycleRoot(options), {
+    recursive: true,
+    force: true,
+  });
+  return {
+    removed: installed,
+    name: linuxUnitName(options),
+  };
+}
+
+
+function launchdDomain(
+  options: NativeAgentLifecycleOptions,
+): string {
+  const uid =
+    options.uid ??
+    (typeof process.getuid === 'function'
+      ? process.getuid()
+      : undefined);
+  if (uid === undefined) {
+    throw new Error(
+      'Cannot determine current user ID for launchd lifecycle.',
+    );
+  }
+  return 'gui/' + uid;
+}
+
+async function macStatus(
+  options: NativeAgentLifecycleOptions,
+): Promise<NativeAgentLifecycleStatus> {
+  const definition = macPlistPath(options);
+  let installed = false;
+  try {
+    await fs.access(definition);
+    installed = true;
+  } catch {
+    // Not installed.
+  }
+
+  if (!installed) {
+    return StatusSchema.parse({
+      installed: false,
+      platform: 'darwin',
+      name: macLabel(options),
+      state: 'not-installed',
+      autostart: false,
+      pid: null,
+      launcher: launcherPath(options, 'darwin'),
+      definition,
+    });
+  }
+
+  const target = launchdDomain(options) + '/' + macLabel(options);
+  const result = await runCommand(
+    'launchctl',
+    ['print', target],
+    options.env ?? process.env,
+    true,
+  );
+  const pidMatch = /\bpid\s*=\s*(\d+)/.exec(result.stdout);
+  const pid = pidMatch ? Number(pidMatch[1]) : null;
+
+  return StatusSchema.parse({
+    installed: true,
+    platform: 'darwin',
+    name: macLabel(options),
+    state:
+      result.code === 0
+        ? pid && pid > 0
+          ? 'running'
+          : 'loaded'
+        : 'stopped',
+    autostart: true,
+    pid: pid && pid > 0 ? pid : null,
+    launcher: launcherPath(options, 'darwin'),
+    definition,
+  });
+}
+
+async function installMac(
+  options: NativeAgentLifecycleOptions,
+): Promise<NativeAgentLifecycleStatus> {
+  const launcher = launcherPath(options, 'darwin');
+  const plist = macPlistPath(options);
+
+  await fs.mkdir(path.dirname(launcher), {
+    recursive: true,
+    mode: 0o700,
+  });
+  await fs.mkdir(path.dirname(plist), {
+    recursive: true,
+    mode: 0o700,
+  });
+  await fs.writeFile(
+    launcher,
+    buildNativeAgentLauncher({
+      ...options,
+      platform: 'darwin',
+    }),
+    { encoding: 'utf8', mode: 0o700 },
+  );
+  await fs.chmod(launcher, 0o700);
+  await fs.writeFile(
+    plist,
+    buildMacLaunchAgentPlist(options),
+    { encoding: 'utf8', mode: 0o600 },
+  );
+
+  const domain = launchdDomain(options);
+  await runCommand(
+    'launchctl',
+    ['bootout', domain + '/' + macLabel(options)],
+    options.env ?? process.env,
+    true,
+  );
+  await runCommand(
+    'launchctl',
+    ['bootstrap', domain, plist],
+    options.env ?? process.env,
+  );
+
+  await writeManifest(options, 'darwin');
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  return await macStatus(options);
+}
+
+async function controlMac(
+  action: 'start' | 'stop' | 'restart',
+  options: NativeAgentLifecycleOptions,
+): Promise<NativeAgentLifecycleStatus> {
+  const domain = launchdDomain(options);
+  const target = domain + '/' + macLabel(options);
+  const plist = macPlistPath(options);
+
+  if (action === 'stop') {
+    await runCommand(
+      'launchctl',
+      ['bootout', target],
+      options.env ?? process.env,
+      true,
+    );
+  } else if (action === 'start') {
+    await runCommand(
+      'launchctl',
+      ['bootstrap', domain, plist],
+      options.env ?? process.env,
+    );
+  } else {
+    await runCommand(
+      'launchctl',
+      ['bootout', target],
+      options.env ?? process.env,
+      true,
+    );
+    await runCommand(
+      'launchctl',
+      ['bootstrap', domain, plist],
+      options.env ?? process.env,
+    );
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  return await macStatus(options);
+}
+
+async function uninstallMac(
+  options: NativeAgentLifecycleOptions,
+): Promise<{ removed: boolean; name: string }> {
+  const status = await macStatus(options);
+  if (status.installed) {
+    await runCommand(
+      'launchctl',
+      ['bootout', launchdDomain(options) + '/' + macLabel(options)],
+      options.env ?? process.env,
+      true,
+    );
+  }
+  await fs.rm(macPlistPath(options), { force: true });
+  await fs.rm(lifecycleRoot(options), {
+    recursive: true,
+    force: true,
+  });
+  return {
+    removed: status.installed,
+    name: macLabel(options),
+  };
+}
+
+async function writeManifest(
+  options: NativeAgentLifecycleOptions,
+  platform: 'win32' | 'linux' | 'darwin',
+): Promise<void> {
+  const env = persistedNativeAgentEnvironment(
+    options.env ?? process.env,
+  );
+  await fs.mkdir(lifecycleRoot(options), {
+    recursive: true,
+    mode: 0o700,
+  });
+  await fs.writeFile(
+    manifestPath(options),
+    JSON.stringify(
+      {
+        version: 1,
+        platform,
+        installedAt: new Date().toISOString(),
+        persistedEnvNames: Object.keys(env).sort(),
+      },
+      null,
+      2,
+    ) + '\n',
+    { encoding: 'utf8', mode: 0o600 },
+  );
+}
+
+export async function nativeAgentLifecycleStatus(
+  options: NativeAgentLifecycleOptions = {},
+): Promise<NativeAgentLifecycleStatus> {
+  const platform = platformOf(options);
+  if (platform === 'win32') return await windowsStatus(options);
+  if (platform === 'linux') return await linuxStatus(options);
+  return await macStatus(options);
+}
+
+export async function installNativeAgentLifecycle(
+  options: NativeAgentLifecycleOptions = {},
+): Promise<NativeAgentLifecycleStatus> {
+  persistedNativeAgentEnvironment(options.env ?? process.env);
+  const platform = platformOf(options);
+  if (platform === 'win32') return await installWindows(options);
+  if (platform === 'linux') return await installLinux(options);
+  return await installMac(options);
+}
+
+export async function startNativeAgentLifecycle(
+  options: NativeAgentLifecycleOptions = {},
+): Promise<NativeAgentLifecycleStatus> {
+  const platform = platformOf(options);
+  if (platform === 'win32') return await controlWindows('start', options);
+  if (platform === 'linux') return await controlLinux('start', options);
+  return await controlMac('start', options);
+}
+
+export async function stopNativeAgentLifecycle(
+  options: NativeAgentLifecycleOptions = {},
+): Promise<NativeAgentLifecycleStatus> {
+  const platform = platformOf(options);
+  if (platform === 'win32') return await controlWindows('stop', options);
+  if (platform === 'linux') return await controlLinux('stop', options);
+  return await controlMac('stop', options);
+}
+
+export async function restartNativeAgentLifecycle(
+  options: NativeAgentLifecycleOptions = {},
+): Promise<NativeAgentLifecycleStatus> {
+  const platform = platformOf(options);
+  if (platform === 'win32') return await controlWindows('restart', options);
+  if (platform === 'linux') return await controlLinux('restart', options);
+  return await controlMac('restart', options);
+}
+
+export async function uninstallNativeAgentLifecycle(
+  options: NativeAgentLifecycleOptions = {},
+): Promise<{ removed: boolean; name: string }> {
+  const platform = platformOf(options);
+  if (platform === 'win32') return await uninstallWindows(options);
+  if (platform === 'linux') return await uninstallLinux(options);
+  return await uninstallMac(options);
+}
+
+export async function runNativeAgentLifecycleCommand(
+  args: readonly string[],
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<void> {
+  const command = args[0] ?? 'status';
+  const options: NativeAgentLifecycleOptions = { env };
+  let result: unknown;
+
+  switch (command) {
+    case 'install':
+      result = await installNativeAgentLifecycle(options);
+      break;
+    case 'status':
+      result = await nativeAgentLifecycleStatus(options);
+      break;
+    case 'start':
+      result = await startNativeAgentLifecycle(options);
+      break;
+    case 'stop':
+      result = await stopNativeAgentLifecycle(options);
+      break;
+    case 'restart':
+      result = await restartNativeAgentLifecycle(options);
+      break;
+    case 'uninstall':
+      result = await uninstallNativeAgentLifecycle(options);
+      break;
+    default:
+      throw new Error(
+        'Usage: nexowire agent [run|install|status|start|stop|restart|uninstall]',
+      );
+  }
+
+  process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+}
+) { break }",
+      '    Start-Sleep -Milliseconds 60',
+      '  }',
+      "  if ($data -cnotmatch '^NWJOB3 ([1-9][0-9]*) ([1-9][0-9]*)
+      '  $ownedPid=[long]$Matches[1]',
+      '  $created=$Matches[2]',
+      "  if ($ownedPid -gt 4294967295) { throw 'NATIVE_AGENT_TASK_RECEIPT_PID_INVALID' }",
+      '  $proc=Get-CimInstance Win32_Process -Filter ("ProcessId="+$ownedPid) -ErrorAction Stop',
+      '  if ($null -ne $proc) {',
+      "    if ($null -eq $proc.CreationDate) { throw 'NATIVE_AGENT_TASK_ROOT_BIRTH_UNKNOWN' }",
+      '    $actual=$proc.CreationDate.ToUniversalTime().ToFileTimeUtc().ToString()',
+      '    if ($actual -ceq $created) { $liveRoots++; $rootPid=$ownedPid }',
+      '  }',
+      '  foreach ($guardian in $guardianProcesses) {',
+      '    if ($guardian.CommandLine.IndexOf($marker.FullName,[StringComparison]::OrdinalIgnoreCase) -ge 0) {',
+      '      $liveGuardians++',
+      '    }',
+      '  }',
+      '}',
+      '[pscustomobject]@{installed=$true;state=([string]$task.State).ToLowerInvariant();guarded=$guarded;receipts=$markers.Count;liveRoots=$liveRoots;liveGuardians=$liveGuardians;rootPid=$rootPid} | ConvertTo-Json -Compress',
+    ].join('\n'),
+    windowsEnv(options),
+  );
+}
+
+async function controlWindows(
+  action: 'start' | 'stop' | 'restart',
+  options: NativeAgentLifecycleOptions,
+): Promise<NativeAgentLifecycleStatus> {
+  const before = await windowsAgentTaskOwnerReadback(options);
+  if (!before.installed || !before.guarded) {
+    throw new Error('NATIVE_AGENT_TASK_JOB_GUARD_REQUIRED');
+  }
+  if (action !== 'stop' &&
+      (before.liveRoots > 0 || before.liveGuardians > 0) &&
+      before.state !== 'running') {
+    throw new Error('NATIVE_AGENT_TASK_PREEXISTING_OWNER_UNCONFIRMED');
+  }
+  if (action === 'start' && before.state === 'running') {
+    if (before.liveRoots !== 1 || before.liveGuardians !== 1) {
+      throw new Error('NATIVE_AGENT_TASK_RUNNING_OWNER_UNCONFIRMED');
+    }
+    return {...await windowsStatus(options), pid: before.rootPid};
+  }
+
+  if (action !== 'start') {
+    await runPowerShellJson<{ok:boolean}>(
+      [
+        "$ErrorActionPreference='Stop'",
+        '$name=$env:NEXOWIRE_AGENT_TASK_NAME',
+        '$task=Get-ScheduledTask -TaskName $name -ErrorAction Stop',
+        "if ($task.State -eq 'Running') { Stop-ScheduledTask -TaskName $name -ErrorAction Stop }",
+        '[pscustomobject]@{ok=$true} | ConvertTo-Json -Compress',
+      ].join('\n'),
+      windowsEnv(options),
+    );
+    let stopped = false;
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline) {
+      const state = await windowsAgentTaskOwnerReadback(options);
+      // A just-stopped PowerShell can leave the Job guardian active for
+      // milliseconds; do not start a second Agent until BOTH have exited.
+      if (state.state !== 'running' &&
+          state.liveRoots === 0 && state.liveGuardians === 0 &&
+          state.receipts > 0) {
+        stopped = true;
+        break;
+      }
+      await new Promise(resolve => setTimeout(resolve, 150));
+    }
+    if (!stopped) {
+      throw new Error('NATIVE_AGENT_TASK_DESCENDANT_STOP_UNCONFIRMED');
+    }
+    if (action === 'stop') return await windowsStatus(options);
+  }
+
+  await runPowerShellJson<{ok:boolean}>(
+    [
+      "$ErrorActionPreference='Stop'",
+      '$name=$env:NEXOWIRE_AGENT_TASK_NAME',
+      'Start-ScheduledTask -TaskName $name -ErrorAction Stop',
+      '[pscustomobject]@{ok=$true} | ConvertTo-Json -Compress',
+    ].join('\n'),
+    windowsEnv(options),
+  );
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const state = await windowsAgentTaskOwnerReadback(options);
+    if (state.state === 'running' &&
+        state.liveRoots === 1 && state.liveGuardians === 1 &&
+        state.rootPid !== null) {
+      return {...await windowsStatus(options), pid: state.rootPid};
+    }
+    if (state.liveRoots > 1 || state.liveGuardians > 1) {
+      throw new Error('NATIVE_AGENT_TASK_MULTIPLE_OWNERS_UNCONFIRMED');
+    }
+    await new Promise(resolve => setTimeout(resolve, 150));
+  }
+  throw new Error('NATIVE_AGENT_TASK_START_READBACK_UNCONFIRMED');
+}
+
+async function uninstallWindows(
+  options: NativeAgentLifecycleOptions,
+): Promise<{ removed: boolean; name: string }> {
+  const result = await runPowerShellJson<{ removed: boolean }>(
+    [
+      "$ErrorActionPreference='Stop'",
+      '$name=$env:NEXOWIRE_AGENT_TASK_NAME',
+      '$task=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue',
+      'if ($null -ne $task) {',
+      '  Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue',
+      '  Unregister-ScheduledTask -TaskName $name -Confirm:$false',
+      '  [pscustomobject]@{removed=$true} | ConvertTo-Json -Compress',
+      '} else {',
+      '  [pscustomobject]@{removed=$false} | ConvertTo-Json -Compress',
+      '}',
+    ].join('\n'),
+    windowsEnv(options),
+  );
+  await fs.rm(lifecycleRoot(options), {
+    recursive: true,
+    force: true,
+  });
+  return {
+    removed: result.removed,
+    name: windowsTaskName(options),
+  };
+}
+
+async function linuxStatus(
+  options: NativeAgentLifecycleOptions,
+): Promise<NativeAgentLifecycleStatus> {
+  const definition = linuxUnitPath(options);
+  let installed = false;
+  try {
+    await fs.access(definition);
+    installed = true;
+  } catch {
+    // Not installed.
+  }
+
+  if (!installed) {
+    return StatusSchema.parse({
+      installed: false,
+      platform: 'linux',
+      name: linuxUnitName(options),
+      state: 'not-installed',
+      autostart: false,
+      pid: null,
+      launcher: launcherPath(options, 'linux'),
+      definition,
+    });
+  }
+
+  const result = await runCommand(
+    'systemctl',
+    [
+      '--user',
+      'show',
+      linuxUnitName(options),
+      '--property=ActiveState',
+      '--property=SubState',
+      '--property=UnitFileState',
+      '--property=MainPID',
+      '--no-pager',
+    ],
+    options.env ?? process.env,
+    true,
+  );
+  const values = new Map<string, string>();
+  for (const line of result.stdout.split(/\r?\n/)) {
+    const index = line.indexOf('=');
+    if (index > 0) {
+      values.set(line.slice(0, index), line.slice(index + 1));
+    }
+  }
+  const pid = Number(values.get('MainPID') ?? '0');
+  return StatusSchema.parse({
+    installed: true,
+    platform: 'linux',
+    name: linuxUnitName(options),
+    state:
+      result.code === 0
+        ? (values.get('ActiveState') ?? 'unknown') +
+          '/' +
+          (values.get('SubState') ?? 'unknown')
+        : 'unknown',
+    autostart:
+      values.get('UnitFileState') === 'enabled' ||
+      values.get('UnitFileState') === 'enabled-runtime',
+    pid: Number.isInteger(pid) && pid > 0 ? pid : null,
+    launcher: launcherPath(options, 'linux'),
+    definition,
+  });
+}
+
+async function installLinux(
+  options: NativeAgentLifecycleOptions,
+): Promise<NativeAgentLifecycleStatus> {
+  const launcher = launcherPath(options, 'linux');
+  const unitFile = linuxUnitPath(options);
+  await fs.mkdir(path.dirname(launcher), {
+    recursive: true,
+    mode: 0o700,
+  });
+  await fs.mkdir(path.dirname(unitFile), {
+    recursive: true,
+    mode: 0o700,
+  });
+  await fs.writeFile(
+    launcher,
+    buildNativeAgentLauncher({
+      ...options,
+      platform: 'linux',
+    }),
+    { encoding: 'utf8', mode: 0o700 },
+  );
+  await fs.chmod(launcher, 0o700);
+  await fs.writeFile(
+    unitFile,
+    buildLinuxUserUnit(options),
+    { encoding: 'utf8', mode: 0o600 },
+  );
+  await runCommand(
+    'systemctl',
+    ['--user', 'daemon-reload'],
+    options.env ?? process.env,
+  );
+  await runCommand(
+    'systemctl',
+    ['--user', 'enable', '--now', linuxUnitName(options)],
+    options.env ?? process.env,
+  );
+  await writeManifest(options, 'linux');
+  return await linuxStatus(options);
+}
+
+async function controlLinux(
+  action: 'start' | 'stop' | 'restart',
+  options: NativeAgentLifecycleOptions,
+): Promise<NativeAgentLifecycleStatus> {
+  await runCommand(
+    'systemctl',
+    ['--user', action, linuxUnitName(options)],
+    options.env ?? process.env,
+  );
+  return await linuxStatus(options);
+}
+
+async function uninstallLinux(
+  options: NativeAgentLifecycleOptions,
+): Promise<{ removed: boolean; name: string }> {
+  const installed = (
+    await linuxStatus(options)
+  ).installed;
+  if (installed) {
+    await runCommand(
+      'systemctl',
+      ['--user', 'disable', '--now', linuxUnitName(options)],
+      options.env ?? process.env,
+      true,
+    );
+  }
+  await fs.rm(linuxUnitPath(options), { force: true });
+  await runCommand(
+    'systemctl',
+    ['--user', 'daemon-reload'],
+    options.env ?? process.env,
+    true,
+  );
+  await fs.rm(lifecycleRoot(options), {
+    recursive: true,
+    force: true,
+  });
+  return {
+    removed: installed,
+    name: linuxUnitName(options),
+  };
+}
+
+
+function launchdDomain(
+  options: NativeAgentLifecycleOptions,
+): string {
+  const uid =
+    options.uid ??
+    (typeof process.getuid === 'function'
+      ? process.getuid()
+      : undefined);
+  if (uid === undefined) {
+    throw new Error(
+      'Cannot determine current user ID for launchd lifecycle.',
+    );
+  }
+  return 'gui/' + uid;
+}
+
+async function macStatus(
+  options: NativeAgentLifecycleOptions,
+): Promise<NativeAgentLifecycleStatus> {
+  const definition = macPlistPath(options);
+  let installed = false;
+  try {
+    await fs.access(definition);
+    installed = true;
+  } catch {
+    // Not installed.
+  }
+
+  if (!installed) {
+    return StatusSchema.parse({
+      installed: false,
+      platform: 'darwin',
+      name: macLabel(options),
+      state: 'not-installed',
+      autostart: false,
+      pid: null,
+      launcher: launcherPath(options, 'darwin'),
+      definition,
+    });
+  }
+
+  const target = launchdDomain(options) + '/' + macLabel(options);
+  const result = await runCommand(
+    'launchctl',
+    ['print', target],
+    options.env ?? process.env,
+    true,
+  );
+  const pidMatch = /\bpid\s*=\s*(\d+)/.exec(result.stdout);
+  const pid = pidMatch ? Number(pidMatch[1]) : null;
+
+  return StatusSchema.parse({
+    installed: true,
+    platform: 'darwin',
+    name: macLabel(options),
+    state:
+      result.code === 0
+        ? pid && pid > 0
+          ? 'running'
+          : 'loaded'
+        : 'stopped',
+    autostart: true,
+    pid: pid && pid > 0 ? pid : null,
+    launcher: launcherPath(options, 'darwin'),
+    definition,
+  });
+}
+
+async function installMac(
+  options: NativeAgentLifecycleOptions,
+): Promise<NativeAgentLifecycleStatus> {
+  const launcher = launcherPath(options, 'darwin');
+  const plist = macPlistPath(options);
+
+  await fs.mkdir(path.dirname(launcher), {
+    recursive: true,
+    mode: 0o700,
+  });
+  await fs.mkdir(path.dirname(plist), {
+    recursive: true,
+    mode: 0o700,
+  });
+  await fs.writeFile(
+    launcher,
+    buildNativeAgentLauncher({
+      ...options,
+      platform: 'darwin',
+    }),
+    { encoding: 'utf8', mode: 0o700 },
+  );
+  await fs.chmod(launcher, 0o700);
+  await fs.writeFile(
+    plist,
+    buildMacLaunchAgentPlist(options),
+    { encoding: 'utf8', mode: 0o600 },
+  );
+
+  const domain = launchdDomain(options);
+  await runCommand(
+    'launchctl',
+    ['bootout', domain + '/' + macLabel(options)],
+    options.env ?? process.env,
+    true,
+  );
+  await runCommand(
+    'launchctl',
+    ['bootstrap', domain, plist],
+    options.env ?? process.env,
+  );
+
+  await writeManifest(options, 'darwin');
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  return await macStatus(options);
+}
+
+async function controlMac(
+  action: 'start' | 'stop' | 'restart',
+  options: NativeAgentLifecycleOptions,
+): Promise<NativeAgentLifecycleStatus> {
+  const domain = launchdDomain(options);
+  const target = domain + '/' + macLabel(options);
+  const plist = macPlistPath(options);
+
+  if (action === 'stop') {
+    await runCommand(
+      'launchctl',
+      ['bootout', target],
+      options.env ?? process.env,
+      true,
+    );
+  } else if (action === 'start') {
+    await runCommand(
+      'launchctl',
+      ['bootstrap', domain, plist],
+      options.env ?? process.env,
+    );
+  } else {
+    await runCommand(
+      'launchctl',
+      ['bootout', target],
+      options.env ?? process.env,
+      true,
+    );
+    await runCommand(
+      'launchctl',
+      ['bootstrap', domain, plist],
+      options.env ?? process.env,
+    );
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  return await macStatus(options);
+}
+
+async function uninstallMac(
+  options: NativeAgentLifecycleOptions,
+): Promise<{ removed: boolean; name: string }> {
+  const status = await macStatus(options);
+  if (status.installed) {
+    await runCommand(
+      'launchctl',
+      ['bootout', launchdDomain(options) + '/' + macLabel(options)],
+      options.env ?? process.env,
+      true,
+    );
+  }
+  await fs.rm(macPlistPath(options), { force: true });
+  await fs.rm(lifecycleRoot(options), {
+    recursive: true,
+    force: true,
+  });
+  return {
+    removed: status.installed,
+    name: macLabel(options),
+  };
+}
+
+async function writeManifest(
+  options: NativeAgentLifecycleOptions,
+  platform: 'win32' | 'linux' | 'darwin',
+): Promise<void> {
+  const env = persistedNativeAgentEnvironment(
+    options.env ?? process.env,
+  );
+  await fs.mkdir(lifecycleRoot(options), {
+    recursive: true,
+    mode: 0o700,
+  });
+  await fs.writeFile(
+    manifestPath(options),
+    JSON.stringify(
+      {
+        version: 1,
+        platform,
+        installedAt: new Date().toISOString(),
+        persistedEnvNames: Object.keys(env).sort(),
+      },
+      null,
+      2,
+    ) + '\n',
+    { encoding: 'utf8', mode: 0o600 },
+  );
+}
+
+export async function nativeAgentLifecycleStatus(
+  options: NativeAgentLifecycleOptions = {},
+): Promise<NativeAgentLifecycleStatus> {
+  const platform = platformOf(options);
+  if (platform === 'win32') return await windowsStatus(options);
+  if (platform === 'linux') return await linuxStatus(options);
+  return await macStatus(options);
+}
+
+export async function installNativeAgentLifecycle(
+  options: NativeAgentLifecycleOptions = {},
+): Promise<NativeAgentLifecycleStatus> {
+  persistedNativeAgentEnvironment(options.env ?? process.env);
+  const platform = platformOf(options);
+  if (platform === 'win32') return await installWindows(options);
+  if (platform === 'linux') return await installLinux(options);
+  return await installMac(options);
+}
+
+export async function startNativeAgentLifecycle(
+  options: NativeAgentLifecycleOptions = {},
+): Promise<NativeAgentLifecycleStatus> {
+  const platform = platformOf(options);
+  if (platform === 'win32') return await controlWindows('start', options);
+  if (platform === 'linux') return await controlLinux('start', options);
+  return await controlMac('start', options);
+}
+
+export async function stopNativeAgentLifecycle(
+  options: NativeAgentLifecycleOptions = {},
+): Promise<NativeAgentLifecycleStatus> {
+  const platform = platformOf(options);
+  if (platform === 'win32') return await controlWindows('stop', options);
+  if (platform === 'linux') return await controlLinux('stop', options);
+  return await controlMac('stop', options);
+}
+
+export async function restartNativeAgentLifecycle(
+  options: NativeAgentLifecycleOptions = {},
+): Promise<NativeAgentLifecycleStatus> {
+  const platform = platformOf(options);
+  if (platform === 'win32') return await controlWindows('restart', options);
+  if (platform === 'linux') return await controlLinux('restart', options);
+  return await controlMac('restart', options);
+}
+
+export async function uninstallNativeAgentLifecycle(
+  options: NativeAgentLifecycleOptions = {},
+): Promise<{ removed: boolean; name: string }> {
+  const platform = platformOf(options);
+  if (platform === 'win32') return await uninstallWindows(options);
+  if (platform === 'linux') return await uninstallLinux(options);
+  return await uninstallMac(options);
+}
+
+export async function runNativeAgentLifecycleCommand(
+  args: readonly string[],
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<void> {
+  const command = args[0] ?? 'status';
+  const options: NativeAgentLifecycleOptions = { env };
+  let result: unknown;
+
+  switch (command) {
+    case 'install':
+      result = await installNativeAgentLifecycle(options);
+      break;
+    case 'status':
+      result = await nativeAgentLifecycleStatus(options);
+      break;
+    case 'start':
+      result = await startNativeAgentLifecycle(options);
+      break;
+    case 'stop':
+      result = await stopNativeAgentLifecycle(options);
+      break;
+    case 'restart':
+      result = await restartNativeAgentLifecycle(options);
+      break;
+    case 'uninstall':
+      result = await uninstallNativeAgentLifecycle(options);
+      break;
+    default:
+      throw new Error(
+        'Usage: nexowire agent [run|install|status|start|stop|restart|uninstall]',
+      );
+  }
+
+  process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+}
+) { throw 'NATIVE_AGENT_TASK_RECEIPT_INVALID' }",
       '  $ownedPid=[long]$Matches[1]',
       '  $created=$Matches[2]',
       "  if ($ownedPid -gt 4294967295) { throw 'NATIVE_AGENT_TASK_RECEIPT_PID_INVALID' }",
