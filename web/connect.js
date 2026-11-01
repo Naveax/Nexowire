@@ -144,10 +144,21 @@ function showError(message, retryable = false) {
   setPill('Hata', 'bad');
   $('error-message').textContent = message;
   $('error-panel').classList.remove('hidden');
+  $('pair-panel').setAttribute('aria-busy', 'false');
   const approve = $('approve');
   approve.disabled = !retryable;
   approve.textContent = retryable ? 'TEKRAR DENE' : 'BAĞLA';
   approve.dataset.busy = 'false';
+  $('retry-hint').textContent = retryable
+    ? 'Tekrar denemek için TEKRAR DENE düğmesine bas.'
+    : 'Bağlantıyı kontrol ettikten sonra bu sayfayı yenile veya kontrol paneline dön.';
+  if (retryable) {
+    approve.setAttribute('aria-describedby', 'error-message retry-hint');
+    approve.focus();
+  } else {
+    approve.removeAttribute('aria-describedby');
+    $('error-panel').focus();
+  }
 }
 
 function validatedLoopbackCallback() {
@@ -212,6 +223,7 @@ async function loadAccount() {
   $('status-text').textContent =
     'Ekstra erişim ayarı gerekmez. BAĞLA dediğinde cihaz hesabına eklenir ve bağlantı otomatik hazırlanır.';
   $('approve').disabled = false;
+  $('pair-panel').setAttribute('aria-busy', 'false');
   setPill('Hazır', 'good');
 
   $('approve').addEventListener('click', async () => {
@@ -221,12 +233,15 @@ async function loadAccount() {
     approve.dataset.busy = 'true';
     approve.disabled = true;
     approve.textContent = 'BAĞLANIYOR…';
+    approve.removeAttribute('aria-describedby');
     $('error-panel').classList.add('hidden');
+    $('pair-panel').setAttribute('aria-busy', 'true');
     setPill('Bağlanıyor', 'muted');
     $('status-title').textContent = 'Bağlanıyor';
     $('status-text').textContent =
       'Başka bir ayar yapmana gerek yok.';
 
+    let retryable = true;
     try {
       const pairing = await fetch('/api/v1/pairing', {
         method: 'POST',
@@ -241,6 +256,7 @@ async function loadAccount() {
       if (!pairing.ok) {
         const body = await pairing.json().catch(() => ({}));
         if (pairing.status === 403) {
+          retryable = false;
           throw new Error(
             body.error === 'DEVICE_LIMIT_REACHED'
               ? 'Bu hesap için cihaz limiti dolu.'
@@ -265,16 +281,18 @@ async function loadAccount() {
     } catch (error) {
       showError(
         error instanceof Error ? error.message : String(error),
-        true,
+        retryable,
       );
-      $('status-title').textContent = 'Tekrar deneyebilirsin';
+      $('status-title').textContent = retryable ? 'Tekrar deneyebilirsin' : 'Bağlantı durduruldu';
       $('status-text').textContent =
-        'Ayarları değiştirmen gerekmez.';
+        retryable ? 'Ayarları değiştirmen gerekmez.' : 'Hata açıklamasını kontrol et.';
     }
   });
 }
 
 loadAccount().catch((error) => {
+  $('status-title').textContent = 'Hesap doğrulanamadı';
+  $('status-text').textContent = 'Sayfayı yenilemeden önce bağlantını kontrol et.';
   showError(
     error instanceof Error ? error.message : String(error),
     false,
