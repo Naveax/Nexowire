@@ -1,0 +1,417 @@
+{
+  "upstreamSha": "93b6df33ef58610dcfdf3584bfe774e5afa7df4d",
+  "forkSha": "93b6df33ef58610dcfdf3584bfe774e5afa7df4d",
+  "observation": "2026-11-01; rolling API snapshot, NOT an atomic exact-head check; branch heads may change while captured",
+  "prs": [
+    {
+      "number": 1010,
+      "title": "fix(ui): responsive CSS, focus and offline viewport regressions",
+      "author": "SinsiVinci",
+      "draft": true,
+      "head": "3f6a226e4244d3a599d9631adf69bb40bf1f4c92",
+      "ci": [{ "runId": 41337736249, "head_sha": "3f6a226e4244d3a599d9631adf69bb40bf1f4c92", "status": "completed", "conclusion": "action_required", "jobs": [] }],
+      "base": "93b6df33ef58610dcfdf3584bfe774e5afa7df4d",
+      "files": [
+        "test/delegated/k02/VIEWPORT_MATRIX.md",
+        "test/delegated/k02/overflow-fixtures.html",
+        "test/delegated/k02/responsive-css.test.ts",
+        "web/styles.css"
+      ],
+      "filesComplete": true,
+      "mainChangedPaths": [],
+      "mainComparisonComplete": true
+    },
+    {
+      "number": 1011,
+      "title": "fix(ui): clarify connect error and retry feedback",
+      "author": "SinsiVinci",
+      "draft": true,
+      "head": "6e740dfe919e5f615655f68815b078447915ce6f",
+      "ci": [{ "runId": 41337712422, "head_sha": "6e740dfe919e5f615655f68815b078447915ce6f", "status": "completed", "conclusion": "action_required", "jobs": [] }],
+      "base": "93b6df33ef58610dcfdf3584bfe774e5afa7df4d",
+      "files": [
+        "test/delegated/k01/ACCEPTANCE.md",
+        "test/delegated/k01/connect-state.test.ts",
+        "web/connect.html",
+        "web/connect.js"
+      ],
+      "filesComplete": true,
+      "mainChangedPaths": [],
+      "mainComparisonComplete": true
+    },
+    {
+      "number": 1012,
+      "title": "docs: guide first-time device connection troubleshooting",
+      "author": "SinsiVinci",
+      "draft": true,
+      "head": "1121a966064570cc95ee6088ef8d9bfbca832baf",
+      "ci": [{ "runId": 41326227430, "head_sha": "1121a966064570cc95ee6088ef8d9bfbca832baf", "status": "completed", "conclusion": "action_required", "jobs": [] }],
+      "base": "93b6df33ef58610dcfdf3584bfe774e5afa7df4d",
+      "files": [
+        "docs/delegated/newcomer-k02/README.md"
+      ],
+      "filesComplete": true,
+      "mainChangedPaths": [],
+      "mainComparisonComplete": true
+    },
+    {
+      "number": 1013,
+      "title": "docs(test): separate hosted/self-host endpoints and audit operator commands",
+      "author": "SinsiVinci",
+      "draft": true,
+      "head": "707408ebc2bf4535c5c6ce115e0f7440b6f61454",
+      "ci": [{ "runId": 41337792146, "head_sha": "707408ebc2bf4535c5c6ce115e0f7440b6f61454", "status": "completed", "conclusion": "action_required", "jobs": [] }],
+      "base": "93b6df33ef58610dcfdf3584bfe774e5afa7df4d",
+      "files": [
+        "docs/DEPLOYMENT_ONBOARDING.md",
+        "docs/SELF_HOST.md",
+        "test/delegated/k07/connection-docs.test.mjs",
+        "test/delegated/k07/self-host-docs.test.mjs",
+        "test/delegated/platform-k07/command-matrix.json",
+        "test/delegated/platform-k07/command-matrix.test.mjs"
+      ],
+      "filesComplete": true,
+      "mainChangedPaths": [],
+      "mainComparisonComplete": true
+    },
+    {
+      "number": 1014,
+      "title": "docs(mcp): map v1 read-only capabilities and architecture boundaries",
+      "author": "SinsiVinci",
+      "draft": true,
+      "head": "b3e40ed6e45b50a1dabef09d9b48978d6e2428c9",
+      "ci": [{ "runId": 41326324103, "head_sha": "b3e40ed6e45b50a1dabef09d9b48978d6e2428c9", "status": "completed", "conclusion": "action_required", "jobs": [] }],
+      "base": "93b6df33ef58610dcfdf3584bfe774e5afa7df4d",
+      "files": [
+        "docs/ARCHITECTURE.md",
+        "docs/MCP_SURFACE.md",
+        "test/delegated/k08/mcp-doc-contract.test.mjs"
+      ],
+      "filesComplete": true,
+      "mainChangedPaths": [],
+      "mainComparisonComplete": true
+    },
+    {
+      "number": 1015,
+      "title": "fix(ui): improve admin overview labels and loading announcements",
+      "author": "SinsiVinci",
+      "draft": true,
+      "head": "72659bf8d17d26f0d3e18590e2bcf7e4a3516f95",
+      "ci": [{ "runId": 41326326209, "head_sha": "72659bf8d17d26f0d3e18590e2bcf7e4a3516f95", "status": "completed", "conclusion": "action_required", "jobs": [] }],
+      "base": "93b6df33ef58610dcfdf3584bfe774e5afa7df4d",
+      "files": [
+        "test/delegated/k04/README.md",
+        "test/delegated/k04/admin-a11y.test.mjs",
+        "web/admin.html",
+        "web/admin.js"
+      ],
+      "filesComplete": true,
+      "mainChangedPaths": [],
+      "mainComparisonComplete": true
+    },
+    {
+      "number": 1016,
+      "title": "fix(ui): make dashboard loading, empty, and error states explicit",
+      "author": "SinsiVinci",
+      "draft": true,
+      "head": "96fa340b477915dc95dd4d8275c981b0a3b37f89",
+      "ci": [{ "runId": 41337745754, "head_sha": "96fa340b477915dc95dd4d8275c981b0a3b37f89", "status": "completed", "conclusion": "action_required", "jobs": [] }],
+      "base": "93b6df33ef58610dcfdf3584bfe774e5afa7df4d",
+      "files": [
+        "test/delegated/k03/panel-states.test.mjs",
+        "web/app.js",
+        "web/index.html"
+      ],
+      "filesComplete": true,
+      "mainChangedPaths": [],
+      "mainComparisonComplete": true
+    },
+    {
+      "number": 1017,
+      "title": "docs: make Scale v2 roadmap status and acceptance evidence explicit",
+      "author": "SinsiVinci",
+      "draft": true,
+      "head": "1791b8c471d5f28e8fbac16be58b96340cd9e49b",
+      "ci": [{ "runId": 41326469081, "head_sha": "1791b8c471d5f28e8fbac16be58b96340cd9e49b", "status": "completed", "conclusion": "action_required", "jobs": [] }],
+      "base": "93b6df33ef58610dcfdf3584bfe774e5afa7df4d",
+      "files": [
+        "ROADMAP.md",
+        "docs/SCALE_V2_ROADMAP.md",
+        "test/delegated/k09/roadmap-evidence.test.mjs"
+      ],
+      "filesComplete": true,
+      "mainChangedPaths": [],
+      "mainComparisonComplete": true
+    },
+    {
+      "number": 1018,
+      "title": "docs: fix v1.0.8 Windows and ChatGPT onboarding guidance",
+      "author": "SinsiVinci",
+      "draft": true,
+      "head": "53667dfdcee664e4dea7acb28a49792e45e6da29",
+      "ci": [{ "runId": 41326496055, "head_sha": "53667dfdcee664e4dea7acb28a49792e45e6da29", "status": "completed", "conclusion": "action_required", "jobs": [] }],
+      "base": "93b6df33ef58610dcfdf3584bfe774e5afa7df4d",
+      "files": [
+        "docs/CHATGPT_INSTALL_PROMPT.md",
+        "docs/INSTALL_WINDOWS.md",
+        "test/delegated/k06/windows-install-docs.test.mjs"
+      ],
+      "filesComplete": true,
+      "mainChangedPaths": [],
+      "mainComparisonComplete": true
+    },
+    {
+      "number": 1019,
+      "title": "test(qa): add offline accessibility checks for web pages",
+      "author": "SinsiVinci",
+      "draft": true,
+      "head": "5843b9c6fbfed99eba85dd61283022726d088323",
+      "ci": [{ "runId": 41326551254, "head_sha": "5843b9c6fbfed99eba85dd61283022726d088323", "status": "completed", "conclusion": "action_required", "jobs": [] }],
+      "base": "93b6df33ef58610dcfdf3584bfe774e5afa7df4d",
+      "files": [
+        "docs/delegated/qa-accessibility-k05/STATIC_AUDIT.md",
+        "scripts/delegated/k05/audit-html.mjs",
+        "test/delegated/k05/audit-html.test.mjs"
+      ],
+      "filesComplete": true,
+      "mainChangedPaths": [],
+      "mainComparisonComplete": true
+    },
+    {
+      "number": 1020,
+      "title": "test(qa): add offline smoke and evidence boundaries for web shell",
+      "author": "SinsiVinci",
+      "draft": true,
+      "head": "6b44959410aff5a62da8944ee6fdb6b1af67dac8",
+      "ci": [{ "runId": 41326831682, "head_sha": "6b44959410aff5a62da8944ee6fdb6b1af67dac8", "status": "completed", "conclusion": "action_required", "jobs": [] }],
+      "base": "93b6df33ef58610dcfdf3584bfe774e5afa7df4d",
+      "files": [
+        "docs/delegated/browser-evidence-k10/README.md",
+        "docs/delegated/browser-evidence-k10/template.json",
+        "scripts/delegated/k10/browser-visual-smoke.mjs",
+        "scripts/delegated/k10/offline-web-smoke.mjs",
+        "test/delegated/k10/offline-web-smoke.test.mjs",
+        "test/delegated/k10/state-scenarios.json",
+        "web/README.md"
+      ],
+      "filesComplete": true,
+      "mainChangedPaths": [],
+      "mainComparisonComplete": true
+    },
+    {
+      "number": 1021,
+      "title": "test(mcp): audit error wording and safe retry guidance",
+      "author": "SinsiVinci",
+      "draft": true,
+      "head": "8ea0cf13b4cb3e01022b6f8c76543071aa6b7967",
+      "ci": [{ "runId": 41326653333, "head_sha": "8ea0cf13b4cb3e01022b6f8c76543071aa6b7967", "status": "completed", "conclusion": "action_required", "jobs": [] }],
+      "base": "93b6df33ef58610dcfdf3584bfe774e5afa7df4d",
+      "files": [
+        "test/delegated/mcp-ux-k08/README.md",
+        "test/delegated/mcp-ux-k08/mcp-error-language.test.mjs"
+      ],
+      "filesComplete": true,
+      "mainChangedPaths": [],
+      "mainComparisonComplete": true
+    },
+    {
+      "number": 1022,
+      "title": "chore(integration): add read-only fork and PR evidence audit",
+      "author": "SinsiVinci",
+      "draft": true,
+      "head": "69452d1776dd1de958018133c7483418449e1ff6",
+      "ci": [{ "runId": 41326996155, "head_sha": "69452d1776dd1de958018133c7483418449e1ff6", "status": "completed", "conclusion": "action_required", "jobs": [] }],
+      "base": "93b6df33ef58610dcfdf3584bfe774e5afa7df4d",
+      "files": [
+        "docs/delegated/integration-k14/README.md",
+        "scripts/delegated/k14/integration-report.mjs",
+        "scripts/delegated/k14/integration-report.test.mjs",
+        "scripts/delegated/pr-summary-k14/README.md",
+        "scripts/delegated/pr-summary-k14/pr-summary.mjs",
+        "scripts/delegated/pr-summary-k14/pr-summary.test.mjs"
+      ],
+      "filesComplete": true,
+      "mainChangedPaths": [],
+      "mainComparisonComplete": true
+    },
+    {
+      "number": 1023,
+      "title": "test(ops): distinguish missing transport counters in offline reports",
+      "author": "SinsiVinci",
+      "draft": true,
+      "head": "c292d2bbb8ead08c328d4099d85081e44c94d63c",
+      "ci": [{ "runId": 41326760781, "head_sha": "c292d2bbb8ead08c328d4099d85081e44c94d63c", "status": "completed", "conclusion": "action_required", "jobs": [] }],
+      "base": "93b6df33ef58610dcfdf3584bfe774e5afa7df4d",
+      "files": [
+        "src/ops/scale-transport-metrics.ts",
+        "test/delegated/k18/transport-metrics-parser.test.ts",
+        "test/delegated/k18/transport-metrics-report.test.ts"
+      ],
+      "filesComplete": true,
+      "mainChangedPaths": [],
+      "mainComparisonComplete": true
+    },
+    {
+      "number": 1024,
+      "title": "test(qa): harden bounded S5 loopback metrics and cancellation",
+      "author": "SinsiVinci",
+      "draft": true,
+      "head": "743c0f562f355583bcfe781e68207dac0261f79d",
+      "ci": [{ "runId": 41337914936, "head_sha": "743c0f562f355583bcfe781e68207dac0261f79d", "status": "completed", "conclusion": "action_required", "jobs": [] }],
+      "base": "93b6df33ef58610dcfdf3584bfe774e5afa7df4d",
+      "files": [
+        "scripts/bench-s5-loopback-reconnect-storm.ts",
+        "scripts/bench-s5-loopback-ws-capacity.ts",
+        "test/delegated/k12/loopback-contract.test.ts",
+        "test/delegated/k12/loopback-teardown.test.ts"
+      ],
+      "filesComplete": true,
+      "mainChangedPaths": [],
+      "mainComparisonComplete": true
+    },
+    {
+      "number": 1025,
+      "title": "test(qa): document cross-device file transfer UX outcome boundaries",
+      "author": "SinsiVinci",
+      "draft": true,
+      "head": "ef520df5f216a9e131d16269da612c262217d6e2",
+      "ci": [{ "runId": 41326817893, "head_sha": "ef520df5f216a9e131d16269da612c262217d6e2", "status": "completed", "conclusion": "action_required", "jobs": [] }],
+      "base": "93b6df33ef58610dcfdf3584bfe774e5afa7df4d",
+      "files": [
+        "docs/delegated/file-ux-k19/TRANSFER_USER_STATES.md",
+        "test/delegated/k19/file-transfer-user-contract.test.ts"
+      ],
+      "filesComplete": true,
+      "mainChangedPaths": [],
+      "mainComparisonComplete": true
+    },
+    {
+      "number": 1026,
+      "title": "test(ui): cover device card identity and offline state contracts",
+      "author": "SinsiVinci",
+      "draft": true,
+      "head": "0876648a4e03288c619557cdc09512a6bc396c68",
+      "ci": [{ "runId": 41326981507, "head_sha": "0876648a4e03288c619557cdc09512a6bc396c68", "status": "completed", "conclusion": "action_required", "jobs": [] }],
+      "base": "93b6df33ef58610dcfdf3584bfe774e5afa7df4d",
+      "files": [
+        "docs/delegated/device-ux-k15/DEVICE_SELECTION_CONTRACT.md",
+        "test/delegated/k15/device-card-contract.test.mjs"
+      ],
+      "filesComplete": true,
+      "mainChangedPaths": [],
+      "mainComparisonComplete": true
+    },
+    {
+      "number": 1027,
+      "title": "test(qa): guard HTML language, title and viewport metadata",
+      "author": "SinsiVinci",
+      "draft": true,
+      "head": "014e2f17c300f67d8c5af9e6ab841e4496a41570",
+      "ci": [{ "runId": 41326886765, "head_sha": "014e2f17c300f67d8c5af9e6ab841e4496a41570", "status": "completed", "conclusion": "action_required", "jobs": [] }],
+      "base": "93b6df33ef58610dcfdf3584bfe774e5afa7df4d",
+      "files": [
+        "test/delegated/html-meta-k05/check-meta.mjs",
+        "test/delegated/html-meta-k05/check-meta.test.mjs"
+      ],
+      "filesComplete": true,
+      "mainChangedPaths": [],
+      "mainComparisonComplete": true
+    },
+    {
+      "number": 1028,
+      "title": "test(qa): add offline outdated-version reference review candidates",
+      "author": "SinsiVinci",
+      "draft": true,
+      "head": "ec9784fff519a91227270b8b2e79e6d88d850c7b",
+      "ci": [{ "runId": 41326936314, "head_sha": "ec9784fff519a91227270b8b2e79e6d88d850c7b", "status": "completed", "conclusion": "action_required", "jobs": [] }],
+      "base": "93b6df33ef58610dcfdf3584bfe774e5afa7df4d",
+      "files": [
+        "scripts/delegated/versions-k09/README.md",
+        "scripts/delegated/versions-k09/version-reference-report.mjs",
+        "scripts/delegated/versions-k09/version-reference-report.test.mjs"
+      ],
+      "filesComplete": true,
+      "mainChangedPaths": [],
+      "mainComparisonComplete": true
+    },
+    {
+      "number": 1029,
+      "title": "test(qa): fail closed on unknown S5 offline cost inputs",
+      "author": "SinsiVinci",
+      "draft": true,
+      "head": "919da8e9a99eb827a0900eadd4a905c7423cae02",
+      "ci": [{ "runId": 41327299897, "head_sha": "919da8e9a99eb827a0900eadd4a905c7423cae02", "status": "completed", "conclusion": "action_required", "jobs": [] }],
+      "base": "93b6df33ef58610dcfdf3584bfe774e5afa7df4d",
+      "files": [
+        "scripts/report-s5-cost-matrix.ts",
+        "src/ops/scale-s5-cost-envelope.ts",
+        "test/delegated/csv-units-k11/s5-csv-locale.test.ts",
+        "test/delegated/k11/cost-report.test.ts"
+      ],
+      "filesComplete": true,
+      "mainChangedPaths": [],
+      "mainComparisonComplete": true
+    },
+    {
+      "number": 1030,
+      "title": "test(qa): validate skill metadata, titles, and local links",
+      "author": "SinsiVinci",
+      "draft": true,
+      "head": "08e9d233fd80138baa62bc4b16d54d3163ae87b8",
+      "ci": [{ "runId": 41327015390, "head_sha": "08e9d233fd80138baa62bc4b16d54d3163ae87b8", "status": "completed", "conclusion": "action_required", "jobs": [] }],
+      "base": "93b6df33ef58610dcfdf3584bfe774e5afa7df4d",
+      "files": [
+        "src/skills/manifest.ts",
+        "test/delegated/k17/METADATA_REPORT.md",
+        "test/delegated/k17/skill-metadata-audit.test.ts",
+        "test/delegated/k17/skill-metadata-audit.ts"
+      ],
+      "filesComplete": true,
+      "mainChangedPaths": [],
+      "mainComparisonComplete": true
+    },
+    {
+      "number": 1031,
+      "title": "test(qa): offline issue triage, docs links and regression maintenance tools",
+      "author": "SinsiVinci",
+      "draft": true,
+      "head": "99a76109e69e73c5a835b8ac6e980ee1d2dcb8d5",
+      "ci": [{ "runId": 41327470111, "head_sha": "99a76109e69e73c5a835b8ac6e980ee1d2dcb8d5", "status": "completed", "conclusion": "action_required", "jobs": [] }],
+      "base": "93b6df33ef58610dcfdf3584bfe774e5afa7df4d",
+      "files": [
+        "docs/delegated/maintenance-k20/README.md",
+        "docs/delegated/maintenance-k20/scenarios.json",
+        "scripts/delegated/k20/check-doc-links.mjs",
+        "scripts/delegated/k20/command-status.mjs",
+        "scripts/delegated/k20/pr-evidence.mjs",
+        "scripts/delegated/k20/regression-catalog.mjs",
+        "scripts/delegated/k20/test-ownership.mjs",
+        "scripts/delegated/k20/triage-open-issues.mjs",
+        "test/delegated/k20/check-doc-links.test.mjs",
+        "test/delegated/k20/command-status.test.mjs",
+        "test/delegated/k20/pr-evidence.test.mjs",
+        "test/delegated/k20/regression-catalog.test.mjs",
+        "test/delegated/k20/test-ownership.test.mjs",
+        "test/delegated/k20/triage-open-issues.test.mjs"
+      ],
+      "filesComplete": true,
+      "mainChangedPaths": [],
+      "mainComparisonComplete": true
+    },
+    {
+      "number": 1032,
+      "title": "docs(qa): record PR description and path security-scope triage",
+      "author": "SinsiVinci",
+      "draft": true,
+      "head": "85c4a2bf7f34f9550659f05c16d8f455d8727d92",
+      "ci": [{ "runId": 41327853950, "head_sha": "85c4a2bf7f34f9550659f05c16d8f455d8727d92", "status": "completed", "conclusion": "action_required", "jobs": [] }],
+      "base": "93b6df33ef58610dcfdf3584bfe774e5afa7df4d",
+      "files": [
+        "docs/delegated/pr-triage-k20/PR_SECURITY_SCOPE_AUDIT_20261101.md"
+      ],
+      "filesComplete": true,
+      "mainChangedPaths": [],
+      "mainComparisonComplete": true
+    }
+  ]
+}

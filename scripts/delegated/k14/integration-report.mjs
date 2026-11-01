@@ -65,6 +65,7 @@ export function buildReport(input) {
     const touched = [...new Set(pr.files ?? [])].sort();
     const mainChanged = pr.mainComparisonComplete === true && Array.isArray(pr.mainChangedPaths)
       ? touched.filter(path => pr.mainChangedPaths.includes(path)) : null;
+    const ci = pr.ci === undefined ? 'NOT_CHECKED' : classifyCi(pr.head, pr.ci);
     return {
       number: pr.number,
       title: pr.title,
@@ -76,7 +77,9 @@ export function buildReport(input) {
       filesComplete: pr.filesComplete === true,
       base: pr.base,
       mainPathOverlap: mainChanged,
-      ci: pr.ci === undefined ? 'NOT_CHECKED' : classifyCi(pr.head, pr.ci),
+      ci,
+      ciJobGate: ci === 'OBSERVED_GREEN_JOBS_NOT_MERGE_APPROVAL' ? 'OBSERVED_GREEN' : 'BLOCKED_OR_UNVERIFIED',
+      mergeReady: false, // Reviews, branch protection and physical acceptance are not inspected here.
     };
   }).sort((a, b) => a.number - b.number);
   return { source: 'GitHub REST, read-only; snapshot only', upstreamSha, forkSha, sync,
@@ -94,12 +97,12 @@ export function markdownReport(report) {
     `- Sync: **${report.sync}** (no branch was modified)`,
     `- Scope: ${report.scope}`,
     `- Merge: ${report.mergeDecision}`, '',
-    '| PR | Owner | Exact HEAD | Files | CI | Main path overlap |',
-    '| --- | --- | --- | ---: | --- | --- |',
+    '| PR | Owner | Exact HEAD | Files | CI | Job gate | Main path overlap |',
+    '| --- | --- | --- | ---: | --- | --- | --- |',
   ];
   for (const pr of report.prs) {
     const overlap = pr.mainPathOverlap === null ? 'UNKNOWN' : (pr.mainPathOverlap.join(', ') || 'none');
-    lines.push(`| #${pr.number}${pr.draft ? ' (draft)' : ''} | ${pr.author} | \`${pr.head}\` | ${pr.files.length}${pr.filesComplete ? '' : '+'} | ${pr.ci} | ${overlap} |`);
+    lines.push(`| #${pr.number}${pr.draft ? ' (draft)' : ''} | ${pr.author} | \`${pr.head}\` | ${pr.files.length}${pr.filesComplete ? '' : '+'} | ${pr.ci} | ${pr.ciJobGate} | ${overlap} |`);
   }
   lines.push('', '## Same-path conflicts within selected PRs', '');
   lines.push(...(report.overlaps.length ? report.overlaps.map(item => `- \`${item.path}\`: ${item.prs.map(n => `#${n}`).join(' / ')}`) : ['- None observed among the completely fetched file lists.']));
@@ -112,7 +115,7 @@ export function markdownReport(report) {
   return lines.join('\n');
 }
 
-function apiRequester(token = process.env.GITHUB_TOKEN) {
+export function apiRequester(token = process.env.GITHUB_TOKEN) {
   return async path => {
     const response = await fetch(`https://api.github.com${path}`, {
       headers: {
@@ -186,6 +189,14 @@ export async function collectSnapshot(get, { includeCi = false, onlyNumbers = nu
     }
     return item;
   }));
+  // Open PRs may be amended while their file lists/runs are fetched.
+  // Fail the whole snapshot instead of presenting mixed-SHA evidence.
+  const fresh = await Promise.all(selected.map(pr => get(`/repos/${UPSTREAM}/pulls/${pr.number}`)));
+  for (let i = 0; i < selected.length; i++) {
+    if (fresh[i].head?.sha !== selected[i].head.sha || fresh[i].base?.sha !== selected[i].base?.sha) {
+      throw new Error(`PR #${selected[i].number} changed HEAD/base during inspection; retry`);
+    }
+  }
   return buildReport({ upstreamSha, forkSha, comparison, prs });
 }
 
