@@ -1,0 +1,129 @@
+name: Coordinator v1.0.8 Read-only Merge Rehearsal
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/coord-v108-merge-rehearsal.yml"
+      - "scripts/coord-v108-merge-tree.mjs"
+      - "scripts/coord-v108-snapshot.mjs"
+      - "scripts/coord-v108-child-lineage.mjs"
+      - "test/coord/coord-v108-merge-tree.test.ts"
+      - "test/coord/coord-v108-child-lineage.test.ts"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: coord-v108-merge-rehearsal-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-child-lineage-only:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout read-only coordinator code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Read and re-read current parent and child PR refs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/coord-v108-child-lineage.mjs
+  simulate-merge-only:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout coordinator source without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Capture authenticated read-only GitHub metadata
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          node scripts/coord-v108-snapshot.mjs > "$RUNNER_TEMP/v108-snapshot-before.json"
+      - name: Fetch exact PR histories in isolated temporary source clone
+        shell: bash
+        run: |
+          set -euo pipefail
+          source="$RUNNER_TEMP/v108-dryrun-source"
+          git -c protocol.version=2 clone --quiet --no-checkout --single-branch --branch main \
+            https://github.com/Naveax/Nexowire.git "$source"
+          for id in 980 1005 981 982 988 983 984 993 989 987 992 985 996 1007 990 1004; do
+            git -C "$source" fetch --quiet --no-tags origin \
+              "pull/$id/head:refs/remotes/origin/coord-pr-$id"
+          done
+      - name: Simulate Git merges without changing any repository refs
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Preserve the fail-closed exit status while emitting sanitized reason codes.
+          set +e
+          node scripts/coord-v108-merge-tree.mjs \
+            --repo "$RUNNER_TEMP/v108-dryrun-source" \
+            --snapshot "$RUNNER_TEMP/v108-snapshot-before.json" \
+            > "$RUNNER_TEMP/v108-merge-result.json"
+          merge_exit=$?
+          set -e
+          if [[ ! -s "$RUNNER_TEMP/v108-merge-result.json" ]]; then
+            echo "BLOCKED: no structured dry-run report (exit $merge_exit)"
+            exit 2
+          fi
+          node --input-type=module -e '
+            import {readFileSync} from "node:fs";
+            const result = JSON.parse(readFileSync(process.env.RUNNER_TEMP + "/v108-merge-result.json", "utf8"));
+            // Only fixed reason codes and PR numbers; never print file contents.
+            console.log("V108_REHEARSAL_STATUS:", result.status);
+            console.log("V108_REHEARSAL_FINDINGS:", JSON.stringify(result.findings?.slice(0,12) ?? []));
+            console.log("V108_REHEARSAL_PR_STATES:", JSON.stringify(
+              (result.nodes ?? []).map(({pr,result:state})=>({pr,state})).slice(0,20)
+            ));
+            // Only public repository paths from Git conflict lines; never print diffs.
+            const conflictPaths = (result.nodes ?? []).flatMap(n =>
+              Array.isArray(n.conflictFiles) ? n.conflictFiles.slice(0,15) : []
+            );
+            console.log("V108_REHEARSAL_CONFLICT_FILES:", JSON.stringify(conflictPaths));
+            if (result.status !== "CLEAN_DRY_RUN" ||
+                result.mergeAuthorized !== false || result.productionCore !== "NO_GO" ||
+                result.deployAuthorized !== false) process.exit(2);
+            console.log("Source-only dry-run clean; never a merge/CORE approval.");
+          '
+          if [[ "$merge_exit" -ne 0 ]]; then
+            echo "BLOCKED: dry-run exit code $merge_exit"
+            exit 2
+          fi
+      - name: Recheck PR head and main SHA after the rehearsal
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          node scripts/coord-v108-snapshot.mjs > "$RUNNER_TEMP/v108-snapshot-after.json"
+          node --input-type=module -e '
+            import {readFileSync} from "node:fs";
+            const root = process.env.RUNNER_TEMP;
+            const a = JSON.parse(readFileSync(root + "/v108-snapshot-before.json", "utf8"));
+            const b = JSON.parse(readFileSync(root + "/v108-snapshot-after.json", "utf8"));
+            if (a.mainSha !== b.mainSha || JSON.stringify(a.prs) !== JSON.stringify(b.prs)) {
+              console.error("BLOCKED: one or more PR/main refs moved during rehearsal");
+              process.exit(2);
+            }
+            console.log("Exact PR/main refs remained stable. No production acceptance implied.");
+          '
