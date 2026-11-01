@@ -16,6 +16,10 @@ export interface LoadedSkill {
   markdown: string;
 }
 
+function compareNames(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 export class SkillRegistry {
   constructor(private readonly skillsDir: string) {}
 
@@ -50,7 +54,7 @@ export class SkillRegistry {
       }
     }
 
-    return skills.sort((a, b) => a.name.localeCompare(b.name));
+    return skills.sort((a, b) => compareNames(a.name, b.name));
   }
 
   async load(name: string): Promise<LoadedSkill> {
@@ -100,16 +104,17 @@ export class SkillRegistry {
     const errors: Array<{ directory: string; error: string }> = [];
     const names = new Set<string>();
 
-    for (const entry of entries) {
+    for (const entry of entries.sort((a, b) => compareNames(a.name, b.name))) {
       if (!entry.isDirectory()) continue;
       try {
         const { manifest } = await this.load(entry.name);
-        if (names.has(manifest.name)) {
+        const canonicalName = manifest.name.toLowerCase();
+        if (names.has(canonicalName)) {
           throw new Error(
             `Duplicate skill manifest name: ${manifest.name}`,
           );
         }
-        names.add(manifest.name);
+        names.add(canonicalName);
         valid.push(manifest);
       } catch (error) {
         errors.push({
@@ -122,8 +127,8 @@ export class SkillRegistry {
       }
     }
 
-    valid.sort((a, b) => a.name.localeCompare(b.name));
-    errors.sort((a, b) => a.directory.localeCompare(b.directory));
+    valid.sort((a, b) => compareNames(a.name, b.name));
+    errors.sort((a, b) => compareNames(a.directory, b.directory));
 
     return {
       ok: errors.length === 0,
