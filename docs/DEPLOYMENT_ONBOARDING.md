@@ -1,6 +1,13 @@
 # Deployment Onboarding
 
-This document is for self-hosted/operator deployment. It is not the normal end-user connection flow. Hosted users should use `nexowire connect`, sign in if needed, and press **BAĞLA**; they do not need to manage tokens, URLs, Tailscale, or capability scopes.
+This document is for self-hosted/operator deployment. It is not the normal end-user connection flow. Hosted Windows users should follow the [installation and ChatGPT guide](INSTALL_WINDOWS.md), use `nexowire connect` if needed, sign in, and press **BAĞLA**; they do not need to manage tokens, URLs, Tailscale, or capability scopes.
+
+There are **two distinct operator flows**:
+
+- [Windows one-command self-host node](SELF_HOST.md): `nexowire node bootstrap` installs same-user Hub/Agent Scheduled Tasks, uses Windows DPAPI, and optionally requests Tailscale Funnel. This implementation rejects Linux/macOS.
+- The `nexowire onboard` flow below: plans deployment readiness or issues credentials for an operator-managed setup. It does **not** install a Hub/Agent, configure TLS/Tailscale, or prove remote connectivity.
+
+For a source checkout, use Node.js 22+ with `npm ci` and `npm run build`; invoke `node dist/src/cli.js` instead of `nexowire` if the CLI is not otherwise on `PATH`. Do not use these developer steps as instructions for first-time hosted Windows users.
 
 The onboarding command creates a safe deployment starting point without writing plaintext bearer tokens into repository files, launcher arguments, or Nexowire state.
 
@@ -11,7 +18,16 @@ nexowire onboard plan
 nexowire onboard plan --remote
 ```
 
-Plan mode is non-mutating. It runs the existing deployment-readiness model and explains the remaining steps.
+Plan mode does not issue or rotate credentials and runs the deployment-readiness model to explain remaining steps. It may initialize a local credential state directory when first run, so it should not be described as a strict filesystem no-write guarantee.
+
+The following diagnostics report readiness rather than perform deployment:
+
+```text
+nexowire doctor
+nexowire doctor --remote
+```
+
+Nonzero exit status (including code 2 for failed readiness) is not a successful installation. Redact hostnames, credentials and other sensitive diagnostics before sharing a report.
 
 ## Bootstrap
 
@@ -20,7 +36,7 @@ nexowire onboard bootstrap
 nexowire onboard bootstrap --remote
 ```
 
-Bootstrap issues missing MCP and native-agent credentials through the hash-only credential store. Each plaintext token is returned once in command output and is not persisted by the credential store.
+**State-changing operation:** bootstrap issues missing MCP and native-agent credentials through the hash-only credential store. Each plaintext token is returned once in command output and is not persisted by the credential store. Avoid terminal capture/session logs and never copy the output into an issue or chat.
 
 Useful scope options:
 
@@ -41,4 +57,6 @@ Store the one-time native-agent credential through a protected source on the tar
 
 For the MCP credential, place the one-time token in the ChatGPT/client connector's secret configuration rather than a repository file.
 
-For remote deployments, `nexowire doctor --remote` remains authoritative. Onboarding does not pretend a loopback/plaintext/missing-TLS deployment is production-ready merely because credentials now exist. Humanity has enough green checkmarks with no relationship to reality.
+For remote deployments, `nexowire doctor --remote` remains the readiness gate. Onboarding does not pretend a loopback/plaintext/missing-TLS deployment is production-ready merely because credentials now exist. Linux/manual hosting requires its own supported, separately verified Agent secret source and lifecycle; the Windows Scheduled Task/DPAPI recipe does not transfer automatically.
+
+Remote readiness still does **not** prove ChatGPT can authenticate, discover the intended device, or call `machine_snapshot` and `machine_health`. Verify those paths with the real client before declaring the connection complete.
