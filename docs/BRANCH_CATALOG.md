@@ -1,5 +1,7 @@
 # Nexowire: Branch Envanteri, Entegrasyon ve Güvenli Temizlik
 
+> **G├╝ncel branch/PR anl─▒k g├Âr├╝nt├╝s├╝ (2026-11-01):** [Tek Durum Panosu](PROJECT_STATUS.md), [397 branch tablosu](inventory/BRANCHES_2026-11-01.csv) ve [368 a├ğ─▒k PR tablosu](inventory/OPEN_PRS_2026-11-01.csv). A┼şa─ş─▒daki 30 Ekim rakamlar─▒ tarihsel kay─▒tt─▒r. Main-ancestor olan 2 eski WAL/QA branch silindi; di─şer benzersiz i┼şler korundu.
+
 > **Son güncelleme: 30 Ekim 2026.** GitHub doğrulamalı envanter. Bu belge bir temizlik ve entegrasyon günlüğüdür; source CI'ı production/physical CORE kabulü yerine geçmez.
 
 - Depo: [Naveax/Nexowire](https://github.com/Naveax/Nexowire)

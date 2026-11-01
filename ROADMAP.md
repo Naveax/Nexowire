@@ -1,5 +1,7 @@
 # Roadmap
 
+> **G├╝ncel ├ğal─▒┼şma listesi (2026-11-01):** [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md). A┼şa─ş─▒daki eski roadmap maddeleri tarihsel durum i├ğerebilir; source/installed/CORE GO durumlar─▒ bu panoda ayr─▒ tutulur.
+
 ## Current priority: Scale v2 foundation (2026-10-14, planned)
 
 **Active scope S1–S5; S6 feature expansion paused.** The detailed actionable checklist is [docs/SCALE_V2_ROADMAP.md](docs/SCALE_V2_ROADMAP.md), linked to [vision](docs/SCALE_V2_VISION.md), [quota/cost model](docs/SCALE_V2_QUOTA_AND_COST.md), [safe connection rollout](docs/SCALE_V2_CONNECTION_ROLLOUT.md), and [master #482](https://github.com/Naveax/Nexowire/issues/482). Stages: S1 [#483](https://github.com/Naveax/Nexowire/issues/483), S2 [#484](https://github.com/Naveax/Nexowire/issues/484), S3 [#485](https://github.com/Naveax/Nexowire/issues/485), S4 [#486](https://github.com/Naveax/Nexowire/issues/486), S5 [#487](https://github.com/Naveax/Nexowire/issues/487).
