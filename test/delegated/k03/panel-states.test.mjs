@@ -30,7 +30,15 @@ class FakeElement {
     this.value = '';
     this._text = '';
     this.listeners = new Map();
+    this.elements = new Map();
   }
+  set className(value) {
+    this._className = String(value);
+    this.classList = new FakeClassList();
+    for (const name of this._className.split(/\s+/).filter(Boolean)) this.classList.add(name);
+  }
+  get className() { return this._className ?? ''; }
+  set innerHTML(value) { this.template = value; }
   get textContent() {
     return this._text + this.children.map((child) => child.textContent).join('');
   }
@@ -41,10 +49,22 @@ class FakeElement {
   appendChild(element) { this.children.push(element); return element; }
   replaceChildren(...elements) { this._text = ''; this.children = elements; }
   add(option) { this.children.push(option); }
+  append(...elements) { this.children.push(...elements); }
   addEventListener(name, callback) { this.listeners.set(name, callback); }
+  focus() { this.focused = true; }
+  scrollIntoView() { this.scrolled = true; }
   querySelector(selector) {
     if (selector === '.filter-count') return this.filterCount;
-    throw new Error('Unexpected fake querySelector: ' + selector);
+    if (!this.elements.has(selector)) this.elements.set(selector, new FakeElement(selector));
+    return this.elements.get(selector);
+  }
+  querySelectorAll(selector) {
+    if (selector === '.bridge-mode') {
+      const mode = this.querySelector('.bridge-mode[data-bridge="auto"]');
+      mode.dataset.bridge = 'auto';
+      return [mode];
+    }
+    return [];
   }
 }
 
@@ -201,8 +221,123 @@ test('recovery after a failure renders only the new verified snapshot', async ()
 
 test('long device names remain text, with per-device control names', () => {
   assert.match(app, /querySelector\('\.device-name'\)\.textContent = device\.name/);
-  assert.match(app, /row\.setAttribute\('aria-label', 'Cihaz: ' \+ device\.name\)/);
-  assert.match(app, /pcButton\.setAttribute\('aria-label', device\.name \+ ' PC ayarları'\)/);
-  assert.match(app, /folderSelect\.setAttribute\('aria-label', device\.name \+ ' cihazının klasörü'\)/);
+  assert.match(app, /row\.setAttribute\('aria-label', deviceLabel\)/);
+  assert.match(app, /pcButton\.setAttribute\('aria-label', deviceLabel \+ ' · PC ayarları'\)/);
+  assert.match(app, /folderSelect\.setAttribute\('aria-label', deviceLabel \+ ' · klasör'\)/);
   assert.doesNotMatch(app, /innerHTML\s*=\s*device\.(?:name|platform)/);
+});
+
+const device = (overrides = {}) => ({
+  id: 'device-a', name: 'Ofis PC', platform: 'win32', online: true,
+  accessMode: 'safe', privilegeMode: 'direct', adminBridgeReady: false,
+  agentVersion: null, lastSeenAt: null, folderId: null,
+  rootMode: { active: false, expiresAt: null },
+  persistentMaintenance: { enabled: false, active: false },
+  bridgePreference: { desiredMode: 'auto' },
+  ...overrides,
+});
+
+test('same-name devices have unique accessible card and action names', () => {
+  const ui = createApp();
+  const data = { ...snapshot, devices: [
+    device({ id: 'desktop-a' }), device({ id: 'desktop-b' }),
+  ] };
+  ui.eval('globalThis.fixture = ' + JSON.stringify(data));
+  ui.eval('render(fixture)');
+  const cards = ui.el('devices').children;
+  assert.deepEqual(cards.map((card) => card.dataset.deviceId), ['desktop-a', 'desktop-b']);
+  for (const selector of [null, '.core-shortcut', '.bridge-quick-toggle', '.bridge-toggle',
+    '.folder-assign', '.pc-settings-button']) {
+    const labels = cards.map((card) => (selector ? card.querySelector(selector) : card).getAttribute('aria-label'));
+    assert.ok(labels.every((label) => label && label.includes('Ofis PC')), `${selector} must name the device`);
+    assert.notEqual(labels[0], labels[1], `${selector} must distinguish duplicate device names`);
+    assert.match(labels[0], /cihaz 1/);
+    assert.match(labels[1], /cihaz 2/);
+  }
+  assert.equal(cards[0].querySelector('.device-name').textContent, 'Ofis PC');
+  assert.equal(cards[1].querySelector('.device-name').textContent, 'Ofis PC');
+});
+
+test('long Unicode and HTML-like device names are text only', () => {
+  const ui = createApp();
+  const name = '🖥️ İş-Özel-电脑 <img src=x onerror=alert(1)> ' + 'Ç'.repeat(160);
+  const data = { ...snapshot, devices: [device({ name, platform: 'linux <svg/onload=alert(1)>' })] };
+  ui.eval('globalThis.fixture = ' + JSON.stringify(data));
+  ui.eval('render(fixture)');
+  const card = ui.el('devices').children[0];
+  assert.equal(card.querySelector('.device-name').textContent, name);
+  assert.equal(card.querySelector('.platform').textContent, data.devices[0].platform);
+  assert.equal(card.template.includes(name), false);
+  assert.equal(card.template.includes(data.devices[0].platform), false);
+  assert.match(card.getAttribute('aria-label'), /cihaz 1/);
+});
+
+test('a late, older success cannot overwrite a newer verified snapshot', async () => {
+  const ui = createApp();
+  const resolveRequests = [];
+  ui.setFetch(() => new Promise((resolve) => resolveRequests.push(resolve)));
+  const oldLoad = ui.eval('load()');
+  const newLoad = ui.eval('load()');
+  const newer = { ...snapshot, usage: { monthlyCredits: null, usedCredits: 9 } };
+  resolveRequests[1]({ status: 200, ok: true, json: async () => newer });
+  await newLoad;
+  assert.equal(ui.el('usage').textContent, '9');
+  resolveRequests[0]({ status: 200, ok: true, json: async () =>
+    ({ ...snapshot, usage: { monthlyCredits: null, usedCredits: 800 } }) });
+  await oldLoad;
+  assert.equal(ui.el('usage').textContent, '9');
+  assert.equal(ui.el('connection-pill').textContent, 'Bağlı');
+});
+
+test('late unauthorized and late JSON replies cannot hide a newer success', async () => {
+  const ui = createApp();
+  const resolves = [];
+  ui.setFetch(() => new Promise((resolve) => resolves.push(resolve)));
+  const oldLoad = ui.eval('load()');
+  const newLoad = ui.eval('load()');
+  resolves[1]({ status: 200, ok: true, json: async () => snapshot });
+  await newLoad;
+  resolves[0]({ status: 401, ok: false });
+  await oldLoad;
+  assert.equal(ui.el('login').classList.contains('hidden'), true);
+  assert.equal(ui.el('devices-count').textContent, '0');
+
+  let releaseOldJson;
+  let notifyOldJsonStarted;
+  const oldJsonStarted = new Promise((resolve) => { notifyOldJsonStarted = resolve; });
+  ui.setFetch(async () => ({ status: 200, ok: true,
+    json: async () => {
+      notifyOldJsonStarted();
+      return new Promise((resolve) => { releaseOldJson = resolve; });
+    } }));
+  const oldJsonLoad = ui.eval('load()');
+  await oldJsonStarted;
+  ui.setFetch(async () => ({ status: 200, ok: true, json: async () => snapshot }));
+  await ui.eval('load()');
+  releaseOldJson({ ...snapshot, usage: { monthlyCredits: null, usedCredits: 999 } });
+  await oldJsonLoad;
+  assert.equal(ui.el('usage').textContent, '0');
+  assert.equal(ui.el('connection-pill').textContent, 'Bağlı');
+});
+
+test('401 clears prior account name, folder names, device list and usage', async () => {
+  const ui = createApp();
+  const privateName = 'KİŞİSEL-GİZLİ-ADI';
+  const privateFolder = 'KİŞİSEL-ÖZEL-KLASÖR';
+  const old = { ...snapshot, displayName: privateName,
+    usage: { monthlyCredits: null, usedCredits: 571 },
+    devices: [device({ name: 'Özel iş bilgisayarı' })],
+    folders: [{ id: 'personal', name: privateFolder }] };
+  ui.eval('globalThis.fixture = ' + JSON.stringify(old));
+  ui.eval('render(fixture)');
+  assert.match(ui.el('welcome').textContent, /KİŞİSEL/);
+  ui.setFetch(async () => ({ status: 401, ok: false }));
+  await ui.eval('load()');
+  assert.equal(ui.el('welcome').textContent, 'Kontrol merkezi');
+  assert.equal(ui.el('usage').textContent, '—');
+  assert.equal(ui.el('plan').textContent, '—');
+  assert.equal(ui.el('devices-count').textContent, '—');
+  assert.doesNotMatch(ui.el('devices').textContent, /Özel iş bilgisayarı|KİŞİSEL/);
+  assert.ok(ui.el('folder-filter').children.every((item) => item.textContent !== privateFolder));
+  assert.match(ui.el('device-list-status').textContent, /giriş yap/);
 });

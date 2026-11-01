@@ -12,6 +12,7 @@ let currentSnapshot = null;
 let selectedDeviceFilter = 'all';
 let selectedDeviceLayout = 'grid';
 let selectedFolder = 'all';
+let latestDashboardLoadId = 0;
 
 async function postFolderAction(action, body) {
   const response = await fetch('/api/v1/me/device-folders/' + action, {
@@ -106,13 +107,17 @@ function setDeviceListMessage(message, loading = false) {
 
 function resetDashboardPresentation() {
   currentSnapshot = null;
+  $('welcome').textContent = 'Kontrol merkezi';
   $('connect-device').disabled = true;
   for (const button of document.querySelectorAll('[data-filter]')) {
     button.disabled = true;
     button.querySelector('.filter-count').textContent = '—';
   }
   for (const button of document.querySelectorAll('[data-layout]')) button.disabled = true;
-  $('folder-filter').disabled = true;
+  const folderSelect = $('folder-filter');
+  folderSelect.replaceChildren(new Option('Tüm klasörler', 'all'), new Option('Klasörsüz', 'unassigned'));
+  folderSelect.value = 'all';
+  folderSelect.disabled = true;
   $('devices-count').textContent = '—';
   $('devices-count').removeAttribute('title');
   $('devices-detail').textContent = 'Cihaz durumu doğrulanmadı';
@@ -449,7 +454,10 @@ function render(snapshot) {
       const row = document.createElement('article');
       row.className = 'device' + (device.online ? '' : ' offline');
       row.dataset.deviceId = device.id;
-      row.setAttribute('aria-label', 'Cihaz: ' + device.name);
+      // The ordinal distinguishes cards even when two devices share a name.
+      // It is a presentation label, not an identifier for API/device actions.
+      const deviceLabel = device.name + ' · cihaz ' + (devices.indexOf(device) + 1);
+      row.setAttribute('aria-label', deviceLabel);
       row.innerHTML = [
         '<div class="device-header">',
         ' <div class="device-identity">',
@@ -515,10 +523,10 @@ function render(snapshot) {
       ].join('');
       row.querySelector('.device-name').textContent = device.name;
       row.querySelector('.platform').textContent = device.platform;
-      row.querySelector('.core-shortcut').setAttribute('aria-label', device.name + ' CORE ayarlarını aç');
-      row.querySelector('.bridge-quick-toggle').setAttribute('aria-label', device.name + ' Admin Bridge tercihini değiştir');
+      row.querySelector('.core-shortcut').setAttribute('aria-label', deviceLabel + ' · CORE ayarlarını aç');
+      row.querySelector('.bridge-quick-toggle').setAttribute('aria-label', deviceLabel + ' · Admin Bridge tercihini değiştir');
       const folderSelect = row.querySelector('.folder-assign');
-      folderSelect.setAttribute('aria-label', device.name + ' cihazının klasörü');
+      folderSelect.setAttribute('aria-label', deviceLabel + ' · klasör');
       folderSelect.add(new Option('Klasörsüz', ''));
       for (const folder of snapshot.folders ?? []) folderSelect.add(new Option(folder.name, folder.id));
       folderSelect.value = device.folderId ?? '';
@@ -555,7 +563,7 @@ function render(snapshot) {
       const pcSettings = row.querySelector('.pc-settings');
       const pcButton = row.querySelector('.pc-settings-button');
       const pcPanel = row.querySelector('.pc-settings-panel');
-      pcButton.setAttribute('aria-label', device.name + ' PC ayarları');
+      pcButton.setAttribute('aria-label', deviceLabel + ' · PC ayarları');
       pcPanel.id = 'pc-settings-' + devices.indexOf(device);
       pcButton.setAttribute('aria-controls', pcPanel.id);
       const setSettingsOpen = (open) => {
@@ -729,13 +737,13 @@ function render(snapshot) {
       bridgeQuickToggle.classList.toggle('active', bridgeIsOn);
       bridgeQuickToggle.setAttribute('aria-pressed', String(bridgeIsOn));
       bridgeQuickToggle.querySelector('.bridge-quick-state').textContent = bridgeDesired.toUpperCase();
-      bridgeQuickToggle.setAttribute('aria-label', 'Admin Bridge tercihi ' + bridgeDesired.toUpperCase() + '. ' + bridgeNextMode.toUpperCase() + ' tercihine geç');
+      bridgeQuickToggle.setAttribute('aria-label', deviceLabel + ' · Admin Bridge tercihi ' + bridgeDesired.toUpperCase() + '. ' + bridgeNextMode.toUpperCase() + ' tercihine geç');
       bridgeQuickToggle.title = 'Yalnızca tercih kaydı; Windows Broker işlemi değil. OFF, CORE tercihini iptal eder.';
       bridgeQuickToggle.addEventListener('click', () => {
         void setDeviceBridgePreference(device.id, bridgeNextMode, row, '.bridge-quick-toggle');
       });
       bridgeToggle.setAttribute('aria-checked', String(bridgeIsOn));
-      bridgeToggle.setAttribute('aria-label', 'Admin Bridge ' + bridgeNextMode.toUpperCase() + ' tercihine geç (Windows görevini henüz değiştirmez)');
+      bridgeToggle.setAttribute('aria-label', deviceLabel + ' · Admin Bridge ' + bridgeNextMode.toUpperCase() + ' tercihine geç (Windows görevini henüz değiştirmez)');
       bridgeToggle.classList.toggle('active', bridgeIsOn);
       bridgeToggle.querySelector('.bridge-toggle-label').textContent = bridgeIsOn ? 'ON' : bridgeDesired === 'auto' ? 'AUTO' : 'OFF';
       bridgeToggle.addEventListener('click', () => {
@@ -800,6 +808,7 @@ function render(snapshot) {
 }
 
 async function load() {
+  const loadId = ++latestDashboardLoadId;
   $('error-panel').classList.add('hidden');
   $('login').classList.add('hidden');
   setPill('Kontrol ediliyor', 'muted');
@@ -809,6 +818,7 @@ async function load() {
       credentials: 'include',
       headers: { Accept: 'application/json' },
     });
+    if (loadId !== latestDashboardLoadId) return;
     if (response.status === 401) {
       setPill('Oturum gerekli', 'muted');
       $('error-message').textContent = 'Kontrol paneli için GitHub hesabınla giriş yap.';
@@ -818,8 +828,11 @@ async function load() {
       return;
     }
     if (!response.ok) throw new Error('HTTP ' + response.status);
-    render(await response.json());
+    const snapshot = await response.json();
+    if (loadId !== latestDashboardLoadId) return;
+    render(snapshot);
   } catch (error) {
+    if (loadId !== latestDashboardLoadId) return;
     setPill('Bağlantı hatası', 'bad');
     $('error-message').textContent =
       error instanceof Error ? error.message : String(error);
