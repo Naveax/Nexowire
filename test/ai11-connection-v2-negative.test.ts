@@ -85,7 +85,7 @@ test('AI-11: unreachable public Cloudflare/OAuth boundary cannot claim authentic
 
 
 test('AI-11 P1-C: device authentication POST forbids automatic HTTP redirects',async()=>{
-  let redirect:RequestRedirect|undefined;
+  let redirect:string|undefined;
   let calls=0;
   const verify=createControlPlaneAgentCredentialVerifier({
     controlPlaneUrl:'https://control.example.test',
@@ -102,7 +102,7 @@ test('AI-11 P1-C: device authentication POST forbids automatic HTTP redirects',a
 });
 
 test('AI-11 P1-C: device presence POST forbids automatic HTTP redirects',async()=>{
-  let redirect:RequestRedirect|undefined;
+  let redirect:string|undefined;
   let calls=0;
   const report=createControlPlaneAgentPresenceReporter({
     controlPlaneUrl:'https://control.example.test',
