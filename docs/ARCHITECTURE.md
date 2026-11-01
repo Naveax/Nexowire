@@ -33,6 +33,21 @@ substitute for proving an end-to-end authenticated deployment.
 This is a source map, not a claim that any specific browser, Windows device,
 authenticated user, remote tunnel, or production service has passed a live test.
 
+## Endpoint identity (not a public deployment address)
+
+| Route or transport | Source | Meaning |
+| --- | --- | --- |
+| `POST /mcp` | [`src/mcp/http.ts`](../src/mcp/http.ts) | ChatGPT-facing Streamable HTTP MCP messages, subject to configured authentication and tool policy |
+| `GET /mcp`, `DELETE /mcp` | [`src/mcp/http.ts`](../src/mcp/http.ts) | Explicitly return HTTP `405`; **not** a browser dashboard or MCP health check |
+| `GET /health` | [`src/mcp/http.ts`](../src/mcp/http.ts) | Hub service health metadata; **not** proof a target computer or a mutation succeeded |
+| WebSocket upgrade `/agent` | [`src/hub/agent-websocket.ts`](../src/hub/agent-websocket.ts) | Native Agent transport; **not** the ChatGPT MCP URL |
+| stdio | [`src/mcp/stdio.ts`](../src/mcp/stdio.ts) | Local development transport, not an HTTP endpoint |
+
+The configured host, TLS certificate, authentication, routing and external
+reachability determine the actual address. Do not paste a local control panel,
+`/health`, or `/agent` URL into a ChatGPT MCP connector field and assume it is
+equivalent to an authenticated `POST /mcp` service.
+
 The default runtime registers only the first-party `native-agent` backend. Remote Desktop Commander, SentinelX, Codex, and other third-party computer-control services are not runtime dependencies.
 
 The internal backend/provider interface remains as an architectural seam for Nexowire-owned transports such as direct agent connections, relays, local execution, testing backends, and future platform-specific agents.

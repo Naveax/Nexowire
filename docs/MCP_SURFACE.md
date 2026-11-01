@@ -84,6 +84,54 @@ capability mapping: for example, `nexowire_surface_info` is implemented in
 matrix. The v1 stable set contains both read and write tools; its purpose is
 **compatibility**, not blanket read-only behavior.
 
+## Interpreting outputs without inventing success
+
+The frozen output profile in
+[`src/mcp/v1-output-contract.json`](../src/mcp/v1-output-contract.json)
+distinguishes **native execution** tools such as `machine_snapshot` and
+`file_write` from **Hub-object** tools such as `nexowire_surface_info` and
+`device_alias_set`. These names are present in both the frozen
+[`input contract`](../src/mcp/v1-input-contract.json) and the output contract.
+
+| Signal | Evidence-based meaning | Not proof of |
+| --- | --- | --- |
+| Native `structuredContent.ok === true` | A native capability reported successful execution | Business-task acceptance or independent postcondition |
+| Native `structuredContent.ok === false`, MCP `isError` | The capability reported an error; inspect its structured error | That a dispatched mutation had no side effects |
+| `structuredContent.error` | Optional code/message on a native failure | Verified root cause of every underlying system failure |
+| `structuredContent.idempotency` | Optional replay/key metadata | Permission to repeat an `UNKNOWN` mutation |
+| Hub-object output | Tool-specific fields, e.g. `nexowire_surface_info.mcpSurfaceVersion` | A native `ok` field, online Agent, or granted device permission |
+
+`isError` is a field on the **MCP tool result**, not automatically a member of
+`structuredContent`. The compatibility contract records output *shapes* and
+stable meanings, not a guarantee that calling a tool completed the user's
+larger workflow.
+
+For an ambiguous mutation, the error classification in
+[`src/protocol/error-contract-v2.ts`](../src/protocol/error-contract-v2.ts)
+uses `retrySafety: "reconcile_first"`: query the original operation and read
+back the target state before deciding what to do. A cancellation, transport
+timeout, lost response, or `UNKNOWN` status after possible dispatch is **not**
+an automatic `succeeded` or `failed` verdict. Only proven
+`not_dispatched` has a stronger no-dispatch claim. Likewise, the
+`audit_query` input filter's `started`/`succeeded`/`failed` status vocabulary
+must not be mistaken for a universal list of possible execution outcomes.
+
+An illustrative *failure shape* (not a live Agent capture):
+
+```json
+{
+  "ok": false,
+  "error": {
+    "code": "MUTATION_STATE_UNKNOWN",
+    "message": "Outcome unconfirmed; reconcile original operation before retrying."
+  }
+}
+```
+
+The example deliberately makes no claim that the mutation failed or that a
+retry is safe. Tool-specific response details remain governed by their actual
+input/output contracts.
+
 ## v1 compatibility rule
 
 `src/mcp/surface.ts` contains `MCP_V1_STABLE_TOOLS`, the compatibility floor for v1.

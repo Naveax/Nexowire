@@ -114,3 +114,34 @@ test('both K08 documents use existing local files and heading anchors', () => {
   checkLocalLinks(docs, 'docs/MCP_SURFACE.md');
   checkLocalLinks(architecture, 'docs/ARCHITECTURE.md');
 });
+
+test('frozen v1 input/output JSON tools exactly match source and documented names', () => {
+  const { stable } = sourceSnapshot();
+  const inputs = JSON.parse(read('src/mcp/v1-input-contract.json'));
+  const output = JSON.parse(read('src/mcp/v1-output-contract.json'));
+  assert.equal(output.version, 1);
+  assert.deepEqual(Object.keys(inputs), stable);
+  assert.deepEqual(Object.keys(output.contracts), stable);
+  for (const name of stable) {
+    assert.equal(output.contracts[name].tool, name, `Output contract tool: ${name}`);
+    assert.equal(output.contracts[name].surfaceVersion, 1, `v1 contract: ${name}`);
+  }
+  for (const name of ['machine_snapshot', 'file_write', 'nexowire_surface_info', 'device_alias_set']) {
+    assert.ok(docs.includes('`' + name + '`'), `Documented example missing from JSON contracts: ${name}`);
+  }
+  assert.deepEqual(inputs.audit_query.properties.status.enum, ['started', 'succeeded', 'failed']);
+  assert.equal(output.contracts.machine_snapshot.profile, 'native-execution-v1');
+  assert.equal(output.contracts.file_write.profile, 'native-execution-v1');
+  assert.equal(output.contracts.nexowire_surface_info.profile, 'hub-object-v1');
+  assert.equal(output.contracts.device_alias_set.profile, 'hub-object-v1');
+  const nativeFields = output.contracts.machine_snapshot.fields;
+  assert.ok(nativeFields.some((field) => field.path === 'ok' && field.type === 'boolean'));
+  assert.ok(nativeFields.some((field) => field.path === 'error' && !field.requiredOnSuccess));
+  assert.ok(nativeFields.some((field) => field.path === 'idempotency' && !field.requiredOnSuccess));
+  assert.ok(output.contracts.nexowire_surface_info.fields.some((field) =>
+    field.path === 'mcpSurfaceVersion' && field.requiredOnSuccess));
+
+  const mismatched = { ...inputs };
+  delete mismatched.machine_snapshot;
+  assert.notDeepEqual(Object.keys(mismatched), stable, 'Missing frozen JSON tool is detectable');
+});
