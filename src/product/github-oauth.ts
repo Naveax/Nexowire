@@ -2,12 +2,14 @@ import type {
   ControlPlaneIdentity,
   ControlPlaneService,
 } from './control-plane-service.js';
+import { issueSessionToken, sessionCookie } from './control-plane-session.js';
 import {
-  issueOAuthState,
-  issueSessionToken,
-  sessionCookie,
-  verifyOAuthState,
-} from './control-plane-session.js';
+  beginGitHubOAuthBrowserState,
+  clearGitHubOAuthBrowserCookie,
+  consumeGitHubOAuthBrowserState,
+  githubOAuthStateDigest,
+  type GitHubOAuthStateConsumeStore,
+} from './github-oauth-browser-state.js';
 
 export interface GitHubOAuthConfig {
   clientId: string;
@@ -15,6 +17,8 @@ export interface GitHubOAuthConfig {
   sessionSecret: string;
   adminGitHubId?: string;
   fetchImpl?: typeof fetch;
+  /** Required for atomic login-CSRF replay protection. No legacy fallback. */
+  stateConsumeStore?: GitHubOAuthStateConsumeStore;
 }
 
 interface GitHubUser {
@@ -35,21 +39,29 @@ function callbackUrl(request: Request): string {
   return url.origin + '/auth/github/callback';
 }
 
-export function githubOAuthStart(
+export async function githubOAuthStart(
   request: Request,
   config: GitHubOAuthConfig,
-): Response {
+): Promise<Response> {
   const clientId = requireConfig(config.clientId, 'GitHub client ID');
   const sessionSecret = requireConfig(
     config.sessionSecret,
     'Session secret',
   );
   const requestUrl = new URL(request.url);
-  const state = issueOAuthState(
-    'github',
-    requestUrl.searchParams.get('next') ?? '/',
-    sessionSecret,
+  // Never issue a login redirect until the cross-Worker state replay store
+  // is configured. Existing production Worker wiring must be separately
+  // reviewed/provisioned before this source change can be deployed.
+  if (!config.stateConsumeStore) throw new Error('OAUTH_STATE_STORE_UNAVAILABLE');
+  const issuedAt = new Date();
+  const { state, cookie } = beginGitHubOAuthBrowserState(
+    request.url, requestUrl.searchParams.get('next'), sessionSecret, issuedAt,
   );
+  const now = Math.floor(issuedAt.getTime() / 1000);
+  const issued = await config.stateConsumeStore.issue(
+    githubOAuthStateDigest(state), now + 600, now,
+  );
+  if (!issued) throw new Error('OAUTH_STATE_STORE_UNAVAILABLE');
   const authorize = new URL('https://github.com/login/oauth/authorize');
   authorize.searchParams.set('client_id', clientId);
   authorize.searchParams.set('redirect_uri', callbackUrl(request));
@@ -59,6 +71,7 @@ export function githubOAuthStart(
     status: 302,
     headers: {
       location: authorize.toString(),
+      'set-cookie': cookie,
       'cache-control': 'no-store',
     },
   });
@@ -79,11 +92,23 @@ export async function githubOAuthCallback(
     );
   }
 
-  const verified = verifyOAuthState(
-    state,
-    'github',
-    config.sessionSecret,
-  );
+  if (!config.stateConsumeStore) {
+    return Response.json({ error: 'OAUTH_STATE_STORE_UNAVAILABLE' }, {
+      status: 503,
+      headers: { 'cache-control': 'no-store' },
+    });
+  }
+  let verified: {next: string} | null;
+  try {
+    verified = await consumeGitHubOAuthBrowserState(
+      request, state, config.sessionSecret, config.stateConsumeStore,
+    );
+  } catch {
+    return Response.json({ error: 'OAUTH_STATE_STORE_UNAVAILABLE' }, {
+      status: 503,
+      headers: { 'cache-control': 'no-store' },
+    });
+  }
   if (!verified) {
     return Response.json(
       { error: 'OAUTH_STATE_INVALID' },
@@ -175,12 +200,14 @@ export async function githubOAuthCallback(
     config.sessionSecret,
   );
 
-  return new Response(null, {
+  const response = new Response(null, {
     status: 302,
     headers: {
       location: verified.next,
-      'set-cookie': sessionCookie(token),
       'cache-control': 'no-store',
     },
   });
+  response.headers.append('set-cookie', sessionCookie(token));
+  response.headers.append('set-cookie', clearGitHubOAuthBrowserCookie());
+  return response;
 }
