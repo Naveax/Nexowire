@@ -88,6 +88,8 @@ export interface NativeAgentLifecycleOptions {
   rootDir?: string;
   homeDir?: string;
   windowsTaskName?: string;
+  /** Fixed, bundled native Job guardian; used for installed Windows task only. */
+  windowsTaskJobOwnerPath?: string;
   linuxUnitName?: string;
   macLabel?: string;
   uid?: number;
@@ -296,14 +298,35 @@ export function buildNativeAgentLauncher(
     )) {
       lines.push('$env:' + name + '=' + psLiteral(value));
     }
-    lines.push(
-      '& ' +
-        psLiteral(rt.executable) +
-        ' ' +
-        rt.args.map(psLiteral).join(' '),
-      'exit $LASTEXITCODE',
-      '',
-    );
+    if (options.windowsTaskJobOwnerPath) {
+      // Scheduled Task kills the PowerShell parent, not necessarily its Node
+      // child. The native guardian pins the PowerShell HANDLE and owns a
+      // KILL_ON_JOB_CLOSE Job containing Node and all its descendants.
+      if (!path.win32.isAbsolute(options.windowsTaskJobOwnerPath)) {
+        throw new Error('NATIVE_AGENT_TASK_JOB_HELPER_PATH_UNCONFIRMED');
+      }
+      lines.push(
+        '# NEXOWIRE_AGENT_TASK_JOB_GUARD_V1',
+        '$jobHelper=' + psLiteral(options.windowsTaskJobOwnerPath),
+        "if (-not (Test-Path -LiteralPath $jobHelper -PathType Leaf)) { throw 'NATIVE_AGENT_TASK_JOB_HELPER_UNAVAILABLE' }",
+        "$jobMarker=Join-Path $PSScriptRoot ('agent-job-'+[guid]::NewGuid().ToString('N')+'.status')",
+        '& $jobHelper ' +
+          "'--status' $jobMarker '--cwd' '-' '--parent' ([string]$PID) '--' " +
+          [rt.executable, ...rt.args].map(psLiteral).join(' '),
+        'if ($null -eq $LASTEXITCODE) { exit 70 }',
+        'exit $LASTEXITCODE',
+        '',
+      );
+    } else {
+      // Standalone launcher rendering for legacy/synthetic consumers only.
+      // installWindows always supplies a pinned guardian and fails if missing.
+      lines.push(
+        '& ' + psLiteral(rt.executable) + ' ' +
+          rt.args.map(psLiteral).join(' '),
+        'exit $LASTEXITCODE',
+        '',
+      );
+    }
     // This file is executed by Windows PowerShell 5.1, whose BOM-less
     // script decoder otherwise uses the machine's ANSI code page.
     return '\uFEFF' + lines.join('\r\n');
@@ -486,17 +509,47 @@ async function windowsStatus(
   });
 }
 
+function bundledNativeAgentJobHelper(options: NativeAgentLifecycleOptions): string {
+  const entry = options.cliEntrypoint ?? process.argv[1];
+  if (!entry || !path.win32.isAbsolute(entry)) {
+    throw new Error('NATIVE_AGENT_TASK_CLI_PATH_UNCONFIRMED');
+  }
+  // Source: src/cli.ts -> native/. Bundle: dist/src/cli.js -> dist/native/.
+  // Never accept PATH, a free-form environment override or global helpers.
+  return path.win32.resolve(
+    path.win32.dirname(entry), '..', 'native', 'windows-job-owner.exe',
+  );
+}
+
 async function installWindows(
   options: NativeAgentLifecycleOptions,
 ): Promise<NativeAgentLifecycleStatus> {
   const root = lifecycleRoot(options);
   const launcher = launcherPath(options, 'win32');
+  const helper = bundledNativeAgentJobHelper(options);
+  if (!(await fs.stat(helper).catch(() => null))?.isFile()) {
+    throw new Error('NATIVE_AGENT_TASK_JOB_HELPER_UNAVAILABLE');
+  }
+  // Do not overwrite a running legacy task: its unmanaged Node descendant
+  // might survive Register-ScheduledTask -Force and collide with new Agent.
+  const existing = await windowsStatus(options);
+  if (existing.installed) {
+    // Legacy tasks have no child-ownership evidence even when Scheduler says
+    // Ready. Explicit migration is required; never assume no orphan exists.
+    const prior = await windowsAgentTaskOwnerReadback(options);
+    if (!prior.guarded || prior.receipts === 0 ||
+        prior.liveRoots !== 0 || prior.liveGuardians !== 0 ||
+        prior.state === 'running') {
+      throw new Error('NATIVE_AGENT_TASK_PREEXISTING_OWNER_UNCONFIRMED');
+    }
+  }
   await fs.mkdir(root, { recursive: true, mode: 0o700 });
   await fs.writeFile(
     launcher,
     buildNativeAgentLauncher({
       ...options,
       platform: 'win32',
+      windowsTaskJobOwnerPath: helper,
     }),
     { encoding: 'utf8', mode: 0o600 },
   );
@@ -512,7 +565,6 @@ async function installWindows(
     '$principal=New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited',
     WINDOWS_NATIVE_AGENT_TASK_SETTINGS,
     "Register-ScheduledTask -TaskName $name -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description 'Nexowire first-party native agent' -Force | Out-Null",
-    'Start-ScheduledTask -TaskName $name',
     '[pscustomobject]@{ok=$true} | ConvertTo-Json -Compress',
   ].join('\n');
 
@@ -521,48 +573,176 @@ async function installWindows(
     windowsEnv(options),
   );
   await writeManifest(options, 'win32');
-  await new Promise((resolve) => setTimeout(resolve, 250));
-  return await windowsStatus(options);
+  // Install is not successful until Job-owned Node has a matching OS receipt.
+  return await controlWindows('start', options);
+}
+
+export interface WindowsAgentTaskOwnerReadback {
+  installed: boolean;
+  state: string;
+  guarded: boolean;
+  receipts: number;
+  liveRoots: number;
+  liveGuardians: number;
+  rootPid: number | null;
+}
+
+/**
+ * Independent OS readback for Scheduler and the native guardian. Never
+ * equate TaskState=Ready with descendant death. The NWJOB3 marker pins
+ * the assigned root's PID *and* Win32 creation FILETIME; PID reuse is not
+ * a live-owner match. Unknown CIM, malformed evidence and access denial
+ * must throw rather than silently authorize the next Agent.
+ */
+async function windowsAgentTaskOwnerReadback(
+  options: NativeAgentLifecycleOptions,
+): Promise<WindowsAgentTaskOwnerReadback> {
+  return await runPowerShellJson<WindowsAgentTaskOwnerReadback>(
+    [
+      "$ErrorActionPreference='Stop'",
+      '$name=$env:NEXOWIRE_AGENT_TASK_NAME',
+      '$launcher=$env:NEXOWIRE_AGENT_LAUNCHER',
+      '$task=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue',
+      "if ($null -eq $task) { [pscustomobject]@{installed=$false;state='not-installed';guarded=$false;receipts=0;liveRoots=0;liveGuardians=0;rootPid=$null} | ConvertTo-Json -Compress; exit 0 }",
+      "if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) { throw 'NATIVE_AGENT_TASK_LAUNCHER_MISSING' }",
+      "$guarded=[IO.File]::ReadAllText($launcher).Contains('# NEXOWIRE_AGENT_TASK_JOB_GUARD_V1')",
+      '$dir=Split-Path -LiteralPath $launcher -Parent',
+      "$markers=@(Get-ChildItem -LiteralPath $dir -Filter 'agent-job-*.status' -File -ErrorAction Stop)",
+      "if ($markers.Count -gt 128) { throw 'NATIVE_AGENT_TASK_RECEIPT_LIMIT_EXCEEDED' }",
+      '$liveRoots=0',
+      '$liveGuardians=0',
+      '$rootPid=$null',
+      "$guardianProcesses=@(Get-CimInstance Win32_Process -Filter \"Name='windows-job-owner.exe'\" -ErrorAction Stop)",
+      'foreach ($guardian in $guardianProcesses) {',
+      "  if (-not $guardian.CommandLine) { throw 'NATIVE_AGENT_TASK_GUARDIAN_IDENTITY_UNKNOWN' }",
+      '}',
+      'foreach ($marker in $markers) {',
+      "  $data=''",
+      "  for ($attempt=0; $attempt -lt 4; $attempt++) {",
+      "    $data=[IO.File]::ReadAllText($marker.FullName).Trim()",
+      "    if ($data -cmatch '^NWJOB3 ([1-9][0-9]*) ([1-9][0-9]*)$') { break }",
+      "    Start-Sleep -Milliseconds 60",
+      "  }",
+      "  if ($data -cnotmatch '^NWJOB3 ([1-9][0-9]*) ([1-9][0-9]*)$') { throw 'NATIVE_AGENT_TASK_RECEIPT_INVALID' }",
+      '  $ownedPid=[long]$Matches[1]',
+      '  $created=$Matches[2]',
+      "  if ($ownedPid -gt 4294967295) { throw 'NATIVE_AGENT_TASK_RECEIPT_PID_INVALID' }",
+      '  $proc=Get-CimInstance Win32_Process -Filter ("ProcessId="+$ownedPid) -ErrorAction Stop',
+      '  if ($null -ne $proc) {',
+      "    if ($null -eq $proc.CreationDate) { throw 'NATIVE_AGENT_TASK_ROOT_BIRTH_UNKNOWN' }",
+      '    $actual=$proc.CreationDate.ToUniversalTime().ToFileTimeUtc().ToString()',
+      '    if ($actual -ceq $created) { $liveRoots++; $rootPid=$ownedPid }',
+      '  }',
+      '  foreach ($guardian in $guardianProcesses) {',
+      '    if ($guardian.CommandLine.IndexOf($marker.FullName,[StringComparison]::OrdinalIgnoreCase) -ge 0) {',
+      '      $liveGuardians++',
+      '    }',
+      '  }',
+      '}',
+      '[pscustomobject]@{installed=$true;state=([string]$task.State).ToLowerInvariant();guarded=$guarded;receipts=$markers.Count;liveRoots=$liveRoots;liveGuardians=$liveGuardians;rootPid=$rootPid} | ConvertTo-Json -Compress',
+    ].join('\n'),
+    windowsEnv(options),
+  );
+}
+
+export function nativeAgentTaskStopConfirmed(state: WindowsAgentTaskOwnerReadback): boolean {
+  return state.guarded && state.receipts > 0 &&
+    (state.state === 'ready' || state.state === 'disabled') &&
+    state.liveRoots === 0 && state.liveGuardians === 0;
+}
+
+export function nativeAgentTaskStartConfirmed(state: WindowsAgentTaskOwnerReadback): boolean {
+  return state.guarded && state.state === 'running' &&
+    state.liveRoots === 1 && state.liveGuardians === 1 &&
+    state.rootPid !== null && state.rootPid > 0;
 }
 
 async function controlWindows(
   action: 'start' | 'stop' | 'restart',
   options: NativeAgentLifecycleOptions,
 ): Promise<NativeAgentLifecycleStatus> {
-  const commands =
-    action === 'restart'
-      ? [
-          'Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue',
-          'Start-ScheduledTask -TaskName $name',
-        ]
-      : action === 'start'
-        ? ['Start-ScheduledTask -TaskName $name']
-        : [
-            'Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue',
-          ];
-  await runPowerShellJson<{ ok: boolean }>(
+  const before = await windowsAgentTaskOwnerReadback(options);
+  if (!before.installed || !before.guarded) {
+    throw new Error('NATIVE_AGENT_TASK_JOB_GUARD_REQUIRED');
+  }
+  if (action !== 'stop' &&
+      (before.liveRoots > 0 || before.liveGuardians > 0) &&
+      before.state !== 'running') {
+    throw new Error('NATIVE_AGENT_TASK_PREEXISTING_OWNER_UNCONFIRMED');
+  }
+  if (action === 'start' && before.state === 'running') {
+    if (!nativeAgentTaskStartConfirmed(before)) {
+      throw new Error('NATIVE_AGENT_TASK_RUNNING_OWNER_UNCONFIRMED');
+    }
+    return {...await windowsStatus(options), pid: before.rootPid};
+  }
+
+  if (action !== 'start') {
+    await runPowerShellJson<{ok:boolean}>(
+      [
+        "$ErrorActionPreference='Stop'",
+        '$name=$env:NEXOWIRE_AGENT_TASK_NAME',
+        '$task=Get-ScheduledTask -TaskName $name -ErrorAction Stop',
+        "if ($task.State -eq 'Running' -or $task.State -eq 'Queued') { Stop-ScheduledTask -TaskName $name -ErrorAction Stop }",
+        '[pscustomobject]@{ok=$true} | ConvertTo-Json -Compress',
+      ].join('\n'),
+      windowsEnv(options),
+    );
+    let stopped = false;
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline) {
+      const state = await windowsAgentTaskOwnerReadback(options);
+      // A just-stopped PowerShell can leave the Job guardian active for
+      // milliseconds; do not start a second Agent until BOTH have exited.
+      if (nativeAgentTaskStopConfirmed(state)) {
+        stopped = true;
+        break;
+      }
+      await new Promise(resolve => setTimeout(resolve, 150));
+    }
+    if (!stopped) {
+      throw new Error('NATIVE_AGENT_TASK_DESCENDANT_STOP_UNCONFIRMED');
+    }
+    if (action === 'stop') return await windowsStatus(options);
+  }
+
+  await runPowerShellJson<{ok:boolean}>(
     [
       "$ErrorActionPreference='Stop'",
       '$name=$env:NEXOWIRE_AGENT_TASK_NAME',
-      ...commands,
+      'Start-ScheduledTask -TaskName $name -ErrorAction Stop',
       '[pscustomobject]@{ok=$true} | ConvertTo-Json -Compress',
     ].join('\n'),
     windowsEnv(options),
   );
-  await new Promise((resolve) => setTimeout(resolve, 250));
-  return await windowsStatus(options);
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const state = await windowsAgentTaskOwnerReadback(options);
+    if (nativeAgentTaskStartConfirmed(state)) {
+      return {...await windowsStatus(options), pid: state.rootPid};
+    }
+    if (state.liveRoots > 1 || state.liveGuardians > 1) {
+      throw new Error('NATIVE_AGENT_TASK_MULTIPLE_OWNERS_UNCONFIRMED');
+    }
+    await new Promise(resolve => setTimeout(resolve, 150));
+  }
+  throw new Error('NATIVE_AGENT_TASK_START_READBACK_UNCONFIRMED');
 }
 
 async function uninstallWindows(
   options: NativeAgentLifecycleOptions,
 ): Promise<{ removed: boolean; name: string }> {
+  const current = await windowsAgentTaskOwnerReadback(options);
+  if (current.installed) {
+    // Never unregister or delete the launcher while its Job descendants are unproven.
+    await controlWindows('stop', options);
+  }
   const result = await runPowerShellJson<{ removed: boolean }>(
     [
       "$ErrorActionPreference='Stop'",
       '$name=$env:NEXOWIRE_AGENT_TASK_NAME',
       '$task=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue',
       'if ($null -ne $task) {',
-      '  Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue',
       '  Unregister-ScheduledTask -TaskName $name -Confirm:$false',
       '  [pscustomobject]@{removed=$true} | ConvertTo-Json -Compress',
       '} else {',
