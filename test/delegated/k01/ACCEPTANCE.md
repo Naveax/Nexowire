@@ -21,6 +21,11 @@ pairing request bodies, callback validation, credentials, or the native Agent.
 | Retry success | Error cleared; only the strict loopback callback receives result | T-002 retry success |
 | Device quota `403` | Limit message; retry disabled | T-002 nonretryable |
 | External/incorrect callback | Install mode; no dashboard request | T-001 invalid callback |
+| Discovery metadata timeout / request abort | No guessed MCP address; distinguish timeout from stopped request | T-138/T-144 negative fixtures |
+| Pairing network error / malformed success payload | No callback navigation; retry state remains explicit | T-138 negative fixtures |
+| Second click during failed in-flight retries | No extra POST, focus only once per failed attempt | T-141 focus/dedup |
+| OAuth cancellation without a local pairing callback | Installation mode; never displays connected | T-142 narrow cancellation-query fixture |
+| Long untrusted device name | Rendered only as text, without HTML interpolation | T-143 source/VM fixture |
 
 Reproduce offline: `node --test --import tsx test/delegated/k01/connect-state.test.ts`
 
@@ -40,6 +45,14 @@ observations at 375px, 768px and desktop for each of:
    quota `403` without misleading retry.
 4. Long device names, long localized errors, Zoom 200%, reduced motion and
    high-contrast focus styling; compare against `web/styles.css` owner K02.
+
+T-142 remains **partial**: the `?error=access_denied` offline fixture does not
+model a complete provider OAuth callback or an authorized return path. Any
+change to actual OAuth/session/redirect semantics requires the security/auth
+owner. T-143 is a DOM/source assertion only, not proof that long strings fit a
+375px screen; visual overflow and shared CSS remain K02/browser follow-ups.
+T-144 distinguishes a request's `TimeoutError` from its `AbortError`, but an
+`AbortError` alone does not establish deliberate user cancellation.
 
 Proof needed: viewport dimensions, browser/OS version, URL without callback
 secrets, screenshot IDs, keyboard actions, observed focus target, expected vs.

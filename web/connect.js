@@ -117,8 +117,12 @@ async function loadChatGPTSetup() {
     $('chatgpt-address').value = chatgptAddress;
     $('copy-chatgpt-address').disabled = false;
     $('chatgpt-status').textContent = 'Bu adresi ChatGPT’deki sunucu alanına yapıştır. Kimlik doğrulama: OAuth.';
-  } catch {
-    $('chatgpt-status').textContent = httpStatus >= 400
+  } catch (error) {
+    $('chatgpt-status').textContent = error?.name === 'TimeoutError'
+      ? 'Bağlantı adresi 5 saniye içinde alınamadı. Sayfayı yenile; sunucu adresini tahmin etme.'
+      : error?.name === 'AbortError'
+      ? 'Bağlantı adresi isteği durduruldu. Yeniden denemek için sayfayı yenile.'
+      : httpStatus >= 400
       ? 'Bağlantı adresi alınamadı (HTTP ' + httpStatus + '). Hizmete erişimi kontrol et; Windows kurulumunu tekrarlama.'
       : 'Bağlantı adresi alınamadı. Sayfayı yenile veya bağlantı bilgisini aç. Rastgele adresle ilerleme.';
   }

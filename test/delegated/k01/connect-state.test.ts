@@ -13,6 +13,7 @@ class FixtureElement {
   href = '';
   disabled = false;
   focused = false;
+  focusCount = 0;
   selected = false;
   tabIndex = 0;
   dataset: Record<string, string> = {};
@@ -33,7 +34,7 @@ class FixtureElement {
   }
   setAttribute(name: string, value: string) { this.attributes.set(name, value); }
   removeAttribute(name: string) { this.attributes.delete(name); }
-  focus() { this.focused = true; }
+  focus() { this.focused = true; this.focusCount++; }
   select() { this.selected = true; }
   closest(_selector: string) { return this.row ?? this; }
   dispatch(name: string, event?: { key?: string; preventDefault?: () => void }) {
@@ -70,6 +71,7 @@ async function boot(options: {
   search?: string;
   dashboard?: () => Promise<Response>;
   pairing?: () => Promise<Response>;
+  metadata?: () => Promise<Response>;
 } = {}) {
   const elements = new Map<string, FixtureElement>();
   const el = (id: string) => {
@@ -123,6 +125,7 @@ async function boot(options: {
         return options.pairing?.() ?? Response.json({ pairingId: 'fixture-pair', token: 'fixture-token' });
       }
       assert.equal(path, '/.well-known/oauth-protected-resource');
+      if (options.metadata) return options.metadata();
       return Response.json({
         resource: 'https://public-hub.fixture.invalid/mcp',
         authorization_servers: [origin],
@@ -260,4 +263,103 @@ test('T-004/T-005: source contracts cover announcements, focus and mobile wrappi
   assert.match(css, /\.install-command-row input\s*\{\s*flex-basis:\s*100%/);
   assert.match(css, /\.install-command-row button\s*\{\s*width:\s*100%/);
   // No claim about rendering, focus order in a real browser or actual mobile overflow.
+});
+
+test('T-138: malformed MCP metadata, HTTP denial and timeout do not offer a fabricated address', async () => {
+  for (const response of [
+    () => Promise.resolve(Response.json({ resource: 'https://elsewhere.fixture.invalid/mcp' })),
+    () => Promise.resolve(new Response('<html>bad gateway</html>', {
+      status: 502, headers: { 'content-type': 'text/html' },
+    })),
+    () => Promise.reject(Object.assign(new Error('test request deadline'), { name: 'TimeoutError' })),
+  ]) {
+    const f = await boot({ metadata: response });
+    assert.equal(f.el('chatgpt-address').value, '');
+    assert.equal(f.el('copy-chatgpt-address').disabled, true);
+    assert.equal(f.el('connect-pill').textContent, 'Kurulum');
+    assert.equal(f.el('approve').disabled, true);
+    assert.doesNotMatch(f.el('chatgpt-status').textContent, /Adres kopyalandı|Bu adresi ChatGPT/);
+  }
+  const timeout = await boot({
+    metadata: () => Promise.reject(Object.assign(new Error('deadline'), { name: 'TimeoutError' })),
+  });
+  assert.match(timeout.el('chatgpt-status').textContent, /5 saniye/);
+  assert.match(timeout.el('chatgpt-status').textContent, /tahmin etme/);
+});
+
+test('T-138: network error and malformed successful pairing both remain failures', async () => {
+  for (const pairing of [
+    () => Promise.reject(new Error('fixture network offline')),
+    () => Promise.resolve(Response.json({ pairingId: 'fixture-only' })),
+    () => Promise.resolve(new Response('unreadable', {
+      status: 200, headers: { 'content-type': 'text/plain' },
+    })),
+  ]) {
+    const f = await boot({ search: pairingSearch(), pairing });
+    await f.el('approve').dispatch('click');
+    assert.equal(f.el('connect-pill').textContent, 'Hata');
+    assert.equal(f.el('error-panel').classes.has('hidden'), false);
+    assert.equal(f.el('approve').textContent, 'TEKRAR DENE');
+    assert.equal(f.navigations.length, 0);
+    assert.equal(f.el('pair-panel').attributes.get('aria-busy'), 'false');
+  }
+});
+
+test('T-141: duplicate clicks do not repeat focus or alert events while request is pending', async () => {
+  const pairingQueue = [deferred<Response>(), deferred<Response>()];
+  let attempts = 0;
+  const f = await boot({
+    search: pairingSearch(),
+    pairing: () => pairingQueue[attempts++]!.promise,
+  });
+  const first = f.el('approve').dispatch('click');
+  await f.el('approve').dispatch('click');
+  pairingQueue[0]!.resolve(Response.json({}, { status: 503 }));
+  await first;
+  assert.equal(attempts, 1);
+  assert.equal(f.el('approve').focusCount, 1);
+  assert.equal(f.el('retry-hint').textContent, 'Tekrar denemek için TEKRAR DENE düğmesine bas.');
+
+  const second = f.el('approve').dispatch('click');
+  await f.el('approve').dispatch('click');
+  assert.equal(attempts, 2);
+  assert.equal(f.el('approve').focusCount, 1);
+  assert.equal(f.el('error-panel').classes.has('hidden'), true);
+  pairingQueue[1]!.resolve(Response.json({}, { status: 500 }));
+  await second;
+  assert.equal(f.el('approve').focusCount, 2);
+  assert.equal(f.el('error-panel').classes.has('hidden'), false);
+  assert.equal(f.el('approve').attributes.get('aria-describedby'), 'error-message retry-hint');
+});
+
+test('T-142/T-143: cancelled setup query and long untrusted display name cannot announce connected state', async () => {
+  const cancelled = await boot({ search: '?error=access_denied' });
+  assert.equal(cancelled.el('pair-panel').classes.has('hidden'), true);
+  assert.equal(cancelled.el('connect-pill').textContent, 'Kurulum');
+  assert.equal(cancelled.requests.some(({ path }) => path === '/api/v1/pairing'), false);
+  // This does not exercise the real OAuth callback; that remains auth-owner acceptance.
+
+  const deviceName = '<img src=x onerror=alert(1)>' + 'İşletme-ÇokUzunAdı'.repeat(40);
+  const f = await boot({ search: pairingSearch({ deviceName }) });
+  assert.equal(f.el('device-name').textContent, deviceName);
+  assert.equal(f.el('status-title').textContent, 'Hazır');
+  assert.notEqual(f.el('connect-pill').textContent, 'Bağlandı');
+  assert.doesNotMatch(script, /\binnerHTML\s*=/);
+  // Real 375px overflow depends on K02's stylesheet and requires a browser.
+});
+
+test('T-144: timeout and request abort have distinct, non-successful user feedback', async () => {
+  const timeout = await boot({
+    metadata: () => Promise.reject(Object.assign(new Error('fixture timeout'), { name: 'TimeoutError' })),
+  });
+  const aborted = await boot({
+    metadata: () => Promise.reject(Object.assign(new Error('fixture abort'), { name: 'AbortError' })),
+  });
+  assert.match(timeout.el('chatgpt-status').textContent, /5 saniye/);
+  assert.match(aborted.el('chatgpt-status').textContent, /isteği durduruldu/);
+  assert.doesNotMatch(aborted.el('chatgpt-status').textContent, /5 saniye|Adres kopyalandı/);
+  assert.notEqual(aborted.el('chatgpt-status').textContent, timeout.el('chatgpt-status').textContent);
+  assert.equal(timeout.el('copy-chatgpt-address').disabled, true);
+  assert.equal(aborted.el('copy-chatgpt-address').disabled, true);
+  // AbortError is not proof of a human OAuth cancellation; this is request-status UX only.
 });
