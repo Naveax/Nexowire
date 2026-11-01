@@ -116,3 +116,153 @@ export function projectS5Matrix(){
   return scenarios.map(s=>({label:s.label,...estimateS5Cost({...S5_ASSUMPTION_DEFAULTS,
     activeUsers:s.activeUsers,callsPerUserDaily:s.callsPerUserDaily})}));
 }
+
+/** Separately priced OFFLINE scenarios; never a provider invoice or a complete bill. */
+export const S5_COST_METERS = [
+  'workerRequests','workerCpuMs','d1RowsRead','d1RowsWritten','monthlyBase',
+] as const;
+export type S5CostMeter = typeof S5_COST_METERS[number];
+export type S5RateQuote = {
+  amount:number; per:number; unit:'request'|'cpu-ms'|'row'|'month';
+  currency:string; source:string;
+};
+export type S5RateQuotes = Partial<Record<S5CostMeter,S5RateQuote|null>>;
+export type S5Unknown = 'UNKNOWN';
+export type S5QuotedCostReport = {
+  classification:'OFFLINE_SIMULATION_NOT_PROVIDER_BILL';
+  currency:string|S5Unknown;
+  monthlyUsage:CostEnvelope['monthly']|S5Unknown;
+  componentCosts:Record<S5CostMeter,number|S5Unknown>;
+  knownSubtotal:number|S5Unknown;
+  modeledTotal:number|S5Unknown;
+  modeledCostPerUser:number|S5Unknown;
+  actualProviderBill:S5Unknown;
+  missing:string[];
+};
+const S5_UNITS:Record<S5CostMeter,S5RateQuote['unit']>={
+  workerRequests:'request',workerCpuMs:'cpu-ms',
+  d1RowsRead:'row',d1RowsWritten:'row',monthlyBase:'month',
+};
+const S5_INPUT_KEYS=Object.keys(S5_ASSUMPTION_DEFAULTS) as (keyof S5CostInput)[];
+const S5_CURRENCIES=new Set(Intl.supportedValuesOf('currency'));
+
+/** Missing input/quotes stay UNKNOWN. Present but invalid numbers fail closed. */
+export function quoteS5Cost(
+  assumptions:Partial<S5CostInput>|null|undefined,
+  rates:S5RateQuotes|null|undefined={},
+):S5QuotedCostReport{
+  if(rates===null||rates===undefined)rates={};
+  if(typeof rates!=='object'||Array.isArray(rates))throw new Error('Invalid cost rates');
+  for(const key of Object.keys(rates)){
+    if(!(S5_COST_METERS as readonly string[]).includes(key))throw new Error('Unknown cost meter '+key);
+  }
+  const currencySet=new Set<string>();
+  for(const meter of S5_COST_METERS){
+    const rate=rates[meter];
+    if(rate===undefined||rate===null)continue;
+    if(typeof rate!=='object'||Array.isArray(rate)||
+      !Number.isFinite(rate.amount)||rate.amount<0||
+      !Number.isFinite(rate.per)||rate.per<=0||
+      rate.unit!==S5_UNITS[meter]||
+      typeof rate.source!=='string'||!rate.source.trim()||
+      rate.source.trim().toUpperCase()==='UNKNOWN'||
+      typeof rate.currency!=='string'||!S5_CURRENCIES.has(rate.currency)){
+      throw new Error('Invalid cost rate '+meter);
+    }
+    for(const key of Object.keys(rate)){
+      if(!['amount','per','unit','currency','source'].includes(key)){
+        throw new Error('Unknown cost rate field '+meter+'.'+key);
+      }
+    }
+    currencySet.add(rate.currency);
+  }
+  if(currencySet.size>1)throw new Error('Mixed cost currencies');
+  const currency=currencySet.values().next().value??'UNKNOWN';
+  if(assumptions!==null&&assumptions!==undefined&&
+    (typeof assumptions!=='object'||Array.isArray(assumptions))){
+    throw new Error('Invalid cost assumptions');
+  }
+  for(const key of Object.keys(assumptions??{})){
+    if(!(S5_INPUT_KEYS as string[]).includes(key))throw new Error('Unknown cost assumption '+key);
+  }
+  for(const key of S5_INPUT_KEYS){
+    const value=assumptions?.[key];
+    if(value===undefined||value===null)continue;
+    if(typeof value!=='number'||!Number.isFinite(value)||value<0||
+      (key!=='workerCpuMsPerRequest'&&!Number.isSafeInteger(value))){
+      throw new Error('Unsafe cost assumption '+key);
+    }
+  }
+  const missing=S5_INPUT_KEYS.filter(key=>assumptions?.[key]===undefined||
+    assumptions?.[key]===null).map(key=>'assumptions.'+key);
+  const empty=Object.fromEntries(S5_COST_METERS.map(m=>[m,'UNKNOWN'])) as
+    Record<S5CostMeter,number|S5Unknown>;
+  for(const meter of S5_COST_METERS){
+    if(rates[meter]===undefined||rates[meter]===null)missing.push('rates.'+meter);
+  }
+  const report:S5QuotedCostReport={
+    classification:'OFFLINE_SIMULATION_NOT_PROVIDER_BILL',currency,
+    monthlyUsage:'UNKNOWN',componentCosts:empty,knownSubtotal:'UNKNOWN',
+    modeledTotal:'UNKNOWN',modeledCostPerUser:'UNKNOWN',
+    actualProviderBill:'UNKNOWN',missing,
+  };
+  if(missing.some(item=>item.startsWith('assumptions.')))return report;
+  const full=assumptions as S5CostInput;
+  const estimate=estimateS5Cost(full);
+  report.monthlyUsage=estimate.monthly;
+  const quantities:Record<S5CostMeter,number>={
+    workerRequests:Number(estimate.monthly.workerRequests),
+    workerCpuMs:Number(estimate.monthly.workerCpuMs),
+    d1RowsRead:Number(estimate.monthly.d1RowsRead),
+    d1RowsWritten:Number(estimate.monthly.d1RowsWritten),monthlyBase:1,
+  };
+  let subtotal=0,known=0;
+  for(const meter of S5_COST_METERS){
+    const rate=rates[meter];
+    if(!rate)continue;
+    const raw=quantities[meter]*rate.amount/rate.per;
+    if(!Number.isFinite(raw)||(quantities[meter]>0&&rate.amount>0&&raw===0)){
+      throw new Error('Unsafe projected cost '+meter);
+    }
+    subtotal+=raw;
+    if(!Number.isFinite(subtotal))throw new Error('Unsafe projected cost total');
+    report.componentCosts[meter]=round(raw);
+    known++;
+  }
+  if(known>0)report.knownSubtotal=round(subtotal);
+  if(known===S5_COST_METERS.length){
+    report.modeledTotal=round(subtotal);
+    // A fixed monthly fee with zero users is not a zero per-user charge.
+    if(full.activeUsers>0)report.modeledCostPerUser=round(subtotal/full.activeUsers);
+  }
+  return report;
+}
+
+const S5_CSV_HEADER=[
+  'label','classification','currency','activeUsers','monthlyWorkerRequests',
+  'monthlyWorkerCpuMs','monthlyD1RowsRead','monthlyD1RowsWritten',
+  ...S5_COST_METERS.map(m=>'cost_'+m),
+  'knownSubtotal','modeledTotal','modeledCostPerUser','actualProviderBill','missing',
+];
+function csvCell(value:string|number):string{
+  const text=String(value);
+  // Spreadsheet formula prefixes, including after leading whitespace, are data.
+  const safe=/^[\s]*[=+\-@]/u.test(text)?"'"+text:text;
+  return '"'+safe.replaceAll('"','""')+'"';
+}
+/** Stable, quoted CSV for the explicitly simulated report fields. */
+export function formatS5CostCsv(rows:readonly {
+  label:string;activeUsers:number|S5Unknown;report:S5QuotedCostReport;
+}[]):string{
+  const body=rows.map(({label,activeUsers,report})=>[
+    label,report.classification,report.currency,activeUsers,
+    report.monthlyUsage==='UNKNOWN'?'UNKNOWN':report.monthlyUsage.workerRequests,
+    report.monthlyUsage==='UNKNOWN'?'UNKNOWN':report.monthlyUsage.workerCpuMs,
+    report.monthlyUsage==='UNKNOWN'?'UNKNOWN':report.monthlyUsage.d1RowsRead,
+    report.monthlyUsage==='UNKNOWN'?'UNKNOWN':report.monthlyUsage.d1RowsWritten,
+    ...S5_COST_METERS.map(m=>report.componentCosts[m]),
+    report.knownSubtotal,report.modeledTotal,report.modeledCostPerUser,
+    report.actualProviderBill,report.missing.join(';'),
+  ].map(csvCell).join(','));
+  return [S5_CSV_HEADER.map(csvCell).join(','),...body].join('\n')+'\n';
+}
