@@ -164,3 +164,26 @@ Additional behaviors now covered:
 upstream main; exact-HEAD CI, real browser + keyboard/screen reader,
 mobile screenshots, and physical Agent/Broker checks remain `NOT_RUN`
 in this K15 audit. The K15 source files are test and documentation only.
+
+## P002 pool T-246: error announcement fixture
+
+After checking the 19 other KNN ownership records, K15 reserved T-246
+before writing code. The isolated fixture is
+`test/delegated/pool-k15/device-list-error-live.test.mjs`.
+
+It checks that a pending list is marked busy, an error clears busy, the
+status is announced once outside the device-card list, and HTML-like
+error detail remains literal text. It also distinguishes a 401 login
+message from a transport failure. With no `setDeviceListMessage()` helper
+on upstream main, the fixture explicitly reports **1 TODO**. Against
+the detached K03 candidate `96fa340...`, the same fixture reports
+**4 PASS, 0 TODO**:
+
+```sh
+node test/delegated/pool-k15/device-list-error-live.test.mjs
+K15_APP_SOURCE=/path/to/k03-readonly/web/app.js K15_HTML_SOURCE=/path/to/k03-readonly/web/index.html node test/delegated/pool-k15/device-list-error-live.test.mjs
+```
+
+These are synthetic read-only DOM checks, not proof of actual screen-reader
+announcement, focus behavior or timing. The K03 source remains unmerged
+to upstream main; no routing or authorization code was changed.
