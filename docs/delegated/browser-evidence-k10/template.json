@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "exactSourceSha": null,
+  "capturedAt": null,
+  "sourceChecks": {
+    "status": "NOT_RUN",
+    "command": "node test/delegated/k10/offline-web-smoke.test.mjs",
+    "passed": null,
+    "failed": null,
+    "ciRunUrl": null
+  },
+  "browserScreenshots": {
+    "status": "NOT_RUN",
+    "browserName": null,
+    "browserVersion": null,
+    "operatingSystem": null,
+    "originClass": null,
+    "cases": []
+  },
+  "keyboardFocus": {
+    "status": "NOT_RUN",
+    "observation": null
+  },
+  "authenticatedStates": {
+    "status": "NOT_RUN",
+    "observation": null
+  },
+  "physicalDeviceAcceptance": {
+    "status": "NOT_RUN",
+    "observation": null
+  },
+  "reviewDecision": "NEEDS_BROWSER"
+}

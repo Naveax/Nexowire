@@ -113,3 +113,16 @@ test('PNG evidence validation rejects incorrect dimensions and missing headers',
   writeFileSync(image, Buffer.alloc(24));
   assert.equal(inspectPng(image, 375, 812).status, 'FAIL');
 });
+
+test('review template never promotes empty browser evidence to PASS', () => {
+  const template = JSON.parse(readFileSync(join(root, 'docs/delegated/browser-evidence-k10/template.json'), 'utf8'));
+  assert.equal(template.schemaVersion, 1);
+  assert.equal(template.exactSourceSha, null);
+  assert.equal(template.sourceChecks.status, 'NOT_RUN');
+  assert.equal(template.browserScreenshots.status, 'NOT_RUN');
+  assert.deepEqual(template.browserScreenshots.cases, []);
+  assert.equal(template.keyboardFocus.status, 'NOT_RUN');
+  assert.equal(template.authenticatedStates.status, 'NOT_RUN');
+  assert.equal(template.physicalDeviceAcceptance.status, 'NOT_RUN');
+  assert.equal(template.reviewDecision, 'NEEDS_BROWSER');
+});
