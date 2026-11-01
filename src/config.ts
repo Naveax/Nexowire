@@ -42,6 +42,7 @@ export interface NexowireConfig {
   mcpBearerTokens?: string[];
   agentToken?: string;
   agentTokens?: string[];
+  remoteAgentAuthOnly?: boolean;
   tlsCertFile?: string;
   tlsKeyFile?: string;
   allowInsecureRemote?: boolean;
@@ -396,6 +397,7 @@ export function loadConfig(
     ...(agentTokens.length > 0
       ? { agentTokens }
       : {}),
+    ...(envFlag(env.NEXOWIRE_AGENT_REMOTE_AUTH_ONLY)?{remoteAgentAuthOnly:true}:{}),
     ...(tlsCertFile ? { tlsCertFile } : {}),
     ...(tlsKeyFile ? { tlsKeyFile } : {}),
     ...(envFlag(env.NEXOWIRE_ALLOW_INSECURE_REMOTE)
