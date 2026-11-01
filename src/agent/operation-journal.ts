@@ -54,6 +54,11 @@ type DbRow={
  * The native-agent process MUST hold its singleton lock. A STARTED mutation
  * cannot be rolled back by this journal and is never retried automatically.
  */
+// Availability-only, per-process initialization sequencing. This is NOT an OS
+// lock, an owner receipt, or proof that a foreign live process has stopped.
+// Mutation permission still comes exclusively from the SQLite owner/CAS fence.
+const journalInitializationTails=new Map<string,Promise<void>>();
+
 export class AgentOperationJournal{
   private db?:DatabaseSync;
   private loading?:Promise<void>;
@@ -123,7 +128,30 @@ export class AgentOperationJournal{
   async initialize():Promise<void>{
     if(this.loaded)return;
     if(this.loading)return this.loading;
+    // Independent same-process journal instances must not race a peer's
+    // WAL creation/PRAGMA migrations against read-only WAL preflight.
+    // Do not bypass WAL verification or convert a persistent failure to
+    // AGENT_JOURNAL_IN_USE. Cross-process races remain a separate OS gate.
+    const key=process.platform==='win32'?
+      path.normalize(this.file).toLowerCase():path.normalize(this.file);
+    const previous=journalInitializationTails.get(key);
+    let release!:()=>void;
+    const finished=new Promise<void>(resolve=>{release=resolve});
+    journalInitializationTails.set(key,finished);
     this.loading=(async()=>{
+      try{
+        if(previous)await previous;
+        await this.initializeUncontended();
+      }finally{
+        release();
+        if(journalInitializationTails.get(key)===finished){
+          journalInitializationTails.delete(key);
+        }
+      }
+    })();
+    try{await this.loading}finally{this.loading=undefined}
+  }
+  private async initializeUncontended():Promise<void>{
       await fs.mkdir(path.dirname(this.file),{recursive:true});
       try{
         const current=await fs.lstat(this.file);
@@ -244,8 +272,6 @@ export class AgentOperationJournal{
       }catch(e){
         db.close();throw e;
       }
-    })();
-    try{await this.loading}finally{this.loading=undefined}
   }
   private transaction<T>(db:DatabaseSync,fn:()=>T):T{
     db.exec('BEGIN IMMEDIATE');
