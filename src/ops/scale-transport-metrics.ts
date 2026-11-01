@@ -34,3 +34,40 @@ export function safelyRecordScaleMetric(
 ):void {
   try { metrics?.record(name,bytes,events); } catch { /* optional telemetry only */ }
 }
+
+// Offline import only: an absent sample is UNKNOWN, never a measured zero.
+// This parser does not change the live connection counters or their snapshot API.
+export type ScaleMetricObservation = Readonly<{
+  classification:'OBSERVED'|'UNKNOWN';events:number|null;bytes:number|null;
+}>;
+export type ScaleMetricReport = Readonly<Record<ScaleMetricName,ScaleMetricObservation>>;
+
+export function parseScaleTransportMetricRows(rows:unknown):ScaleMetricReport {
+  if(!Array.isArray(rows))throw new Error('Scale metric rows must be an array');
+  const seen=new Set<string>();
+  const observed=new Map<ScaleMetricName,ScaleMetricObservation>();
+  for(const value of rows as unknown[]){
+    if(!value||typeof value!=='object'||Array.isArray(value))
+      throw new Error('Invalid scale metric row');
+    const row=value as Record<string,unknown>;
+    const name=row.name;
+    if(typeof name!=='string'||!(SCALE_METRIC_NAMES as readonly string[]).includes(name))
+      throw new Error('Unknown scale metric name');
+    if(seen.has(name))throw new Error('Duplicate scale metric name');
+    seen.add(name);
+    if(row.eventsUnit!=='count'||row.bytesUnit!=='bytes')
+      throw new Error('Invalid scale metric units');
+    const valid=(n:unknown)=>Number.isSafeInteger(n)&&typeof n==='number'&&n>=0;
+    for(const field of ['events','bytes'] as const){
+      if(row[field]!==undefined&&row[field]!==null&&!valid(row[field]))
+        throw new Error('Invalid scale metric '+field);
+    }
+    const complete=valid(row.events)&&valid(row.bytes);
+    observed.set(name as ScaleMetricName,complete
+      ? {classification:'OBSERVED',events:row.events as number,bytes:row.bytes as number}
+      : {classification:'UNKNOWN',events:null,bytes:null});
+  }
+  return Object.fromEntries(SCALE_METRIC_NAMES.map(name=>[name,
+    observed.get(name)??{classification:'UNKNOWN',events:null,bytes:null},
+  ])) as ScaleMetricReport;
+}
