@@ -647,8 +647,8 @@ async function windowsAgentTaskOwnerReadback(
 
 export function nativeAgentTaskStopConfirmed(state: WindowsAgentTaskOwnerReadback): boolean {
   return state.guarded && state.receipts > 0 &&
-    state.state !== 'running' && state.liveRoots === 0 &&
-    state.liveGuardians === 0;
+    (state.state === 'ready' || state.state === 'disabled') &&
+    state.liveRoots === 0 && state.liveGuardians === 0;
 }
 
 export function nativeAgentTaskStartConfirmed(state: WindowsAgentTaskOwnerReadback): boolean {
@@ -683,7 +683,7 @@ async function controlWindows(
         "$ErrorActionPreference='Stop'",
         '$name=$env:NEXOWIRE_AGENT_TASK_NAME',
         '$task=Get-ScheduledTask -TaskName $name -ErrorAction Stop',
-        "if ($task.State -eq 'Running') { Stop-ScheduledTask -TaskName $name -ErrorAction Stop }",
+        "if ($task.State -eq 'Running' -or $task.State -eq 'Queued') { Stop-ScheduledTask -TaskName $name -ErrorAction Stop }",
         '[pscustomobject]@{ok=$true} | ConvertTo-Json -Compress',
       ].join('\n'),
       windowsEnv(options),
