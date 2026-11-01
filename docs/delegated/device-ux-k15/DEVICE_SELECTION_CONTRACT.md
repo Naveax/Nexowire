@@ -50,8 +50,9 @@ Neither displaying a card nor choosing a folder grants permission.
   `web/app.js` should add device-specific accessible context to per-card
   controls without modifying capability/routing logic. A focused test
   documents the **expected failing condition as TODO** until the UI owner
-  resolves it. This task's path ownership does not permit editing
-  `web/app.js`.
+  resolves it on upstream `main`. K03's unmerged candidate now includes
+  distinct per-card ordinal names (see differential check below). This
+  task's path ownership does not permit editing `web/app.js`.
 
 ## Copy proposal for one / many / filtered devices (T-088)
 
@@ -113,3 +114,53 @@ tests registered/filtered/duplicate ID/offline/ready/Unicode/AUTO display
 contracts: eight PASS cases plus one explicitly TODO accessible-label case.
 It deliberately excludes browser layout, keyboard accessibility,
 MCP route admission and actual device operations.
+
+## P002 follow-up: K03 candidate and additional negatives (T-210–T-214)
+
+The upstream `main` source remains the reference baseline above. K03's
+unmerged UI-only branch `k03/panel-state-qa` at exact head
+`96fa340...` was checked in a **detached read-only Git worktree**.
+It includes a `deviceLabel` containing a within-list ordinal for repeated
+device names, as well as a dashboard loading/error reset. This is a
+candidate result, **not a merged/released behavior**.
+
+| Source under test | 15 synthetic renderer contracts | Meaning |
+| --- | --- | --- |
+| Upstream `main` `93b6df33...` | 12 PASS, 3 known TODO | Unique per-card accessible action names, pending reload reset, 401/503 reset not yet in main |
+| K03 candidate `96fa340...` | 15 PASS, 0 TODO | Candidate addresses these source-level conditions; no browser or CI proof |
+
+Use the **same K15 test file** for both sources, without copying K03 files
+into K15's branch:
+
+```sh
+node test/delegated/k15/device-card-contract.test.mjs
+K15_APP_SOURCE=/path/to/k03-readonly/web/app.js node test/delegated/k15/device-card-contract.test.mjs
+```
+
+The override path must point to a separately verified, local, read-only
+Git worktree at a known exact SHA. It is not used in product code.
+
+Additional behaviors now covered:
+
+- **T-210:** Repeated CORE, Bridge, PC Settings and folder controls have
+  distinguishable accessible names in the K03 candidate; upstream main
+  still reports an expected TODO. An actual accessibility tree is not
+  asserted by this fake DOM.
+- **T-211:** Two identically named PCs in the same folder retain their
+  exact `deviceId` on assignment, even when the source card order changes.
+  The ordinal is presentation-only and may change after reorder; it must
+  never substitute for the stable backend ID.
+- **T-212:** An offline FULL card with stale CORE, ROOT and Broker-ready
+  flags remains unverified; the separate Broker apply control is disabled.
+- **T-213:** Pending reload and 401/503 responses cannot reuse previously
+  successful device counts in the candidate; baseline TODO explicitly
+  prevents overstating merged behavior.
+- **T-214:** `autoSelectDevices` is a displayed owner preference, while
+  `src/mcp/create-server.ts` separately requires a unique online owned
+  device and enforces credential restrictions. Displaying a card is not
+  authorization; an exact backend choice is still necessary.
+
+**Remaining acceptance gaps:** K03 candidate has not been merged to
+upstream main; exact-HEAD CI, real browser + keyboard/screen reader,
+mobile screenshots, and physical Agent/Broker checks remain `NOT_RUN`
+in this K15 audit. The K15 source files are test and documentation only.
