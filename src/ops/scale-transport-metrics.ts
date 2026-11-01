@@ -71,3 +71,23 @@ export function parseScaleTransportMetricRows(rows:unknown):ScaleMetricReport {
     observed.get(name)??{classification:'UNKNOWN',events:null,bytes:null},
   ])) as ScaleMetricReport;
 }
+
+/** For best-effort display: malformed/mixed-unit reports stay UNKNOWN. */
+export function safelyParseScaleTransportMetricRows(rows:unknown):ScaleMetricReport {
+  try{return parseScaleTransportMetricRows(rows)}
+  catch{return parseScaleTransportMetricRows([])}
+}
+
+export type ScaleMetricProgress='UNKNOWN'|'NON_DECREASING'|'DECREASED';
+/** Offline comparison; a decrease may be a normal process reset, not proof of tampering. */
+export function compareScaleMetricReports(
+  before:ScaleMetricReport,after:ScaleMetricReport,
+):Readonly<Record<ScaleMetricName,ScaleMetricProgress>>{
+  return Object.fromEntries(SCALE_METRIC_NAMES.map(name=>{
+    const a=before[name],b=after[name];
+    if(!a||!b||a.classification!=='OBSERVED'||b.classification!=='OBSERVED'||
+      a.events===null||a.bytes===null||b.events===null||b.bytes===null)
+      return [name,'UNKNOWN'];
+    return [name,b.events<a.events||b.bytes<a.bytes?'DECREASED':'NON_DECREASING'];
+  })) as Record<ScaleMetricName,ScaleMetricProgress>;
+}
