@@ -176,6 +176,20 @@ test('each card preserves its exact stable ID even when names are identical', ()
   assert.equal(JSON.parse(h.requests[0].options.body).deviceId, 'desktop-b');
 });
 
+test('per-device quick controls expose distinguishable accessible names', {
+  todo: 'web/app.js UI owner must distinguish repeated CORE quick-action labels by device identity',
+}, () => {
+  const h = harness();
+  h.render(snapshot([
+    device({id: 'desktop-a', name: 'Ofis PC'}),
+    device({id: 'desktop-b', name: 'Ofis PC'}),
+  ]));
+  const labels = h.cards().map(card => card.querySelector('.core-shortcut').getAttribute('aria-label')
+    ?? card.template.match(/class="core-shortcut" aria-label="([^"]+)"/)?.[1]);
+  assert.ok(labels.every(Boolean), 'each card must have an accessible quick-action name');
+  assert.equal(new Set(labels).size, labels.length, 'labels must distinguish same-named devices');
+});
+
 test('stale Broker-ready telemetry on offline device does not render online/ready', () => {
   const h = harness();
   h.render(snapshot([
