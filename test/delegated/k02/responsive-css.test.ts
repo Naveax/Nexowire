@@ -120,6 +120,48 @@ test("form controls have a consistent visible keyboard focus outline", () => {
   }
 });
 
+test("narrow status/error text can break and action rows can wrap", () => {
+  for (const selector of [".error-panel", ".folder-feedback", ".folder-assign-status", "#copy-status", "#auto-status"]) {
+    assert.equal(property(rules, selector, "overflow-wrap", 320), "anywhere", selector);
+  }
+  for (const viewport of [320, 375, 620]) {
+    assert.equal(property(rules, ".device-foot", "flex-wrap", viewport), "wrap");
+    assert.equal(property(rules, ".connect-breadcrumb", "flex-wrap", viewport), "wrap");
+  }
+  assert.notEqual(property(rules, ".device-foot", "flex-wrap", 621), "wrap");
+});
+
+test("disabled action buttons do not inherit enabled hover effects", () => {
+  const guarded = [
+    ".filter-button:not(:disabled):hover",
+    ".layout-button:not(:disabled):hover",
+    ".core-shortcut:not(:disabled):hover",
+    ".pc-settings-button:not(:disabled):hover",
+    '.os-tabs [role="tab"]:not(:disabled):hover',
+  ];
+  const unguarded = [
+    ".filter-button:hover", ".layout-button:hover", ".core-shortcut:hover",
+    ".pc-settings-button:hover", '.os-tabs [role="tab"]:hover',
+  ];
+  for (const selector of guarded) {
+    assert.ok(rules.some((rule) => rule.selectors.includes(selector)), `guard absent: ${selector}`);
+  }
+  for (const selector of unguarded) {
+    assert.ok(!rules.some((rule) => rule.selectors.includes(selector)), `disabled hover remains: ${selector}`);
+  }
+  assert.equal(property(rules, "button:disabled", "cursor", 375), "not-allowed");
+});
+
+test("dead overwritten CSS declarations stay removed without changing the final values", () => {
+  assert.equal(property(rules, ".connect-shell", "max-width", 900), "870px");
+  assert.equal(property(rules, ".policy-steps", "display", 900), "grid");
+  assert.equal(property(rules, ".policy-steps", "gap", 900), "0");
+  const connectWidths = rules.filter((r) => r.selectors.includes(".connect-shell") && r.declarations["max-width"]);
+  const policyGaps = rules.filter((r) => r.selectors.includes(".policy-steps") && r.declarations.gap);
+  assert.equal(connectWidths.length, 1, "redundant .connect-shell max-width override reintroduced");
+  assert.equal(policyGaps.length, 1, "redundant .policy-steps gap override reintroduced");
+});
+
 test("installation commands can wrap and their controls use full mobile width", () => {
   for (const viewport of [320, 375, 620]) {
     assert.equal(property(rules, ".install-command-row", "flex-wrap", viewport), "wrap");
