@@ -48,6 +48,7 @@ test('AI09 stop requires separate Scheduler, root and guardian absence',()=>{
   assert.equal(nativeAgentTaskStopConfirmed(snapshot()),true);
   for(const bad of [
     {guarded:false},{receipts:0},{state:'running'},
+    {state:'queued'},{state:'unknown'},
     {liveRoots:1,rootPid:14184},{liveGuardians:1},
   ]){
     assert.equal(nativeAgentTaskStopConfirmed(snapshot(bad)),false,JSON.stringify(bad));
