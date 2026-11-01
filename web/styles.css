@@ -228,10 +228,16 @@ small,.subtle,.label { color: var(--muted); }
 .connect-copy { margin-top:10px; }
 .connect-copy h2 { font-size:20px; margin-bottom:7px; }
 .connect-button { min-height:50px; font-size:15px; margin-top:8px; }
+#approve[data-busy="true"]::after { content:""; display:inline-block; width:12px; height:12px; margin-inline-start:8px; vertical-align:-2px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:button-spin .7s linear infinite; }
+@keyframes button-spin { to { transform:rotate(360deg); } }
 body:has(#setting-compact:checked) .device { padding:14px; }
 body:has(#setting-compact:checked) .device-meta { margin:10px 0; }
 body:has(#setting-reduce-motion:checked) *,body:has(#setting-reduce-motion:checked) *::before,body:has(#setting-reduce-motion:checked) *::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; }
 @media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; } }
+@media (prefers-reduced-motion: reduce) { #approve[data-busy="true"]::after { border-right-color:currentColor; } }
+@media (forced-colors: active) {
+  button:focus-visible,summary:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,.bridge-quick-toggle:focus-visible,.bridge-toggle:focus-visible,.pc-settings-button:focus-visible { outline:3px solid Highlight !important; outline-offset:3px; }
+}
 @media (max-width:870px) {
   .shell { padding-top:34px; }
   .metrics { gap:10px; }
@@ -392,4 +398,7 @@ body:has(#setting-reduce-motion:checked) *,body:has(#setting-reduce-motion:check
   .pc-settings .pc-settings-button { width:auto; min-width:172px; margin:0; }
   .policy-line { grid-template-columns:60px minmax(0,1fr); gap:10px; padding:11px; }
   .policy-line>span:last-child { font-size:11px; }
+  .device-header .status { flex:0 1 auto; min-width:0; white-space:normal; overflow-wrap:anywhere; }
+  .bridge-live-status { min-width:0; white-space:normal; overflow-wrap:anywhere; }
+  .pc-settings-label strong,.pc-settings-label small { white-space:normal; overflow-wrap:anywhere; }
 }
