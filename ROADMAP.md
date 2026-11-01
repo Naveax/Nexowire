@@ -1,5 +1,22 @@
 # Roadmap
 
+## Status and evidence convention (snapshot: 2026-11-01)
+
+This file mixes historical milestones with future work. **A checked item (`[x]`) is a historical source/work-tracking claim, not proof that the corresponding feature is currently deployed, safe to enable, or accepted on both physical PCs.** An unchecked item (`[ ]`) is open; a draft PR does not close it. Use the linked stage gate and its exact-head evidence before changing a stage to complete.
+
+| Term | What it means | What it does **not** prove |
+| --- | --- | --- |
+| **PLANNED** | Proposed design, checklist, or unverified target | Implemented behavior |
+| **SOURCE CANDIDATE** | Code or documentation exists on a named commit/PR | Merged, released, or deployed |
+| **TESTED** | A named test passed on a specified exact SHA and environment | Other SHAs, real Windows devices, billing, or production |
+| **RELEASED** | A verifiable version/tag and release assets were published | Installed runtime version or live rollout |
+| **DEPLOYED / ACCEPTED** | Independently recorded live environment, owner authorization, and acceptance evidence | Any other host, device, or subsequent version |
+| **UNKNOWN / NOT_RUN** | Required observation/test has not been supplied | PASS by default |
+
+Source-versus-release reference as observed on 2026-11-01: [`main` `93b6df3`](https://github.com/Naveax/Nexowire/commit/93b6df33ef58610dcfdf3584bfe774e5afa7df4d) (source revision); [latest published GitHub release `v1.0.8`](https://github.com/Naveax/Nexowire/releases/tag/v1.0.8) (released 2026-10-30). **Currently installed/operating versions, production quota policy, and real S1–S5 acceptance have not been rechecked in this snapshot: UNKNOWN.** The older device accounts below remain dated historical evidence. These distinct observations must not be combined into a claim that `main` is deployed.
+
+The [Scale v2 evidence ledger and user-visible acceptance checklist](docs/SCALE_V2_ROADMAP.md#evidence-ledger-snapshot-2026-11-01) distinguishes draft source work from stage completion. It is a dated snapshot, not a live PR/CI dashboard.
+
 ## Current priority: Scale v2 foundation (2026-10-14, planned)
 
 **Active scope S1–S5; S6 feature expansion paused.** The detailed actionable checklist is [docs/SCALE_V2_ROADMAP.md](docs/SCALE_V2_ROADMAP.md), linked to [vision](docs/SCALE_V2_VISION.md), [quota/cost model](docs/SCALE_V2_QUOTA_AND_COST.md), [safe connection rollout](docs/SCALE_V2_CONNECTION_ROLLOUT.md), and [master #482](https://github.com/Naveax/Nexowire/issues/482). Stages: S1 [#483](https://github.com/Naveax/Nexowire/issues/483), S2 [#484](https://github.com/Naveax/Nexowire/issues/484), S3 [#485](https://github.com/Naveax/Nexowire/issues/485), S4 [#486](https://github.com/Naveax/Nexowire/issues/486), S5 [#487](https://github.com/Naveax/Nexowire/issues/487).

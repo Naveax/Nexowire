@@ -4,6 +4,32 @@
 >
 > **Critical path:** S1 connect/security baseline → S2 quota truth → S3 installer → S4 dormant subscription policy → S5 cost/load/staging acceptance. Limited parallel research is allowed; changes that depend on prior contracts must wait for the predecessor gate.
 
+## Evidence ledger (snapshot: 2026-11-01)
+
+This is a **read-only PR/source snapshot**, not a status of installed Agents or production Worker. `PLANNED` means a gate is still open; `SOURCE CANDIDATE` means a draft exists but does not prove deployment; `UNKNOWN` and `NOT_RUN` are never PASS. PR test figures below are **author-reported**, not independently rerun here. Historical checked milestones in [ROADMAP.md](../ROADMAP.md) do not close any S1–S5 gate.
+
+| Stage | Snapshot source candidate / exact HEAD | Verified gate status and missing proof |
+| --- | --- | --- |
+| S1 connection | [#1003](https://github.com/Naveax/Nexowire/pull/1003) Draft at `30a905351c4bb91ad279e1f3532f8416c421ff67` (Cloudflare bridge; author reports 60 local PASS / 2 Windows skips) | **PLANNED / NO-GO**: authorized two-PC/off-network, real Windows scheduler, revocation and rollback acceptance **NOT_RUN** here; this is not evidence of a P2P route |
+| S2 quota | [#998](https://github.com/Naveax/Nexowire/pull/998) Draft at `4f11cad5f5e8d507270b14de63e9a14ab85c58dc` (illustrative quota prototype); [#991](https://github.com/Naveax/Nexowire/pull/991) Draft at `d4e8fa98799ecd4b2bd16efcf60e55699978c12b` (specific hosted account credit exception, **not** daily-v2 quota) | **PLANNED / NO-GO**: UTC daily policy, D1 atomic reserve/dedupe, migration, and production cutover **NOT_RUN** here; historical monthly Free-only policy must not be relabeled daily |
+| S3 installer | [#998](https://github.com/Naveax/Nexowire/pull/998) Draft at `4f11cad5f5e8d507270b14de63e9a14ab85c58dc` (static onboarding design and troubleshooting) | **PLANNED / NO-GO**: signed native helper, clean Windows VM install, verified provenance, repair/uninstall/rollback **NOT_RUN**; DOM checks are not a physical installer test |
+| S4 subscription | [#997](https://github.com/Naveax/Nexowire/pull/997) Draft at `3bdd96f10168850d04e1a0b5483ea7378bb25ac7` (offline billing policy plans/mock event cases) | **PLANNED / NO-GO**: signed provider sandbox, legal eligibility, owner authorization and any live billing **NOT_RUN**; checkout stays paused |
+| S5 scale/cost | [#997](https://github.com/Naveax/Nexowire/pull/997) Draft at `3bdd96f10168850d04e1a0b5483ea7378bb25ac7` (author reports 44/44 synthetic tests) | **PLANNED / NO-GO**: measured hosted baseline, invoice, 24h soak, real reconnect and owner-safe rollback **UNKNOWN / NOT_RUN**; a modeled number is not real provider cost |
+
+Cross-cutting CORE gate: [#1009](https://github.com/Naveax/Nexowire/pull/1009) Draft at `8a9e7c814529b462c5d3b93728202a5ca0561c8d` addresses a reported journal startup race, but explicitly does **not** close foreign-process WAL/OS authority P0 or authorize CORE activation. Its exact-head CI and independent Windows/physical evidence must be reviewed separately. All PR associations above are observations, not merge recommendations; CI from an earlier SHA must not be carried forward.
+
+### User-visible acceptance and measurement dependencies
+
+| Stage | Observable acceptance expected by a user (future test) | Evidence required / dependency |
+| --- | --- | --- |
+| S1 | Authorized connection and reconnect on both named devices, no surprise visible-console takeover or duplicated mutation | Real two-device/NAT matrix, authenticated revoke/reconnect logs and exact-head CI; after security contract review |
+| S2 | Used/remaining quota, reset time and exhausted status agree with server for each owner; retry cannot double-charge or double-execute | Policy approval, atomic D1 staging tests and migration evidence; before enabling daily policy |
+| S3 | Clean Windows user installs, signs in, presses **BAĞLA**, sees the correct device; failed pairing can safely retry or roll back | Signed artifact provenance, disposable Windows VM, browser keyboard/visual check and owner-approved rollback |
+| S4 | Free-only accounts cannot accidentally check out; paid status changes only after verified signed provider events when explicitly enabled | Sandbox webhook lifecycle, legal/commercial approval, `BILLING_PAUSED` negative and separate live launch gate |
+| S5 | User sessions remain usable under documented load; interruptions show honest errors and no surprise cost | Measured ingress/D1/CPU/egress baselines, p50/p95/p99, provider invoice, authorized soak and stop criteria |
+
+Metrics without a real baseline or external billing record stay **UNKNOWN**, not zero: S1 network success/relay bytes depends on an opt-in two-PC NAT lab; S2 authoritative reserve latency depends on D1 staging; S3 completion/rollback rates depend on disposable Windows installs; S4 entitlement/reversal correctness depends on signed sandbox events; S5 cost per user and p99 availability depend on measured staging and actual provider billing. No target number in this plan is an achieved SLO.
+
 ## S0: prerequisites (before software mutation)
 
 - [ ] Capture current `main` SHA, open PRs and repo policy, and record exactly what is deployed versus only merged.
