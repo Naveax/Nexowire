@@ -31,9 +31,9 @@ test('AI09 installed Agent task uses a parent-bound native Job guardian',()=>{
   assert.match(ps,/--status' \$jobMarker/);
   assert.match(ps,/--parent' \(\[string\]\$PID\)/);
   assert.match(ps,/--cwd' '-'/);
-  assert.match(ps,/--' 'C:\\\\Nexowire/);
+  assert.ok(ps.includes("'C:\\Nexowire\\runtime\\node.exe'"));
   assert.match(ps,/'agent' 'run'/);
-  assert.doesNotMatch(ps,/^& 'C:\\\\Nexowire\\\\runtime\\\\node\.exe'/m,
+  assert.ok(!ps.includes("& 'C:\\Nexowire\\runtime\\node.exe'"),
     'installed task must not spawn naked Node');
 });
 
