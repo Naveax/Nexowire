@@ -565,7 +565,6 @@ async function installWindows(
     '$principal=New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited',
     WINDOWS_NATIVE_AGENT_TASK_SETTINGS,
     "Register-ScheduledTask -TaskName $name -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description 'Nexowire first-party native agent' -Force | Out-Null",
-    'Start-ScheduledTask -TaskName $name',
     '[pscustomobject]@{ok=$true} | ConvertTo-Json -Compress',
   ].join('\n');
 
@@ -574,8 +573,8 @@ async function installWindows(
     windowsEnv(options),
   );
   await writeManifest(options, 'win32');
-  await new Promise((resolve) => setTimeout(resolve, 250));
-  return await windowsStatus(options);
+  // Install is not successful until Job-owned Node has a matching OS receipt.
+  return await controlWindows('start', options);
 }
 
 export interface WindowsAgentTaskOwnerReadback {
@@ -733,13 +732,17 @@ async function controlWindows(
 async function uninstallWindows(
   options: NativeAgentLifecycleOptions,
 ): Promise<{ removed: boolean; name: string }> {
+  const current = await windowsAgentTaskOwnerReadback(options);
+  if (current.installed) {
+    // Never unregister or delete the launcher while its Job descendants are unproven.
+    await controlWindows('stop', options);
+  }
   const result = await runPowerShellJson<{ removed: boolean }>(
     [
       "$ErrorActionPreference='Stop'",
       '$name=$env:NEXOWIRE_AGENT_TASK_NAME',
       '$task=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue',
       'if ($null -ne $task) {',
-      '  Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue',
       '  Unregister-ScheduledTask -TaskName $name -Confirm:$false',
       '  [pscustomobject]@{removed=$true} | ConvertTo-Json -Compress',
       '} else {',
