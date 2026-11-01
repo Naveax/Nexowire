@@ -33,6 +33,9 @@ jobs:
 
   browser-live:
     runs-on: windows-latest
+    # Fail the entire hosted Windows job if the runner stops reporting progress.
+    # This never turns a timeout into success and keeps all negative tests active.
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
