@@ -42,6 +42,11 @@ export function renderS5CostReport(args:string[]):string{
     generatedAt:new Date().toISOString(),
     source:'OFFLINE SIMULATION; not a provider invoice, measured usage, or complete bill',
     actualProviderBill:'UNKNOWN',
+    limitationsEvidence:{
+      kind:'REPOSITORY_DOCUMENTATION_NOT_PROVIDER_METER',
+      sourcePath:'docs/SCALE_V2_S5_LOAD_COST_ACCEPTANCE_20261018.md',
+      providerInvoiceStatus:'UNKNOWN',
+    },
     pricesAsOf:embedded?'2026-10-18':'UNKNOWN',
     embeddedRateAssumptionsAsOf:embedded?'2026-10-18':'UNKNOWN',
     scenarios:rows.map((row,i)=>embedded?{

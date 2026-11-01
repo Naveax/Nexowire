@@ -132,6 +132,8 @@ export type S5QuotedCostReport = {
   classification:'OFFLINE_SIMULATION_NOT_PROVIDER_BILL';
   currency:string|S5Unknown;
   monthlyUsage:CostEnvelope['monthly']|S5Unknown;
+  freeThresholdSafeguard:{numericThresholdsFit:boolean|S5Unknown;
+    zeroExtraInvoiceProven:false};
   componentCosts:Record<S5CostMeter,number|S5Unknown>;
   knownSubtotal:number|S5Unknown;
   modeledTotal:number|S5Unknown;
@@ -202,7 +204,9 @@ export function quoteS5Cost(
   }
   const report:S5QuotedCostReport={
     classification:'OFFLINE_SIMULATION_NOT_PROVIDER_BILL',currency,
-    monthlyUsage:'UNKNOWN',componentCosts:empty,knownSubtotal:'UNKNOWN',
+    monthlyUsage:'UNKNOWN',freeThresholdSafeguard:{
+      numericThresholdsFit:'UNKNOWN',zeroExtraInvoiceProven:false},
+    componentCosts:empty,knownSubtotal:'UNKNOWN',
     modeledTotal:'UNKNOWN',modeledCostPerUser:'UNKNOWN',
     actualProviderBill:'UNKNOWN',missing,
   };
@@ -210,6 +214,7 @@ export function quoteS5Cost(
   const full=assumptions as S5CostInput;
   const estimate=estimateS5Cost(full);
   report.monthlyUsage=estimate.monthly;
+  report.freeThresholdSafeguard.numericThresholdsFit=estimate.freeEnvelope.numericThresholdsFit;
   const quantities:Record<S5CostMeter,number>={
     workerRequests:Number(estimate.monthly.workerRequests),
     workerCpuMs:Number(estimate.monthly.workerCpuMs),
