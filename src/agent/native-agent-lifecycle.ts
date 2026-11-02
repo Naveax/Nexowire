@@ -665,6 +665,27 @@ try {
     if (-not $g.ExecutablePath -or -not $g.CommandLine) { throw 'NATIVE_AGENT_TASK_GUARDIAN_IDENTITY_UNKNOWN' }
     if ([string]::Equals($g.ExecutablePath,$expectedHelper,[StringComparison]::OrdinalIgnoreCase)) { $ownedGuardians+=,$g }
   }
+  # Windows CIM may report an 8.3 short path (RUNNER~1), while GetFullPath
+  # and the receipt enumeration return the long path. Do not compare raw
+  # CommandLine substrings: parse the real guardian's --status argument and
+  # canonicalize it against the protected launcher/receipt directory.
+  $guardianStatuses=@()
+  foreach ($g in $ownedGuardians) {
+    $statusMatch=[regex]::Match([string]$g.CommandLine,
+      '^\s*(?:"[^"]+"|\S+)\s+--status\s+(?:"(?<quoted>[^"]+)"|(?<plain>\S+))(?=\s|$)',
+      [Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    if (-not $statusMatch.Success) { throw 'NATIVE_AGENT_TASK_GUARDIAN_STATUS_ARGUMENT_UNCONFIRMED' }
+    $rawStatus=if ($statusMatch.Groups['quoted'].Success) { $statusMatch.Groups['quoted'].Value } else { $statusMatch.Groups['plain'].Value }
+    if (-not [IO.Path]::IsPathRooted($rawStatus)) { throw 'NATIVE_AGENT_TASK_GUARDIAN_STATUS_PATH_UNSAFE' }
+    $statusPath=[IO.Path]::GetFullPath($rawStatus)
+    if (-not [string]::Equals([IO.Path]::GetDirectoryName($statusPath),$dir,[StringComparison]::OrdinalIgnoreCase)) {
+      throw 'NATIVE_AGENT_TASK_GUARDIAN_STATUS_DIRECTORY_UNCONFIRMED'
+    }
+    if ([IO.Path]::GetFileName($statusPath) -cnotmatch '^agent-job-[0-9a-f]{32}\.status$') {
+      throw 'NATIVE_AGENT_TASK_GUARDIAN_STATUS_NAME_UNCONFIRMED'
+    }
+    $guardianStatuses+=,[pscustomobject]@{process=$g;status=$statusPath}
+  }
   $nodesByPid=@{}
   foreach ($node in $nodes) {
     if (-not $node.ExecutablePath -or -not $node.CommandLine -or $null -eq $node.CreationDate) { throw 'NATIVE_AGENT_TASK_NODE_IDENTITY_UNKNOWN' }
@@ -689,8 +710,8 @@ try {
     $ownedPid=[long]$Matches[1]
     $created=[string]$Matches[2]
     if ($ownedPid -gt 4294967295) { throw 'NATIVE_AGENT_TASK_RECEIPT_PID_INVALID' }
-    $matchedGuardians=@($ownedGuardians | Where-Object {
-      $_.CommandLine.IndexOf($marker.FullName,[StringComparison]::OrdinalIgnoreCase) -ge 0
+    $matchedGuardians=@($guardianStatuses | Where-Object {
+      [string]::Equals($_.status,$marker.FullName,[StringComparison]::OrdinalIgnoreCase)
     })
     if ($matchedGuardians.Count -gt 1) { throw 'NATIVE_AGENT_TASK_GUARDIAN_AMBIGUOUS' }
     $liveGuardians+=$matchedGuardians.Count
@@ -721,18 +742,15 @@ try {
   }
   # A native guardian from THIS Agent's protected receipt directory whose
   # marker is missing/renamed is indeterminate, never an empty healthy owner.
-  foreach ($g in $ownedGuardians) {
-    if ($g.CommandLine.IndexOf($dir,[StringComparison]::OrdinalIgnoreCase) -ge 0 -and
-        $g.CommandLine.IndexOf('agent-job-',[StringComparison]::OrdinalIgnoreCase) -ge 0) {
-      $found=$false
-      foreach ($record in $records) {
-        if ($g.CommandLine.IndexOf($record.file,[StringComparison]::OrdinalIgnoreCase) -ge 0) {
-          $found=$true
-          break
-        }
+  foreach ($g in $guardianStatuses) {
+    $found=$false
+    foreach ($record in $records) {
+      if ([string]::Equals($g.status,$record.file,[StringComparison]::OrdinalIgnoreCase)) {
+        $found=$true
+        break
       }
-      if (-not $found) { throw 'NATIVE_AGENT_TASK_GUARDIAN_RECEIPT_MISSING' }
     }
+    if (-not $found) { throw 'NATIVE_AGENT_TASK_GUARDIAN_RECEIPT_MISSING' }
   }
   $unknownAgentNodes=0
   foreach ($node in $nodes) {

@@ -363,6 +363,37 @@ test('AI09 live guardian with absent status receipt blocks readback',{
   });
 });
 
+test('AI09 canonical status argument keeps a live guardian across lexical path aliases',{
+  skip:process.platform!=='win32',timeout:60000,
+},async()=>{
+  await withMockTask(async({marker,helper,run,dir})=>{
+    const live=await marker(999);
+    for(let i=1;i<=130;i++)await marker(i);
+    const alias=dir+path.sep+'.'+path.sep+path.basename(live);
+    const guardian=fakeProc(65001,helper,'"'+helper+'" --status "'+alias+'" --cwd - --parent 42');
+    const result=run({guardians:[guardian]});
+    assert.equal(result.receipts,131);
+    assert.equal(result.liveGuardians,1);
+    assert.equal(nativeAgentTaskStopConfirmed(result),false);
+    assert.equal((await readdir(dir)).filter(x=>x.endsWith('.status')).length,131);
+  });
+});
+
+test('AI09 malformed or foreign guardian status cannot be masked by unrelated arguments',{
+  skip:process.platform!=='win32',timeout:60000,
+},async()=>{
+  await withMockTask(async({marker,helper,run,dir})=>{
+    const live=await marker(999);
+    for(let i=1;i<=130;i++)await marker(i);
+    const withoutStatus=fakeProc(65002,helper,'"'+helper+'" --cwd "'+live+'" --parent 42');
+    expectMockError(()=>run({guardians:[withoutStatus]}),'NATIVE_AGENT_TASK_GUARDIAN_STATUS_ARGUMENT_UNCONFIRMED');
+    const foreign=path.join(os.tmpdir(),'agent-job-'+('f').repeat(32)+'.status');
+    const forged=fakeProc(65003,helper,'"'+helper+'" --status "'+foreign+'" --cwd "'+live+'" --parent 42');
+    expectMockError(()=>run({guardians:[forged]}),'NATIVE_AGENT_TASK_GUARDIAN_STATUS_DIRECTORY_UNCONFIRMED');
+    assert.equal((await readdir(dir)).filter(x=>x.endsWith('.status')).length,131);
+  });
+});
+
 test('AI09 unknown and malformed receipts cannot be garbage collected',{
   skip:process.platform!=='win32',timeout:60000,
 },async()=>{
