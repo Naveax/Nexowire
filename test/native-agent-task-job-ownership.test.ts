@@ -10,6 +10,7 @@ import {
   nativeAgentTaskStartConfirmed,
   nativeAgentTaskStopConfirmed,
   WINDOWS_AGENT_TASK_OWNER_READBACK_SCRIPT,
+  assertNoResidualWindowsTaskOwnerArtifacts,
   type WindowsAgentTaskOwnerReadback,
 } from '../src/agent/native-agent-lifecycle.js';
 
@@ -163,6 +164,14 @@ async function withMockTask(
   try{await fn({dir,node,cli,helper,launch,marker,run});}
   finally{await rm(dir,{recursive:true,force:true});}
 }
+function expectMockError(callback:()=>unknown,reason:string):void{
+  assert.throws(callback,(error:unknown)=>{
+    const e=error as Error & {stderr?:string|Buffer};
+    const diagnostic=String(e.stderr??'')+' '+e.message;
+    assert.ok(diagnostic.includes(reason), 'expected '+reason+' but got: '+diagnostic.slice(0,500));
+    return true;
+  });
+}
 const fakeProc=(pid:number,exe:string,cmd:string,iso='2026-11-02T06:00:00.000Z'):FixtureProcess=>
   ({ProcessId:pid,ExecutablePath:exe,CommandLine:cmd,CreationDate:iso});
 
@@ -224,7 +233,7 @@ test('AI09 access denied preserves ALL receipts and fails closed',{
 },async()=>{
   await withMockTask(async({marker,run,dir})=>{
     for(let i=1;i<=130;i++)await marker(i);
-    assert.throws(()=>run({},'Ready',true),/Command failed|MOCK_CIM_ACCESS_DENIED/);
+    expectMockError(()=>run({},'Ready',true),'MOCK_CIM_ACCESS_DENIED');
     assert.equal((await readdir(dir)).filter(x=>x.endsWith('.status')).length,130);
   });
 });
@@ -238,7 +247,7 @@ test('AI09 matched root without guardian is an orphan and blocks cleanup',{
     await marker(1,birth);
     for(let i=2;i<=130;i++)await marker(i);
     const root=fakeProc(1001,node,'"'+node+'" "'+cli+'" agent run',iso);
-    assert.throws(()=>run({nodes:[root]}),/Command failed|ORPHAN_ROOT_UNCONFIRMED/);
+    expectMockError(()=>run({nodes:[root]}),'NATIVE_AGENT_TASK_ORPHAN_ROOT_UNCONFIRMED');
     assert.equal((await readdir(dir)).filter(x=>x.endsWith('.status')).length,130);
   });
 });
@@ -249,7 +258,7 @@ test('AI09 unowned Node child with Agent CLI blocks stop/uninstall and cleanup',
   await withMockTask(async({marker,node,cli,run,dir})=>{
     for(let i=1;i<=130;i++)await marker(i);
     const orphan=fakeProc(50000,node,'"'+node+'" "'+cli+'" agent run');
-    assert.throws(()=>run({nodes:[orphan]}),/Command failed|UNOWNED_AGENT_NODE_UNCONFIRMED/);
+    expectMockError(()=>run({nodes:[orphan]}),'NATIVE_AGENT_TASK_UNOWNED_AGENT_NODE_UNCONFIRMED');
     assert.equal((await readdir(dir)).filter(x=>x.endsWith('.status')).length,130);
     const src=readFileSync(new URL('../src/agent/native-agent-lifecycle.ts',import.meta.url),'utf8');
     const uninstall=src.slice(src.indexOf('async function uninstallWindows('),src.indexOf('async function linuxStatus('));
@@ -265,4 +274,48 @@ test('AI09 source has exclusive readback lock, 30s race grace and no 128 hard st
   assert.match(WINDOWS_AGENT_TASK_OWNER_READBACK_SCRIPT,/TotalSeconds -lt 30/);
   assert.match(WINDOWS_AGENT_TASK_OWNER_READBACK_SCRIPT,/NATIVE_AGENT_TASK_ORPHAN_ROOT_UNCONFIRMED/);
   assert.doesNotMatch(WINDOWS_AGENT_TASK_OWNER_READBACK_SCRIPT,/RECEIPT_LIMIT_EXCEEDED/);
+});
+
+
+test('AI09 residual unregistered task receipts block cleanup on any platform',async()=>{
+  const root=await mkdtemp(path.join(os.tmpdir(),'nw-ai09-uninstall-contract-'));
+  try{
+    await assertNoResidualWindowsTaskOwnerArtifacts(root);
+    const marker=path.join(root,'agent-job-abcdef.status');
+    await writeFile(marker,'NWJOB3 1 133000000000000000');
+    await assert.rejects(
+      ()=>assertNoResidualWindowsTaskOwnerArtifacts(root),
+      /NATIVE_AGENT_TASK_RESIDUAL_OWNER_UNCONFIRMED/,
+    );
+    await rm(marker,{force:true});
+    await writeFile(path.join(root,'launch.ps1'),'# old launcher');
+    await assert.rejects(
+      ()=>assertNoResidualWindowsTaskOwnerArtifacts(root),
+      /NATIVE_AGENT_TASK_RESIDUAL_OWNER_UNCONFIRMED/,
+    );
+  }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('AI09 live guardian with absent status receipt blocks readback',{
+  skip:process.platform!=='win32',timeout:60000,
+},async()=>{
+  await withMockTask(async({marker,helper,run,dir})=>{
+    for(let i=1;i<=130;i++)await marker(i);
+    const vanished=path.join(dir,'agent-job-'+('f').repeat(32)+'.status');
+    const guardian=fakeProc(64002,helper,'"'+helper+'" --status "'+vanished+'" --parent 42');
+    expectMockError(()=>run({guardians:[guardian]}),'NATIVE_AGENT_TASK_GUARDIAN_RECEIPT_MISSING');
+    assert.equal((await readdir(dir)).filter(x=>x.endsWith('.status')).length,130);
+  });
+});
+
+test('AI09 unknown and malformed receipts cannot be garbage collected',{
+  skip:process.platform!=='win32',timeout:60000,
+},async()=>{
+  await withMockTask(async({marker,run,dir})=>{
+    for(let i=1;i<=130;i++)await marker(i);
+    const corrupt=path.join(dir,'agent-job-'+('e').repeat(32)+'.status');
+    await writeFile(corrupt,'BROKEN\n','utf8');
+    expectMockError(()=>run(),'NATIVE_AGENT_TASK_RECEIPT_INVALID');
+    assert.equal((await readdir(dir)).filter(x=>x.endsWith('.status')).length,131);
+  });
 });
