@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; form-action 'none'; base-uri 'none'"><title>Nexowire • Kurulum taslağı</title><style>
+*{box-sizing:border-box}body{margin:0;background:#0d1524;color:#f2f5ff;font:16px/1.6 system-ui,sans-serif}main{max-width:960px;margin:auto;padding:32px 20px}header{margin-bottom:32px}.demo{display:inline-block;background:#ffe293;color:#27200c;padding:6px 12px;font-weight:800;border-radius:6px}h1{font-size:clamp(28px,5vw,44px);line-height:1.2}h2{font-size:22px}p{color:#c4cee2}section,article{background:#17243a;border:1px solid #435773;border-radius:14px;padding:24px;margin:18px 0}small{color:#c4cee2}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px}.grid article{margin:0}strong.metric{display:block;font-size:36px;color:#88e3cc}button,select{font:inherit;padding:12px 18px;border-radius:8px;border:2px solid #88e3cc;background:#122e32;color:#fff}button{cursor:pointer}button:disabled{opacity:.55;cursor:default}button:focus-visible,select:focus-visible,a:focus-visible{outline:3px solid #ffe293;outline-offset:4px}a{color:#a2e9ff}progress{width:100%;height:20px;accent-color:#88e3cc}.error{border-left:5px solid #ffa696}.steps{display:flex;gap:24px;flex-wrap:wrap;padding-left:24px}.actions{display:flex;flex-wrap:wrap;gap:12px}label{display:block;font-weight:700;margin-bottom:8px}[hidden]{display:none!important}@media(max-width:480px){main{padding:20px 14px}section,article{padding:18px}button,select{width:100%}}
+</style></head><body><main><header><span class="demo">DEMO / CANLI VERİ DEĞİL</span><h1>Bilgisayarını bağlamaya hazırlan.</h1><p>İki adımlı arayüz taslağı. Buradaki düğmeler yalnız örnek görünümü değiştirir.</p></header>
+<ol class="steps"><li id="step1" aria-current="step">1. İndir ve kur — bekliyor</li><li id="step2">2. GitHub ile giriş ve BAĞLA — bekliyor</li></ol>
+<section aria-labelledby="preview"><h2 id="preview">Örnek durumu seç</h2><label for="state">Sentetik ekran</label><select id="state"><option value="start">Başlangıç</option><option value="loading">Kuruluyor görünümü</option><option value="installed">Kurulum tamam görünümü</option><option value="signin">Giriş bekleniyor görünümü</option><option value="error">Bağlantı hatası görünümü</option><option value="success">Bağlandı görünümü</option></select><p id="status" role="status" aria-live="polite" aria-atomic="true"></p></section>
+<section id="install"><h2>1. İndir ve kur</h2><p>Windows 10/11 x64. Normal kurulumda Node/npm, API anahtarı veya yönetici yükseltmesi beklenmez.</p><p>Kaynak bootstrap v1.0.7'ye sabit; yayımlanmış son sürüm v1.0.8. Bu taslak hiçbir paket indirmez ve imzalı installer vaadi vermez.</p><button id="download" type="button">İndirme görünümünü dene</button> <button id="installed" type="button">Kurulum tamam görünümüne geç</button></section>
+<section id="connect" hidden><h2>2. GitHub ile giriş yap ve BAĞLA</h2><p>Örnek bilgisayar: <strong>DEMO-PC</strong>. Gerçek hesabın veya cihazın okunmadı.</p><p>Gerçek üründe kendi GitHub hesabını ve bilgisayar adını kontrol etmen gerekir. Bu taslakta parola veya kod girilmez.</p><div class="actions"><button id="signin" type="button">GitHub giriş görünümü</button><button id="bind" type="button">BAĞLA görünümünü dene</button></div></section>
+<section id="failure" class="error" hidden><h2>Bağlantı tamamlanamadı — örnek hata</h2><p>Sentetik eşleme süresi doldu. Bu, cihazının durumu değildir.</p><button id="retry" type="button">Tekrar dene görünümü</button></section>
+<section id="done" hidden><h2>Örnek akış tamamlandı</h2><p>DEMO-PC çevrimiçi görünümü. Gerçek bağlantı veya CORE/yönetici yetkisi kanıtı değildir.</p></section>
+<section><h2>ChatGPT eklentisi ayrı bir adım</h2><p>Gerçek üründe eklenti/özel MCP ekleme izni gerekir. Cihaz eşlemesi eklenti kurmaz. Aynı GitHub hesabı ve Nexowire'ın verdiği tam MCP adresi kullanılır; API anahtarı veya rastgele adres girilmez.</p></section>
+<footer><p>Yalnız yerel sentetik state. Sayfa yenilenince başlangıca döner. Ağ isteği, OAuth, credential storage veya cihaz bağlantısı içermez.</p></footer></main><script>
+'use strict';
+const byId = id => document.getElementById(id);
+const messages = {start:'Başlangıç: ilk adım bekliyor.',loading:'Örnek: kurulum sürüyor. Gerçek indirme yapılmıyor.',installed:'Örnek: kurulum tamam; hesap bağlantısı bekliyor.',signin:'Örnek: GitHub giriş ekranı bekleniyor. Başka sayfa açılmıyor.',error:'Örnek hata: eşleme süresi doldu. Yeniden deneme görünümü kullanılabilir.',success:'Örnek: iki adım tamam. Gerçek cihaz doğrulanmadı.'};
+function render(state) {
+ if (!Object.hasOwn(messages,state)) return;
+ byId('state').value=state;
+ const ready=['installed','signin','error','success'].includes(state);
+ byId('connect').hidden=!ready;
+ byId('failure').hidden=state!=='error';
+ byId('done').hidden=state!=='success';
+ byId('download').disabled=state==='loading';
+ byId('status').textContent=messages[state];
+ byId('step1').textContent='1. İndir ve kur — '+(ready?'örnekte tamam':state==='loading'?'yükleniyor':'bekliyor');
+ byId('step2').textContent='2. GitHub ile giriş ve BAĞLA — '+(state==='success'?'örnekte tamam':state==='error'?'örnek hata':'bekliyor');
+ byId('step1').removeAttribute('aria-current');byId('step2').removeAttribute('aria-current');
+ byId(ready?'step2':'step1').setAttribute('aria-current','step');
+}
+byId('state').addEventListener('change',event=>render(event.target.value));
+for(const [id,state] of [['download','loading'],['installed','installed'],['signin','signin'],['bind','error'],['retry','signin']]) {
+ byId(id).addEventListener('click',()=>{render(state);byId('state').focus();});
+}
+render('start');
+</script></body></html>
