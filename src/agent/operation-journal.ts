@@ -55,6 +55,11 @@ type DbRow={
  * The native-agent process MUST hold its singleton lock. A STARTED mutation
  * cannot be rolled back by this journal and is never retried automatically.
  */
+// Same-process, per-normalized-path preflight sequencing from merged #1009.
+// Availability only: this does not replace the independent JournalAuthority,
+// OS PID-incarnation checks, or the SQLite BEGIN IMMEDIATE mutation fence.
+const journalInitializationTails=new Map<string,Promise<void>>();
+
 export class AgentOperationJournal{
   private db?:DatabaseSync;
   private loading?:Promise<void>;
@@ -132,8 +137,18 @@ export class AgentOperationJournal{
   async initialize():Promise<void>{
     if(this.loaded)return;
     if(this.loading)return this.loading;
+    // Prevent a same-process peer from racing WAL preflight and migrations.
+    // This is NOT a cross-process authority or an excuse to skip validation.
+    const key=process.platform==='win32'?
+      path.normalize(this.file).toLowerCase():path.normalize(this.file);
+    const previous=journalInitializationTails.get(key);
+    let release!:()=>void;
+    const finished=new Promise<void>(resolve=>{release=resolve});
+    journalInitializationTails.set(key,finished);
     this.loading=(async()=>{
-      // An authority is never auto-provisioned from a journal snapshot.
+      try{
+        if(previous)await previous;
+        // An authority is never auto-provisioned from a journal snapshot.
       await this.authority?.initialize();
       await fs.mkdir(path.dirname(this.file),{recursive:true});
       try{
@@ -277,6 +292,12 @@ export class AgentOperationJournal{
         this.loaded=true;
       }catch(e){
         db.close();this.authority?.close();throw e;
+      }
+      }finally{
+        release();
+        if(journalInitializationTails.get(key)===finished){
+          journalInitializationTails.delete(key);
+        }
       }
     })();
     try{await this.loading}
