@@ -166,7 +166,22 @@ $expected=@($fixture.guardians | Where-Object { $null -ne $_ }).Count
 $observed=@(Get-CimInstance Win32_Process -Filter "Name='windows-job-owner.exe'" -ErrorAction Stop).Count
 if ($observed -ne $expected) { throw ('AI09_MOCK_GUARDIAN_COUNT_UNCONFIRMED expected=' + $expected + ' observed=' + $observed) }
 `;
-  await writeFile(script,mockPrelude+'\n'+preflight+'\n'+WINDOWS_AGENT_TASK_OWNER_READBACK_SCRIPT,'utf8');
+  const trace=path.join(dir,'mock-trace.json');
+  const traceScript=String.raw`
+  $mockTrace=[pscustomobject]@{
+    guardianProcesses=@($guardianProcesses).Count
+    ownedGuardians=@($ownedGuardians).Count
+    receiptCount=@($markers).Count
+    matchedReceipts=@($records | Where-Object { $_.guardianCount -gt 0 }).Count
+    binaryMatches=@($guardianProcesses | ForEach-Object { [string]::Equals($_.ExecutablePath,$expectedHelper,[StringComparison]::OrdinalIgnoreCase) })
+    directoryMatches=@($guardianProcesses | ForEach-Object { $_.CommandLine.IndexOf($dir,[StringComparison]::OrdinalIgnoreCase) -ge 0 })
+  }
+  [IO.File]::WriteAllText($env:AI09_MOCK_TRACE,($mockTrace | ConvertTo-Json -Compress -Depth 4))
+`;
+  const markerText='  # Never compact during a running/queued task';
+  assert.ok(WINDOWS_AGENT_TASK_OWNER_READBACK_SCRIPT.includes(markerText));
+  const withTrace=WINDOWS_AGENT_TASK_OWNER_READBACK_SCRIPT.replace(markerText,traceScript+markerText);
+  await writeFile(script,mockPrelude+'\n'+preflight+'\n'+withTrace,'utf8');
   const old=new Date(Date.now()-180_000);
   const marker=async(i:number,birth='133000000000000000')=>{
     const name='agent-job-'+i.toString(16).padStart(32,'0')+'.status';
@@ -184,13 +199,19 @@ if ($observed -ne $expected) { throw ('AI09_MOCK_GUARDIAN_COUNT_UNCONFIRMED expe
       NEXOWIRE_AGENT_EXECUTABLE:node,
       NEXOWIRE_AGENT_CLI:cli,
       AI09_MOCK_CIM:JSON.stringify({guardians:mock.guardians??[],nodes:mock.nodes??[]}),
+      AI09_MOCK_TRACE:trace,
       AI09_MOCK_TASK_STATE:state,
       AI09_MOCK_ACCESS_DENIED:deny?'1':'0',
     };
     const result=execFileSync(psExe,[
       '-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',script,
     ],{env,encoding:'utf8',windowsHide:true,timeout:20000});
-    return JSON.parse(result.trim()) as WindowsAgentTaskOwnerReadback;
+    const parsed=JSON.parse(result.trim()) as WindowsAgentTaskOwnerReadback;
+    if ((mock.guardians?.length??0)>0 && parsed.liveGuardians===0) {
+      // Pure test diagnostic; no identity, fixture outcome or security check is changed.
+      console.error('AI09_MOCK_GUARDIAN_TRACE '+readFileSync(trace,'utf8'));
+    }
+    return parsed;
   };
   try{await fn({dir,node,cli,helper,launch,marker,run});}
   finally{await rm(dir,{recursive:true,force:true});}
