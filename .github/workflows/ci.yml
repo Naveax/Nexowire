@@ -86,6 +86,10 @@ jobs:
         run: ./scripts/coord-build-wal-namespace-probe.ps1
       - name: Physical Windows Job Object regressions
         run: node --test --import tsx --test-concurrency=1 test/windows-job-owner.test.ts test/windows-job-capacity-128.test.ts test/process-manager-tree-cleanup.test.ts test/process-manager.test.ts
+      - name: Verify AI-09 Windows Agent guardian receipt retention
+        # Exercises the Win32-only mocked OS readback cases; no real Task or process mutation.
+        timeout-minutes: 7
+        run: node --test --import tsx --test-concurrency=1 test/native-agent-task-job-ownership.test.ts
       - name: Verify Windows native-agent singleton lease on a real runner
         run: node --test --import tsx test/native-agent-singleton.test.ts
       - name: Verify Windows DPAPI and pre-logon Hub contracts
