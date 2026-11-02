@@ -635,7 +635,11 @@ if ($null -eq $task) {
 if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) { throw 'NATIVE_AGENT_TASK_LAUNCHER_MISSING' }
 $guarded=[IO.File]::ReadAllText($launcher).Contains('# NEXOWIRE_AGENT_TASK_JOB_GUARD_V1')
 if (-not $guarded) { throw 'NATIVE_AGENT_TASK_JOB_GUARD_REQUIRED' }
-$dir=Split-Path -LiteralPath $launcher -Parent
+# PS5.1 does not support Split-Path -LiteralPath with -Parent.
+# Resolve only a rooted launcher path; never infer ownership from cwd.
+if (-not [IO.Path]::IsPathRooted($launcher)) { throw 'NATIVE_AGENT_TASK_LAUNCHER_PATH_UNSAFE' }
+$dir=[IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($launcher))
+if ([string]::IsNullOrWhiteSpace($dir)) { throw 'NATIVE_AGENT_TASK_LAUNCHER_PARENT_UNCONFIRMED' }
 $expectedHelper=$env:NEXOWIRE_AGENT_JOB_HELPER
 $expectedNode=$env:NEXOWIRE_AGENT_EXECUTABLE
 $expectedCli=$env:NEXOWIRE_AGENT_CLI
