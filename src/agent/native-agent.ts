@@ -604,6 +604,8 @@ export async function runNativeAgent(
                     fingerprint,
                     request.data.capability,
                   );
+                  // A disconnect during async OS process readback denies execution.
+                  requestLifetime.signal.throwIfAborted();
                   if (!begun.created) {
                     return {
                       type: 'response' as const,
@@ -626,6 +628,7 @@ export async function runNativeAgent(
                   await operationJournal.markDispatched(
                     request.data.requestId,fingerprint,
                   );
+                  requestLifetime.signal.throwIfAborted();
                 }
                 let outcome: AgentResponse;
                 try {
