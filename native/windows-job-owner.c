@@ -27,7 +27,6 @@ static BOOL enforce_guardian_isolation(void) {
   BOOL admin=FALSE;
   BYTE adminSid[SECURITY_MAX_SID_SIZE]={0};
   DWORD sidBytes=sizeof(adminSid);
-  SID_IDENTIFIER_AUTHORITY ntAuthority=SECURITY_NT_AUTHORITY;
   BOOL trusted=FALSE;
   const wchar_t *stage=L"token_open";
   DWORD win32=ERROR_SUCCESS;

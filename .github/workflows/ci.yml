@@ -40,11 +40,11 @@ jobs:
       - name: Run Node test suite
         timeout-minutes: 15
         run: npm test
-      - name: Verify coordinator PR dependency and exact-head CI gates
-        run: node --test --import tsx test/qa-v108-integration-gates.test.ts
       - name: Build Node sources
         timeout-minutes: 10
         run: npm run build
+      - name: Verify coordinator PR dependency and exact-head CI gates
+        run: node --test --import tsx test/qa-v108-integration-gates.test.ts
 
   browser-live:
     runs-on: windows-latest
