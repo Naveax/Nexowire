@@ -527,6 +527,25 @@ function bundledNativeAgentJobHelper(options: NativeAgentLifecycleOptions): stri
   );
 }
 
+async function assertNoResidualWindowsTaskOwnerArtifacts(root: string): Promise<void> {
+  let files: string[];
+  try {
+    files = await fs.readdir(root);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw error;
+  }
+  if (files.some((file) =>
+    file === 'launch.ps1' ||
+    file === 'agent-job-retention.lock' ||
+    file.startsWith('agent-job-'))) {
+    throw new Error('NATIVE_AGENT_TASK_RESIDUAL_OWNER_UNCONFIRMED');
+  }
+}
+
+/** An unregistered task is not proof that its former guardian/Node exited. */
+export { assertNoResidualWindowsTaskOwnerArtifacts };
+
 async function installWindows(
   options: NativeAgentLifecycleOptions,
 ): Promise<NativeAgentLifecycleStatus> {
@@ -548,6 +567,8 @@ async function installWindows(
         prior.state === 'running') {
       throw new Error('NATIVE_AGENT_TASK_PREEXISTING_OWNER_UNCONFIRMED');
     }
+  } else {
+    await assertNoResidualWindowsTaskOwnerArtifacts(root);
   }
   await fs.mkdir(root, { recursive: true, mode: 0o700 });
   await fs.writeFile(
@@ -691,6 +712,21 @@ try {
       written=$marker.LastWriteTimeUtc
       liveRoot=$matchedRoot
       guardianCount=$matchedGuardians.Count
+    }
+  }
+  # A native guardian from THIS Agent's protected receipt directory whose
+  # marker is missing/renamed is indeterminate, never an empty healthy owner.
+  foreach ($g in $ownedGuardians) {
+    if ($g.CommandLine.IndexOf($dir,[StringComparison]::OrdinalIgnoreCase) -ge 0 -and
+        $g.CommandLine.IndexOf('agent-job-',[StringComparison]::OrdinalIgnoreCase) -ge 0) {
+      $found=$false
+      foreach ($record in $records) {
+        if ($g.CommandLine.IndexOf($record.file,[StringComparison]::OrdinalIgnoreCase) -ge 0) {
+          $found=$true
+          break
+        }
+      }
+      if (-not $found) { throw 'NATIVE_AGENT_TASK_GUARDIAN_RECEIPT_MISSING' }
     }
   }
   $unknownAgentNodes=0
@@ -843,6 +879,9 @@ async function uninstallWindows(
   if (current.installed) {
     // Never unregister or delete the launcher while its Job descendants are unproven.
     await controlWindows('stop', options);
+  } else {
+    // A removed/absent task may still leave a live orphan and stale receipts.
+    await assertNoResidualWindowsTaskOwnerArtifacts(lifecycleRoot(options));
   }
   const result = await runPowerShellJson<{ removed: boolean }>(
     [
