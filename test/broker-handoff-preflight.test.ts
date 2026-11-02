@@ -78,10 +78,20 @@ test('Windows handoff binds staged archive and manifest to explicit release vers
     await mkdir(moduleDir,{recursive:true});
     await writeFile(join(scratch,'package','package.json'),JSON.stringify({version:'1.0.8'}));
     await writeFile(join(moduleDir,'privileged-broker.js'),"const route='/health';");
+    // The test invokes Windows PowerShell 5.1 from a possibly pwsh 7-hosted
+    // runner. Resolve its inbox Microsoft.PowerShell.Utility/Get-FileHash
+    // module first, without changing the host environment or release code.
+    const winModules=join(process.env.SystemRoot||'C:\\Windows','System32',
+      'WindowsPowerShell','v1.0','Modules');
+    const inheritedModules=(process.env.PSModulePath??'').split(';')
+      .filter(entry=>entry.length>0 && entry.toLowerCase()!==winModules.toLowerCase());
+    const preflightChildEnv={...process.env,
+      PSModulePath:[winModules,...inheritedModules].join(';')};
     const inspect=(version:string)=>JSON.parse(execFileSync('powershell.exe',[
       '-NoLogo','-NoProfile','-NonInteractive','-File',path,
       '-ExpectedVersion',version,'-Staging',scratch,
-    ],{encoding:'utf8',windowsHide:true,timeout:18000,maxBuffer:200000}));
+    ],{encoding:'utf8',windowsHide:true,timeout:18000,maxBuffer:200000,
+      env:preflightChildEnv}));
     const accepted=inspect('1.0.8');
     assert.equal(accepted.expectedReleaseVersion,'1.0.8');
     assert.equal(accepted.stagedArchiveChecksumMatches,true);
