@@ -19,7 +19,11 @@ assert.ok(restore);
 
 const win=process.platform==='win32';
 const pwsh='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
+// Keep PowerShell 5.1 module resolution deterministic, but provide the
+// host's real TEMP/profile environment so command/module initialization can
+// complete on GitHub's Windows runner. Scope this only to test children.
 const env={
+  ...process.env,
   SystemRoot:'C:\\Windows',windir:'C:\\Windows',
   PATH:'C:\\Windows\\System32;C:\\Windows',
   PSModulePath:'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules',
@@ -95,7 +99,7 @@ for(const s of scenarios){
       rollback,
     ].join('\r\n');
     const output=run(scriptText);
-    assert.equal(output.status,s.code,output.stderr);
+    assert.equal(output.status,s.code,`PowerShell child: ${String(output.error)}\n${output.stderr}\n${output.stdout}`);
     assert.match(output.stdout,new RegExp('STATUS='+s.status+';'));
     assert.match(output.stdout,/ORIGINAL_UPDATE_FAILURE/);
     if(s.stopFail)assert.match(output.stdout,/STOP_SYNTHETIC_FAILURE/);
@@ -126,7 +130,7 @@ test('real file rollback restores original launcher content and verifies checksu
       '[Console]::WriteLine("RESTORE_PASS")',
     ].join('\r\n');
     const output=run(fixture);
-    assert.equal(output.status,0,output.stderr);
+    assert.equal(output.status,0,`PowerShell restore: ${String(output.error)}\n${output.stderr}\n${output.stdout}`);
     assert.match(output.stdout,/RESTORE_PASS/);
   }finally{
     rmSync(root,{recursive:true,force:true});
