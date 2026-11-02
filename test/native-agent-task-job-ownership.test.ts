@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
-import {randomBytes} from 'node:crypto';
 import {mkdtemp, rm, utimes, writeFile, readdir} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -254,8 +253,8 @@ test('AI09 unowned Node child with Agent CLI blocks stop/uninstall and cleanup',
     assert.equal((await readdir(dir)).filter(x=>x.endsWith('.status')).length,130);
     const src=readFileSync(new URL('../src/agent/native-agent-lifecycle.ts',import.meta.url),'utf8');
     const uninstall=src.slice(src.indexOf('async function uninstallWindows('),src.indexOf('async function linuxStatus('));
-    assert.ok(uninstall.indexOf('await controlWindows(\\'stop\\', options)')>=0);
-    assert.ok(uninstall.indexOf('await controlWindows(\\'stop\\', options)')<uninstall.indexOf('Unregister-ScheduledTask'));
+    assert.ok(uninstall.indexOf("await controlWindows(\'stop\', options)")>=0);
+    assert.ok(uninstall.indexOf("await controlWindows(\'stop\', options)")<uninstall.indexOf('Unregister-ScheduledTask'));
   });
 });
 
