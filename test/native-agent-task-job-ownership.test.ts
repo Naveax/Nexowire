@@ -50,6 +50,24 @@ test('AI09 does not silently accept an unpinned/relative Job executable',()=>{
   );
 });
 
+test('AI09 150 synthetic start/stop generation decisions do not lock out after 128 receipts',()=>{
+  for(let generation=1;generation<=150;generation++){
+    const running=snapshot({
+      state:'running',receipts:generation,
+      liveRoots:1,liveGuardians:1,rootPid:30000+generation,
+    });
+    assert.equal(nativeAgentTaskStartConfirmed(running),true,
+      'synthetic start generation '+generation);
+    const stopped=snapshot({receipts:generation});
+    assert.equal(nativeAgentTaskStopConfirmed(stopped),true,
+      'synthetic stop generation '+generation);
+  }
+  // Windows-specific on-disk retention is covered by separate mocked Win32
+  // tests. This pure test intentionally does NOT claim real Task Scheduler PASS.
+  assert.match(WINDOWS_AGENT_TASK_OWNER_READBACK_SCRIPT,/Remove-Item -LiteralPath \\$candidate\\.file/);
+  assert.match(WINDOWS_AGENT_TASK_OWNER_READBACK_SCRIPT,/Sort-Object -Property written -Descending/);
+});
+
 test('AI09 stop requires separate Scheduler, root and guardian absence',()=>{
   assert.equal(nativeAgentTaskStopConfirmed(snapshot()),true);
   for(const bad of [
