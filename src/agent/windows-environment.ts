@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import * as z from 'zod';
+import {assertCoreWindowsMutationAdmission} from './core-windows-mutation-dispatch.js';
 
 function validEnvironmentName(name: string): boolean {
   return !name.includes('\u0000') && !name.includes('=');
@@ -411,6 +412,8 @@ export async function executeWindowsEnvironmentCapability(
   capability: string,
   input: unknown,
 ): Promise<unknown> {
+  // Machine-scope environment writes are privileged OS mutations.
+  assertCoreWindowsMutationAdmission(capability,input);
   switch (capability) {
     case 'windows.environment.list':
       return await listEnvironment(input);
