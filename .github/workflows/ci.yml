@@ -60,19 +60,19 @@ jobs:
           # Require the real toolcache binary, do not download or silently skip Node 22.
           $cacheRoot = Join-Path $env:RUNNER_TOOL_CACHE 'node'
           $node22 = Get-ChildItem -LiteralPath $cacheRoot -Directory -ErrorAction Stop |
-            Where-Object { $_.Name -match '^22\\.' } |
+            Where-Object { $_.Name -match '^22\.' } |
             Sort-Object { [version]$_.Name } -Descending |
             Select-Object -First 1
           if ($null -eq $node22) { throw 'WINDOWS_NODE22_NOT_CACHED' }
           $node22Exe = Join-Path $node22.FullName 'x64/node.exe'
           if (-not (Test-Path -LiteralPath $node22Exe -PathType Leaf)) { throw 'WINDOWS_NODE22_EXE_MISSING' }
           $version22 = & $node22Exe --version
-          if ($LASTEXITCODE -ne 0 -or $version22 -notmatch '^v22\\.') { throw 'WINDOWS_NODE22_VERSION_UNVERIFIED' }
+          if ($LASTEXITCODE -ne 0 -or $version22 -notmatch '^v22\.') { throw 'WINDOWS_NODE22_VERSION_UNVERIFIED' }
           Write-Host "Windows focused Node 22: $version22"
           & $node22Exe --test --import tsx --test-concurrency=1 @tests
           if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_NODE22_FOCUSED_RED' }
           $version24 = & node --version
-          if ($LASTEXITCODE -ne 0 -or $version24 -notmatch '^v24\\.') { throw 'WINDOWS_NODE24_VERSION_UNVERIFIED' }
+          if ($LASTEXITCODE -ne 0 -or $version24 -notmatch '^v24\.') { throw 'WINDOWS_NODE24_VERSION_UNVERIFIED' }
           Write-Host "Windows focused Node 24: $version24"
           & node --test --import tsx --test-concurrency=1 @tests
           if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_NODE24_FOCUSED_RED' }
