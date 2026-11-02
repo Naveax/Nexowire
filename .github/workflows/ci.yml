@@ -27,6 +27,18 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+      - name: Verify delegated batch-2 offline MJS and TS negative QA
+        # npm test discovers .test.ts only. These source MJS checks must execute,
+        # rather than counting a green CI that never ran them.
+        run: >-
+          node --test --import tsx --test-concurrency=1
+          scripts/delegated/versions-k09/version-reference-report.test.mjs
+          test/delegated/html-meta-k05/check-meta.test.mjs
+          test/delegated/pool-k02/suspicious-mcp-url.test.mjs
+          test/delegated/pool-k04/probe-runner.test.mjs
+          test/delegated/pool-k20/github-pagination-audit.test.mjs
+          test/delegated/k19/file-transfer-copy-reference.test.ts
+          test/delegated/k19/file-transfer-user-contract.test.ts
       - name: Verify coordinator PR dependency and exact-head CI gates
         run: node --test --import tsx test/qa-v108-integration-gates.test.ts
       - run: npm run build
