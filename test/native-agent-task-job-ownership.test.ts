@@ -175,6 +175,9 @@ if ($observed -ne $expected) { throw ('AI09_MOCK_GUARDIAN_COUNT_UNCONFIRMED expe
     matchedReceipts=@($records | Where-Object { $_.guardianCount -gt 0 }).Count
     binaryMatches=@($guardianProcesses | ForEach-Object { [string]::Equals($_.ExecutablePath,$expectedHelper,[StringComparison]::OrdinalIgnoreCase) })
     directoryMatches=@($guardianProcesses | ForEach-Object { $_.CommandLine.IndexOf($dir,[StringComparison]::OrdinalIgnoreCase) -ge 0 })
+    expectedReceiptDirectory=[string]$dir
+    fixtureLauncher=[string]$launcher
+    rawGuardianCommandLines=@($guardianProcesses | ForEach-Object { [string]$_.CommandLine })
   }
   [IO.File]::WriteAllText($env:AI09_MOCK_TRACE,($mockTrace | ConvertTo-Json -Compress -Depth 4))
 `;
