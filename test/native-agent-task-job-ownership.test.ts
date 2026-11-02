@@ -156,7 +156,17 @@ async function withMockTask(
   const launch=path.join(dir,'launch.ps1');
   const script=path.join(dir,'readback.ps1');
   await writeFile(launch,'# NEXOWIRE_AGENT_TASK_JOB_GUARD_V1\n','utf8');
-  await writeFile(script,mockPrelude+'\n'+WINDOWS_AGENT_TASK_OWNER_READBACK_SCRIPT,'utf8');
+  // Verify the PowerShell fixture really intercepts CIM before executing the
+  // production readback. Hosted Windows module/command resolution can differ from
+  // local Windows; an ineffective mock must fail loudly, never give false green.
+  const preflight=String.raw`
+$resolved=Get-Command Get-CimInstance -ErrorAction Stop
+if ($resolved.CommandType -ne 'Function') { throw 'AI09_MOCK_CIM_RESOLUTION_UNCONFIRMED' }
+$expected=@($fixture.guardians | Where-Object { $null -ne $_ }).Count
+$observed=@(Get-CimInstance Win32_Process -Filter "Name='windows-job-owner.exe'" -ErrorAction Stop).Count
+if ($observed -ne $expected) { throw ('AI09_MOCK_GUARDIAN_COUNT_UNCONFIRMED expected=' + $expected + ' observed=' + $observed) }
+`;
+  await writeFile(script,mockPrelude+'\n'+preflight+'\n'+WINDOWS_AGENT_TASK_OWNER_READBACK_SCRIPT,'utf8');
   const old=new Date(Date.now()-180_000);
   const marker=async(i:number,birth='133000000000000000')=>{
     const name='agent-job-'+i.toString(16).padStart(32,'0')+'.status';
