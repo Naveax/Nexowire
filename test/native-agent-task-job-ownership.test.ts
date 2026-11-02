@@ -64,7 +64,7 @@ test('AI09 150 synthetic start/stop generation decisions do not lock out after 1
   }
   // Windows-specific on-disk retention is covered by separate mocked Win32
   // tests. This pure test intentionally does NOT claim real Task Scheduler PASS.
-  assert.match(WINDOWS_AGENT_TASK_OWNER_READBACK_SCRIPT,/Remove-Item -LiteralPath \\$candidate\\.file/);
+  assert.ok(WINDOWS_AGENT_TASK_OWNER_READBACK_SCRIPT.includes('Remove-Item -LiteralPath $candidate.file'));
   assert.match(WINDOWS_AGENT_TASK_OWNER_READBACK_SCRIPT,/Sort-Object -Property written -Descending/);
 });
 
