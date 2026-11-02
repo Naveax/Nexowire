@@ -32,6 +32,9 @@ export function isolatedNativeAgentTaskEnv(input:NodeJS.ProcessEnv):NodeJS.Proce
     PSModulePath:AGENT_TASK_MODULES,
     NEXOWIRE_AGENT_TASK_NAME:name,
     NEXOWIRE_AGENT_LAUNCHER:launcher,
+    ...(input.NEXOWIRE_AGENT_JOB_HELPER ? {NEXOWIRE_AGENT_JOB_HELPER:input.NEXOWIRE_AGENT_JOB_HELPER} : {}),
+    ...(input.NEXOWIRE_AGENT_EXECUTABLE ? {NEXOWIRE_AGENT_EXECUTABLE:input.NEXOWIRE_AGENT_EXECUTABLE} : {}),
+    ...(input.NEXOWIRE_AGENT_CLI ? {NEXOWIRE_AGENT_CLI:input.NEXOWIRE_AGENT_CLI} : {}),
   };
 }
 
@@ -475,6 +478,9 @@ function windowsEnv(
     ...(options.env ?? process.env),
     NEXOWIRE_AGENT_TASK_NAME: windowsTaskName(options),
     NEXOWIRE_AGENT_LAUNCHER: launcherPath(options, 'win32'),
+    NEXOWIRE_AGENT_JOB_HELPER: bundledNativeAgentJobHelper(options),
+    NEXOWIRE_AGENT_EXECUTABLE: runtime(options).executable,
+    NEXOWIRE_AGENT_CLI: options.cliEntrypoint ?? process.argv[1],
   };
 }
 
@@ -585,6 +591,8 @@ export interface WindowsAgentTaskOwnerReadback {
   liveRoots: number;
   liveGuardians: number;
   rootPid: number | null;
+  /** A process with Agent CLI args but no currently attested Job owner. */
+  unknownAgentNodes: number;
 }
 
 /**
@@ -594,53 +602,150 @@ export interface WindowsAgentTaskOwnerReadback {
  * a live-owner match. Unknown CIM, malformed evidence and access denial
  * must throw rather than silently authorize the next Agent.
  */
+export const WINDOWS_AGENT_TASK_OWNER_READBACK_SCRIPT = String.raw`
+$ErrorActionPreference='Stop'
+$name=$env:NEXOWIRE_AGENT_TASK_NAME
+$launcher=$env:NEXOWIRE_AGENT_LAUNCHER
+$task=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
+if ($null -eq $task) {
+  [pscustomobject]@{installed=$false;state='not-installed';guarded=$false;receipts=0;liveRoots=0;liveGuardians=0;rootPid=$null;unknownAgentNodes=0} | ConvertTo-Json -Compress
+  exit 0
+}
+if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) { throw 'NATIVE_AGENT_TASK_LAUNCHER_MISSING' }
+$guarded=[IO.File]::ReadAllText($launcher).Contains('# NEXOWIRE_AGENT_TASK_JOB_GUARD_V1')
+if (-not $guarded) { throw 'NATIVE_AGENT_TASK_JOB_GUARD_REQUIRED' }
+$dir=Split-Path -LiteralPath $launcher -Parent
+$expectedHelper=$env:NEXOWIRE_AGENT_JOB_HELPER
+$expectedNode=$env:NEXOWIRE_AGENT_EXECUTABLE
+$expectedCli=$env:NEXOWIRE_AGENT_CLI
+if (-not $expectedHelper -or -not $expectedNode -or -not $expectedCli) { throw 'NATIVE_AGENT_TASK_OWNER_PATH_UNKNOWN' }
+if (-not [IO.Path]::IsPathRooted($expectedHelper) -or -not [IO.Path]::IsPathRooted($expectedNode) -or -not [IO.Path]::IsPathRooted($expectedCli)) { throw 'NATIVE_AGENT_TASK_OWNER_PATH_UNSAFE' }
+$lockPath=Join-Path $dir 'agent-job-retention.lock'
+$lock=$null
+# Serialize independent Agent control readbacks; a lock failure never authorizes restart or deletion.
+for ($attempt=0; $attempt -lt 25; $attempt++) {
+  try { $lock=[IO.File]::Open($lockPath,[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None); break }
+  catch [IO.IOException] { Start-Sleep -Milliseconds 80 }
+}
+if ($null -eq $lock) { throw 'NATIVE_AGENT_TASK_RETENTION_LOCK_UNAVAILABLE' }
+try {
+  $markers=@(Get-ChildItem -LiteralPath $dir -Filter 'agent-job-*.status' -File -ErrorAction Stop)
+  # Bound untrusted filesystem work. Normal housekeeping removes only proved-dead receipts,
+  # so the historical 128 count no longer acts as a permanent 129th-start failure.
+  if ($markers.Count -gt 16384) { throw 'NATIVE_AGENT_TASK_RECEIPT_SCAN_LIMIT_EXCEEDED' }
+  $guardianProcesses=@(Get-CimInstance Win32_Process -Filter "Name='windows-job-owner.exe'" -ErrorAction Stop)
+  $nodes=@(Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction Stop)
+  $ownedGuardians=@()
+  foreach ($g in $guardianProcesses) {
+    if (-not $g.ExecutablePath -or -not $g.CommandLine) { throw 'NATIVE_AGENT_TASK_GUARDIAN_IDENTITY_UNKNOWN' }
+    if ([string]::Equals($g.ExecutablePath,$expectedHelper,[StringComparison]::OrdinalIgnoreCase)) { $ownedGuardians+=,$g }
+  }
+  $nodesByPid=@{}
+  foreach ($node in $nodes) {
+    if (-not $node.ExecutablePath -or -not $node.CommandLine -or $null -eq $node.CreationDate) { throw 'NATIVE_AGENT_TASK_NODE_IDENTITY_UNKNOWN' }
+    $nodesByPid[[string]$node.ProcessId]=$node
+  }
+  $liveRoots=0
+  $liveGuardians=0
+  $rootPid=$null
+  $records=@()
+  $ownedRootPids=@{}
+  foreach ($marker in $markers) {
+    if ($marker.Name -cnotmatch '^agent-job-[0-9a-f]{32}\.status$') { throw 'NATIVE_AGENT_TASK_RECEIPT_NAME_INVALID' }
+    if (($marker.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'NATIVE_AGENT_TASK_RECEIPT_REPARSE_UNSAFE' }
+    if ($marker.Length -gt 128) { throw 'NATIVE_AGENT_TASK_RECEIPT_OVERSIZED' }
+    $data=''
+    for ($attempt=0; $attempt -lt 4; $attempt++) {
+      $data=[IO.File]::ReadAllText($marker.FullName).Trim()
+      if ($data -cmatch '^NWJOB3 ([1-9][0-9]*) ([1-9][0-9]*)$') { break }
+      Start-Sleep -Milliseconds 60
+    }
+    if ($data -cnotmatch '^NWJOB3 ([1-9][0-9]*) ([1-9][0-9]*)$') { throw 'NATIVE_AGENT_TASK_RECEIPT_INVALID' }
+    $ownedPid=[long]$Matches[1]
+    $created=[string]$Matches[2]
+    if ($ownedPid -gt 4294967295) { throw 'NATIVE_AGENT_TASK_RECEIPT_PID_INVALID' }
+    $matchedGuardians=@($ownedGuardians | Where-Object {
+      $_.CommandLine.IndexOf($marker.FullName,[StringComparison]::OrdinalIgnoreCase) -ge 0
+    })
+    if ($matchedGuardians.Count -gt 1) { throw 'NATIVE_AGENT_TASK_GUARDIAN_AMBIGUOUS' }
+    $liveGuardians+=$matchedGuardians.Count
+    $root=$nodesByPid[[string]$ownedPid]
+    $matchedRoot=$false
+    if ($null -ne $root) {
+      $actual=$root.CreationDate.ToUniversalTime().ToFileTimeUtc().ToString()
+      $matchedRoot=($actual -ceq $created)
+      if ($matchedRoot -and -not [string]::Equals($root.ExecutablePath,$expectedNode,[StringComparison]::OrdinalIgnoreCase)) {
+        throw 'NATIVE_AGENT_TASK_ROOT_BINARY_MISMATCH'
+      }
+    }
+    if ($matchedRoot) {
+      $liveRoots++
+      $rootPid=$ownedPid
+      $ownedRootPids[[string]$ownedPid]=$true
+      # Without an owning guardian the Node child may be an orphan. Never compact.
+      if ($matchedGuardians.Count -ne 1) { throw 'NATIVE_AGENT_TASK_ORPHAN_ROOT_UNCONFIRMED' }
+    }
+    $records+=,[pscustomobject]@{
+      file=$marker.FullName
+      data=$data
+      written=$marker.LastWriteTimeUtc
+      liveRoot=$matchedRoot
+      guardianCount=$matchedGuardians.Count
+    }
+  }
+  $unknownAgentNodes=0
+  foreach ($node in $nodes) {
+    if ([string]::Equals($node.ExecutablePath,$expectedNode,[StringComparison]::OrdinalIgnoreCase) -and
+        $node.CommandLine.IndexOf($expectedCli,[StringComparison]::OrdinalIgnoreCase) -ge 0 -and
+        $node.CommandLine -match '\bagent\s+run\b' -and
+        -not $ownedRootPids.ContainsKey([string]$node.ProcessId)) {
+      $unknownAgentNodes++
+    }
+  }
+  if ($unknownAgentNodes -gt 0) { throw 'NATIVE_AGENT_TASK_UNOWNED_AGENT_NODE_UNCONFIRMED' }
+  # Never compact during a running/queued task or while a pinned Job root/guardian
+  # remains. Keep 16 recent dead receipts for forensic review, plus any younger
+  # than 30 seconds to exclude concurrent guardian startup/marker creation races.
+  $state=([string]$task.State).ToLowerInvariant()
+  if (($state -eq 'ready' -or $state -eq 'disabled') -and $liveRoots -eq 0 -and $liveGuardians -eq 0) {
+    $safe=@($records | Where-Object { -not $_.liveRoot -and $_.guardianCount -eq 0 } |
+      Sort-Object -Property written -Descending)
+    $now=[DateTime]::UtcNow
+    for ($index=16; $index -lt $safe.Count; $index++) {
+      $candidate=$safe[$index]
+      if (($now-$candidate.written).TotalSeconds -lt 30) { continue }
+      # CREATE_NEW uses one unpredictable marker name per launch. Never remove
+      # a replaced/rewritten marker, a reparse point or a locked/uncertain file.
+      $current=Get-Item -LiteralPath $candidate.file -ErrorAction Stop
+      if (($current.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+          $current.LastWriteTimeUtc -ne $candidate.written -or
+          [IO.File]::ReadAllText($candidate.file).Trim() -cne $candidate.data) {
+        throw 'NATIVE_AGENT_TASK_RECEIPT_RACE_UNCONFIRMED'
+      }
+      Remove-Item -LiteralPath $candidate.file -Force -ErrorAction Stop
+    }
+  }
+  $remaining=@(Get-ChildItem -LiteralPath $dir -Filter 'agent-job-*.status' -File -ErrorAction Stop)
+  [pscustomobject]@{
+    installed=$true
+    state=$state
+    guarded=$guarded
+    receipts=$remaining.Count
+    liveRoots=$liveRoots
+    liveGuardians=$liveGuardians
+    rootPid=$rootPid
+    unknownAgentNodes=$unknownAgentNodes
+  } | ConvertTo-Json -Compress
+} finally {
+  if ($null -ne $lock) { $lock.Dispose() }
+}
+`;
+
 async function windowsAgentTaskOwnerReadback(
   options: NativeAgentLifecycleOptions,
 ): Promise<WindowsAgentTaskOwnerReadback> {
   return await runPowerShellJson<WindowsAgentTaskOwnerReadback>(
-    [
-      "$ErrorActionPreference='Stop'",
-      '$name=$env:NEXOWIRE_AGENT_TASK_NAME',
-      '$launcher=$env:NEXOWIRE_AGENT_LAUNCHER',
-      '$task=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue',
-      "if ($null -eq $task) { [pscustomobject]@{installed=$false;state='not-installed';guarded=$false;receipts=0;liveRoots=0;liveGuardians=0;rootPid=$null} | ConvertTo-Json -Compress; exit 0 }",
-      "if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) { throw 'NATIVE_AGENT_TASK_LAUNCHER_MISSING' }",
-      "$guarded=[IO.File]::ReadAllText($launcher).Contains('# NEXOWIRE_AGENT_TASK_JOB_GUARD_V1')",
-      '$dir=Split-Path -LiteralPath $launcher -Parent',
-      "$markers=@(Get-ChildItem -LiteralPath $dir -Filter 'agent-job-*.status' -File -ErrorAction Stop)",
-      "if ($markers.Count -gt 128) { throw 'NATIVE_AGENT_TASK_RECEIPT_LIMIT_EXCEEDED' }",
-      '$liveRoots=0',
-      '$liveGuardians=0',
-      '$rootPid=$null',
-      "$guardianProcesses=@(Get-CimInstance Win32_Process -Filter \"Name='windows-job-owner.exe'\" -ErrorAction Stop)",
-      'foreach ($guardian in $guardianProcesses) {',
-      "  if (-not $guardian.CommandLine) { throw 'NATIVE_AGENT_TASK_GUARDIAN_IDENTITY_UNKNOWN' }",
-      '}',
-      'foreach ($marker in $markers) {',
-      "  $data=''",
-      "  for ($attempt=0; $attempt -lt 4; $attempt++) {",
-      "    $data=[IO.File]::ReadAllText($marker.FullName).Trim()",
-      "    if ($data -cmatch '^NWJOB3 ([1-9][0-9]*) ([1-9][0-9]*)$') { break }",
-      "    Start-Sleep -Milliseconds 60",
-      "  }",
-      "  if ($data -cnotmatch '^NWJOB3 ([1-9][0-9]*) ([1-9][0-9]*)$') { throw 'NATIVE_AGENT_TASK_RECEIPT_INVALID' }",
-      '  $ownedPid=[long]$Matches[1]',
-      '  $created=$Matches[2]',
-      "  if ($ownedPid -gt 4294967295) { throw 'NATIVE_AGENT_TASK_RECEIPT_PID_INVALID' }",
-      '  $proc=Get-CimInstance Win32_Process -Filter ("ProcessId="+$ownedPid) -ErrorAction Stop',
-      '  if ($null -ne $proc) {',
-      "    if ($null -eq $proc.CreationDate) { throw 'NATIVE_AGENT_TASK_ROOT_BIRTH_UNKNOWN' }",
-      '    $actual=$proc.CreationDate.ToUniversalTime().ToFileTimeUtc().ToString()',
-      '    if ($actual -ceq $created) { $liveRoots++; $rootPid=$ownedPid }',
-      '  }',
-      '  foreach ($guardian in $guardianProcesses) {',
-      '    if ($guardian.CommandLine.IndexOf($marker.FullName,[StringComparison]::OrdinalIgnoreCase) -ge 0) {',
-      '      $liveGuardians++',
-      '    }',
-      '  }',
-      '}',
-      '[pscustomobject]@{installed=$true;state=([string]$task.State).ToLowerInvariant();guarded=$guarded;receipts=$markers.Count;liveRoots=$liveRoots;liveGuardians=$liveGuardians;rootPid=$rootPid} | ConvertTo-Json -Compress',
-    ].join('\n'),
+    WINDOWS_AGENT_TASK_OWNER_READBACK_SCRIPT,
     windowsEnv(options),
   );
 }
@@ -648,13 +753,15 @@ async function windowsAgentTaskOwnerReadback(
 export function nativeAgentTaskStopConfirmed(state: WindowsAgentTaskOwnerReadback): boolean {
   return state.guarded && state.receipts > 0 &&
     (state.state === 'ready' || state.state === 'disabled') &&
-    state.liveRoots === 0 && state.liveGuardians === 0;
+    state.liveRoots === 0 && state.liveGuardians === 0 &&
+    state.unknownAgentNodes === 0;
 }
 
 export function nativeAgentTaskStartConfirmed(state: WindowsAgentTaskOwnerReadback): boolean {
   return state.guarded && state.state === 'running' &&
     state.liveRoots === 1 && state.liveGuardians === 1 &&
-    state.rootPid !== null && state.rootPid > 0;
+    state.rootPid !== null && state.rootPid > 0 &&
+    state.unknownAgentNodes === 0;
 }
 
 async function controlWindows(
