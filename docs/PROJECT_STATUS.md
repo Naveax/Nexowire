@@ -1,10 +1,29 @@
 # Nexowire | Tek Durum ve Entegrasyon Panosu
 
-> **Güncel envanter: 1 Kasım 2026.** Kaynak: canlı GitHub API + tam Git geçmişi. Main snapshot: **4d699b8bbd8cb908c782a3776a34301c4a4c74b5**. Bu bir iş ve kanıt günlüğüdür; tek başına release, CORE veya fiziksel cihaz GO belgesi değildir.
+## 0. 2 Kasım 2026 entegrasyon kontrol noktası
+
+> **Bu bölüm en son kaynak/CI kontrolüdür.** Aşağıdaki **1 Kasım envanteri tarihsel snapshot** olarak korunmuştur. Branch/PR sayıları canlı sayaç değildir; karar öncesi GitHub'dan yeniden doğrulayın. Son bilinen ana dal: `a1e6af80413e866da654889b583c3cd41fa596e9`.
+
+| Durum | İş | Kanıt / kabul sınırı |
+| --- | --- | --- |
+| **YAPILDI (main source)** | [#1042](https://github.com/Naveax/Nexowire/pull/1042) tek durum panosu ve SHA-bağlı envanter | 7/7 exact-HEAD CI; snapshot 1 Kasım, canlı sayı değil |
+| **YAPILDI (main source)** | [#1043](https://github.com/Naveax/Nexowire/pull/1043) MSVC/Windows Job helper build fallback | 7/7 exact-HEAD CI ve NAVEAX PS5.1/PS7 yerel derleme; **Scheduled Task child-stop #540 ayrı açık** |
+| **YAPILDI (main source)** | [#1045](https://github.com/Naveax/Nexowire/pull/1045) Windows browser-live 75 dakika job üst sınırı | 7/7 CI; DPAPI 15 dakika ve negatifler korunur; sorun giderilmiş üretim kabulü değil |
+| **YAPILDI (dokümantasyon)** | [#1046](https://github.com/Naveax/Nexowire/pull/1046) AI-12 2 Kasım DAG arşivi; [#861](https://github.com/Naveax/Nexowire/pull/861) 24 Ekim QA11 arşivi | Her ikisi exact-HEAD 7/7; tarihli kayıt, current GO değil |
+| **DEVAM EDİYOR (Draft)** | [#1048](https://github.com/Naveax/Nexowire/pull/1048) AI-10 Windows rollback/handoff fikstürü | Önceki Windows run 41400921750 **6 FAIL**; sonraki HEAD `0a85894c...` Windows *focused step* PASS. Ancak fixture `...process.env` kullanıyor, üretim `isolatedMachineUpdateChildEnvironment()` daha dar: **prod-env eşdeğerliği kanıtlanmadan merge yok** |
+| **BLOKE (Draft)** | [#1047](https://github.com/Naveax/Nexowire/pull/1047) AI-09 Agent Job owner | 128 makbuz liveness düzeltmesi çalışılıyor; HEAD `cf69482b...` CI 41402625861 **RED (TS2322)**, 129+ gerçek cycle, orphan/unclaimed guardian ve receipt race testleri eksik |
+| **BLOKE (Draft)** | [#1044](https://github.com/Naveax/Nexowire/pull/1044) AI-11 bağımsız güvenlik negatifleri / ürün [#1003](https://github.com/Naveax/Nexowire/pull/1003) | Binary TOCTOU, publisher, control-plane URL/redirect ve credential ACL eksikleri; test RED **kapatılmayacak**, CORE/Connection production **NO-GO** |
+| **P0 AÇIK** | [#974](https://github.com/Naveax/Nexowire/issues/974) WAL, [#1001](https://github.com/Naveax/Nexowire/issues/1001) Agent journal, [#540](https://github.com/Naveax/Nexowire/issues/540) Task descendants | Signed installed Windows crash/reboot + independent Hub/VM kabulü henüz kanıtlanmadı |
+
+**Fiziksel NAVEAX:** Son yerel incelemede Agent/Broker `Running` idi, ancak Remote Desktop Commander şu kontrol turunda **Offline**; bu nedenle güncel sağlık durumu varsayılmıyor. Fiziksel PC'yi yeniden başlatma, CORE/UAC/ACL/token/journal veya deployment değiştirme **yok**. İzole VM'ye ait genel reset çıkış kodu, VM içindeki kurulu Agent PASS anlamına gelmez.
+
+---
+
+> **Tarihsel envanter snapshot'ı: 1 Kasım 2026.** Kaynak: canlı GitHub API + tam Git geçmişi. Main snapshot: **4d699b8bbd8cb908c782a3776a34301c4a4c74b5**. Bu bir iş ve kanıt günlüğüdür; tek başına release, CORE veya fiziksel cihaz GO belgesi değildir.
 
 **Başlangıç noktası burası.** [ROADMAP](../ROADMAP.md), [30 Ekim entegrasyon günlüğü](BRANCH_INTEGRATION_BATCH_20261030.md) ve [eski branch kataloğu](BRANCH_CATALOG.md) tarihsel kayıt olarak kalır. Bu sayfada yeni durum ayrımı kullanılır.
 
-## 1. Canlı envanter
+## 1. 1 Kasım tarihli envanter snapshot'ı
 
 | Ölçüt | Sayı |
 | --- | ---: |
@@ -37,7 +56,6 @@ Bütün dallar: [branch SHA, ahead/behind, açık PR bağı, risk ve karar](inve
 | **P0-A: Agent yeniden başlatma ve journal** | [#974](https://github.com/Naveax/Nexowire/issues/974), [#1001](https://github.com/Naveax/Nexowire/issues/1001) | İmzalı yeni Windows sürüm, mevcut DB/WAL/SHM/UNKNOWN koruması, kurulu Agent crash/reboot ve kimlik doğrulamalı Hub readback |
 | **P0-B: Windows task süreç ağacı** | [#540](https://github.com/Naveax/Nexowire/issues/540); Stop-ScheduledTask eski Node çocuğunu bırakmıştı | Parent/child ownership ve ölüm-sonrası kayıt kanıtı, yeniden başlatmada tek Agent, PID+creation-time eşleşmesi |
 | **P0-C: Windows tam suite RED** | 27 fail; [#1006](https://github.com/Naveax/Nexowire/issues/1006) | 27 hatayı kök nedenlerine göre düzelt, exact-HEAD Windows Node22/24 ve gerekli Windows helper/native regresyonları PASS |
-| **P0-D: Windows Job helper build** | scripts/build-windows-job-owner.ps1 MSVC Community tırnaklama hatası; ayrı /W4 /WX derleme PASS | Resmi builder ile aynı kaynak/helper derlemesi, temiz makinede tekrarlanabilir exit 0, negatif testler korunur |
 | **P0-E: VM guest test ortamı** | VMware clone reset komutları PASS, guest operations kimlik doğrulaması engeli | İzole guest Windows içinde gerçek Nexowire kurulumu, crash/reboot readback, VM sınırları dışına credential/CORE taşımadan test |
 
 **Naveax fiziksel bilgisayarı yeniden başlatılmayacak.** Yalnızca ayrı izole VM üzerinde restart ve guest kabulü yapılabilir. Kaynak testinde gerçek host GUI/input işlemlerinin kullanılması fiziksel CORE izni anlamına gelmez.
