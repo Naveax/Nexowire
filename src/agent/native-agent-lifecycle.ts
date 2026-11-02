@@ -710,6 +710,7 @@ try {
       file=$marker.FullName
       data=$data
       written=$marker.LastWriteTimeUtc
+      created=$marker.CreationTimeUtc
       liveRoot=$matchedRoot
       guardianCount=$matchedGuardians.Count
     }
@@ -742,23 +743,87 @@ try {
   # Never compact during a running/queued task or while a pinned Job root/guardian
   # remains. Keep 16 recent dead receipts for forensic review, plus any younger
   # than 30 seconds to exclude concurrent guardian startup/marker creation races.
+  # The deletion uses the SAME exclusive Windows file HANDLE that verified
+  # bytes, creation FILETIME, last-write FILETIME, size and reparse attributes.
+  # SetFileInformationByHandle(FileDispositionInfo) avoids path-based check/delete TOCTOU.
   $state=([string]$task.State).ToLowerInvariant()
   if (($state -eq 'ready' -or $state -eq 'disabled') -and $liveRoots -eq 0 -and $liveGuardians -eq 0) {
     $safe=@($records | Where-Object { -not $_.liveRoot -and $_.guardianCount -eq 0 } |
       Sort-Object -Property written -Descending)
     $now=[DateTime]::UtcNow
-    for ($index=16; $index -lt $safe.Count; $index++) {
-      $candidate=$safe[$index]
-      if (($now-$candidate.written).TotalSeconds -lt 30) { continue }
-      # CREATE_NEW uses one unpredictable marker name per launch. Never remove
-      # a replaced/rewritten marker, a reparse point or a locked/uncertain file.
-      $current=Get-Item -LiteralPath $candidate.file -ErrorAction Stop
-      if (($current.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
-          $current.LastWriteTimeUtc -ne $candidate.written -or
-          [IO.File]::ReadAllText($candidate.file).Trim() -cne $candidate.data) {
-        throw 'NATIVE_AGENT_TASK_RECEIPT_RACE_UNCONFIRMED'
+    $aged=@($safe | Select-Object -Skip 16 | Where-Object { ($now-$_.written).TotalSeconds -ge 30 })
+    if ($aged.Count -gt 0) {
+      # Compile the interop only when old receipts actually need compaction.
+      # No native DLL, unchecked child process or external filesystem tool.
+      Add-Type -ErrorAction Stop -TypeDefinition @'
+using System;
+using System.IO;
+using System.Text;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+public static class NexowireAgentJobReceiptDelete {
+  [StructLayout(LayoutKind.Sequential)]
+  public struct FILETIME { public uint Low; public uint High; }
+  [StructLayout(LayoutKind.Sequential)]
+  public struct FILE_INFO {
+    public uint Attributes;
+    public FILETIME Created;
+    public FILETIME Accessed;
+    public FILETIME Written;
+    public uint Volume;
+    public uint SizeHigh;
+    public uint SizeLow;
+    public uint Links;
+    public uint IndexHigh;
+    public uint IndexLow;
+  }
+  [StructLayout(LayoutKind.Sequential)]
+  public struct DISPOSITION { [MarshalAs(UnmanagedType.Bool)] public bool DeleteFile; }
+  [DllImport("kernel32.dll", EntryPoint="CreateFileW", CharSet=CharSet.Unicode, SetLastError=true)]
+  private static extern SafeFileHandle Open(string path, uint access, uint sharing,
+    IntPtr security, uint creation, uint options, IntPtr templateFile);
+  [DllImport("kernel32.dll", SetLastError=true)]
+  private static extern bool GetFileInformationByHandle(SafeFileHandle handle, out FILE_INFO info);
+  [DllImport("kernel32.dll", SetLastError=true)]
+  private static extern bool SetFileInformationByHandle(SafeFileHandle handle, int kind,
+    ref DISPOSITION value, uint size);
+  private static ulong Ticks(FILETIME time) { return ((ulong)time.High<<32)|time.Low; }
+
+  public static void DeleteVerified(string path, string content,
+    long writtenFiletime, long createdFiletime) {
+    // GENERIC_READ | DELETE; FILE_SHARE_NONE; OPEN_EXISTING;
+    // FILE_FLAG_OPEN_REPARSE_POINT. Untrusted replacement cannot happen
+    // while this exact handle is held.
+    using (var handle=Open(path,0x80010000u,0u,IntPtr.Zero,3u,0x00200000u,IntPtr.Zero)) {
+      if (handle.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error(),"NATIVE_AGENT_TASK_RECEIPT_OPEN_UNCONFIRMED");
+      FILE_INFO info;
+      if (!GetFileInformationByHandle(handle,out info))
+        throw new Win32Exception(Marshal.GetLastWin32Error(),"NATIVE_AGENT_TASK_RECEIPT_IDENTITY_UNKNOWN");
+      if ((info.Attributes & 0x400u)!=0 || info.SizeHigh!=0 || info.SizeLow>128u ||
+          Ticks(info.Created)!=(ulong)createdFiletime ||
+          Ticks(info.Written)!=(ulong)writtenFiletime)
+        throw new IOException("NATIVE_AGENT_TASK_RECEIPT_RACE_UNCONFIRMED");
+      using (var stream=new FileStream(handle,FileAccess.Read,4096,false)) {
+        using (var reader=new StreamReader(stream,Encoding.UTF8,true,4096,true)) {
+          if (!String.Equals(reader.ReadToEnd().Trim(),content,StringComparison.Ordinal))
+            throw new IOException("NATIVE_AGENT_TASK_RECEIPT_RACE_UNCONFIRMED");
+        }
+        DISPOSITION disposition=new DISPOSITION {DeleteFile=true};
+        if (!SetFileInformationByHandle(handle,4,ref disposition,
+              (uint)Marshal.SizeOf(typeof(DISPOSITION))))
+          throw new Win32Exception(Marshal.GetLastWin32Error(),"NATIVE_AGENT_TASK_RECEIPT_DELETE_UNCONFIRMED");
       }
-      Remove-Item -LiteralPath $candidate.file -Force -ErrorAction Stop
+    }
+  }
+}
+'@
+      foreach ($candidate in $aged) {
+        [NexowireAgentJobReceiptDelete]::DeleteVerified(
+          $candidate.file,$candidate.data,
+          $candidate.written.ToFileTimeUtc(),$candidate.created.ToFileTimeUtc()
+        )
+      }
     }
   }
   $remaining=@(Get-ChildItem -LiteralPath $dir -Filter 'agent-job-*.status' -File -ErrorAction Stop)
