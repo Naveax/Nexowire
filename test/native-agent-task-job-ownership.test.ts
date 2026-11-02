@@ -292,7 +292,7 @@ test('AI09 source has exclusive readback lock, 30s race grace and no 128 hard st
   assert.match(WINDOWS_AGENT_TASK_OWNER_READBACK_SCRIPT,/agent-job-retention\.lock/);
   assert.match(WINDOWS_AGENT_TASK_OWNER_READBACK_SCRIPT,/FileShare\]::None/);
   assert.match(WINDOWS_AGENT_TASK_OWNER_READBACK_SCRIPT,/RECEIPT_RACE_UNCONFIRMED/);
-  assert.match(WINDOWS_AGENT_TASK_OWNER_READBACK_SCRIPT,/TotalSeconds -lt 30/);
+  assert.match(WINDOWS_AGENT_TASK_OWNER_READBACK_SCRIPT,/TotalSeconds -ge 30/);
   assert.match(WINDOWS_AGENT_TASK_OWNER_READBACK_SCRIPT,/NATIVE_AGENT_TASK_ORPHAN_ROOT_UNCONFIRMED/);
   assert.doesNotMatch(WINDOWS_AGENT_TASK_OWNER_READBACK_SCRIPT,/RECEIPT_LIMIT_EXCEEDED/);
 });
