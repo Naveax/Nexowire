@@ -55,6 +55,20 @@ jobs:
           grep -qx '# fail 0' "$RUNNER_TEMP/nw-batch3.tap"
           grep -qx '# skipped 0' "$RUNNER_TEMP/nw-batch3.tap"
           grep -qx '# todo 0' "$RUNNER_TEMP/nw-batch3.tap"
+      - name: Verify delegated K20 evidence audits and safe URL offline QA
+        # npm test excludes .mjs; require a real TAP run with zero TODO/SKIP.
+        shell: bash
+        run: |
+          node --test --test-reporter=tap --import tsx --test-concurrency=1 \
+            test/delegated/k20/*.test.mjs \
+            test/delegated/pool-k07/safe-url-language.test.mjs \
+            > "$RUNNER_TEMP/nw-k20-qa.tap"
+          cat "$RUNNER_TEMP/nw-k20-qa.tap"
+          grep -qx '# tests 41' "$RUNNER_TEMP/nw-k20-qa.tap"
+          grep -qx '# pass 41' "$RUNNER_TEMP/nw-k20-qa.tap"
+          grep -qx '# fail 0' "$RUNNER_TEMP/nw-k20-qa.tap"
+          grep -qx '# skipped 0' "$RUNNER_TEMP/nw-k20-qa.tap"
+          grep -qx '# todo 0' "$RUNNER_TEMP/nw-k20-qa.tap"
       - name: Verify coordinator PR dependency and exact-head CI gates
         run: node --test --import tsx test/qa-v108-integration-gates.test.ts
       - run: npm run build
