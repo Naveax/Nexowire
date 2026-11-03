@@ -100,6 +100,22 @@ jobs:
           grep -qx '# fail 0' "$RUNNER_TEMP/nw-k10-qa24.tap"
           grep -qx '# skipped 0' "$RUNNER_TEMP/nw-k10-qa24.tap"
           grep -qx '# todo 0' "$RUNNER_TEMP/nw-k10-qa24.tap"
+      - name: Verify K01 K02 K03 K04 isolated web UX regressions
+        # Real source / VM and CSS fixture QA; does not claim authenticated browser acceptance.
+        shell: bash
+        run: |
+          node --test --test-reporter=tap --import tsx --test-concurrency=1 \
+            test/delegated/k01/connect-state.test.ts \
+            test/delegated/k02/responsive-css.test.ts \
+            test/delegated/k03/panel-states.test.mjs \
+            test/delegated/k04/admin-a11y.test.mjs \
+            > "$RUNNER_TEMP/nw-ui-k0104.tap"
+          cat "$RUNNER_TEMP/nw-ui-k0104.tap"
+          grep -qx '# tests 56' "$RUNNER_TEMP/nw-ui-k0104.tap"
+          grep -qx '# pass 56' "$RUNNER_TEMP/nw-ui-k0104.tap"
+          grep -qx '# fail 0' "$RUNNER_TEMP/nw-ui-k0104.tap"
+          grep -qx '# skipped 0' "$RUNNER_TEMP/nw-ui-k0104.tap"
+          grep -qx '# todo 0' "$RUNNER_TEMP/nw-ui-k0104.tap"
       - name: Verify coordinator PR dependency and exact-head CI gates
         run: node --test --import tsx test/qa-v108-integration-gates.test.ts
       - run: npm run build
