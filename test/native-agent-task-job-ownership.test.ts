@@ -416,17 +416,22 @@ test('AI09 8.3 helper binary alias cannot hide live guardian receipts',{
   });
 });
 
-test('AI09 unrelated guardian binary never inherits pinned guardian identity',{
+test('AI09 foreign guardian claiming the protected owner directory blocks cleanup',{
   skip:process.platform!=='win32',timeout:60000,
 },async()=>{
-  await withMockTask(async({marker,run})=>{
+  await withMockTask(async({marker,run,dir})=>{
     const live=await marker(999);
     for(let i=1;i<=130;i++)await marker(i);
     const other='C:\\Program Files\\OtherProduct\\windows-job-owner.exe';
     const guardian=fakeProc(66003,other,'"'+other+'" --status "'+live+'" --cwd - --parent 42');
-    const state=run({guardians:[guardian]},'Ready',false,{helper:'C:\\PROGRA~1\\Nexowire\\windows-job-owner.exe'});
+    expectMockError(()=>run({guardians:[guardian]},'Ready',false,{helper:'C:\\PROGRA~1\\Nexowire\\windows-job-owner.exe'}),
+      'NATIVE_AGENT_TASK_FOREIGN_GUARDIAN_OWNER_DIR_UNCONFIRMED');
+    assert.equal((await readdir(dir)).filter(x=>x.endsWith('.status')).length,131);
+    const foreignPath='C:\\OtherProduct\\agent-job-'+('f').repeat(32)+'.status';
+    const unrelated=fakeProc(66004,other,'"'+other+'" --status "'+foreignPath+'" --cwd - --parent 42');
+    const state=run({guardians:[unrelated]},'Ready',false,{helper:'C:\\PROGRA~1\\Nexowire\\windows-job-owner.exe'});
     assert.equal(state.liveGuardians,0);
-    assert.equal(state.receipts,16,'only an unrelated process is present; no owned guardian');
+    assert.equal(state.receipts,16,'unrelated guardian outside protected owner directory stays unrelated');
   });
 });
 

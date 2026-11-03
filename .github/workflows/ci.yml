@@ -27,6 +27,48 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+      - name: Verify delegated batch-2 offline MJS and TS negative QA
+        # npm test discovers .test.ts only. These source MJS checks must execute,
+        # rather than counting a green CI that never ran them.
+        run: >-
+          node --test --import tsx --test-concurrency=1
+          scripts/delegated/versions-k09/version-reference-report.test.mjs
+          test/delegated/html-meta-k05/check-meta.test.mjs
+          test/delegated/pool-k02/suspicious-mcp-url.test.mjs
+          test/delegated/pool-k04/probe-runner.test.mjs
+          test/delegated/pool-k20/github-pagination-audit.test.mjs
+          test/delegated/k19/file-transfer-copy-reference.test.ts
+          test/delegated/k19/file-transfer-user-contract.test.ts
+      - name: Verify delegated batch-3 offline accessibility and MCP error QA
+        # npm test excludes .mjs. A green process exit with TODO cases is not a pass.
+        shell: bash
+        run: |
+          node --test --test-reporter=tap --import tsx --test-concurrency=1 \
+            test/delegated/k05/audit-html.test.mjs \
+            test/delegated/k05/dynamic-id-contract.test.mjs \
+            test/delegated/pool-k05/touch-evidence.test.mjs \
+            test/delegated/mcp-ux-k08/mcp-error-language.test.mjs \
+            > "$RUNNER_TEMP/nw-batch3.tap"
+          cat "$RUNNER_TEMP/nw-batch3.tap"
+          grep -qx '# tests 37' "$RUNNER_TEMP/nw-batch3.tap"
+          grep -qx '# pass 37' "$RUNNER_TEMP/nw-batch3.tap"
+          grep -qx '# fail 0' "$RUNNER_TEMP/nw-batch3.tap"
+          grep -qx '# skipped 0' "$RUNNER_TEMP/nw-batch3.tap"
+          grep -qx '# todo 0' "$RUNNER_TEMP/nw-batch3.tap"
+      - name: Verify delegated K20 evidence audits and safe URL offline QA
+        # npm test excludes .mjs; require a real TAP run with zero TODO/SKIP.
+        shell: bash
+        run: |
+          node --test --test-reporter=tap --import tsx --test-concurrency=1 \
+            test/delegated/k20/*.test.mjs \
+            test/delegated/pool-k07/safe-url-language.test.mjs \
+            > "$RUNNER_TEMP/nw-k20-qa.tap"
+          cat "$RUNNER_TEMP/nw-k20-qa.tap"
+          grep -qx '# tests 41' "$RUNNER_TEMP/nw-k20-qa.tap"
+          grep -qx '# pass 41' "$RUNNER_TEMP/nw-k20-qa.tap"
+          grep -qx '# fail 0' "$RUNNER_TEMP/nw-k20-qa.tap"
+          grep -qx '# skipped 0' "$RUNNER_TEMP/nw-k20-qa.tap"
+          grep -qx '# todo 0' "$RUNNER_TEMP/nw-k20-qa.tap"
       - name: Verify coordinator PR dependency and exact-head CI gates
         run: node --test --import tsx test/qa-v108-integration-gates.test.ts
       - run: npm run build

@@ -669,7 +669,28 @@ try {
     if (-not $g.ExecutablePath -or -not $g.CommandLine) { throw 'NATIVE_AGENT_TASK_GUARDIAN_IDENTITY_UNKNOWN' }
     if (-not [IO.Path]::IsPathRooted([string]$g.ExecutablePath)) { throw 'NATIVE_AGENT_TASK_GUARDIAN_BINARY_PATH_UNSAFE' }
     $guardianBinary=[IO.Path]::GetFullPath([string]$g.ExecutablePath)
-    if ([string]::Equals($guardianBinary,$expectedHelper,[StringComparison]::OrdinalIgnoreCase)) { $ownedGuardians+=,$g }
+    if ([string]::Equals($guardianBinary,$expectedHelper,[StringComparison]::OrdinalIgnoreCase)) {
+      $ownedGuardians+=,$g
+      continue
+    }
+    # A different binary advertising THIS protected receipt directory is
+    # ambiguous, even if a reparse/realpath alias prevents binary equality.
+    # Never authorize compaction or stop under that foreign guardian.
+    $foreignStatusMatch=[regex]::Match([string]$g.CommandLine,
+      '^\s*(?:"[^"]+"|\S+)\s+--status\s+(?:"(?<quoted>[^"]+)"|(?<plain>\S+))(?=\s|$)',
+      [Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    if ($foreignStatusMatch.Success) {
+      $foreignStatus=if ($foreignStatusMatch.Groups['quoted'].Success) {
+        $foreignStatusMatch.Groups['quoted'].Value
+      } else { $foreignStatusMatch.Groups['plain'].Value }
+      if (-not [IO.Path]::IsPathRooted($foreignStatus)) {
+        throw 'NATIVE_AGENT_TASK_FOREIGN_GUARDIAN_STATUS_UNCONFIRMED'
+      }
+      $foreignDir=[IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($foreignStatus))
+      if ([string]::Equals($foreignDir,$dir,[StringComparison]::OrdinalIgnoreCase)) {
+        throw 'NATIVE_AGENT_TASK_FOREIGN_GUARDIAN_OWNER_DIR_UNCONFIRMED'
+      }
+    }
   }
   # Windows CIM may report an 8.3 short path (RUNNER~1), while GetFullPath
   # and the receipt enumeration return the long path. Do not compare raw
