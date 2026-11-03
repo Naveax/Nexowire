@@ -1,0 +1,29 @@
+{
+  "schema": "nexowire-k18-offline-telemetry-fixture-v1",
+  "origin": "SYNTHETIC_NO_REAL_ACCOUNTS_OR_DEVICES",
+  "measurementUnitContract": {"eventsUnit": "count", "bytesUnit": "bytes"},
+  "samples": [
+    {
+      "sequence": 1,
+      "rows": [
+        {"name": "agent.rx_frames", "events": 1, "bytes": 100, "eventsUnit": "count", "bytesUnit": "bytes"},
+        {"name": "relay.auth_denials", "events": 0, "bytes": 0, "eventsUnit": "count", "bytesUnit": "bytes"}
+      ]
+    },
+    {
+      "sequence": 2,
+      "rows": [
+        {"name": "agent.rx_frames", "events": 2, "bytes": 150, "eventsUnit": "count", "bytesUnit": "bytes"},
+        {"name": "relay.auth_denials", "events": 0, "bytes": 0, "eventsUnit": "count", "bytesUnit": "bytes"}
+      ]
+    },
+    {
+      "sequence": 3,
+      "note": "Intentional negative transition, not a real attack claim",
+      "rows": [
+        {"name": "agent.rx_frames", "events": 1, "bytes": 160, "eventsUnit": "count", "bytesUnit": "bytes"},
+        {"name": "relay.auth_denials", "events": 0, "bytes": 0, "eventsUnit": "count", "bytesUnit": "bytes"}
+      ]
+    }
+  ]
+}
