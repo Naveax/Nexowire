@@ -85,6 +85,23 @@ jobs:
           grep -qx '# fail 0' "$RUNNER_TEMP/nw-k14-audit.tap"
           grep -qx '# skipped 0' "$RUNNER_TEMP/nw-k14-audit.tap"
           grep -qx '# todo 0' "$RUNNER_TEMP/nw-k14-audit.tap"
+      - name: Verify Hyper-V, tenant parser and transfer cancellation adversarial QA
+        # Real product source under test; no privileged device or external network action.
+        shell: bash
+        run: |
+          node --test --test-reporter=tap --import tsx --test-concurrency=1 \
+            test/qa-02-hyperv-denial-provenance.test.ts \
+            test/qa-02-hyperv-unknown-audit.test.ts \
+            test/worker30-mcp-parser-admission.test.ts \
+            test/worker30-staging-tenant-byte-qa.test.ts \
+            test/artifact-588-cancel-postchunk-status.qa.test.ts \
+            > "$RUNNER_TEMP/nw-p0-adversarial-qa.tap"
+          cat "$RUNNER_TEMP/nw-p0-adversarial-qa.tap"
+          grep -qx '# tests 20' "$RUNNER_TEMP/nw-p0-adversarial-qa.tap"
+          grep -qx '# pass 20' "$RUNNER_TEMP/nw-p0-adversarial-qa.tap"
+          grep -qx '# fail 0' "$RUNNER_TEMP/nw-p0-adversarial-qa.tap"
+          grep -qx '# skipped 0' "$RUNNER_TEMP/nw-p0-adversarial-qa.tap"
+          grep -qx '# todo 0' "$RUNNER_TEMP/nw-p0-adversarial-qa.tap"
       - name: Verify coordinator PR dependency and exact-head CI gates
         run: node --test --import tsx test/qa-v108-integration-gates.test.ts
       - run: npm run build
