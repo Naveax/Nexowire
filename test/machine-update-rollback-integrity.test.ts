@@ -19,7 +19,11 @@ assert.ok(restore);
 
 const win=process.platform==='win32';
 const pwsh='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
+// Keep PowerShell 5.1 module resolution deterministic, but provide the
+// host's real TEMP/profile environment so command/module initialization can
+// complete on GitHub's Windows runner. Scope this only to test children.
 const env={
+  ...process.env,
   SystemRoot:'C:\\Windows',windir:'C:\\Windows',
   PATH:'C:\\Windows\\System32;C:\\Windows',
   PSModulePath:'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules',
@@ -60,25 +64,42 @@ for(const s of scenarios){
       '$hasBoot=$true',
       '$hasBroker=$true',
       '$backups=@{}',
+      // Model a cutover that reached the real stop/start boundary; no OS tasks are touched.
+      '$cutoverStarted=$true',
+      "$BootLauncher='C:\\Nexowire-QA\\synthetic-hub.ps1'",
+      "$BrokerLauncher='C:\\Nexowire-QA\\synthetic-broker.ps1'",
+      "$priorRoot='C:\\ProgramData\\Nexowire\\versions\\1.0.4-aabbccddeeff'",
+      '$previousRoots=@{}',
+      '$previousRoots[$BootLauncher]=$priorRoot',
+      '$previousRoots[$BrokerLauncher]=$priorRoot',
       '$stopFail='+JSON.stringify(s.stopFail),
       '$startFail='+JSON.stringify(s.startFail),
       '$restoreFail='+String(s.restoreFail?'$true':'$false'),
       'function Stop-ScheduledTask {',
+      '  [CmdletBinding()]',
       '  param([string]$TaskName)',
       "  if(($stopFail -eq 'broker' -and $TaskName -eq $BrokerTask) -or ($stopFail -eq 'hub' -and $TaskName -eq $BootTask)){throw 'STOP_SYNTHETIC_FAILURE'}",
       '}',
       'function Start-ScheduledTask {',
+      '  [CmdletBinding()]',
       '  param([string]$TaskName)',
       "  if(($startFail -eq 'broker' -and $TaskName -eq $BrokerTask) -or ($startFail -eq 'hub' -and $TaskName -eq $BootTask)){throw 'START_SYNTHETIC_FAILURE'}",
       '}',
       'function Restore {if($restoreFail){throw "RESTORE_SYNTHETIC_FAILURE"}}',
+      'function Wait-Service {',
+      '  [CmdletBinding()]',
+      '  param([int]$port,[string]$needle,[int]$seconds,[string]$runtimeRoot)',
+      '  if($runtimeRoot -cne $priorRoot){throw "UNEXPECTED_ROLLBACK_RUNTIME_ROOT"}',
+      '  if($port -ne 43110 -and $port -ne 43112){throw "UNEXPECTED_ROLLBACK_PORT"}',
+      '  return $true',
+      '}',
       'function Start-Sleep {param([int]$Seconds)}',
       'function Write-Status {param([string]$state,[string]$message);[Console]::WriteLine("STATUS="+$state+";"+$message)}',
       "try {throw 'ORIGINAL_UPDATE_FAILURE'",
       rollback,
     ].join('\r\n');
     const output=run(scriptText);
-    assert.equal(output.status,s.code,output.stderr);
+    assert.equal(output.status,s.code,`PowerShell child: ${String(output.error)}\n${output.stderr}\n${output.stdout}`);
     assert.match(output.stdout,new RegExp('STATUS='+s.status+';'));
     assert.match(output.stdout,/ORIGINAL_UPDATE_FAILURE/);
     if(s.stopFail)assert.match(output.stdout,/STOP_SYNTHETIC_FAILURE/);
@@ -109,7 +130,7 @@ test('real file rollback restores original launcher content and verifies checksu
       '[Console]::WriteLine("RESTORE_PASS")',
     ].join('\r\n');
     const output=run(fixture);
-    assert.equal(output.status,0,output.stderr);
+    assert.equal(output.status,0,`PowerShell restore: ${String(output.error)}\n${output.stderr}\n${output.stdout}`);
     assert.match(output.stdout,/RESTORE_PASS/);
   }finally{
     rmSync(root,{recursive:true,force:true});
