@@ -39,6 +39,22 @@ jobs:
           test/delegated/pool-k20/github-pagination-audit.test.mjs
           test/delegated/k19/file-transfer-copy-reference.test.ts
           test/delegated/k19/file-transfer-user-contract.test.ts
+      - name: Verify delegated batch-3 offline accessibility and MCP error QA
+        # npm test excludes .mjs. A green process exit with TODO cases is not a pass.
+        shell: bash
+        run: |
+          node --test --test-reporter=tap --import tsx --test-concurrency=1 \
+            test/delegated/k05/audit-html.test.mjs \
+            test/delegated/k05/dynamic-id-contract.test.mjs \
+            test/delegated/pool-k05/touch-evidence.test.mjs \
+            test/delegated/mcp-ux-k08/mcp-error-language.test.mjs \
+            > "$RUNNER_TEMP/nw-batch3.tap"
+          cat "$RUNNER_TEMP/nw-batch3.tap"
+          grep -qx '# tests 37' "$RUNNER_TEMP/nw-batch3.tap"
+          grep -qx '# pass 37' "$RUNNER_TEMP/nw-batch3.tap"
+          grep -qx '# fail 0' "$RUNNER_TEMP/nw-batch3.tap"
+          grep -qx '# skipped 0' "$RUNNER_TEMP/nw-batch3.tap"
+          grep -qx '# todo 0' "$RUNNER_TEMP/nw-batch3.tap"
       - name: Verify delegated K20 evidence audits and safe URL offline QA
         # npm test excludes .mjs; require a real TAP run with zero TODO/SKIP.
         shell: bash
