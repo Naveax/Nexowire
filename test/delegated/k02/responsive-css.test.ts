@@ -269,7 +269,7 @@ test("same-selector duplicate cleanup preserves effective CSS values across view
       [".device-list.list-view .device", "display"],
       [".connect-shell", "max-width"],
       [".policy-steps", "gap"],
-    ]) {
+    ] as const) {
       assert.equal(property(withoutShadowedDisplay, selector, name, width),
         property(rules, selector, name, width), `${selector} ${name} changed at ${width}px`);
     }
