@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "page": "web/index.html",
+  "viewport": { "widthPx": 375, "heightPx": 812, "zoom": 1 },
+  "targets": [
+    {
+      "id": "device-filter",
+      "selector": ".filter-button",
+      "status": "NOT_RUN",
+      "reason": "CSS source declares min-height:36px; rendered size/spacing and touch interaction were not measured.",
+      "measurement": null,
+      "evidence": { "kind": "source-css", "reference": "web/styles.css" }
+    }
+  ]
+}
