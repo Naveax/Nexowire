@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "STATIC_FOCUS_TARGET_INVENTORY",
+  "browserKeyboardTest": "NOT_RUN",
+  "targets": [
+    { "page": "dashboard", "targetId": "connect-device", "precondition": "dashboard has loaded and button is enabled", "expected": "tab reachable and visible focus ring", "browserStatus": "NOT_RUN" },
+    { "page": "dashboard", "targetId": "folder-name", "precondition": "folder form is visible", "expected": "tab reachable; focus not clipped at 375px", "browserStatus": "NOT_RUN" },
+    { "page": "dashboard", "targetId": "retry", "precondition": "API error panel is visible", "expected": "tab reachable; retry action not duplicated", "browserStatus": "NOT_RUN" },
+    { "page": "connect", "targetId": "tab-windows", "precondition": "installation tabs are visible", "expected": "keyboard tab and arrow order require interactive browser", "browserStatus": "NOT_RUN" },
+    { "page": "connect", "targetId": "copy-command", "precondition": "installation command available", "expected": "keyboard activation and focus return", "browserStatus": "NOT_RUN" },
+    { "page": "connect", "targetId": "approve", "precondition": "pairing panel visible, user authorized and button enabled", "expected": "focused approval is not confused with successful device pairing", "browserStatus": "NOT_RUN" },
+    { "page": "admin", "targetId": null, "precondition": "static admin page contains metrics only", "expected": "no invented keyboard acceptance for authenticated or dynamic UI", "browserStatus": "NOT_RUN" }
+  ]
+}
