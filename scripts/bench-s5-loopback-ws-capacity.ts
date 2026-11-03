@@ -10,7 +10,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {performance} from 'node:perf_hooks';
 import {fileURLToPath} from 'node:url';
-import {setImmediate as nextTurn} from 'node:timers/promises';
+import {setImmediate as nextTurn,setTimeout as sleep} from 'node:timers/promises';
 import WebSocket,{WebSocketServer} from 'ws';
 import {ProposedAllIngressTransportMeter} from '../src/mcp/all-ingress-transport-meter-proposal.js';
 import {ProposedTrustedOwnerQuotaAuthority} from '../src/product/trusted-owner-quota-authority-proposal.js';
@@ -21,8 +21,18 @@ const SCOPE='synthetic-operator-ingress-1';
 const account=(i:number)=>'synthetic-account-'+String(i).padStart(4,'0');
 const device=(i:number)=>'synthetic-device-'+String(i).padStart(4,'0');
 const token=(i:number)=>'synthetic-fixture-bearer-'+String(i).padStart(4,'0');
-const percentile=(sorted:number[],p:number)=>
-  Number((sorted[Math.max(0,Math.ceil(sorted.length*p)-1)]??0).toFixed(3));
+/** Nearest-rank percentiles for actual, strictly positive local timings only.
+ * Empty/invalid observations must not silently become a zero-latency PASS. */
+export function summarizeS5Latencies(samples:readonly number[]):
+  {p50:number;p95:number;p99:number;max:number}{
+  if(samples.length===0||samples.some(x=>!Number.isFinite(x)||x<=0)){
+    throw new Error('S5 latency samples must be non-empty finite positive durations');
+  }
+  const sorted=[...samples].sort((a,b)=>a-b);
+  // Positive observations below 0.0005 ms must not be rounded into a false zero.
+  const at=(p:number)=>Math.max(.001,Number(sorted[Math.ceil(sorted.length*p)-1]!.toFixed(3)));
+  return {p50:at(.5),p95:at(.95),p99:at(.99),max:at(1)};
+}
 function integer(n:number,min:number,max:number,name:string):void{
   if(!Number.isSafeInteger(n)||n<min||n>max)throw new Error(name+' outside '+min+'..'+max);
 }
@@ -220,14 +230,12 @@ export async function runS5LoopbackLoad(opts:S5LoadOptions):Promise<S5LoadResult
     const successes=successful.reduce((a,b)=>a+b,0);
     const squares=successful.reduce((a,b)=>a+b*b,0);
     const fairness=squares===0?0:successes*successes/(opts.clients*squares);
-    latencies.sort((a,b)=>a-b);
     pendingResult={
       kind:'SYNTHETIC_LOOPBACK_WS_OWNER_SQLITE',clients:opts.clients,mode,callsPerClient:calls,
       sockets:{connected:opts.clients,peak:peakSockets,closed},
       rpc:{attempted:attempts,reserved,duplicate,rateLimited,backpressure,other,
         peakInFlight,peakQueue,perSecond:Number((reserved/(elapsed/1000)).toFixed(2))},
-      latencyMs:{p50:percentile(latencies,.5),p95:percentile(latencies,.95),
-        p99:percentile(latencies,.99),max:percentile(latencies,1)},
+      latencyMs:summarizeS5Latencies(latencies),
       cpuMs:{user:cpu.user/1000,system:cpu.system/1000},
       memoryBytes:{rssStart,rssPeak,rssEnd:process.memoryUsage().rss},
       ioBytes:{sqlite:statSync(dbPath).size,wal:existsSync(dbPath+'-wal')?statSync(dbPath+'-wal').size:0,
@@ -243,9 +251,15 @@ export async function runS5LoopbackLoad(opts:S5LoadOptions):Promise<S5LoadResult
   }finally{
     for(const ws of clients)try{ws.terminate()}catch{}
     if(server)await new Promise<void>(resolve=>server!.close(()=>resolve()));
+    // Server close callback can precede peer close events on loopback (notably Windows).
+    // Do not publish a misleading closed=0 metric for an otherwise completed run.
+    for(let i=0;i<50&&activeSockets.size>0;i++)await sleep(10);
     if(pendingResult)pendingResult.sockets.closed=closed;
     db.close();
     rmSync(folder,{recursive:true,force:true});
+    if(pendingResult&&activeSockets.size!==0){
+      throw new Error('S5 fixture sockets did not close within the bounded deadline');
+    }
   }
 }
 function cli(args:string[]):S5LoadOptions{
