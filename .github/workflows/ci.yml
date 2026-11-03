@@ -223,8 +223,6 @@ jobs:
 
   linux-native-live:
     runs-on: ubuntu-latest
-  linux-native-live:
-    runs-on: ubuntu-latest
     services:
       # Disposable CI storage, NOT the independently hosted production CAS.
       dispatch-postgres:
