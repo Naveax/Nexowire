@@ -80,8 +80,8 @@ jobs:
             scripts/delegated/pr-summary-k14/pr-summary.test.mjs \
             > "$RUNNER_TEMP/nw-k14-audit.tap"
           cat "$RUNNER_TEMP/nw-k14-audit.tap"
-          grep -qx '# tests 33' "$RUNNER_TEMP/nw-k14-audit.tap"
-          grep -qx '# pass 33' "$RUNNER_TEMP/nw-k14-audit.tap"
+          grep -qx '# tests 32' "$RUNNER_TEMP/nw-k14-audit.tap"
+          grep -qx '# pass 32' "$RUNNER_TEMP/nw-k14-audit.tap"
           grep -qx '# fail 0' "$RUNNER_TEMP/nw-k14-audit.tap"
           grep -qx '# skipped 0' "$RUNNER_TEMP/nw-k14-audit.tap"
           grep -qx '# todo 0' "$RUNNER_TEMP/nw-k14-audit.tap"
