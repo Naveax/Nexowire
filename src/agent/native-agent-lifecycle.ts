@@ -645,6 +645,10 @@ $expectedNode=$env:NEXOWIRE_AGENT_EXECUTABLE
 $expectedCli=$env:NEXOWIRE_AGENT_CLI
 if (-not $expectedHelper -or -not $expectedNode -or -not $expectedCli) { throw 'NATIVE_AGENT_TASK_OWNER_PATH_UNKNOWN' }
 if (-not [IO.Path]::IsPathRooted($expectedHelper) -or -not [IO.Path]::IsPathRooted($expectedNode) -or -not [IO.Path]::IsPathRooted($expectedCli)) { throw 'NATIVE_AGENT_TASK_OWNER_PATH_UNSAFE' }
+# Resolve Windows 8.3 short/long executable aliases before establishing ownership.
+# Never widen owner scope beyond the pinned absolute binary and root paths.
+$expectedHelper=[IO.Path]::GetFullPath($expectedHelper)
+$expectedNode=[IO.Path]::GetFullPath($expectedNode)
 $lockPath=Join-Path $dir 'agent-job-retention.lock'
 $lock=$null
 # Serialize independent Agent control readbacks; a lock failure never authorizes restart or deletion.
@@ -663,7 +667,9 @@ try {
   $ownedGuardians=@()
   foreach ($g in $guardianProcesses) {
     if (-not $g.ExecutablePath -or -not $g.CommandLine) { throw 'NATIVE_AGENT_TASK_GUARDIAN_IDENTITY_UNKNOWN' }
-    if ([string]::Equals($g.ExecutablePath,$expectedHelper,[StringComparison]::OrdinalIgnoreCase)) { $ownedGuardians+=,$g }
+    if (-not [IO.Path]::IsPathRooted([string]$g.ExecutablePath)) { throw 'NATIVE_AGENT_TASK_GUARDIAN_BINARY_PATH_UNSAFE' }
+    $guardianBinary=[IO.Path]::GetFullPath([string]$g.ExecutablePath)
+    if ([string]::Equals($guardianBinary,$expectedHelper,[StringComparison]::OrdinalIgnoreCase)) { $ownedGuardians+=,$g }
   }
   # Windows CIM may report an 8.3 short path (RUNNER~1), while GetFullPath
   # and the receipt enumeration return the long path. Do not compare raw
@@ -720,8 +726,11 @@ try {
     if ($null -ne $root) {
       $actual=$root.CreationDate.ToUniversalTime().ToFileTimeUtc().ToString()
       $matchedRoot=($actual -ceq $created)
-      if ($matchedRoot -and -not [string]::Equals($root.ExecutablePath,$expectedNode,[StringComparison]::OrdinalIgnoreCase)) {
-        throw 'NATIVE_AGENT_TASK_ROOT_BINARY_MISMATCH'
+      if ($matchedRoot) {
+        if (-not [IO.Path]::IsPathRooted([string]$root.ExecutablePath)) { throw 'NATIVE_AGENT_TASK_ROOT_BINARY_PATH_UNSAFE' }
+        if (-not [string]::Equals([IO.Path]::GetFullPath([string]$root.ExecutablePath),$expectedNode,[StringComparison]::OrdinalIgnoreCase)) {
+          throw 'NATIVE_AGENT_TASK_ROOT_BINARY_MISMATCH'
+        }
       }
     }
     if ($matchedRoot) {
@@ -754,7 +763,8 @@ try {
   }
   $unknownAgentNodes=0
   foreach ($node in $nodes) {
-    if ([string]::Equals($node.ExecutablePath,$expectedNode,[StringComparison]::OrdinalIgnoreCase) -and
+    if (-not [IO.Path]::IsPathRooted([string]$node.ExecutablePath)) { throw 'NATIVE_AGENT_TASK_NODE_BINARY_PATH_UNSAFE' }
+    if ([string]::Equals([IO.Path]::GetFullPath([string]$node.ExecutablePath),$expectedNode,[StringComparison]::OrdinalIgnoreCase) -and
         $node.CommandLine.IndexOf($expectedCli,[StringComparison]::OrdinalIgnoreCase) -ge 0 -and
         $node.CommandLine -match '\bagent\s+run\b' -and
         -not $ownedRootPids.ContainsKey([string]$node.ProcessId)) {

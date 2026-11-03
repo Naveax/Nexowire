@@ -147,7 +147,8 @@ interface MockCim {guardians:FixtureProcess[];nodes:FixtureProcess[]}
 async function withMockTask(
   fn:(fixture:{dir:string;node:string;cli:string;helper:string;
               launch:string;marker:(i:number,birth?:string)=>Promise<string>;
-              run:(mock?:Partial<MockCim>,state?:string,deny?:boolean)=>WindowsAgentTaskOwnerReadback})=>Promise<void>,
+              run:(mock?:Partial<MockCim>,state?:string,deny?:boolean,
+                    paths?:{helper?:string;node?:string;cli?:string})=>WindowsAgentTaskOwnerReadback})=>Promise<void>,
 ):Promise<void>{
   const dir=await mkdtemp(path.join(os.tmpdir(),'nw-ai09-receipts-'));
   const node=path.join(dir,'node.exe');
@@ -193,14 +194,15 @@ if ($observed -ne $expected) { throw ('AI09_MOCK_GUARDIAN_COUNT_UNCONFIRMED expe
     await utimes(target,old,old);
     return target;
   };
-  const run=(mock:Partial<MockCim>={},state='Ready',deny=false):WindowsAgentTaskOwnerReadback=>{
+  const run=(mock:Partial<MockCim>={},state='Ready',deny=false,
+    paths:{helper?:string;node?:string;cli?:string}={}):WindowsAgentTaskOwnerReadback=>{
     const env={
       ...process.env,
       NEXOWIRE_AGENT_TASK_NAME:'NX-AI09-SYNTHETIC-NO-SCHEDULER',
       NEXOWIRE_AGENT_LAUNCHER:launch,
-      NEXOWIRE_AGENT_JOB_HELPER:helper,
-      NEXOWIRE_AGENT_EXECUTABLE:node,
-      NEXOWIRE_AGENT_CLI:cli,
+      NEXOWIRE_AGENT_JOB_HELPER:paths.helper??helper,
+      NEXOWIRE_AGENT_EXECUTABLE:paths.node??node,
+      NEXOWIRE_AGENT_CLI:paths.cli??cli,
       AI09_MOCK_CIM:JSON.stringify({guardians:mock.guardians??[],nodes:mock.nodes??[]}),
       AI09_MOCK_TRACE:trace,
       AI09_MOCK_TASK_STATE:state,
@@ -391,6 +393,54 @@ test('AI09 malformed or foreign guardian status cannot be masked by unrelated ar
     const forged=fakeProc(65003,helper,'"'+helper+'" --status "'+foreign+'" --cwd "'+live+'" --parent 42');
     expectMockError(()=>run({guardians:[forged]}),'NATIVE_AGENT_TASK_GUARDIAN_STATUS_DIRECTORY_UNCONFIRMED');
     assert.equal((await readdir(dir)).filter(x=>x.endsWith('.status')).length,131);
+  });
+});
+
+test('AI09 8.3 helper binary alias cannot hide live guardian receipts',{
+  skip:process.platform!=='win32',timeout:60000,
+},async()=>{
+  await withMockTask(async({marker,run,dir})=>{
+    const live=await marker(999);
+    for(let i=1;i<=130;i++)await marker(i);
+    const longHelper='C:\\Program Files\\Nexowire\\windows-job-owner.exe';
+    const shortHelper='C:\\PROGRA~1\\Nexowire\\windows-job-owner.exe';
+    const fromLong=fakeProc(66001,longHelper,'"'+longHelper+'" --status "'+live+'" --cwd - --parent 42');
+    const fromShort=fakeProc(66002,shortHelper,'"'+shortHelper+'" --status "'+live+'" --cwd - --parent 42');
+    for(const [guardian,pinned] of [[fromLong,shortHelper],[fromShort,longHelper]] as const){
+      const state=run({guardians:[guardian]},'Ready',false,{helper:pinned});
+      assert.equal(state.liveGuardians,1,'8.3 and long helper aliases are same binary');
+      assert.equal(state.receipts,131,'never compact receipts owned by a live guardian');
+      assert.equal(nativeAgentTaskStopConfirmed(state),false);
+      assert.equal((await readdir(dir)).filter(x=>x.endsWith('.status')).length,131);
+    }
+  });
+});
+
+test('AI09 unrelated guardian binary never inherits pinned guardian identity',{
+  skip:process.platform!=='win32',timeout:60000,
+},async()=>{
+  await withMockTask(async({marker,run})=>{
+    const live=await marker(999);
+    for(let i=1;i<=130;i++)await marker(i);
+    const other='C:\\Program Files\\OtherProduct\\windows-job-owner.exe';
+    const guardian=fakeProc(66003,other,'"'+other+'" --status "'+live+'" --cwd - --parent 42');
+    const state=run({guardians:[guardian]},'Ready',false,{helper:'C:\\PROGRA~1\\Nexowire\\windows-job-owner.exe'});
+    assert.equal(state.liveGuardians,0);
+    assert.equal(state.receipts,16,'only an unrelated process is present; no owned guardian');
+  });
+});
+
+test('AI09 8.3 pinned Node executable alias cannot mask an unowned Agent',{
+  skip:process.platform!=='win32',timeout:60000,
+},async()=>{
+  await withMockTask(async({marker,cli,run,dir})=>{
+    for(let i=1;i<=130;i++)await marker(i);
+    const longNode='C:\\Program Files\\Nexowire\\node.exe';
+    const shortNode='C:\\PROGRA~1\\Nexowire\\node.exe';
+    const orphan=fakeProc(66004,longNode,'"'+longNode+'" "'+cli+'" agent run');
+    expectMockError(()=>run({nodes:[orphan]},'Ready',false,{node:shortNode}),
+      'NATIVE_AGENT_TASK_UNOWNED_AGENT_NODE_UNCONFIRMED');
+    assert.equal((await readdir(dir)).filter(x=>x.endsWith('.status')).length,130);
   });
 });
 
