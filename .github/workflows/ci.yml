@@ -124,6 +124,26 @@ jobs:
           grep -qx '# fail 0' "$RUNNER_TEMP/nw-s5-qa-k111218.tap"
           grep -qx '# skipped 0' "$RUNNER_TEMP/nw-s5-qa-k111218.tap"
           grep -qx '# todo 0' "$RUNNER_TEMP/nw-s5-qa-k111218.tap"
+      - name: Verify delegated K06 K07 K08 onboarding and MCP docs (32 exact tests)
+        # Nested .mjs docs checks are excluded by npm test; never infer pass without execution.
+        shell: bash
+        run: |
+          node --test --test-reporter=tap --import tsx --test-concurrency=1 \
+            test/delegated/k07/connection-docs.test.mjs \
+            test/delegated/k07/self-host-docs.test.mjs \
+            test/delegated/platform-k07/command-matrix.test.mjs \
+            test/delegated/k08/mcp-doc-contract.test.mjs \
+            test/delegated/k08/mcp-doc-fences-endpoints.test.mjs \
+            test/delegated/k08/mcp-output-language.test.mjs \
+            test/delegated/k06/readme-install-p002.test.mjs \
+            test/delegated/k06/windows-install-docs.test.mjs \
+            > "$RUNNER_TEMP/nw-k060708-docs.tap"
+          cat "$RUNNER_TEMP/nw-k060708-docs.tap"
+          grep -qx '# tests 32' "$RUNNER_TEMP/nw-k060708-docs.tap"
+          grep -qx '# pass 32' "$RUNNER_TEMP/nw-k060708-docs.tap"
+          grep -qx '# fail 0' "$RUNNER_TEMP/nw-k060708-docs.tap"
+          grep -qx '# skipped 0' "$RUNNER_TEMP/nw-k060708-docs.tap"
+          grep -qx '# todo 0' "$RUNNER_TEMP/nw-k060708-docs.tap"
       - name: Verify coordinator PR dependency and exact-head CI gates
         run: node --test --import tsx test/qa-v108-integration-gates.test.ts
       - run: npm run build
