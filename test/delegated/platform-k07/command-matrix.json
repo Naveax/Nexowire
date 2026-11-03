@@ -1,0 +1,48 @@
+{
+  "sourceRevision": "93b6df33ef58610dcfdf3584bfe774e5afa7df4d",
+  "status": "source-static-only; no Windows/Linux runtime acceptance",
+  "commands": [
+    {
+      "command": "npm ci",
+      "intent": "install developer dependencies",
+      "windows": "declared-not-executed",
+      "linux": "declared-not-executed",
+      "source": "package.json"
+    },
+    {
+      "command": "npm run build",
+      "intent": "compile TypeScript checkout",
+      "windows": "declared-not-executed",
+      "linux": "declared-not-executed",
+      "source": "package.json"
+    },
+    {
+      "command": "node dist/src/cli.js help",
+      "intent": "show CLI command list",
+      "windows": "routed-not-executed",
+      "linux": "routed-not-executed",
+      "source": "src/cli.ts"
+    },
+    {
+      "command": "node dist/src/cli.js onboard plan",
+      "intent": "operator readiness planning; may initialize local credential state",
+      "windows": "routed-not-executed",
+      "linux": "routed-not-executed",
+      "source": "src/cli.ts"
+    },
+    {
+      "command": "node dist/src/cli.js doctor --remote",
+      "intent": "readiness evaluation; not connection acceptance",
+      "windows": "routed-not-executed",
+      "linux": "routed-not-executed",
+      "source": "src/cli.ts"
+    },
+    {
+      "command": "node dist/src/cli.js node bootstrap",
+      "intent": "Windows Hub/Agent Scheduled Tasks and DPAPI state creation",
+      "windows": "win32-only-not-executed",
+      "linux": "explicitly-rejected",
+      "source": "src/self-host-bootstrap.ts"
+    }
+  ]
+}
