@@ -761,14 +761,34 @@ try {
     }
     if (-not $found) { throw 'NATIVE_AGENT_TASK_GUARDIAN_RECEIPT_MISSING' }
   }
+  # Parse Node command-line tokens rather than matching a raw CLI path substring.
+  # The installed launcher can contain Node flags before the CLI; 8.3 short/long
+  # paths and quoted "agent" "run" arguments must not hide an orphan Agent.
+  $expectedCli=[IO.Path]::GetFullPath($expectedCli)
+  $expectedCliName=[IO.Path]::GetFileName($expectedCli)
   $unknownAgentNodes=0
   foreach ($node in $nodes) {
     if (-not [IO.Path]::IsPathRooted([string]$node.ExecutablePath)) { throw 'NATIVE_AGENT_TASK_NODE_BINARY_PATH_UNSAFE' }
-    if ([string]::Equals([IO.Path]::GetFullPath([string]$node.ExecutablePath),$expectedNode,[StringComparison]::OrdinalIgnoreCase) -and
-        $node.CommandLine.IndexOf($expectedCli,[StringComparison]::OrdinalIgnoreCase) -ge 0 -and
-        $node.CommandLine -match '\bagent\s+run\b' -and
-        -not $ownedRootPids.ContainsKey([string]$node.ProcessId)) {
+    if (-not [string]::Equals([IO.Path]::GetFullPath([string]$node.ExecutablePath),$expectedNode,[StringComparison]::OrdinalIgnoreCase)) { continue }
+    if ($ownedRootPids.ContainsKey([string]$node.ProcessId)) { continue }
+    $tokens=@([regex]::Matches([string]$node.CommandLine,'"(?:[^"]+)"|[^\s"]+') | ForEach-Object { $_.Value.Trim('"') })
+    $matchedAgentCli=$false
+    for ($i=1; $i -lt ($tokens.Count-2); $i++) {
+      $candidate=[string]$tokens[$i]
+      if (-not [IO.Path]::IsPathRooted($candidate)) { continue }
+      $canonicalCandidate=[IO.Path]::GetFullPath($candidate)
+      if ([string]::Equals($canonicalCandidate,$expectedCli,[StringComparison]::OrdinalIgnoreCase) -and
+          $tokens[$i+1] -ceq 'agent' -and $tokens[$i+2] -ceq 'run') {
+        $matchedAgentCli=$true
+        break
+      }
+    }
+    if ($matchedAgentCli) {
       $unknownAgentNodes++
+    } elseif ($node.CommandLine.IndexOf($expectedCliName,[StringComparison]::OrdinalIgnoreCase) -ge 0 -and
+              $node.CommandLine -match '\bagent"?\s+"?run\b') {
+      # Ambiguous same-name CLI with Agent verbs is not a safe "no owner" proof.
+      throw 'NATIVE_AGENT_TASK_NODE_CLI_IDENTITY_UNCONFIRMED'
     }
   }
   if ($unknownAgentNodes -gt 0) { throw 'NATIVE_AGENT_TASK_UNOWNED_AGENT_NODE_UNCONFIRMED' }

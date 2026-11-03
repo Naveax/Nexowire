@@ -444,6 +444,39 @@ test('AI09 8.3 pinned Node executable alias cannot mask an unowned Agent',{
   });
 });
 
+test('AI09 short/long CLI aliases and quoted verbs cannot hide an unowned Agent',{
+  skip:process.platform!=='win32',timeout:60000,
+},async()=>{
+  await withMockTask(async({marker,node,run,dir})=>{
+    for(let i=1;i<=130;i++)await marker(i);
+    const longCli='C:\\Program Files\\Nexowire\\agent-cli.js';
+    const shortCli='C:\\PROGRA~1\\Nexowire\\agent-cli.js';
+    for(const [pinned,observed] of [[shortCli,longCli],[longCli,shortCli]] as const){
+      const cmd='"'+node+'" --no-warnings "'+observed+'" "agent" "run"';
+      expectMockError(()=>run({nodes:[fakeProc(66010,node,cmd)]},'Ready',false,{cli:pinned}),
+        'NATIVE_AGENT_TASK_UNOWNED_AGENT_NODE_UNCONFIRMED');
+      assert.equal((await readdir(dir)).filter(x=>x.endsWith('.status')).length,130);
+    }
+  });
+});
+
+test('AI09 same basename in a foreign CLI fails closed; unrelated Node still ignored',{
+  skip:process.platform!=='win32',timeout:60000,
+},async()=>{
+  await withMockTask(async({marker,node,run,dir})=>{
+    for(let i=1;i<=130;i++)await marker(i);
+    const expected='C:\\Program Files\\Nexowire\\agent-cli.js';
+    const foreign='C:\\OtherProduct\\agent-cli.js';
+    const suspicious=fakeProc(66011,node,'"'+node+'" "'+foreign+'" agent run');
+    expectMockError(()=>run({nodes:[suspicious]},'Ready',false,{cli:expected}),
+      'NATIVE_AGENT_TASK_NODE_CLI_IDENTITY_UNCONFIRMED');
+    const unrelated=fakeProc(66012,node,'"'+node+'" "C:\\OtherProduct\\unrelated-tool.js" help');
+    const state=run({nodes:[unrelated]},'Ready',false,{cli:expected});
+    assert.equal(state.unknownAgentNodes,0);
+    assert.equal((await readdir(dir)).filter(x=>x.endsWith('.status')).length,16);
+  });
+});
+
 test('AI09 unknown and malformed receipts cannot be garbage collected',{
   skip:process.platform!=='win32',timeout:60000,
 },async()=>{
