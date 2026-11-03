@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "SYNTHETIC_DOM_SNAPSHOT_NOT_A_BROWSER_CAPTURE",
+  "description": "Illustrative status content for offline QA; these strings do not assert that authenticated runtime reaches or paints the state.",
+  "cases": [
+    { "page": "dashboard", "state": "loading", "rootId": "connection-pill", "snapshot": { "role": "status", "text": "Bağlanıyor", "deviceCount": null }, "runtimeStatus": "NOT_RUN" },
+    { "page": "dashboard", "state": "empty", "rootId": "devices", "snapshot": { "role": "status", "text": "Henüz cihaz yok", "deviceCount": 0 }, "runtimeStatus": "NOT_RUN" },
+    { "page": "dashboard", "state": "error", "rootId": "error-panel", "snapshot": { "role": "alert", "text": "Bilgi alınamadı, yeniden dene", "deviceCount": null }, "runtimeStatus": "NOT_RUN" },
+    { "page": "dashboard", "state": "success", "rootId": "devices", "snapshot": { "role": "list", "text": "Örnek cihaz listesi", "deviceCount": 1 }, "runtimeStatus": "NOT_RUN" },
+    { "page": "connect", "state": "loading", "rootId": "chatgpt-status", "snapshot": { "role": "status", "text": "Bağlantı adresi alınıyor", "deviceCount": null }, "runtimeStatus": "NOT_RUN" },
+    { "page": "connect", "state": "empty", "rootId": "install-panel", "snapshot": { "role": "region", "text": "Kurulum seçenekleri", "deviceCount": null }, "runtimeStatus": "NOT_RUN" },
+    { "page": "connect", "state": "error", "rootId": "error-panel", "snapshot": { "role": "alert", "text": "Eşleştirme tamamlanmadı", "deviceCount": null }, "runtimeStatus": "NOT_RUN" },
+    { "page": "connect", "state": "success", "rootId": "pair-panel", "snapshot": { "role": "region", "text": "Örnek eşleştirme onayı", "deviceCount": null }, "runtimeStatus": "NOT_RUN" },
+    { "page": "admin", "state": "loading", "rootId": "admin-pill", "snapshot": { "role": "status", "text": "Yükleniyor", "deviceCount": null }, "runtimeStatus": "NOT_RUN" },
+    { "page": "admin", "state": "empty", "rootId": "users", "snapshot": { "role": "status", "text": "Örnek boş özet", "deviceCount": 0 }, "runtimeStatus": "NOT_RUN" },
+    { "page": "admin", "state": "error", "rootId": "admin-error", "snapshot": { "role": "alert", "text": "Yönetici verisi alınamadı", "deviceCount": null }, "runtimeStatus": "NOT_RUN" },
+    { "page": "admin", "state": "success", "rootId": "online-devices", "snapshot": { "role": "status", "text": "Örnek yönetim özeti", "deviceCount": 2 }, "runtimeStatus": "NOT_RUN" }
+  ]
+}

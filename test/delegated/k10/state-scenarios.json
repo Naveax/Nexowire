@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "scope": "Browser state fixtures only; real API/auth behavior is not executed by offline smoke.",
+  "cases": [
+    { "page": "dashboard", "state": "loading", "trigger": "initial document before dashboard response", "anchors": ["connection-pill", "devices-count", "devices"], "browserStatus": "NOT_RUN" },
+    { "page": "dashboard", "state": "empty", "trigger": "authorized dashboard with zero registered devices", "anchors": ["devices", "devices-count"], "browserStatus": "NOT_RUN" },
+    { "page": "dashboard", "state": "error", "trigger": "dashboard request rejects without API fallback", "anchors": ["error-panel", "error-message", "retry"], "browserStatus": "NOT_RUN" },
+    { "page": "dashboard", "state": "success", "trigger": "authorized dashboard with one device", "anchors": ["devices", "devices-count"], "browserStatus": "NOT_RUN" },
+    { "page": "connect", "state": "loading", "trigger": "initial install and ChatGPT address loading", "anchors": ["install-panel", "chatgpt-status"], "browserStatus": "NOT_RUN" },
+    { "page": "connect", "state": "empty", "trigger": "no pairing identifier supplied", "anchors": ["install-panel", "chatgpt-panel"], "browserStatus": "NOT_RUN" },
+    { "page": "connect", "state": "error", "trigger": "pairing or connection request rejects", "anchors": ["error-panel", "error-message"], "browserStatus": "NOT_RUN" },
+    { "page": "connect", "state": "success", "trigger": "device pairing is approved and acknowledged", "anchors": ["pair-panel", "status-title", "status-text"], "browserStatus": "NOT_RUN" },
+    { "page": "admin", "state": "loading", "trigger": "admin overview before response", "anchors": ["admin-pill", "users", "calls"], "browserStatus": "NOT_RUN" },
+    { "page": "admin", "state": "empty", "trigger": "authorized overview with zero counters", "anchors": ["users", "online-devices", "calls"], "browserStatus": "NOT_RUN" },
+    { "page": "admin", "state": "error", "trigger": "admin overview request rejects or denies authorization", "anchors": ["admin-error", "admin-error-message"], "browserStatus": "NOT_RUN" },
+    { "page": "admin", "state": "success", "trigger": "authorized overview with populated counters", "anchors": ["users", "online-devices", "calls"], "browserStatus": "NOT_RUN" }
+  ]
+}

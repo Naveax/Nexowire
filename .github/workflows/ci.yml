@@ -85,6 +85,21 @@ jobs:
           grep -qx '# fail 0' "$RUNNER_TEMP/nw-k14-audit.tap"
           grep -qx '# skipped 0' "$RUNNER_TEMP/nw-k14-audit.tap"
           grep -qx '# todo 0' "$RUNNER_TEMP/nw-k14-audit.tap"
+      - name: Verify K10 offline web shell and QA24 integration DAG
+        # npm test excludes .mjs; QA24 historical snapshot does not prove live CORE.
+        shell: bash
+        run: |
+          node --test --test-reporter=tap --import tsx --test-concurrency=1 \
+            test/delegated/k10/offline-web-smoke.test.mjs \
+            test/delegated/pool-k10/browser-evidence-inventory.test.mjs \
+            test/qa-24-integration-dag.test.ts \
+            > "$RUNNER_TEMP/nw-k10-qa24.tap"
+          cat "$RUNNER_TEMP/nw-k10-qa24.tap"
+          grep -qx '# tests 28' "$RUNNER_TEMP/nw-k10-qa24.tap"
+          grep -qx '# pass 28' "$RUNNER_TEMP/nw-k10-qa24.tap"
+          grep -qx '# fail 0' "$RUNNER_TEMP/nw-k10-qa24.tap"
+          grep -qx '# skipped 0' "$RUNNER_TEMP/nw-k10-qa24.tap"
+          grep -qx '# todo 0' "$RUNNER_TEMP/nw-k10-qa24.tap"
       - name: Verify coordinator PR dependency and exact-head CI gates
         run: node --test --import tsx test/qa-v108-integration-gates.test.ts
       - run: npm run build
