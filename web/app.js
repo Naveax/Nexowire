@@ -118,6 +118,14 @@ function resetDashboardPresentation() {
   folderSelect.replaceChildren(new Option('Tüm klasörler', 'all'), new Option('Klasörsüz', 'unassigned'));
   folderSelect.value = 'all';
   folderSelect.disabled = true;
+  // A previous account's editor state must not survive a pending or denied load.
+  $('folder-delete').disabled = true;
+  $('folder-create-form').querySelector('button[type="submit"]').disabled = true;
+  $('folder-name').disabled = true;
+  $('folder-name').value = '';
+  $('folder-status').textContent = '';
+  $('auto-confirm-panel').hidden = true;
+  $('auto-phrase').value = '';
   $('devices-count').textContent = '—';
   $('devices-count').removeAttribute('title');
   $('devices-detail').textContent = 'Cihaz durumu doğrulanmadı';
@@ -382,6 +390,8 @@ async function updateAutoSelection(enabled) {
 
 function render(snapshot) {
   currentSnapshot = snapshot;
+  $('folder-name').disabled = false;
+  $('folder-create-form').querySelector('button[type="submit"]').disabled = false;
   $('welcome').textContent = snapshot.displayName
     ? 'Hoş geldin, ' + snapshot.displayName
     : 'Kontrol merkezi';
@@ -820,6 +830,7 @@ async function load() {
     });
     if (loadId !== latestDashboardLoadId) return;
     if (response.status === 401) {
+      selectedFolder = 'all';
       setPill('Oturum gerekli', 'muted');
       $('error-message').textContent = 'Kontrol paneli için GitHub hesabınla giriş yap.';
       $('login').classList.remove('hidden');

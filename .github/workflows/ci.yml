@@ -111,8 +111,8 @@ jobs:
             test/delegated/k04/admin-a11y.test.mjs \
             > "$RUNNER_TEMP/nw-ui-k0104.tap"
           cat "$RUNNER_TEMP/nw-ui-k0104.tap"
-          grep -qx '# tests 56' "$RUNNER_TEMP/nw-ui-k0104.tap"
-          grep -qx '# pass 56' "$RUNNER_TEMP/nw-ui-k0104.tap"
+          grep -qx '# tests 57' "$RUNNER_TEMP/nw-ui-k0104.tap"
+          grep -qx '# pass 57' "$RUNNER_TEMP/nw-ui-k0104.tap"
           grep -qx '# fail 0' "$RUNNER_TEMP/nw-ui-k0104.tap"
           grep -qx '# skipped 0' "$RUNNER_TEMP/nw-ui-k0104.tap"
           grep -qx '# todo 0' "$RUNNER_TEMP/nw-ui-k0104.tap"

@@ -341,3 +341,29 @@ test('401 clears prior account name, folder names, device list and usage', async
   assert.ok(ui.el('folder-filter').children.every((item) => item.textContent !== privateFolder));
   assert.match(ui.el('device-list-status').textContent, /giriş yap/);
 });
+
+
+test('401 clears pending folder editor text and hides old-account confirmation controls', async () => {
+  const ui = createApp();
+  const privateName = 'ÖZEL-KLASÖR-ADI';
+  const data = { ...snapshot, folders: [{ id: 'private-folder', name: privateName }] };
+  ui.eval('globalThis.fixture = ' + JSON.stringify(data));
+  ui.eval("selectedFolder = 'private-folder'; render(fixture)");
+  ui.el('folder-name').value = privateName;
+  ui.el('folder-status').textContent = privateName;
+  ui.el('auto-confirm-panel').hidden = false;
+  ui.el('auto-phrase').value = 'AUTO DEVICE ACCESS';
+  assert.equal(ui.el('folder-delete').disabled, false);
+  assert.equal(ui.el('folder-name').disabled, false);
+
+  ui.setFetch(async () => ({ status: 401, ok: false }));
+  await ui.eval('load()');
+  assert.equal(ui.el('folder-name').value, '');
+  assert.equal(ui.el('folder-name').disabled, true);
+  assert.equal(ui.el('folder-create-form').querySelector('button[type="submit"]').disabled, true);
+  assert.equal(ui.el('folder-delete').disabled, true);
+  assert.equal(ui.el('folder-status').textContent, '');
+  assert.equal(ui.el('auto-confirm-panel').hidden, true);
+  assert.equal(ui.el('auto-phrase').value, '');
+  assert.equal(ui.eval('selectedFolder'), 'all');
+});
