@@ -9,6 +9,129 @@ Nexowire exposes a versioned ChatGPT-facing MCP surface independently from the n
 
 These versions solve different compatibility problems. A native-agent protocol bump does not automatically require an MCP surface bump, and adding a new MCP tool does not automatically require either bump.
 
+## Tool names, read-only capabilities, and permissions
+
+The **MCP tool name** is not the same as an Agent capability name. The v1
+compatibility floor is defined in [`src/mcp/surface.ts`](../src/mcp/surface.ts),
+tool-to-capability mappings in
+[`src/mcp/tool-capabilities.ts`](../src/mcp/tool-capabilities.ts), and the
+Agent's read-only capability classification in
+[`src/protocol/capabilities.ts`](../src/protocol/capabilities.ts).
+The matrix below is the intersection of those three sources at upstream `main`
+`93b6df33ef58610dcfdf3584bfe774e5afa7df4d`. It is checked by
+[`test/delegated/k08/mcp-doc-contract.test.mjs`](../test/delegated/k08/mcp-doc-contract.test.mjs).
+
+**Read-only here means that the mapped Agent capability is in
+`READ_ONLY_CAPABILITIES`; it does not grant anyone permission to invoke it.**
+Tool allowlists, device selection, authorization, online capabilities, and
+additional operation-specific restrictions still apply. A read-only network
+probe can generate network traffic; a read can reveal sensitive data to an
+already-authorized caller. This is a *classification*, not a security approval.
+
+<!-- k08:read-only-v1-begin -->
+| Stable MCP v1 tool | Read-only Agent capability |
+| --- | --- |
+| `browser_screenshot` | `browser.screenshot` |
+| `browser_session_list` | `browser.session.list` |
+| `browser_snapshot` | `browser.snapshot` |
+| `browser_tabs` | `browser.tabs` |
+| `browser_visual_verify` | `browser.visual.verify` |
+| `file_hash` | `files.hash` |
+| `file_list` | `files.list` |
+| `file_read` | `files.read` |
+| `file_read_many` | `files.read_many` |
+| `file_stat` | `files.stat` |
+| `machine_health` | `machine.health` |
+| `machine_snapshot` | `machine.snapshot` |
+| `network_dns_resolve` | `network.dns.resolve` |
+| `network_http_probe` | `network.http.probe` |
+| `network_tcp_probe` | `network.tcp.probe` |
+| `process_list` | `process.list` |
+| `process_read` | `process.read` |
+| `runbook_get` | `runbook.get` |
+| `runbook_list` | `runbook.list` |
+| `search_text` | `search.text` |
+| `task_artifact_list` | `task.artifact.list` |
+| `task_artifact_verify` | `task.artifact.verify` |
+| `task_graph_get` | `task.graph.get` |
+| `task_graph_list` | `task.graph.list` |
+| `verify_assertions` | `verify.assertions` |
+| `windows_accessibility_find` | `windows.accessibility.find` |
+| `windows_accessibility_tree` | `windows.accessibility.tree` |
+| `windows_clipboard_read` | `windows.clipboard.read` |
+| `windows_environment_list` | `windows.environment.list` |
+| `windows_environment_read` | `windows.environment.read` |
+| `windows_eventlog_query` | `windows.eventlog.query` |
+| `windows_firewall_rules` | `windows.firewall.rules` |
+| `windows_network_snapshot` | `windows.network.snapshot` |
+| `windows_pointer_position` | `windows.pointer.position` |
+| `windows_processes` | `windows.processes` |
+| `windows_registry_read` | `windows.registry.read` |
+| `windows_screenshot` | `windows.screenshot` |
+| `windows_services` | `windows.services` |
+| `windows_tasks` | `windows.tasks` |
+| `windows_window_list` | `windows.window.list` |
+| `workspace_detect` | `workspace.detect` |
+| `workspace_snapshot` | `workspace.snapshot` |
+<!-- k08:read-only-v1-end -->
+
+This table deliberately **excludes** mutation-capable tools such as
+`file_write`, `shell_exec`, `windows_window_focus`, and `browser_session_start`.
+It also does not automatically classify Hub-local tools with no Agent
+capability mapping: for example, `nexowire_surface_info` is implemented in
+[`src/mcp/create-server.ts`](../src/mcp/create-server.ts) and operates locally;
+`device_alias_set` changes Hub state. Neither belongs in the Agent read-only
+matrix. The v1 stable set contains both read and write tools; its purpose is
+**compatibility**, not blanket read-only behavior.
+
+## Interpreting outputs without inventing success
+
+The frozen output profile in
+[`src/mcp/v1-output-contract.json`](../src/mcp/v1-output-contract.json)
+distinguishes **native execution** tools such as `machine_snapshot` and
+`file_write` from **Hub-object** tools such as `nexowire_surface_info` and
+`device_alias_set`. These names are present in both the frozen
+[`input contract`](../src/mcp/v1-input-contract.json) and the output contract.
+
+| Signal | Evidence-based meaning | Not proof of |
+| --- | --- | --- |
+| Native `structuredContent.ok === true` | A native capability reported successful execution | Business-task acceptance or independent postcondition |
+| Native `structuredContent.ok === false`, MCP `isError` | The capability reported an error; inspect its structured error | That a dispatched mutation had no side effects |
+| `structuredContent.error` | Optional code/message on a native failure | Verified root cause of every underlying system failure |
+| `structuredContent.idempotency` | Optional replay/key metadata | Permission to repeat an `UNKNOWN` mutation |
+| Hub-object output | Tool-specific fields, e.g. `nexowire_surface_info.mcpSurfaceVersion` | A native `ok` field, online Agent, or granted device permission |
+
+`isError` is a field on the **MCP tool result**, not automatically a member of
+`structuredContent`. The compatibility contract records output *shapes* and
+stable meanings, not a guarantee that calling a tool completed the user's
+larger workflow.
+
+For an ambiguous mutation, the error classification in
+[`src/protocol/error-contract-v2.ts`](../src/protocol/error-contract-v2.ts)
+uses `retrySafety: "reconcile_first"`: query the original operation and read
+back the target state before deciding what to do. A cancellation, transport
+timeout, lost response, or `UNKNOWN` status after possible dispatch is **not**
+an automatic `succeeded` or `failed` verdict. Only proven
+`not_dispatched` has a stronger no-dispatch claim. Likewise, the
+`audit_query` input filter's `started`/`succeeded`/`failed` status vocabulary
+must not be mistaken for a universal list of possible execution outcomes.
+
+An illustrative *failure shape* (not a live Agent capture):
+
+```json
+{
+  "ok": false,
+  "error": {
+    "code": "MUTATION_STATE_UNKNOWN",
+    "message": "Outcome unconfirmed; reconcile original operation before retrying."
+  }
+}
+```
+
+The example deliberately makes no claim that the mutation failed or that a
+retry is safe. Tool-specific response details remain governed by their actual
+input/output contracts.
+
 ## v1 compatibility rule
 
 `src/mcp/surface.ts` contains `MCP_V1_STABLE_TOOLS`, the compatibility floor for v1.
@@ -69,7 +192,9 @@ node --test --import tsx test/mcp-schema-compat.test.ts test/mcp-surface.test.ts
 
 A changed snapshot is not evidence of compatibility by itself. Review the diff. If the change narrows previously accepted input, introduce a new surface version or a migration layer instead of updating the snapshot.
 
-The compatibility checker currently covers input JSON Schema. Successful structured output stability is enforced through targeted tool tests and remains an explicit follow-up for a machine-readable output contract where the MCP SDK surface provides enough schema metadata.
+The input compatibility checker covers input JSON Schema; the separately frozen
+output semantic profile described below covers selected structured-output
+invariants. Neither automatically proves all nested output meanings unchanged.
 
 ## Frozen v1 output contract
 
