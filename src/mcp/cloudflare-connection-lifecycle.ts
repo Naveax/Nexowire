@@ -207,8 +207,8 @@ if($task){
 switch($env:NEXOWIRE_CONNECTION_ACTION){
  'protect' {
   $stage='CONNECTION_STAGE_PROTECT_ENTRY'
-  // Only invoked after exclusive creation of this connection's launcher and
-  // digest, and only when the named user task does not yet exist.
+  # Only invoked after exclusive creation of this connection's launcher and
+  # digest, and only when the named user task does not yet exist.
   if($task){throw 'CONNECTION_ALREADY_INSTALLED'}
   $paths=@((Split-Path -Parent $launcher),$launcher,($launcher+'.sha256'))
   $ownerSid=[Security.Principal.WindowsIdentity]::GetCurrent().User
