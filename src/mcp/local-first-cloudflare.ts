@@ -1,4 +1,4 @@
-import {promises as fs} from 'node:fs';
+import {promises as fs,constants as fsFlags,type BigIntStats} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import path from 'node:path';
@@ -66,6 +66,55 @@ async function regularFile(file:string,max:number){
   return fs.readFile(file);
 }
 
+/** A narrow, identity-bound cleanup. Never recursively remove an untrusted
+ * runtime path: a renamed/replaced temporary directory could contain someone
+ * else's files. On Linux use the opened directory's /proc fd for child unlink,
+ * so a parent-path swap cannot redirect deletion.
+ * Returns false on drift and leaves the suspicious files untouched.
+ */
+export async function cleanupOwnedCloudflareRuntime(
+  directory:string,root:BigIntStats,files:ReadonlyArray<{name:string;identity:BigIntStats}>,
+):Promise<boolean>{
+  if(!root.isDirectory()||root.isSymbolicLink()||
+     (process.platform!=='win32'&&(root.mode&0o077n)!==0n))return false;
+  const seen=new Set<string>();
+  for(const file of files){
+    if(!['tunnel-credentials.json','config.json'].includes(file.name)||seen.has(file.name)||
+       !file.identity.isFile()||file.identity.isSymbolicLink()||file.identity.nlink!==1n)
+      return false;
+    seen.add(file.name);
+  }
+  let handle:Awaited<ReturnType<typeof fs.open>>|undefined;
+  try{
+    if(process.platform==='linux'){
+      handle=await fs.open(directory,fsFlags.O_RDONLY|fsFlags.O_DIRECTORY|fsFlags.O_NOFOLLOW);
+    }
+    const stable=handle?await handle.stat({bigint:true}):await fs.lstat(directory,{bigint:true});
+    const matches=(a:BigIntStats,b:BigIntStats)=>a.dev===b.dev&&a.ino===b.ino&&a.uid===b.uid;
+    if(!stable.isDirectory()||stable.isSymbolicLink()||!matches(root,stable))return false;
+    const owned=handle?`/proc/self/fd/${handle.fd}`:directory;
+    const existing=await fs.readdir(owned);
+    if(existing.length!==files.length||existing.some(name=>!seen.has(name)))return false;
+    // Validate the entire inventory BEFORE deleting anything.
+    for(const {name,identity} of files){
+      const actual=await fs.lstat(path.join(owned,name),{bigint:true});
+      if(!actual.isFile()||actual.isSymbolicLink()||actual.nlink!==1n||
+         !matches(actual,identity)||
+         (process.platform!=='win32'&&(actual.mode&0o077n)!==0n))return false;
+    }
+    for(const {name,identity} of files){
+      const actual=await fs.lstat(path.join(owned,name),{bigint:true});
+      if(!matches(actual,identity))return false;
+      await fs.unlink(path.join(owned,name));
+    }
+    const final=await fs.lstat(directory,{bigint:true});
+    if(!matches(final,root)||!final.isDirectory())return false;
+    await fs.rmdir(directory);
+    return true;
+  }catch{return false;}
+  finally{await handle?.close().catch(()=>{});}
+}
+
 /** Foreground owner process, suitable for a user-logon task. Stops only its
  * own connector/origin; never restarts Hub, Agent, Broker or Tailscale. */
 export async function startCloudflareConnection(input:unknown,config:NexowireConfig){
@@ -85,10 +134,17 @@ export async function startCloudflareConnection(input:unknown,config:NexowireCon
     throw new Error('Cloudflare tunnel credentials do not match the selected tunnel');
   await verifyLocalFirstPublicUpstream({hubPort:config.port,expectedResourceUrl:config.mcpResourceUrl!,
     requireRemoteAgentAdmission:profile.publishAgentEndpoint});
-  const dir=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-cloudflare-'));
+  // Windows has no approved held-image custodian. Reject before writing even a
+  // temporary copy of the secret. Linux opens and stages the approved image.
+  const approvedImage=await prepareTrustedCloudflared(profile.binary,profile.binarySha256);
+  let dir:string;
+  try{dir=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-cloudflare-'));}
+  catch(error){await approvedImage.dispose();throw error;}
+  const runtimeRoot=await fs.lstat(dir,{bigint:true});
+  const runtimeFiles:Array<{name:string;identity:BigIntStats}>=[];
   const origin=createLocalFirstIngressServer(safe);
   let child:ReturnType<typeof spawn>|undefined;
-  let trusted:TrustedCloudflared|undefined;
+  let trusted:TrustedCloudflared|undefined=approvedImage;
   let stopped=false;
   let exit:Promise<void>|undefined;
   let closePromise:Promise<void>|undefined;
@@ -102,7 +158,10 @@ export async function startCloudflareConnection(input:unknown,config:NexowireCon
     closeLocalFirstAgentSockets(origin);origin.closeAllConnections();
     await new Promise<void>(resolve=>origin.close(()=>resolve()));
     try{await trusted?.dispose();}
-    finally{await fs.rm(dir,{recursive:true,force:true});}
+    finally{
+      if(!await cleanupOwnedCloudflareRuntime(dir,runtimeRoot,runtimeFiles))
+        throw Error('Cloudflare runtime custody drift: unsafe cleanup refused');
+    }
   })();
   try{
     // Cloudflared must NEVER reopen the original mutable credential pathname.
@@ -113,12 +172,13 @@ export async function startCloudflareConnection(input:unknown,config:NexowireCon
     if(!secretStat.isFile()||secretStat.isSymbolicLink()||secretStat.nlink!==1||
        (process.platform!=='win32'&&(secretStat.mode&0o077)!==0))
       throw Error('Cloudflare tunnel credential custody unsafe');
+    runtimeFiles.push({name:'tunnel-credentials.json',identity:await fs.lstat(secretCopy,{bigint:true})});
     tunnelConfig['credentials-file']=secretCopy;
     // Linux uses descriptor-bound exec, never the owner-supplied binary path.
     // Windows remains fail closed until a native immutable-image launch exists.
-    trusted=await prepareTrustedCloudflared(profile.binary,profile.binarySha256);
     const file=path.join(dir,'config.json');
     await fs.writeFile(file,JSON.stringify(tunnelConfig),{mode:0o600,flag:'wx'});
+    runtimeFiles.push({name:'config.json',identity:await fs.lstat(file,{bigint:true})});
     await new Promise<void>((resolve,reject)=>{
       origin.once('error',reject);
       origin.listen(profile.listenPort,'127.0.0.1',()=>{origin.off('error',reject);resolve();});
