@@ -83,12 +83,16 @@ test('V2-03 ingress rejects query, spoofed Host/Origin, oversized upstream outpu
     await new Promise<void>(r=>origin.close(()=>r()));
     await new Promise<void>(r=>hub.close(()=>r()));
   });
-  async function send(path:string,host:string,originHeader?:string){
-    const res=await fetch('http://127.0.0.1:'+port+path,{
-      method:'POST',headers:{host,authorization:'Bearer disposable01234567890',
-        ...(originHeader?{origin:originHeader}:{})},body:'{}'});
-    await res.arrayBuffer().catch(()=>{});
-    return res.status;
+  async function send(path:string,host:string,originHeader?:string):Promise<number>{
+    // Raw Node HTTP avoids undici connection reuse across intentional aborts.
+    return await new Promise<number>((resolve,reject)=>{
+      const req=request({host:'127.0.0.1',port,path,method:'POST',
+        headers:{host,authorization:'Bearer disposable01234567890',
+          ...(originHeader?{origin:originHeader}:{})}},
+        res=>{res.resume();res.once('end',()=>resolve(res.statusCode??0));});
+      req.once('error',reject);
+      req.end('{}');
+    });
   }
   assert.equal(await send('/mcp?debug=true','mcp.example.test'),404);
   assert.equal(await send('/mcp','spoof.example.test'),403);
