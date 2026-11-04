@@ -203,6 +203,7 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
             if(latest.device_ready!==1||latest.device_platform!=='win32'||
               latest.owner_account_id!==before.owner_account_id||
               latest.installation_id!==before.installation_id||latest.enrollment_id!==before.enrollment_id||
+              latest.public_key_spki!==before.public_key_spki||
               latest.owner_epoch!==before.owner_epoch||latest.grant_generation!==before.grant_generation||
               latest.revoke_epoch!==before.revoke_epoch||
               latest.native_consent_receipt_id!==before.native_consent_receipt_id||
@@ -210,6 +211,20 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
               latest.windows_logon_luid!==before.windows_logon_luid||
               latest.windows_logon_session_epoch!==before.windows_logon_session_epoch)
               throw new Error('CORE_NATIVE_CONSENT_SESSION_CHANGED');
+            // The reservation was consumed before the external native readback.
+            // No signed completion is eligible until this SECOND, winner-only
+            // D1 CAS succeeds after independent native and current DB checks.
+            // Every original device, owner, receipt, session, epoch and key
+            // identity is compared again atomically with current readiness.
+            await changed(`UPDATE device_core_console_operations SET native_claim_verified=1
+              WHERE request_id=? AND fingerprint=? AND device_id=? AND installation_id=? AND enrollment_id=?
+                AND owner_epoch=? AND grant_generation=? AND revoke_epoch=?
+                AND state='dispatched' AND native_claim_verified=0
+                AND device_id IN(SELECT c.device_id ${JOIN} WHERE ${currentPredicate}
+                  AND c.native_consent_receipt_id=? AND c.windows_user_sid=? AND c.windows_session_id=?
+                  AND c.windows_logon_luid=? AND c.windows_logon_session_epoch=?)`,
+              [...opArgs,...currentArgs,before.native_consent_receipt_id,before.windows_user_sid,
+                before.windows_session_id,before.windows_logon_luid,before.windows_logon_session_epoch]);
           }catch(error){
             // Only the worker that won the reservation may downgrade its
             // dispatch. A losing contender cannot revoke that worker's claim.
@@ -221,7 +236,13 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
           await changed(`UPDATE device_core_console_operations SET state=?
             WHERE request_id=? AND fingerprint=? AND device_id=? AND installation_id=? AND enrollment_id=?
               AND owner_epoch=? AND grant_generation=? AND revoke_epoch=? AND state='dispatched'
-              AND device_id IN(SELECT c.device_id ${JOIN} WHERE ${currentPredicate})`,[r.outcome,...opArgs,...currentArgs]);
+              AND (?='unknown' OR native_claim_verified=1)
+              AND device_id IN(SELECT c.device_id ${JOIN} WHERE ${currentPredicate}
+                AND c.native_consent_receipt_id=? AND c.windows_user_sid=? AND c.windows_session_id=?
+                AND c.windows_logon_luid=? AND c.windows_logon_session_epoch=?)`,
+            [r.outcome,...opArgs,r.outcome,...currentArgs,before.native_consent_receipt_id,
+              before.windows_user_sid,before.windows_session_id,before.windows_logon_luid,
+              before.windows_logon_session_epoch]);
         }
       }
     }
