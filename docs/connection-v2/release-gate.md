@@ -5,7 +5,7 @@
 ## Frozen source snapshot
 - Candidate identifier: `1.0.8-connection-v2-rc.0+939b4d6` (no release tag)
 - Current main parent: `939b4d6beecf996f2750c736c5d4b4beb7b64488`; old #1003 base: `a19a228dc6f19fd484cf935e941a00ea625233f8` (62 main-side commits)
-- Source HEAD snapshot: #1003 `95d9f9e431ad5a9c46adde1ecf716f84d60d8455`; #1044 `d38b30fec77cce5c9b5e29c491b11f8fe6806bef`; #1074 `5997a6d7ae43c34170016eb0963718ee35bf4a15`; #1077 `67fa411c6aa6135aeeac93f7197b5fd46c804884`; #1081 `707db9728c883d1bb027788793f4cc072768f325`; #1083 `4d8e7b359d572a6ee4cf22fd02ad9ee7ed81808e`; #1084 `bf913cb1a8ca3c40b25bb9a69d1bc1833f384744`.
+- Source HEAD snapshot: #1003 `95d9f9e431ad5a9c46adde1ecf716f84d60d8455`; #1044 `d38b30fec77cce5c9b5e29c491b11f8fe6806bef`; #1074 `5997a6d7ae43c34170016eb0963718ee35bf4a15`; #1077 `67fa411c6aa6135aeeac93f7197b5fd46c804884`; #1081 `707db9728c883d1bb027788793f4cc072768f325`; #1083 `4d8e7b359d572a6ee4cf22fd02ad9ee7ed81808e`; #1084 `03e8507c2d6b18742a6a337356f3d5bb19da6f22`.
 - Git DAG: original six-parent commit (main plus #1003/#1044/#1074/#1077/#1081); next integration commit records #1083, #1084 and newer #1003/#1044 as additional parents. Source refs stay untouched.
 - Selected source paths: **47**, preservation rows **54**. Status distribution: `{"MERGED_MAIN_SECURITY_REVIEW_REQUIRED":4,"EXACT_BLOB":45,"EVOLVED_SOURCE_SEMANTIC_REVIEW_REQUIRED":5}`. Exact SHA matching is not equivalent to semantic verification..
 - `.github/workflows/ci.yml` merged with current-main QA checks and official Cloudflared security checks; `scripts/ai-screen-launch-sinks-baseline.json` union retains main journal owner and new Cloudflare launch sinks. No branch source file was deleted.
@@ -60,13 +60,13 @@
 - Exact SHA `524497acee4d2078828019eb99ff4ad5d8b418df` CI run `41829279333`: `test (24)` failed before adversarial steps because preservation matrix still referenced pre-Oracle `ci.yml` blob; `two_pc_read_only` had an ambiguous non-`NOT_RUN` value. Updated candidate matrix to actual Git blob SHA and restored strict `NOT_RUN` for unperformed v2 acceptance. This change is **not** a security PASS.
 
 ## V2-04 source refresh
-- #1084 Windows recovery source advanced by three commits: `84cfcaa...` → `bf913cb1a8ca3c40b25bb9a69d1bc1833f384744`. `src/mcp/cloudflare-connection-lifecycle.ts` and `test/cloudflare-connection-lifecycle.test.ts` exact new blobs incorporated. Previous candidate CI remains attached to its original SHA; successor must pass its own checks.
+- #1084 Windows recovery source advanced by three commits: `84cfcaa...` → `03e8507c2d6b18742a6a337356f3d5bb19da6f22`. `src/mcp/cloudflare-connection-lifecycle.ts` and `test/cloudflare-connection-lifecycle.test.ts` exact new blobs incorporated. Previous candidate CI remains attached to its original SHA; successor must pass its own checks.
 
 ## Separate Windows negative oracle (latest coordinator patch)
 - Prior exact SHA `aa4fc209ac4fd8486bf4dd68b65238a9f0584994`, CI `41830183272`: Windows browser-live ended RED at the first newly added negative job step, leaving downstream Cloudflared custody/Task validation unexecuted.
 - Split Windows CI into independent matrix job `connection-v2-negative-windows` on Node 22 and Node 24. Existing `browser-live` original Cloudflared credential custody, native image and Windows process cleanup tests remain intact and can now run separately. Both jobs **must pass**. Current new exact SHA result is pending.
 
-## V2-04 refresh at bf913cb1a8ca3c40b25bb9a69d1bc1833f384744
+## V2-04 refresh at 03e8507c2d6b18742a6a337356f3d5bb19da6f22
 - Exact latest four #1084 source blobs carried into the coordinator candidate; source branch unchanged.
 - Windows PowerShell task code uses UTF-16LE `-EncodedCommand`; revised tests avoid bare-PID kills and may run 20 real Scheduler cycles on GitHub disposable Windows runners when `RUNNER_ENVIRONMENT=github-hosted`. This is **NOT_RUN until matching CI emits the cycle evidence**. Reboot/logoff remain NOT_RUN.
 - Any previously completed CI run belongs to its previous exact SHA and cannot approve the refreshed candidate.
@@ -87,5 +87,11 @@
 - Evidence artifact `connection-v2-native-git-dag.json` is produced even on a failed job. Until a matching Actions run exists, native Git checks are **NOT_RUN**. A DAG PASS alone never grants production GO.
 
 ## Latest V2-04 source refresh / native Git prior-run evidence
-- #1084 advanced one commit `385109b87c22ae677ba06f517b7872b732b142dc` → `bf913cb1a8ca3c40b25bb9a69d1bc1833f384744`; exactly three modified source files were imported as Git blobs and matrix source heads refreshed. #1084 branch remains unchanged by coordinator.
+- #1084 advanced one commit `385109b87c22ae677ba06f517b7872b732b142dc` → `03e8507c2d6b18742a6a337356f3d5bb19da6f22`; exactly three modified source files were imported as Git blobs and matrix source heads refreshed. #1084 branch remains unchanged by coordinator.
 - Native Git DAG at **prior** candidate `e3384c89001f49ca1a525ff04639752b23f35c6a`: CI `41835856330` job `126594742469` PASS, `merge-tree=0`, `patch-id=0`, `cherry` 110 records, all 54 source + candidate blobs match. Artifact retained. New exact SHA requires its own DAG job.
+
+## Completed exact-head CI and refreshed V2-04 owner source (2026-11-04)
+- Previous coordinator `06a3d58fa0c7b98764b2aaaa9cb5a6d16651dffb`: CI `41836378207` **FAILURE**. All nine other jobs PASS, but Windows `browser-live` job `126596782011` exit 1 with four security/compatibility failures: P1-D ACL on owner-only disposable fixture, P1-B signed official image/immutable custodian, Windows foreign task refusal reason, and checksum/credential identity error precedence. Do not suppress tests or treat a fail-closed rejection as the expected security proof without testing the intended boundary.
+- Native Git DAG job `126596782124` exact SHA SUCCESS: merge-tree exit 0, stable patch-id exit 0, cherry 111, source blob 54/54, candidate blob 54/54. Relay Windows/Linux Node22/24 run `41836378051` 4/4 SUCCESS. Release Readiness `41836378072` SUCCESS is packaging only.
+- Real TLS loopback WSS benchmark has 101 authenticated admissions and 101 read-only AgentBroker ACK completions on all four Node/OS combinations, 128 connection cap, 129th attempted connection rejected by 503, and 256 attempt scenario capped at 128. Exact CPU/RSS/latency samples stored in `staging-evidence.json`. No external hosting, 1 GiB file transfer or 24h soak was exercised, and whole-process memory/CPU must not be mislabeled relay-only provider cost.
+- #1084 latest `03e8507c2d6b18742a6a337356f3d5bb19da6f22` adds allowlisted, non-sensitive PowerShell task refusal-token reporting in `src/mcp/cloudflare-connection-lifecycle.ts`; one source blob updated, all original assertions unchanged. Previous completed CI is evidence for **previous** SHA only; new candidate exact SHA checks required.

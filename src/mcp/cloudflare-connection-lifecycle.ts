@@ -168,6 +168,12 @@ public static class NexowireConnectionJob {
 const SCRIPT=String.raw`
 $ErrorActionPreference='Stop'
 trap {
+ # Report only fixed, non-sensitive refusal tokens. Do not print arbitrary
+ # exception text containing paths, task definitions or credential material.
+ $refusal=[string]$_.Exception.Message
+ if($refusal -cmatch '^CONNECTION_[A-Z_]{3,64}$'){
+   [Console]::Error.WriteLine($refusal)
+ }
  $type=$_.Exception.GetType().Name
  if($type -match '^[A-Za-z]{1,40}$') { [Console]::Error.WriteLine('CONNECTION_PS_'+$type.ToUpperInvariant()) }
  if($stage -match '^CONNECTION_STAGE_[A-Z_]{3,64}$') { [Console]::Error.WriteLine($stage) }
