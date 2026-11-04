@@ -120,7 +120,7 @@ function windowsCredentialAcl(file:string){
       childCode==='ENOBUFS'?'POWERSHELL_OUTPUT_BOUND':
       childCode?'POWERSHELL_SPAWN_'+(childCode==='ENOENT'?'MISSING':'FAILED'):
       marker?.[1]??(child.status===0?'INVALID_RESULT':'POWERSHELL_UNCLASSIFIED_EXIT');
-    const meta=/C13:PARENT_REPLACE_ACE:D(\\d+):R(-?\\d+):P(\\d+):I(\\d+):H([01])/.exec(child.stderr??'');
+    const meta=/C13:PARENT_REPLACE_ACE:D(\d+):R(-?\d+):P(\d+):I(\d+):H([01])/.exec(child.stderr??'');
     const detail=meta?{
       depth:Number(meta[1]),rights:Number(meta[2]),
       propagation:Number(meta[3]),inheritance:Number(meta[4]),inherited:meta[5]==='1',
