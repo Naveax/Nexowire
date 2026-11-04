@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {readCloudflareTunnelCredential} from '../src/mcp/cloudflare-credential-custody.js';
 import {prepareTrustedCloudflared,stageDescriptorBoundImage,OFFICIAL_CLOUDFLARED_SHA256} from '../src/mcp/cloudflare-binary-trust.js';
+import {cleanupOwnedCloudflareRuntime} from '../src/mcp/local-first-cloudflare.js';
 
 const digest=(data:Buffer|string)=>createHash('sha256').update(data).digest('hex');
 async function root(t:import('node:test').TestContext){
@@ -106,4 +107,56 @@ test('CLEAN-13 P1-A: production sealed image has no pathname or hardlink alias',
   });
   assert.equal(run.status,0,run.error?.message);
   assert.equal(await fs.readFile(marker,'utf8'),'sealed');
+});
+
+test('CLEAN-13 P1-D: owned private credential/config files clean up without recursive rm',{
+  skip:process.platform!=='linux',
+},async t=>{
+  const dir=await root(t);
+  const anchor=await fs.lstat(dir,{bigint:true});
+  const files=[] as Array<{name:string;identity:import('node:fs').BigIntStats}>;
+  for(const name of ['config.json','tunnel-credentials.json']){
+    await fs.writeFile(path.join(dir,name),'disposable',{mode:0o600,flag:'wx'});
+    files.push({name,identity:await fs.lstat(path.join(dir,name),{bigint:true})});
+  }
+  assert.equal(await cleanupOwnedCloudflareRuntime(dir,anchor,files),true);
+  await assert.rejects(fs.lstat(dir),{code:'ENOENT'});
+});
+
+test('CLEAN-13 P1-D: replaced credential inode is never deleted by cleanup',{
+  skip:process.platform!=='linux',
+},async t=>{
+  const dir=await root(t),credential=path.join(dir,'tunnel-credentials.json');
+  await fs.writeFile(credential,'original',{mode:0o600});
+  const anchor=await fs.lstat(dir,{bigint:true});
+  const original=await fs.lstat(credential,{bigint:true});
+  const backup=path.join(dir,'backup');
+  await fs.rename(credential,backup);
+  await fs.writeFile(credential,'foreign',{mode:0o600});
+  assert.equal(await cleanupOwnedCloudflareRuntime(dir,anchor,[
+    {name:'tunnel-credentials.json',identity:original},
+  ]),false);
+  assert.equal(await fs.readFile(credential,'utf8'),'foreign');
+  assert.equal(await fs.readFile(backup,'utf8'),'original');
+});
+
+test('CLEAN-13 P1-D: parent-path symlink swap never deletes victim credentials',{
+  skip:process.platform!=='linux',
+},async t=>{
+  const dir=await root(t),victim=await root(t);
+  const credential=path.join(dir,'tunnel-credentials.json');
+  const victimFile=path.join(victim,'tunnel-credentials.json');
+  await fs.writeFile(credential,'owned',{mode:0o600});
+  await fs.writeFile(victimFile,'victim',{mode:0o600});
+  const anchor=await fs.lstat(dir,{bigint:true});
+  const identity=await fs.lstat(credential,{bigint:true});
+  const moved=dir+'-moved';
+  await fs.rename(dir,moved);
+  t.after(()=>fs.rm(moved,{recursive:true,force:true}));
+  await fs.symlink(victim,dir,'dir');
+  assert.equal(await cleanupOwnedCloudflareRuntime(dir,anchor,[
+    {name:'tunnel-credentials.json',identity},
+  ]),false);
+  assert.equal(await fs.readFile(victimFile,'utf8'),'victim');
+  assert.equal(await fs.readFile(path.join(moved,'tunnel-credentials.json'),'utf8'),'owned');
 });
