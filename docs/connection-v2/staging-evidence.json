@@ -12,7 +12,7 @@
     "1077": "67fa411c6aa6135aeeac93f7197b5fd46c804884",
     "1081": "707db9728c883d1bb027788793f4cc072768f325",
     "1083": "4d8e7b359d572a6ee4cf22fd02ad9ee7ed81808e",
-    "1084": "84cfcaa19095f3210e92ffc22d7ca3dce3d8dd13"
+    "1084": "b9312a456b0feafede4b4f3c9bd53e108f5af5c6"
   },
   "source_files": 47,
   "matrix_rows": 54,
@@ -148,5 +148,17 @@
     "issue": "source preservation expected old ci.yml blob; full CI not reached",
     "second_issue": "two_pc_read_only incorrectly held CURRENT_AGENT_ONLY_V2_NOT_RUN rather than NOT_RUN",
     "resolved_in_next_candidate": true
-  }
+  },
+  "source_refreshes": [
+    {
+      "pr": 1084,
+      "old_sha": "84cfcaa19095f3210e92ffc22d7ca3dce3d8dd13",
+      "new_sha": "b9312a456b0feafede4b4f3c9bd53e108f5af5c6",
+      "files": [
+        "src/mcp/cloudflare-connection-lifecycle.ts",
+        "test/cloudflare-connection-lifecycle.test.ts"
+      ],
+      "reason": "Windows lifecycle owner latest source edits; release remains NO_GO"
+    }
+  ]
 }

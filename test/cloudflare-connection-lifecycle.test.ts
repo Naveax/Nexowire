@@ -4,7 +4,8 @@ import {mkdtemp,rm,writeFile,readFile} from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import {randomUUID} from 'node:crypto';
-import {buildCloudflareConnectionLauncher,cloudflareConnectionLifecycle} from '../src/mcp/cloudflare-connection-lifecycle.js';
+import {spawnSync} from 'node:child_process';
+import {buildCloudflareConnectionLauncher,cloudflareConnectionLifecycle,windowsConnectionControllerSourceForTest} from '../src/mcp/cloudflare-connection-lifecycle.js';
 import {inspectCloudflareConnection} from '../src/mcp/cloudflare-connection-doctor.js';
 import {loadConfig} from '../src/config.js';
 
@@ -89,6 +90,28 @@ test('Cloudflare connection task refuses reserved Hub and protected boot task id
   for(const name of ['Nexowire Hub','Nexowire Hub Boot','Nexowire Stack']){
     await assert.rejects(cloudflareConnectionLifecycle('status',undefined,{taskName:name}),/Invalid connection task name/);
   }
+});
+
+test('Windows controller PowerShell 5.1 source parses without executing any task',{
+  skip:process.platform!=='win32',timeout:30000,
+},()=>{
+  const parse=String.raw`$source=[Console]::In.ReadToEnd()
+$tokens=$null
+$errors=$null
+[System.Management.Automation.Language.Parser]::ParseInput($source,[ref]$tokens,[ref]$errors) | Out-Null
+foreach($error in $errors){
+  # Only bounded parser diagnostic IDs/line/column, never source or secrets.
+  $id=[string]$error.ErrorId
+  if($id -notmatch '^[a-zA-Z0-9_-]{1,100}$'){$id='UNRECOGNIZED'}
+  [Console]::Out.WriteLine($id+'@'+$error.Extent.StartLineNumber+':'+$error.Extent.StartColumnNumber)
+}
+if(@($errors).Count -gt 0){exit 3}
+exit 0`;
+  const result=spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+    ['-NoLogo','-NoProfile','-NonInteractive','-Command',parse],{
+      input:windowsConnectionControllerSourceForTest(),encoding:'utf8',timeout:15000,windowsHide:true,
+    });
+  assert.equal(result.status,0,'PowerShell parser failures: '+(result.stdout??'').slice(0,1000));
 });
 
 test('Windows user-logon task registers limited and cannot be silently overwritten',{
