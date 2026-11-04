@@ -74,7 +74,7 @@ export async function readCloudflareTunnelCredential(file:string):Promise<Buffer
     await parents(file);
     if(process.platform==='win32')windowsCredentialAcl(file);
     const prior=await fs.lstat(file,{bigint:true});
-    if(!prior.isFile()||prior.isSymbolicLink()||prior.nlink!==1||
+    if(!prior.isFile()||prior.isSymbolicLink()||prior.nlink!==1n||
        prior.size<1n||prior.size>BigInt(MAX_CREDENTIAL_BYTES))deny();
     if(process.platform!=='win32'){
       const uid=BigInt(typeof process.getuid==='function'?process.getuid():-1);
