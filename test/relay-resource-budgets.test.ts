@@ -12,7 +12,8 @@ import { AGENT_PROTOCOL_VERSION } from '../src/protocol/agent.js';
 
 import assert from 'node:assert/strict';
 import { createServer, type Server } from 'node:http';
-import WebSocket from 'ws';
+import { connect as connectTcp } from 'node:net';
+import WebSocket, { WebSocketServer } from 'ws';
 import { startRelayServer } from '../src/relay/server.js';
 import { assertSafeRelayConfig, loadRelayConfig, type NexowireRelayConfig } from '../src/relay/config.js';
 
@@ -162,6 +163,81 @@ test('shutdown is idempotent and cannot hang on an unresponsive upstream', async
   await closed(first, 2_000);
 });
 
+
+
+test('oversized incoming frame closes with protocol code 1009, not an upstream delivery', async t => {
+  const http = createServer();
+  const upstream = new WebSocketServer({ server: http });
+  let received = 0;
+  upstream.on('connection', socket => { socket.on('message', () => { received++; }); });
+  const port = await boundServer(http);
+  const relay = await startRelayServer(relayConfig(port));
+  t.after(async () => {
+    await relay.close();
+    for (const client of upstream.clients) client.terminate();
+    await new Promise<void>(resolve => upstream.close(() => resolve()));
+    await new Promise<void>(resolve => http.close(() => resolve()));
+  });
+  const client = ws(relay.url);
+  await open(client);
+  const code = new Promise<number>(resolve => client.once('close', c => resolve(c)));
+  client.send(Buffer.alloc(65 * 1024));
+  assert.equal(await code, 1009);
+  assert.equal(received, 0);
+});
+
+test('stalled upstream exhausts only the 2 MiB pre-handshake queue and releases bytes', async t => {
+  const upstream = createServer();
+  const sockets = new Set<import('node:stream').Duplex>();
+  upstream.on('upgrade', (_req, socket) => {
+    sockets.add(socket);
+    socket.once('close', () => sockets.delete(socket));
+  });
+  const port = await boundServer(upstream);
+  const relay = await startRelayServer(relayConfig(port, {
+    upstreamHandshakeTimeoutMs: 5_000,
+    shutdownGraceMs: 200,
+  }));
+  t.after(async () => {
+    await relay.close();
+    for (const socket of sockets) socket.destroy();
+    await new Promise<void>(resolve => upstream.close(() => resolve()));
+  });
+  const client = ws(relay.url);
+  await open(client);
+  const closure = new Promise<number>(resolve => client.once('close', code => resolve(code)));
+  for (let i = 0; i < 40; i++) {
+    if (client.readyState !== WebSocket.OPEN) break;
+    client.send(Buffer.alloc(64 * 1024));
+  }
+  assert.equal(await closure, 1013);
+  await until(() => relay.resourceSnapshot().startupQueuedBytes === 0);
+  assert.equal(relay.resourceSnapshot().startupQueuedFrames, 0);
+  assert.ok(relay.resourceSnapshot().peakStartupQueuedBytes <= 2 * 1024 * 1024);
+});
+
+test('partial HTTP slowloris headers allocate no authenticated relay pair', async t => {
+  const relay = await startRelayServer(relayConfig(9));
+  const address = relay.server.address();
+  assert.ok(address && typeof address === 'object');
+  const sockets = Array.from({ length: 32 }, () => connectTcp(address.port, '127.0.0.1'));
+  t.after(async () => {
+    for (const socket of sockets) socket.destroy();
+    await relay.close();
+  });
+  await Promise.all(sockets.map(socket => new Promise<void>((resolve, reject) => {
+    socket.once('connect', () => {
+      socket.write('GET /agent HTTP/1.1\\r\\nHost: localhost\\r\\nAuthorization: Bearer ');
+      resolve();
+    });
+    socket.once('error', reject);
+  })));
+  await new Promise(resolve => setTimeout(resolve, 100));
+  assert.equal(relay.wss.clients.size, 0);
+  assert.equal(relay.resourceSnapshot().connectingUpstreams, 0);
+  assert.equal(relay.server.headersTimeout, 10_000);
+  assert.equal(relay.server.requestTimeout, 10_000);
+});
 
 /** Isolated test runner: actual WSS + native AgentBroker request completions. */
 function percentile(values: number[], percent: number): number {
