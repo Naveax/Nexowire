@@ -422,6 +422,8 @@ export async function startRelayServer(
       });
     } catch {
       if (!transferred) onRawClose();
+      // Listener exceptions must never strand an admission reservation.
+      else releaseSlot();
       socket.destroy();
     }
   });

@@ -165,6 +165,8 @@ test('shutdown is idempotent and cannot hang on an unresponsive upstream', async
   await Promise.all([relay.close(), relay.close()]);
   assert.ok(Date.now() - before < 2_000, 'shutdown should terminate the stuck pair');
   await closed(first, 2_000);
+  await until(() => relay.resourceSnapshot().totalReservedBytes === 0);
+  assert.equal(relay.resourceSnapshot().reservedConnectionSlots, 0);
 });
 
 
@@ -265,6 +267,8 @@ test('global queue budget fails closed, releases every reservation and preserves
   const port = await boundServer(upstream);
   const relay = await startRelayServer(relayConfig(port, {
     maxConnections: 2,
+    // 128 KiB frame ceiling keeps the per-pair queue above the shared cap.
+    maxPayloadBytes: 128 * 1024,
     globalMemoryBudgetBytes: 256 * 1024,
     upstreamHandshakeTimeoutMs: 8_000,
     shutdownGraceMs: 150,
@@ -314,6 +318,48 @@ test('global queue budget fails closed, releases every reservation and preserves
   assert.equal(after.startupQueuedFrames, 0);
   assert.equal(after.reservedConnectionSlots, 0);
   assert.equal(after.pendingUpstreamHandshakes, 0);
+});
+
+
+test('global connection reservation cap rejects fifth upgrade with HTTP 503 and drains on close', async t => {
+  const upstream = createServer();
+  const service = new WebSocketServer({ server: upstream });
+  const port = await boundServer(upstream);
+  const relay = await startRelayServer(relayConfig(port, {
+    maxConnections: 8,
+    maxPendingUpstreamHandshakes: 8,
+    globalMemoryBudgetBytes: 256 * 1024,
+  }));
+  const clients: WebSocket[] = [];
+  t.after(async () => {
+    for (const client of clients) client.terminate();
+    await relay.close();
+    for (const peer of service.clients) peer.terminate();
+    await new Promise<void>(resolve => service.close(() => resolve()));
+    await new Promise<void>(resolve => upstream.close(() => resolve()));
+  });
+  for (let n = 0; n < 4; n++) {
+    const client = ws(relay.url);
+    clients.push(client);
+    await open(client);
+  }
+  await until(() => relay.resourceSnapshot().pendingUpstreamHandshakes === 0);
+  const full = relay.resourceSnapshot();
+  assert.equal(full.reservedConnectionSlots, 4);
+  assert.equal(full.totalReservedBytes, 256 * 1024);
+  assert.equal(full.connectionReservedBytes, 256 * 1024);
+  assert.equal(await status(ws(relay.url)), 503);
+  assert.equal(relay.resourceSnapshot().reservedConnectionSlots, 4);
+  assert.equal(relay.resourceSnapshot().overload503Count, 1);
+  for (const client of clients) client.close();
+  await Promise.all(clients.map(client => closed(client)));
+  await until(() => relay.resourceSnapshot().totalReservedBytes === 0);
+  const released = relay.resourceSnapshot();
+  assert.equal(released.connectionReservedBytes, 0);
+  assert.equal(released.inflightReservedBytes, 0);
+  assert.equal(released.startupQueuedBytes, 0);
+  assert.equal(released.pendingUpstreamHandshakes, 0);
+  assert.equal(released.reservedConnectionSlots, 0);
 });
 
 test('pending handshake limit rejects a new authenticated upgrade with 503 before allocating upstream', async t => {

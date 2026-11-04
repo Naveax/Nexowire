@@ -89,3 +89,5 @@ After controlled close and cleanup all current counters must become zero. A stal
 **P2P backlog (NOT_RUN):** evaluate WebRTC/ICE/STUN plus TURN fallback for bulk file, desktop pixels and telemetry streams with consent and device binding; use measured egress and quota spending guards. Authenticated MCP control, owner authorization, revocation and mutation ACK stay authoritative and are **not** replaced by P2P.
 
 **Public hosted Cloudflare 101+ WSS:** NOT_RUN. **Cross-device 1 GiB verified stream:** NOT_RUN. **24-hour soak and actual provider egress/billing:** NOT_RUN. **Production GO:** NO-GO until external security gates, hosted capacity and transfer correctness validation.
+
+**Additional Round 2 negative:** the 256 KiB global reservation cap, at 64 KiB per pair, accepts four authenticated upgrades and returns HTTP 503 on the fifth despite an eight-connection configured ceiling. A separate 128 KiB-max-frame stalled-upstream fixture proves global queue 1013 is reached before the per-pair startup cap. Both assert cleanup to zero without skipping tests.
