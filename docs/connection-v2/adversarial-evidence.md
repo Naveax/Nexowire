@@ -100,3 +100,15 @@ CI URLs:
 4. V2-08: independent combined-SHA revoked/wrong-device/auth-before-101, 60s revalidation with a bounded 5s decision, cancellation -> UNKNOWN, zero re-dispatch, and socket/child cleanup. For each outcome record source SHA, OS, command, exit code, targeted assertion and CI job. Until that arrives, explicit NOT_RUN.
 
 Safety: no src/** edits; no CORE, live PCs, DNS, Cloudflare tunnel, service credentials, user tokens, deployment, merge, or branch deletion. All local credentials in fixtures are synthetic.
+
+
+## V2-06 CI follow-up (supersedes earlier NOT_RUN for the first V2-06 commit)
+
+- **Exact head SHA 32e1ea5b25fdfa79ec1a10e747425f34e224bf00**, GitHub Actions pull_request run [41825029614](https://github.com/Naveax/Nexowire/actions/runs/41825029614), attempt 1, completed FAILURE. Runner head_sha matched this SHA. Node 24 job 126557460985, npm run check, **exit code 1**. Test fixtures compiled/ran; there is no invented local run.
+- New real 307 collector: Agent authenticate **FAIL** (second server observed 1 redirected POST, expected 0); presence **FAIL** (1 redirected POST, expected 0). The initial run proves request forwarding, **not by itself that Authorization was retained**: browsers/fetch may strip cross-origin Authorization. A follow-up diagnostic collects only boolean indicators of device token in POST body, presence device ID, and Authorization header, without logging secrets. That diagnostic requires new exact-head CI.
+- New Linux real filesystem: credential hardlink **FAIL**, writable parent **FAIL**, binary hardlink **FAIL**, credential symlink **PASS**. Each failed test lacked the named security-specific rejection, not because of an unrelated mock failure. Source baseline still insecure.
+- Node 24 run also reported independent FAIL for existing OAuth public doctor and new V2-03 ingress query/Host/Origin test (socket closed, undici UND_ERR_SOCKET). These are separate owner regressions, not grounds to delete or skip V2-06 assertions.
+- Windows browser-live job 126557461172, **exit code 1**: public OAuth doctor expected true but got false; disposable task parent termination failed. These were source-owner tests, not V2-06 fixture results.
+- #1077 candidate 67fa411c6aa6135aeeac93f7197b5fd46c804884, CI run [41824607523](https://github.com/Naveax/Nexowire/actions/runs/41824607523), attempt 1: Linux Node 24 job 126556283541 showed original P1-A/B/D focused assertions **PASS**, plus Linux CLEAN-13 sealed-FD, symlink/hardlink, custody checks **PASS**. Original P1-C assertions remain **FAIL**. Windows browser-live job 126556283485 failed custody SID/ACE/parent, immutable native launch and task parent stop. Overall CI **FAIL**.
+- #1074 candidate daa834ef588261905529c845d619c9df34b332f7, CI run [41825280799](https://github.com/Naveax/Nexowire/actions/runs/41825280799) was **in_progress** at this follow-up; do not rerun, do not imply all-green.
+- **No combined #1077+#1074+current #1003 exact SHA acceptance was performed. Overall still NO-GO.** Source-owner PR heads are moving; re-read exact HEAD and base for any later gate.

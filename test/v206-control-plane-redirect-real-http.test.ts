@@ -19,13 +19,19 @@ async function close(server:Server):Promise<void>{
   await new Promise<void>((resolve,reject)=>server.close(err=>err?reject(err):resolve()));
 }
 async function redirectFixture(t:import('node:test').TestContext){
-  const collector:{authorization:string|undefined;method:string|undefined}[]=[];
+  const collector:{authorization:string|undefined;method:string|undefined;deviceCredentialInBody:boolean;presenceDeviceIdInBody:boolean}[]=[];
   let redirects=0;
   const sink=createServer((req,res)=>{
-    collector.push({authorization:req.headers.authorization,method:req.method});
-    req.resume();
-    res.writeHead(200,{'content-type':'application/json'});
-    res.end(JSON.stringify({authenticated:true,device:{deviceId:'disposable-device-01'},updated:true}));
+    const chunks:Buffer[]=[];
+    req.on('data',(chunk:Buffer)=>chunks.push(chunk));
+    req.once('end',()=>{
+      const body=Buffer.concat(chunks).toString('utf8');
+      collector.push({authorization:req.headers.authorization,method:req.method,
+        deviceCredentialInBody:body.includes('nwx_dev_'),
+        presenceDeviceIdInBody:body.includes('disposable-device-01')});
+      res.writeHead(200,{'content-type':'application/json'});
+      res.end(JSON.stringify({authenticated:true,device:{deviceId:'disposable-device-01'},updated:true}));
+    });
   });
   const sinkPort=await listen(sink);
   t.after(()=>close(sink));
@@ -51,6 +57,9 @@ test('V2-06 P1-C real HTTP 307 cannot forward Agent authentication secrets', {ti
   });
   const authorization=await verifier('Bearer nwx_dev_disposable_device_0123456789');
   assert.equal(f.redirects,1,'disposable redirect response must actually be reached');
+  if(f.collector.length)t.diagnostic('Redirect collector: requests='+f.collector.length+
+    ', device-credential-in-body='+f.collector.some(v=>v.deviceCredentialInBody)+
+    ', authorization-header-present='+f.collector.some(v=>Boolean(v.authorization)));
   assert.equal(f.collector.length,0,'HTTP 307 destination must receive ZERO device/service credentials');
   assert.equal(authorization,undefined,'remote redirect must never authenticate a device');
 });
@@ -64,6 +73,9 @@ test('V2-06 P1-C real HTTP 307 cannot forward Agent presence service token', {ti
   });
   const accepted=await report({deviceId:'disposable-device-01',online:false,at:'2026-11-04T00:00:00.000Z'});
   assert.equal(f.redirects,1,'disposable redirect response must actually be reached');
+  if(f.collector.length)t.diagnostic('Redirect collector: requests='+f.collector.length+
+    ', presence-device-id-in-body='+f.collector.some(v=>v.presenceDeviceIdInBody)+
+    ', authorization-header-present='+f.collector.some(v=>Boolean(v.authorization)));
   assert.equal(f.collector.length,0,'HTTP 307 destination must receive ZERO presence service credentials');
   assert.equal(accepted,false,'a redirect must never count as authenticated presence update');
 });
