@@ -61,7 +61,7 @@ function windowsPublisherSignature(file:string){
     "}",
   ].join('\\n');
   const started=Date.now();
-  const result=spawnSync('C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe',
+  const result=spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
     ['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(ps,'utf16le').toString('base64')],
     {encoding:'utf8',windowsHide:true,timeout:25000,maxBuffer:4096,
       env:{...windowsDpapiChildEnvironment(),NEXOWIRE_CLOUDFLARED_IMAGE:file}});
