@@ -71,6 +71,38 @@ The P1-C public-origin failures and separate Windows task parent/descendant life
 | Control | Linux x64 source gate | Windows native gate | Production |
 |---|---|---|---|
 | P1-A immutable executed image | Conditional pass for cross-UID path swap; same-UID sealed-memfd proof missing | **NO-GO**, native signed held-section custodian absent | **NO-GO** |
-| P1-B publisher provenance | Source-pinned official 2026.10.1 hash and positive official executable test | **NO-GO**, Authenticode audit does not complete successfully on hosted runner | **NO-GO** |
-| P1-D original credential custody | Conditional pass, owner/mode/inode/no-follow | **NO-GO**, SID/ACE positive fails hosted; descriptor native proof missing | **NO-GO** |
+| P1-B publisher provenance | Source-pinned official 2026.10.1 hash and positive official executable test | Official 2026.10.1 SHA256 + Authenticode Valid + Cloudflare signer checked on disposable Windows CI; native held-image binding **NO-GO** | **NO-GO** |
+| P1-D original credential custody | Conditional pass, owner/mode/inode/no-follow | **DISPOSABLE WINDOWS PASS** exact owner SID positive, foreign owner, explicit/inherited ACE, parent mutation negatives; native file-ID/rename proof **NO-GO** | **NO-GO** |
 | P1-D temporary cleanup | Identity-bound cleanup plus adversarial regressions pending exact-HEAD CI | No credential staging until native image acceptance; runtime cleanup not physically accepted | **NO-GO** |
+
+## V2-01 Round 2: Windows PowerShell, owner SID and ACE closure
+
+**Precise source gate:** #1077 remains Draft; original #1044 negative Git blobs unchanged. Windows tunnel launch remains disabled, because verifying a signed file through a pathname is not a held verified Windows image section.
+
+### Root causes (hosted disposable Windows runner)
+
+1. The runner's temporary fixture initially had an Administrators-group owner. Granting the logged-on user `(F)` was insufficient: ACL permissions do not replace the NTFS owner SID. The fixture now sets the actual logged-on SID as owner of its own temporary directory and file only; production ACL policy is unchanged.
+2. Windows PowerShell 5.1 subprocess verification was slow/unstable: earlier official image audit missed a 25,000 ms deadline; a subsequent owner-only ACL invocation returned classified `POWERSHELL_51_TIMEOUT` at **45,026 ms**. The fixed, system-wide PowerShell 7 executable under `C:\Program Files\PowerShell\7\pwsh.exe` executes the same strict checks on hosted Windows in about one second; Windows PowerShell 5.1 is still the fixed, fail-closed fallback where PS7 is absent. Both callsites use isolated child environments, fixed executable locations, and bounded output; no arbitrary `PATH` override.
+3. Even under an isolated user-profile fixture, a parent ACE was rejected as `PARENT_REPLACE_ACE`. The read-only diagnostic proved **depth 4, inheritance=3, propagation=2 (InheritOnly), inherited=false**. An `InheritOnly` entry is a template for descendants, not an effective permission on the parent object itself. The audit now ignores only that non-effective ACE **on the object being inspected**, while still traversing every descendant DACL and rejecting actual inherited rights. This was not a waiver for foreign access.
+4. The prior credential mismatch negative inadvertently depended on first accepting a nonofficial binary. It now exercises the pure bounded credential identity validator directly; the public launch path continues to reject the fake executable at independent provenance admission. No real tunnel secret, network endpoint, owner device, Cloudflare account or DNS was touched.
+
+### Confirmed hosted tests
+
+- GitHub Actions **41903957718**, exact source SHA `76fe54ac27796736313f16261968dd6edc4c23c8`, Windows browser-live job **126833516445**, source command `node --test --import tsx test/clean13-cloudflared-windows-custody.test.ts test/local-first-cloudflare.test.ts test/cloudflare-connection-lifecycle.test.ts test/cloudflare-agent-upgrade.test.ts test/connection-active-authorization.test.ts test/control-plane-agent-auth.test.ts test/agent-broker.e2e.test.ts`:
+  - **PASS**: `CLEAN-13 P1-D Windows exact SID, inherited ACE and parent replacement rights` (7.68s). Confirms positive owner-only fixture, explicit foreign read ACE rejection, **actual inherited** foreign read ACE rejection, foreign NTFS owner rejection, and parent `Users:(M)` rejection. No failed assertion skipped.
+  - **PASS**: `CLEAN-13 P1-B Windows official image requires native immutable launch guard` (1.28s). Official SHA256+valid Authenticode reaches the intentional native custodian denial instead of a wrong-publisher rejection.
+  - **PASS**: independent PowerShell 7 signer baseline (1.18s), official `Valid`, Cloudflare signer, SHA pin, public certificate thumbprint `0B6C68C4BAD79F9AC39E07FE84223FB796D4D0BC`.
+  - **PASS**: `checksum and tunnel identity are checked before any network exposure`, with credential-format mismatch checked independently of publisher gate.
+  - **FAIL**, outside this file ownership: `Windows connection task stop terminates its real disposable process tree` (`task stop must stop the managed parent`), owned by V2-04. Windows browser-live job exit 1, not green.
+- Same SHA Linux Node24 job **126833516771**, `npm run check` exit 1 from **8 independent inherited red tests** (five AI-11 P1-C, two V2-06 HTTP 307 redirect tests, one V2-06 revocation-at-dispatch). **PASS**: official 2026.10.1 Linux sealed-FD `--version`; all original AI-11 P1-A/B/D and CLEAN-13 Linux path-swap, hardlink, symlink, credential owner/mode, and cleanup regressions. Do not relabel aggregate CI as success.
+- Earlier Windows CI **41901471345**, job **126824724474**, P1-D `POWERSHELL_51_TIMEOUT` at 45,026 ms; CI **41902337991** job **126828412983**, `PARENT_REPLACE_ACE` on runner shared temp; CI **41903367391** job **126832250243**, depth/propagation evidence reproduced under user profile before the effective-ACE fix.
+
+### Remaining strict security gates
+
+- Windows **P1-A NO-GO**: no native, signed, immutable executable section/held-handle custodian linked to process creation and final process image identity. Do not permit `spawn(profile.binary)` even after Authenticode PASS.
+- Windows **P1-B** official artifact/source-stage signed provenance confirmed on disposable runner, but final execute-image provenance remains **NO-GO**.
+- Windows **P1-D** owner/ACE/parent policy validated on disposable files, but native file-ID/rename/reparse/cleanup under multi-SID adversarial races and actual tunnel launch remain **NOT_RUN / NO-GO**.
+- Linux same-UID mutation of an already-held executable inode is not sealed; Linux P1-A is conditional for the cross-UID/path-swap model only.
+- Cross-owner regressions P1-C, revocation and Windows lifecycle remain red in the source-stacked PR and must be resolved by their owners or verified in the integration candidate separately.
+
+**Overall release decision: NO-GO** until native Windows image identity, off-network authenticated Cloudflare acceptance, and all integration gates are satisfied. Windows native launch remains fail-closed.
