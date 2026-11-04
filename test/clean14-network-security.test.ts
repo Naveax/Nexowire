@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createServer,type Server} from 'node:http';
 import {once} from 'node:events';
+import {createSocket} from 'node:dgram';
+import {Resolver} from 'node:dns/promises';
 import {normalizeControlPlaneBase,resolveControlPlaneAddress,controlPlaneSecretPost} from '../src/hub/control-plane-network-policy.js';
 import {ControlPlaneMcpClient,ControlPlaneMcpVerifierUnavailableError} from '../src/hub/control-plane-mcp-auth.js';
 import {createControlPlaneAgentCredentialVerifier,createControlPlaneAgentPresenceReporter} from '../src/hub/control-plane-agent-auth.js';
@@ -177,6 +179,74 @@ test('CLEAN-14 P1-C: revoked credential and ambiguous device identities do not a
   result={authenticated:false,device:{deviceId:'expected-device-id'}};
   assert.equal(await verify(agent),undefined,'revoked or expired authority must deny on fresh verification');
   assert.equal(await verify('Bearer shared-legacy-token'),undefined,'shared token is not a device credential');
+});
+
+test('CLEAN-14 P1-C: real isolated UDP CNAME chain and changing DNS cache deny a rebinding private IP',{
+  timeout:10000,
+},async t=>{
+  const dns=createSocket('udp4');
+  const encodeName=(hostname:string):Buffer=>Buffer.concat([
+    ...hostname.split('.').map(label=>Buffer.concat([
+      Buffer.from([label.length]),Buffer.from(label,'ascii'),
+    ])),Buffer.from([0]),
+  ]);
+  const resourceRecord=(owner:Buffer,type:number,data:Buffer):Buffer=>{
+    const info=Buffer.alloc(10);
+    info.writeUInt16BE(type,0);
+    info.writeUInt16BE(1,2); // IN
+    info.writeUInt32BE(5,4); // TTL
+    info.writeUInt16BE(data.length,8);
+    return Buffer.concat([owner,info,data]);
+  };
+  let answer='8.8.8.8';
+  let queries=0;
+  dns.on('message',(query,peer)=>{
+    if(query.length<17)return;
+    let offset=12;
+    while(offset<query.length && query[offset]!==0)offset+=1+query[offset]!;
+    const end=offset+5;
+    if(end>query.length)return;
+    queries++;
+    const header=Buffer.alloc(12);
+    query.copy(header,0,0,2); // transaction ID
+    header.writeUInt16BE(0x8180,2); // standard, authoritative local fixture response
+    header.writeUInt16BE(1,4); // one question
+    header.writeUInt16BE(2,6); // CNAME + terminal A record
+    const cname=encodeName('target.fixture.test');
+    const payload=Buffer.concat([
+      header,query.subarray(12,end),
+      resourceRecord(Buffer.from([0xc0,0x0c]),5,cname),
+      resourceRecord(cname,1,Buffer.from(answer.split('.').map(Number))),
+    ]);
+    dns.send(payload,peer.port,peer.address);
+  });
+  await new Promise<void>((resolve,reject)=>{
+    dns.once('error',reject);
+    dns.bind(0,'127.0.0.1',()=>{
+      dns.off('error',reject);
+      resolve();
+    });
+  });
+  t.after(()=>new Promise<void>(resolve=>dns.close(()=>resolve())));
+  const listenAddress=dns.address();
+  assert.ok(listenAddress&&typeof listenAddress!=='string');
+  const isolatedResolver=()=>{
+    // Each resolver is a separate DNS cache. No hosts-file or system DNS edits.
+    const client=new Resolver();
+    client.setServers([`127.0.0.1:${listenAddress.port}`]);
+    return async(hostname:string)=>
+      (await client.resolve4(hostname)).map(address=>({address,family:4 as const}));
+  };
+  assert.deepEqual(
+    await resolveControlPlaneAddress('control.example.test',isolatedResolver()),
+    {address:'8.8.8.8',family:4},
+  );
+  answer='127.0.0.1';
+  await assert.rejects(
+    resolveControlPlaneAddress('control.example.test',isolatedResolver()),
+    /CONTROL_PLANE_DNS_UNSAFE/,
+  );
+  assert.equal(queries,2,'both DNS answers must come from isolated real UDP sockets');
 });
 
 test('CLEAN-14 P1-C: real TCP lookup pins the first checked DNS answer despite later rebinding',async t=>{
