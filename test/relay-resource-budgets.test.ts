@@ -117,6 +117,12 @@ test('one stalled upstream occupies only one slot and fails at handshake deadlin
   await open(first);
   assert.equal(await status(ws(relay.url)), 503);
   await closed(first, 4_000);
+  // ws removes its server-side client on a separate close callback tick.
+  // Wait a bounded interval rather than assuming the two close events race in one order.
+  const deadline = Date.now() + 1_500;
+  while (relay.wss.clients.size > 0 && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
   assert.equal(relay.wss.clients.size, 0);
 });
 
