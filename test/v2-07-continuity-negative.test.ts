@@ -186,3 +186,82 @@ test('V2-07 same-instance socket replacement marks lost mutation ACK UNKNOWN, wi
   assert.equal(second.inbound.length, 0);
   assert.equal(f.broker.getConnectionHealth(device)?.epoch, 2);
 });
+
+
+test('V2-07 lost ACK then Hub restart preserves one UUID, UNKNOWN and no second Agent dispatch', async t => {
+  const {mkdtemp, rm} = await import('node:fs/promises');
+  const {tmpdir} = await import('node:os');
+  const path = await import('node:path');
+  const {IdempotencyStore, operationFingerprint} = await import('../src/operations/idempotency-store.js');
+  const {AgentOperationJournal} = await import('../src/agent/operation-journal.js');
+  const {fingerprintAgentRequest} = await import('../src/agent/request-cache.js');
+  const root = await mkdtemp(path.join(tmpdir(), 'v2-07-unknown-'));
+  const hub = new IdempotencyStore(path.join(root, 'hub'));
+  const journal = new AgentOperationJournal(path.join(root, 'agent.sqlite'));
+  t.after(async () => { journal.close(); await rm(root, {recursive: true, force: true}); });
+  const payload = {path: 'synthetic.txt', content: 'one logical mutation'};
+  const request = {
+    key: 'v2-07-' + randomUUID(),
+    targetId: 'fixture-device', capability: 'files.write',
+    fingerprint: operationFingerprint({targetId: 'fixture-device',
+      capability: 'files.write', payload}),
+  };
+  const first = await hub.begin(request);
+  assert.equal(first.created, true);
+  const id = first.record.operationId;
+  const agentFingerprint = fingerprintAgentRequest('files.write', payload, 'safe');
+  let syntheticDispatches = 0;
+  const firstAgent = await journal.begin(id, agentFingerprint, 'files.write');
+  if (firstAgent.created) {
+    await journal.markDispatched(id, agentFingerprint);
+    syntheticDispatches++;
+    await journal.complete(id, 'succeeded', undefined,
+      {kind: 'file_write_ack', verified: false}, agentFingerprint);
+  }
+  // Simulated ACK loss before Hub can confirm the terminal Agent journal.
+  await hub.complete(request.key, 'unknown');
+
+  const restarted = new IdempotencyStore(path.join(root, 'hub'));
+  await restarted.initialize();
+  const again = await restarted.begin(request);
+  assert.equal(again.created, false);
+  assert.equal(again.record.operationId, id);
+  assert.equal(again.record.status, 'unknown');
+  const secondAgent = await journal.begin(id, agentFingerprint, 'files.write');
+  assert.equal(secondAgent.created, false, 'durable Agent journal must not re-execute');
+  assert.equal(syntheticDispatches, 1);
+  assert.equal((await journal.inspect(id))?.status, 'succeeded');
+
+  await assert.rejects(
+    () => restarted.begin({...request, fingerprint: operationFingerprint({
+      targetId:'fixture-device', capability:'files.write',
+      payload:{...payload, content:'different effect'},
+    })}),
+    (error: unknown) => (error as {code?:string}).code === 'IDEMPOTENCY_KEY_REUSED',
+  );
+});
+
+test('V2-07 global one-second reconnect budget stops a multi-request replay burst', async t => {
+  const f = await fixture(t, {maxResumesPerEpoch: 8, maxGlobalResumesPerSecond: 1});
+  const device = 'global-budget';
+  const first = await f.agent(device, randomUUID(), 1);
+  const attempts = Array.from({length: 3}, () => {
+    const requestId = randomUUID();
+    const outcome = f.broker.request(device, 'machine.snapshot', {synthetic: true},
+      2_000, requestId).then(() => 'ok', (e: {code?:string}) => e.code);
+    return {requestId, outcome};
+  });
+  await eventually(() => first.inbound.length === 3);
+  first.socket.terminate();
+  await eventually(() => !f.broker.has(device));
+  const rejoined = await f.agent(device, randomUUID(), 2);
+  await eventually(() => rejoined.inbound.length === 1);
+  const requestId = (JSON.parse(rejoined.inbound[0]!) as {requestId:string}).requestId;
+  assert.equal(requestId, attempts[0]!.requestId);
+  rejoined.socket.send(JSON.stringify({
+    type: 'response', requestId, ok: true, data: {receipt: 'synthetic'},
+  }));
+  assert.deepEqual(await Promise.all(attempts.map(x => x.outcome)), [
+    'ok', 'AGENT_RECONNECT_BUDGET', 'AGENT_RECONNECT_BUDGET',
+  ]);
+});
