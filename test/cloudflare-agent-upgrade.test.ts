@@ -1,4 +1,6 @@
 import test,{type TestContext} from 'node:test';
+// Keep V2-03 boundary regressions on the existing Windows browser-live CI gate.
+import './v2-03-ingress-doctor-bridge.test.js';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {randomUUID} from 'node:crypto';
