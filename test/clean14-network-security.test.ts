@@ -4,7 +4,7 @@ import {createServer,type Server} from 'node:http';
 import {once} from 'node:events';
 import {createSocket} from 'node:dgram';
 import {Resolver} from 'node:dns/promises';
-import {normalizeControlPlaneBase,resolveControlPlaneAddress,controlPlaneSecretPost} from '../src/hub/control-plane-network-policy.js';
+import {normalizeControlPlaneBase,normalizePublicControlPlaneAuthority,resolveControlPlaneAddress,resolvePublicControlPlaneAuthority,controlPlaneSecretPost} from '../src/hub/control-plane-network-policy.js';
 import {ControlPlaneMcpClient,ControlPlaneMcpVerifierUnavailableError} from '../src/hub/control-plane-mcp-auth.js';
 import {createControlPlaneAgentCredentialVerifier,createControlPlaneAgentPresenceReporter} from '../src/hub/control-plane-agent-auth.js';
 
@@ -35,6 +35,50 @@ test('CLEAN-14 P1-C: normalized nonpublic, mapped, metadata and alternate IP for
     'https://control.example.test');
   assert.equal(normalizeControlPlaneBase('http://127.0.0.1:4321/'),
     'http://127.0.0.1:4321');
+});
+
+test('CLEAN-14 P1-C: public Cloudflare authority rejects local-only, noncanonical and DNS metadata URL inputs',()=>{
+  assert.equal(normalizeControlPlaneBase('http://localhost:43110'),'http://localhost:43110',
+    'explicit local development mode remains supported');
+  assert.equal(normalizeControlPlaneBase('http://127.0.0.1:43110'),'http://127.0.0.1:43110');
+  assert.equal(normalizePublicControlPlaneAuthority('https://control.example.test'),
+    'https://control.example.test');
+  const blocked=[
+    'http://localhost:43110','http://127.0.0.1:43110',
+    'https://localhost','https://127.0.0.1','https://[::1]',
+    'https://10.0.0.1','https://192.168.1.4','https://169.254.169.254',
+    'https://[::ffff:127.0.0.1]','https://[fc00::1]',
+    'https://2130706433','https://0177.0.0.1','https://0x7f000001',
+    'https://metadata.google.internal','https://metadata.azure.internal',
+    'https://user:password@control.example.test','http://control.example.test',
+    'https://control.example.test/?next=http://127.0.0.1',
+    'https://control.example.test/#fragment',
+    'https://control.example.test/api/v1/internal/device/authenticate',
+    'https://control.example.test:443','https://control.example.test:8443',
+    'https://CONTROL.EXAMPLE.TEST','https://control.example.test/',
+    'https://xn--e1afmkfd.test','https://%63ontrol.example.test',
+    'https://control.example.test.',
+  ];
+  for(const value of blocked)
+    assert.throws(()=>normalizePublicControlPlaneAuthority(value),value);
+});
+
+test('CLEAN-14 P1-C: public DNS admission validates all A/AAAA even after canonical HTTPS authority admission',async()=>{
+  let calls=0;
+  const target='https://control.example.test';
+  await assert.rejects(resolvePublicControlPlaneAuthority(target,async()=>{
+    calls++;
+    return [{address:'8.8.8.8',family:4},{address:'169.254.169.254',family:4}];
+  }),/CONTROL_PLANE_DNS_UNSAFE/);
+  await assert.rejects(resolvePublicControlPlaneAuthority(target,async()=>{
+    calls++;
+    return [{address:'2606:4700:4700::1111',family:6},{address:'fc00::7',family:6}];
+  }),/CONTROL_PLANE_DNS_UNSAFE/);
+  assert.deepEqual(await resolvePublicControlPlaneAuthority(target,async()=>{
+    calls++;
+    return [{address:'8.8.8.8',family:4},{address:'2606:4700:4700::1111',family:6}];
+  }),{address:'8.8.8.8',family:4});
+  assert.equal(calls,3);
 });
 
 test('CLEAN-14 P1-C: all A/AAAA candidates must be approved (one private poisons result)',async()=>{
