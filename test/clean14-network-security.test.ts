@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createServer,type Server} from 'node:http';
 import {once} from 'node:events';
-import {normalizeControlPlaneBase,resolveControlPlaneAddress} from '../src/hub/control-plane-network-policy.js';
+import {normalizeControlPlaneBase,resolveControlPlaneAddress,controlPlaneSecretPost} from '../src/hub/control-plane-network-policy.js';
 import {ControlPlaneMcpClient,ControlPlaneMcpVerifierUnavailableError} from '../src/hub/control-plane-mcp-auth.js';
 import {createControlPlaneAgentCredentialVerifier,createControlPlaneAgentPresenceReporter} from '../src/hub/control-plane-agent-auth.js';
 
@@ -121,4 +121,38 @@ test('CLEAN-14 P1-C: real TCP/HTTP 307 never forwards MCP or Agent secrets to re
   assert.equal(sourceCalls,4);
   assert.equal(sourceSawSecrets,4);
   assert.equal(targetCalls,0,'redirect receiver must never see service or device credentials');
+});
+
+test('CLEAN-14 P1-C: real TCP lookup pins the first checked DNS answer despite later rebinding',async t=>{
+  let trustedRequests=0,redirectedRequests=0,dnsCalls=0;
+  const trusted=createServer((req,res)=>{
+    trustedRequests++;
+    assert.equal(req.headers.authorization,'Bearer '+secret);
+    req.resume();
+    res.writeHead(200,{'content-type':'application/json'});res.end('{}');
+  });
+  const port=await listen(trusted);
+  t.after(()=>close(trusted));
+  // Same port, different address family; this represents the attacker-selected
+  // second DNS answer. Both listeners are disposable and loopback-only.
+  const alternate=createServer((req,res)=>{
+    redirectedRequests++;req.resume();res.writeHead(200).end('{}');
+  });
+  alternate.listen({host:'::1',port,ipv6Only:true});
+  await once(alternate,'listening');
+  t.after(()=>close(alternate));
+  const response=await controlPlaneSecretPost('http://localhost:'+port+'/one-use',{
+    method:'POST',redirect:'error',
+    headers:{authorization:'Bearer '+secret,'content-type':'application/json'},
+    body:'{}',
+  },undefined,async()=>{
+    dnsCalls++;
+    return dnsCalls===1
+      ? [{address:'127.0.0.1',family:4}]
+      : [{address:'::1',family:6}];
+  });
+  assert.equal(response.status,200);
+  assert.equal(dnsCalls,1,'socket lookup must not perform a second DNS resolution');
+  assert.equal(trustedRequests,1);
+  assert.equal(redirectedRequests,0,'rebound second endpoint receives no credential');
 });
