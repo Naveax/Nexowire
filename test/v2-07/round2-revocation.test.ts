@@ -175,15 +175,16 @@ test('round2: post-dispatch revocation and lost ACK remain UNKNOWN, never auto-r
   const f=await fixture(t);
   const operationId=randomUUID();
   let authorized=true;
-  const old=await f.connect('ack-lost',randomUUID(),1,async()=>authorized);
+  const sameInstanceId=randomUUID();
+  const old=await f.connect('ack-lost',sameInstanceId,1,async()=>authorized);
   const first=observed(f.broker.request('ack-lost','files.write',
     {operation:'one'},1_000,operationId));
   await eventually(()=>old.received.length===1);
   authorized=false;
   old.socket.terminate();
   await eventually(()=>!f.broker.has('ack-lost'));
-  const next=await f.connect('ack-lost',randomUUID(),2,async()=>authorized);
-  assert.deepEqual(await first,{ok:false,code:'AGENT_INSTANCE_CHANGED'});
+  const next=await f.connect('ack-lost',sameInstanceId,2,async()=>authorized);
+  assert.deepEqual(await first,{ok:false,code:'MUTATION_STATE_UNKNOWN'});
   assert.equal(next.received.length,0);
   const denied=await observed(f.broker.request('ack-lost','files.write',
     {operation:'one'},500,operationId));
