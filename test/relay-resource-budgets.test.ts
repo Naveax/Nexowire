@@ -94,6 +94,10 @@ test('resource budgets reject partial numbers, negative and oversized values', (
   assert.equal(loaded.maxConnections, 128);
   assert.equal(loaded.upstreamHandshakeTimeoutMs, 4000);
   assert.equal(loaded.shutdownGraceMs, 800);
+  assert.throws(() => loadRelayConfig({ NEXOWIRE_RELAY_GLOBAL_MEMORY_BUDGET_BYTES: '33MiB' }), /GLOBAL_MEMORY_BUDGET_BYTES/);
+  assert.throws(() => loadRelayConfig({ NEXOWIRE_RELAY_MAX_PENDING_HANDSHAKES: '0' }), /MAX_PENDING_HANDSHAKES/);
+  assert.throws(() => assertSafeRelayConfig(relayConfig(43110, { globalMemoryBudgetBytes: 0 })), /globalMemoryBudgetBytes/);
+  assert.equal(loadRelayConfig({ NEXOWIRE_RELAY_GLOBAL_MEMORY_BUDGET_BYTES: '33554432' }).globalMemoryBudgetBytes, 33554432);
 });
 
 test('unknown upgrade path and normal HTTP GET fail closed without spawning upstream', async t => {
@@ -161,6 +165,8 @@ test('shutdown is idempotent and cannot hang on an unresponsive upstream', async
   await Promise.all([relay.close(), relay.close()]);
   assert.ok(Date.now() - before < 2_000, 'shutdown should terminate the stuck pair');
   await closed(first, 2_000);
+  await until(() => relay.resourceSnapshot().totalReservedBytes === 0);
+  assert.equal(relay.resourceSnapshot().reservedConnectionSlots, 0);
 });
 
 
@@ -237,6 +243,155 @@ test('partial HTTP slowloris headers allocate no authenticated relay pair', asyn
   assert.equal(relay.resourceSnapshot().connectingUpstreams, 0);
   assert.equal(relay.server.headersTimeout, 10_000);
   assert.equal(relay.server.requestTimeout, 10_000);
+});
+
+
+test('global queue budget fails closed, releases every reservation and preserves fast-peer response', { timeout: 20_000 }, async t => {
+  const upstream = createServer();
+  const healthy = new WebSocketServer({ noServer: true });
+  const held = new Set<import('node:stream').Duplex>();
+  let upstreamNumber = 0;
+  upstream.on('upgrade', (req, socket, head) => {
+    if (upstreamNumber++ === 0) {
+      held.add(socket);
+      socket.once('close', () => held.delete(socket));
+      return;
+    }
+    healthy.handleUpgrade(req, socket, head, peer => {
+      healthy.emit('connection', peer, req);
+    });
+  });
+  healthy.on('connection', peer => peer.on('message', (message, binary) => {
+    peer.send(message, { binary });
+  }));
+  const port = await boundServer(upstream);
+  const relay = await startRelayServer(relayConfig(port, {
+    maxConnections: 2,
+    // 128 KiB frame ceiling keeps the per-pair queue above the shared cap.
+    maxPayloadBytes: 128 * 1024,
+    globalMemoryBudgetBytes: 256 * 1024,
+    upstreamHandshakeTimeoutMs: 8_000,
+    shutdownGraceMs: 150,
+  }));
+  t.after(async () => {
+    await relay.close();
+    for (const peer of healthy.clients) peer.terminate();
+    for (const socket of held) socket.destroy();
+    await new Promise<void>(resolve => healthy.close(() => resolve()));
+    await new Promise<void>(resolve => upstream.close(() => resolve()));
+  });
+  const slow = ws(relay.url);
+  await open(slow);
+  const fast = ws(relay.url);
+  await open(fast);
+  await until(() => relay.resourceSnapshot().pendingUpstreamHandshakes === 1);
+  const initial = relay.resourceSnapshot();
+  assert.equal(initial.reservedConnectionSlots, 2);
+  assert.equal(initial.connectionReservedBytes, 2 * 64 * 1024);
+  assert.equal(initial.globalMemoryBudgetBytes, 256 * 1024);
+  const data = Buffer.alloc(64 * 1024, 7);
+  slow.send(data);
+  slow.send(data);
+  await until(() => relay.resourceSnapshot().startupQueuedBytes === 128 * 1024);
+  const atCapacity = relay.resourceSnapshot();
+  assert.equal(atCapacity.totalReservedBytes, 256 * 1024);
+  assert.ok(atCapacity.peakTotalReservedBytes <= 256 * 1024);
+  const slowClosed = closed(slow, 4_000);
+  slow.send(data);
+  await slowClosed;
+  await until(() => relay.resourceSnapshot().startupQueuedBytes === 0);
+  assert.ok(relay.resourceSnapshot().budgetRejectionCount >= 1);
+  const response = new Promise<string>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Fast peer starved')), 3_000);
+    fast.once('message', raw => { clearTimeout(timer); resolve(raw.toString()); });
+  });
+  fast.send('fast-peer-ack');
+  assert.equal(await response, 'fast-peer-ack');
+  assert.equal(relay.resourceSnapshot().reservedConnectionSlots, 1);
+  fast.close();
+  await closed(fast);
+  await until(() => relay.resourceSnapshot().totalReservedBytes === 0);
+  const after = relay.resourceSnapshot();
+  assert.equal(after.connectionReservedBytes, 0);
+  assert.equal(after.inflightReservedBytes, 0);
+  assert.equal(after.startupQueuedBytes, 0);
+  assert.equal(after.startupQueuedFrames, 0);
+  assert.equal(after.reservedConnectionSlots, 0);
+  assert.equal(after.pendingUpstreamHandshakes, 0);
+});
+
+
+test('global connection reservation cap rejects fifth upgrade with HTTP 503 and drains on close', async t => {
+  const upstream = createServer();
+  const service = new WebSocketServer({ server: upstream });
+  const port = await boundServer(upstream);
+  const relay = await startRelayServer(relayConfig(port, {
+    maxConnections: 8,
+    maxPendingUpstreamHandshakes: 8,
+    globalMemoryBudgetBytes: 256 * 1024,
+  }));
+  const clients: WebSocket[] = [];
+  t.after(async () => {
+    for (const client of clients) client.terminate();
+    await relay.close();
+    for (const peer of service.clients) peer.terminate();
+    await new Promise<void>(resolve => service.close(() => resolve()));
+    await new Promise<void>(resolve => upstream.close(() => resolve()));
+  });
+  for (let n = 0; n < 4; n++) {
+    const client = ws(relay.url);
+    clients.push(client);
+    await open(client);
+  }
+  await until(() => relay.resourceSnapshot().pendingUpstreamHandshakes === 0);
+  const full = relay.resourceSnapshot();
+  assert.equal(full.reservedConnectionSlots, 4);
+  assert.equal(full.totalReservedBytes, 256 * 1024);
+  assert.equal(full.connectionReservedBytes, 256 * 1024);
+  assert.equal(await status(ws(relay.url)), 503);
+  assert.equal(relay.resourceSnapshot().reservedConnectionSlots, 4);
+  assert.equal(relay.resourceSnapshot().overload503Count, 1);
+  for (const client of clients) client.close();
+  await Promise.all(clients.map(client => closed(client)));
+  await until(() => relay.resourceSnapshot().totalReservedBytes === 0);
+  const released = relay.resourceSnapshot();
+  assert.equal(released.connectionReservedBytes, 0);
+  assert.equal(released.inflightReservedBytes, 0);
+  assert.equal(released.startupQueuedBytes, 0);
+  assert.equal(released.pendingUpstreamHandshakes, 0);
+  assert.equal(released.reservedConnectionSlots, 0);
+});
+
+test('pending handshake limit rejects a new authenticated upgrade with 503 before allocating upstream', async t => {
+  const upstream = createServer();
+  const held = new Set<import('node:stream').Duplex>();
+  let attempts = 0;
+  upstream.on('upgrade', (_req, socket) => {
+    ++attempts;
+    held.add(socket);
+    socket.once('close', () => held.delete(socket));
+  });
+  const port = await boundServer(upstream);
+  const relay = await startRelayServer(relayConfig(port, {
+    maxConnections: 3,
+    maxPendingUpstreamHandshakes: 1,
+    globalMemoryBudgetBytes: 256 * 1024,
+    upstreamHandshakeTimeoutMs: 1_000,
+  }));
+  t.after(async () => {
+    await relay.close();
+    for (const socket of held) socket.destroy();
+    await new Promise<void>(resolve => upstream.close(() => resolve()));
+  });
+  const first = ws(relay.url);
+  await open(first);
+  await until(() => relay.resourceSnapshot().pendingUpstreamHandshakes === 1);
+  assert.equal(await status(ws(relay.url)), 503);
+  assert.equal(attempts, 1);
+  assert.equal(relay.resourceSnapshot().reservedConnectionSlots, 1);
+  await closed(first, 4_000);
+  await until(() => relay.resourceSnapshot().totalReservedBytes === 0);
+  assert.equal(relay.resourceSnapshot().pendingUpstreamHandshakes, 0);
 });
 
 /** Isolated test runner: actual WSS + native AgentBroker request completions. */
@@ -446,6 +601,12 @@ test('isolated WSS relay: 1/32/64/101/128/129/256 attempts, real Broker ACKs and
       assert.equal(snapshot.overload503Count - before.overload503Count, rejected);
       assert.equal(snapshot.activeConnections, admitted);
       assert.ok(snapshot.startupQueuedBytes <= 2 * 1024 * 1024 * admitted);
+      assert.equal(snapshot.reservedConnectionSlots, admitted);
+      assert.equal(snapshot.connectionReservedBytes, admitted * 64 * 1024);
+      assert.ok(snapshot.totalReservedBytes <= snapshot.globalMemoryBudgetBytes);
+      assert.ok(snapshot.peakTotalReservedBytes <= snapshot.globalMemoryBudgetBytes);
+      assert.equal(snapshot.totalReservedBytes,
+        snapshot.connectionReservedBytes + snapshot.startupQueuedBytes + snapshot.inflightReservedBytes);
       const elapsedMs = performance.now() - started;
       const cpu = process.cpuUsage(cpuBefore);
       const row = {
@@ -469,6 +630,18 @@ test('isolated WSS relay: 1/32/64/101/128/129/256 attempts, real Broker ACKs and
         startupQueuedFrames: snapshot.startupQueuedFrames,
         peakStartupQueuedFrames: snapshot.peakStartupQueuedFrames,
         outboundBufferedBytes: snapshot.outboundBufferedBytes,
+        globalMemoryBudgetBytes: snapshot.globalMemoryBudgetBytes,
+        reservedBytes: snapshot.totalReservedBytes,
+        peakReservedBytes: snapshot.peakTotalReservedBytes,
+        connectionReservedBytes: snapshot.connectionReservedBytes,
+        inflightReservedBytes: snapshot.inflightReservedBytes,
+        peakInflightReservedBytes: snapshot.peakInflightReservedBytes,
+        reservedConnectionSlots: snapshot.reservedConnectionSlots,
+        pendingAdmissions: snapshot.pendingAdmissions,
+        pendingUpstreamHandshakes: snapshot.pendingUpstreamHandshakes,
+        budgetRejectionCount: snapshot.budgetRejectionCount,
+        peakPerConnectionQueuedBytes: snapshot.peakPerConnectionQueuedBytes,
+        peakPerConnectionInflightBytes: snapshot.peakPerConnectionInflightBytes,
         applicationBytes,
         verifiedFileBytes: 0,
         fairnessCompletedRatio: Number((completions.length / admitted).toFixed(5)),
@@ -483,7 +656,12 @@ test('isolated WSS relay: 1/32/64/101/128/129/256 attempts, real Broker ACKs and
         else if (client.readyState === WebSocket.CONNECTING) client.terminate();
       }
       try {
-        await until(() => relay.resourceSnapshot().activeConnections === 0, 7_000);
+        await until(() => {
+          const s = relay.resourceSnapshot();
+          return s.activeConnections === 0 && s.reservedConnectionSlots === 0 &&
+            s.totalReservedBytes === 0 && s.pendingAdmissions === 0 &&
+            s.pendingUpstreamHandshakes === 0 && s.startupQueuedFrames === 0;
+        }, 7_000);
       } finally {
         for (const client of clients) if (client.readyState !== WebSocket.CLOSED) client.terminate();
       }

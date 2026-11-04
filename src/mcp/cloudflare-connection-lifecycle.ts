@@ -197,7 +197,9 @@ if($task){
  $taskUser=$task.Principal.UserId
  try{if($taskUser -ne $sid){$taskUser=([Security.Principal.NTAccount]$taskUser).Translate([Security.Principal.SecurityIdentifier]).Value}}catch{$owned=$false}
  if($taskUser -ne $sid -or [string]$task.Principal.RunLevel -ne 'Limited' -or [string]$task.Principal.LogonType -ne 'Interactive'){$owned=$false}
- if([string]$task.Settings.MultipleInstances -ne 'IgnoreNew' -or [int]$task.Settings.RestartCount -gt 3 -or [int]$task.Settings.RestartCount -lt 0){$owned=$false}
+ if([string]$task.Settings.MultipleInstances -ne 'IgnoreNew' -or [int]$task.Settings.RestartCount -ne 3){$owned=$false}
+ try{if([Xml.XmlConvert]::ToTimeSpan([string]$task.Settings.RestartInterval) -ne [TimeSpan]::FromMinutes(1)){$owned=$false}}catch{$owned=$false}
+ if([string]$actions[0].WorkingDirectory -ne ''){$owned=$false}
  $triggers=@($task.Triggers)
  if($triggers.Count -ne 1 -or $triggers[0].CimClass.CimClassName -ne 'MSFT_TaskLogonTrigger'){$owned=$false}
  if($triggers.Count -eq 1){

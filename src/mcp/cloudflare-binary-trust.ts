@@ -25,26 +25,55 @@ export interface TrustedCloudflared{
   imageFd:number;
   dispose():Promise<void>;
 }
-/** Windows read-only publisher audit. A valid signature is necessary but NOT
- * sufficient to launch without a native handle-bound image custodian. */
+/** Only bounded, non-secret diagnostic classes are exposed to tests. */
+export class CloudflaredPublisherAuditError extends Error{
+  constructor(
+    public readonly reason:string,
+    public readonly childExitCode:number|null,
+    public readonly elapsedMs:number,
+  ){
+    super('Cloudflared publisher/signature provenance rejected');
+    this.name='CloudflaredPublisherAuditError';
+  }
+}
+/** Windows read-only publisher audit. No certificate or credential is logged.
+ * The independent official SHA pin remains mandatory. This is not a native
+ * image handle/section identity proof and never authorizes CreateProcess.
+ */
 function windowsPublisherSignature(file:string){
   const ps=[
     "$ErrorActionPreference='Stop'",
-    "$path=$env:NEXOWIRE_CLOUDFLARED_IMAGE",
-    "$item=Get-Item -LiteralPath $path -Force -ErrorAction Stop",
-    "if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw 'REPARSE'}",
-    "$sig=Get-AuthenticodeSignature -LiteralPath $path -ErrorAction Stop",
-    "if($sig.Status -ne 'Valid' -or $null -eq $sig.SignerCertificate){throw 'UNTRUSTED_SIGNATURE'}",
-    "$subject=$sig.SignerCertificate.Subject",
-    "if($subject -notmatch 'Cloudflare'){throw 'WRONG_PUBLISHER'}",
-    "[Console]::Out.Write('OK')",
+    "$stage='START'",
+    "try {",
+    "  $path=$env:NEXOWIRE_CLOUDFLARED_IMAGE",
+    "  $stage='ITEM'",
+    "  $item=Get-Item -LiteralPath $path -Force -ErrorAction Stop",
+    "  if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){[Console]::Error.Write('C13:REPARSE');exit 21}",
+    "  $stage='SIGNATURE'",
+    "  $sig=Get-AuthenticodeSignature -LiteralPath $path -ErrorAction Stop",
+    "  if($sig.Status -ne 'Valid' -or $null -eq $sig.SignerCertificate){[Console]::Error.Write('C13:INVALID_SIGNATURE');exit 22}",
+    "  $stage='PUBLISHER'",
+    "  if($sig.SignerCertificate.Subject -notmatch 'Cloudflare'){[Console]::Error.Write('C13:WRONG_PUBLISHER');exit 23}",
+    "  [Console]::Out.Write('OK')",
+    "} catch {",
+    "  [Console]::Error.Write('C13:ERROR_'+$stage)",
+    "  exit 29",
+    "}",
   ].join('\n');
+  const started=Date.now();
   const result=spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
     ['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(ps,'utf16le').toString('base64')],
-    {encoding:'utf8',windowsHide:true,timeout:25000,maxBuffer:1024,
+    {encoding:'utf8',windowsHide:true,timeout:25000,maxBuffer:4096,
       env:{...windowsDpapiChildEnvironment(),NEXOWIRE_CLOUDFLARED_IMAGE:file}});
-  if(result.error||result.status!==0||result.stdout.trim()!=='OK')
-    deny('Cloudflared publisher/signature provenance rejected');
+  if(result.error||result.status!==0||result.stdout.trim()!=='OK'){
+    const childCode=(result.error as NodeJS.ErrnoException|undefined)?.code;
+    const marker=/C13:(REPARSE|INVALID_SIGNATURE|WRONG_PUBLISHER|ERROR_(?:START|ITEM|SIGNATURE|PUBLISHER))/.exec(result.stderr??'');
+    const reason=childCode==='ETIMEDOUT'?'POWERSHELL_51_TIMEOUT':
+      childCode==='ENOBUFS'?'POWERSHELL_OUTPUT_BOUND':
+      childCode?'POWERSHELL_SPAWN_'+(childCode==='ENOENT'?'MISSING':'FAILED'):
+      marker?.[1]??(result.status===0?'INVALID_RESULT':'POWERSHELL_UNCLASSIFIED_EXIT');
+    throw new CloudflaredPublisherAuditError(reason,result.status,Date.now()-started);
+  }
 }
 /** Trust verified bytes and execute via an inherited descriptor on Linux.
  * Windows intentionally denies execution until a native immutable-image

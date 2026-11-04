@@ -8,9 +8,9 @@ import type {NexowireConfig} from '../config.js';
 import {createLocalFirstIngressServer,validateLocalFirstIngress,closeLocalFirstAgentSockets,
   verifyLocalFirstPublicUpstream} from './local-first-ingress.js';
 import {windowsDpapiChildEnvironment} from '../security/windows-dpapi.js';
-import {readCloudflareTunnelCredential} from './cloudflare-credential-custody.js';
+import {readCloudflareTunnelCredential,preflightCloudflareTunnelCredentialMetadata} from './cloudflare-credential-custody.js';
 import {prepareTrustedCloudflared,type TrustedCloudflared} from './cloudflare-binary-trust.js';
-import {normalizeControlPlaneBase} from '../hub/control-plane-network-policy.js';
+import {normalizePublicControlPlaneAuthority} from '../hub/control-plane-network-policy.js';
 
 const absoluteFile=z.string().min(1).max(4096).refine(value=>
   path.isAbsolute(value)&&!/[\r\n\0]/.test(value),'Absolute local file path required');
@@ -38,15 +38,10 @@ export function cloudflareConnectionConfig(input:unknown,config:NexowireConfig){
       safe.publicHostname!.endsWith('.trycloudflare.com') ||
       safe.publicHostname!.endsWith('.ts.net'))
     throw new Error('Cloudflare connection requires stable HTTPS MCP resource and hosted OAuth authority');
-  // A local-only loopback authority is valid for development, but must never
-  // become the authenticated control plane for a publicly published tunnel.
-  // Reuse the DNS/IP-safe network policy instead of trusting URL() parsing.
-  try {
-    const controlPlane=normalizeControlPlaneBase(config.controlPlaneAgentAuth.url);
-    if(new URL(controlPlane).protocol!=='https:')throw new Error('HTTPS required');
-  } catch {
-    throw new Error('Public Cloudflare connection requires a canonical global HTTPS control-plane authority');
-  }
+  // Internet-exposed connector requires a canonical HTTPS public control plane.
+  // Pinned DNS resolution is still checked separately for every secret request.
+  try { normalizePublicControlPlaneAuthority(config.controlPlaneAgentAuth.url); }
+  catch { throw Error('Public Cloudflare connection requires a canonical global HTTPS control-plane authority'); }
   if(profile.publishAgentEndpoint&&config.remoteAgentAuthOnly!==true)
     throw new Error('Public Agent endpoint requires remote-only Agent authentication');
   const tunnelConfig={
@@ -125,6 +120,25 @@ export async function cleanupOwnedCloudflareRuntime(
   finally{await handle?.close().catch(()=>{});}
 }
 
+/** Pure, side-effect-free credential fixture/identity gate. Unlike launching
+ * an untrusted executable, this validation can be tested at its own stage
+ * without bypassing the independent publisher gate or contacting a Hub.
+ */
+export function verifyCloudflareTunnelCredentialIdentity(bytes:Buffer,tunnelId:string):void{
+  let credential:unknown;
+  try{credential=JSON.parse(bytes.toString('utf8'));}
+  catch{throw Error('Cloudflare tunnel credential format invalid');}
+  if(!credential||typeof credential!=='object'||Array.isArray(credential))
+    throw Error('Cloudflare tunnel credential format invalid');
+  const data=credential as {TunnelID?:unknown;AccountTag?:unknown;TunnelSecret?:unknown};
+  if(data.TunnelID!==tunnelId ||
+      typeof data.AccountTag!=='string'||!/^[a-f0-9]{32}$/i.test(data.AccountTag)||
+      typeof data.TunnelSecret!=='string'||
+      !/^[A-Za-z0-9+/]{43}=$/.test(data.TunnelSecret)||
+      Buffer.from(data.TunnelSecret,'base64').length!==32)
+    throw Error('Cloudflare tunnel credentials do not match the selected tunnel');
+}
+
 /** Foreground owner process, suitable for a user-logon task. Stops only its
  * own connector/origin; never restarts Hub, Agent, Broker or Tailscale. */
 export async function startCloudflareConnection(input:unknown,config:NexowireConfig){
@@ -132,26 +146,22 @@ export async function startCloudflareConnection(input:unknown,config:NexowireCon
   const binary=await regularFile(profile.binary,256*1024*1024);
   if(createHash('sha256').update(binary).digest('hex')!==profile.binarySha256)
     throw new Error('Cloudflare connector binary checksum mismatch');
-  // Windows has no approved immutable-image launcher. Refuse untrusted
-  // publisher/provenance before consuming credentials or contacting Hub.
-  // A profile-controlled digest alone never authenticates the publisher.
-  if(process.platform==='win32')
-    await prepareTrustedCloudflared(profile.binary,profile.binarySha256);
-  const credentialBytes=await readCloudflareTunnelCredential(profile.credentialsFile);
-  let credentials:{TunnelID?:string;AccountTag?:string;TunnelSecret?:string};
-  try{credentials=JSON.parse(credentialBytes.toString('utf8')) as typeof credentials;}
-  catch{throw Error('Cloudflare tunnel credential format invalid');}
-  if(credentials.TunnelID!==profile.tunnelId ||
-      !/^[a-f0-9]{32}$/i.test(credentials.AccountTag??'') ||
-      typeof credentials.TunnelSecret!=='string' ||
-      !/^[A-Za-z0-9+/]{43}=$/.test(credentials.TunnelSecret) ||
-      Buffer.from(credentials.TunnelSecret,'base64').length!==32)
-    throw new Error('Cloudflare tunnel credentials do not match the selected tunnel');
-  await verifyLocalFirstPublicUpstream({hubPort:config.port,expectedResourceUrl:config.mcpResourceUrl!,
-    requireRemoteAgentAdmission:profile.publishAgentEndpoint});
-  // Windows has no approved held-image custodian. Reject before writing even a
-  // temporary copy of the secret. Linux opens and stages the approved image.
+  // Reject already-insecure POSIX credential metadata before any executable
+  // admission, without reading the secret. This preserves the independent P1-D
+  // custody negative even if an unrelated fake publisher also fails.
+  if(process.platform!=='win32')
+    await preflightCloudflareTunnelCredentialMetadata(profile.credentialsFile);
+  // Bind official image provenance BEFORE reading tunnel secrets or probing
+  // the Hub. Linux preserves the sealed open descriptor through preflight;
+  // Windows refuses at the native custodian boundary (never path-spawns).
   const approvedImage=await prepareTrustedCloudflared(profile.binary,profile.binarySha256);
+  let credentialBytes:Buffer;
+  try{
+    credentialBytes=await readCloudflareTunnelCredential(profile.credentialsFile);
+    verifyCloudflareTunnelCredentialIdentity(credentialBytes,profile.tunnelId);
+    await verifyLocalFirstPublicUpstream({hubPort:config.port,expectedResourceUrl:config.mcpResourceUrl!,
+      requireRemoteAgentAdmission:profile.publishAgentEndpoint});
+  }catch(error){await approvedImage.dispose();throw error;}
   let dir:string;
   try{dir=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-cloudflare-'));}
   catch(error){await approvedImage.dispose();throw error;}

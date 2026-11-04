@@ -31,6 +31,18 @@ export interface RelayResourceSnapshot {
   connectingUpstreams: number;
   startupQueuedBytes: number;
   startupQueuedFrames: number;
+  globalMemoryBudgetBytes: number;
+  totalReservedBytes: number;
+  peakTotalReservedBytes: number;
+  connectionReservedBytes: number;
+  reservedConnectionSlots: number;
+  inflightReservedBytes: number;
+  peakInflightReservedBytes: number;
+  pendingAdmissions: number;
+  pendingUpstreamHandshakes: number;
+  budgetRejectionCount: number;
+  peakPerConnectionQueuedBytes: number;
+  peakPerConnectionInflightBytes: number;
   peakStartupQueuedBytes: number;
   peakStartupQueuedFrames: number;
   outboundBufferedBytes: number;
@@ -72,6 +84,43 @@ function closePeer(
   }
 }
 
+/** Accounting bound, not a guarantee about TLS, V8 or kernel socket RSS. */
+type ReservationKind = 'connection' | 'queue' | 'inflight';
+const PAIR_RESERVATION_BYTES = 64 * 1024;
+const DEFAULT_GLOBAL_MEMORY_BUDGET_BYTES = 32 * 1024 * 1024;
+class RelayMemoryBudget {
+  private readonly values: Record<ReservationKind, number> = {
+    connection: 0, queue: 0, inflight: 0,
+  };
+  private readonly peaks: Record<ReservationKind, number> = {
+    connection: 0, queue: 0, inflight: 0,
+  };
+  peakTotalReservedBytes = 0;
+  constructor(readonly limitBytes: number) {}
+  get connectionBytes(): number { return this.values.connection; }
+  get queueBytes(): number { return this.values.queue; }
+  get inflightBytes(): number { return this.values.inflight; }
+  get peakQueueBytes(): number { return this.peaks.queue; }
+  get peakInflightBytes(): number { return this.peaks.inflight; }
+  get totalBytes(): number {
+    return this.connectionBytes + this.queueBytes + this.inflightBytes;
+  }
+  reserve(kind: ReservationKind, bytes: number): boolean {
+    if (!Number.isSafeInteger(bytes) || bytes < 0) throw new Error('Invalid relay reservation');
+    if (bytes > this.limitBytes - this.totalBytes) return false;
+    this.values[kind] += bytes;
+    this.peaks[kind] = Math.max(this.peaks[kind], this.values[kind]);
+    this.peakTotalReservedBytes = Math.max(this.peakTotalReservedBytes, this.totalBytes);
+    return true;
+  }
+  release(kind: ReservationKind, bytes: number): void {
+    if (!Number.isSafeInteger(bytes) || bytes < 0 || bytes > this.values[kind]) {
+      throw new Error('Relay memory reservation underflow: ' + kind);
+    }
+    this.values[kind] -= bytes;
+  }
+}
+
 function wireRelayPair(
   downstream: WebSocket,
   upstream: WebSocket,
@@ -79,7 +128,10 @@ function wireRelayPair(
     maxPayloadBytes: number;
     heartbeatMs: number;
     metrics?: ScaleTransportMetrics;
-    onQueueDelta?: (bytes: number, frames: number) => void;
+    onQueueDelta: (bytes: number, frames: number) => boolean;
+    onInflightReserve: (bytes: number) => boolean;
+    onInflightRelease: (bytes: number) => void;
+    onPairLevels: (queuedBytes: number, inflightBytes: number) => void;
     onDownstreamClose?: (code: number) => void;
   },
 ): () => void {
@@ -89,6 +141,14 @@ function wireRelayPair(
     bytes: number;
   }> = [];
   let queuedBytes = 0;
+  let inflightBytes = 0;
+  const inflight = new Set<{ bytes: number }>();
+  const completeFlight = (entry: { bytes: number }): void => {
+    if (!inflight.delete(entry)) return;
+    inflightBytes -= entry.bytes;
+    options.onInflightRelease(entry.bytes);
+    options.onPairLevels(queuedBytes, inflightBytes);
+  };
   // A slow upstream must not reserve 2 x 64-MiB payload per pending peer.
   const maxStartupQueueBytes = Math.min(options.maxPayloadBytes * 2, 2 * 1024 * 1024);
   let disposed = false;
@@ -100,9 +160,11 @@ function wireRelayPair(
     disposed = true;
     clearInterval(heartbeat);
     // Release retained frames even when a peer dies during handshake.
-    if (queuedBytes > 0) options.onQueueDelta?.(-queuedBytes, -queue.length);
+    if (queuedBytes > 0) options.onQueueDelta(-queuedBytes, -queue.length);
     queuedBytes = 0;
     queue.length = 0;
+    for (const entry of inflight) completeFlight(entry);
+    options.onPairLevels(queuedBytes, inflightBytes);
   };
 
   const failPair = (code: number, reason: string): void => {
@@ -118,28 +180,33 @@ function wireRelayPair(
     binary: boolean,
   ): void => {
     if (disposed || destination.readyState !== WebSocket.OPEN) return;
-    if (
-      destination.bufferedAmount +
-        (typeof data === 'string' ? Buffer.byteLength(data) :
-          data instanceof ArrayBuffer ? data.byteLength :
-          Array.isArray(data) ? data.reduce((n, part) => n + part.length, 0) : data.length)
-        > options.maxPayloadBytes * 2
-    ) {
-      failPair(1013, 'Relay backpressure limit');
+    const bytes = typeof data === 'string' ? Buffer.byteLength(data) :
+      data instanceof ArrayBuffer ? data.byteLength :
+      Array.isArray(data) ? data.reduce((n, part) => n + part.length, 0) : data.length;
+    if (destination.bufferedAmount + bytes > options.maxPayloadBytes * 2) {
+      failPair(1013, 'Relay peer backpressure limit');
       return;
     }
-    destination.send(data, { binary }, (error) => {
-      if (error) {
-        failPair(1011, 'Relay forwarding error');
-      }
-    });
-    if (options.metrics) {
-      const bytes = typeof data === 'string' ? Buffer.byteLength(data) :
-        data instanceof ArrayBuffer ? data.byteLength :
-        Array.isArray(data) ? data.reduce((sum, part) => sum + part.length, 0) : data.length;
-      safelyRecordScaleMetric(options.metrics,
-        destination === upstream ? 'relay.upstream_frames' : 'relay.downstream_frames', bytes);
+    if (!options.onInflightReserve(bytes)) {
+      failPair(1013, 'Relay global memory budget exceeded');
+      return;
     }
+    const entry = { bytes };
+    inflight.add(entry);
+    inflightBytes += bytes;
+    options.onPairLevels(queuedBytes, inflightBytes);
+    try {
+      destination.send(data, { binary }, (error) => {
+        completeFlight(entry);
+        if (error && !disposed) failPair(1011, 'Relay forwarding error');
+      });
+    } catch {
+      completeFlight(entry);
+      failPair(1011, 'Relay forwarding error');
+      return;
+    }
+    safelyRecordScaleMetric(options.metrics,
+      destination === upstream ? 'relay.upstream_frames' : 'relay.downstream_frames', bytes);
   };
 
   downstream.on('pong', () => {
@@ -171,9 +238,13 @@ function wireRelayPair(
         failPair(1013, 'Relay startup queue limit');
         return;
       }
+      if (!options.onQueueDelta(bytes, 1)) {
+        failPair(1013, 'Relay global memory budget exceeded');
+        return;
+      }
       queuedBytes += bytes;
-      options.onQueueDelta?.(bytes, 1);
       queue.push({ data, binary, bytes });
+      options.onPairLevels(queuedBytes, inflightBytes);
       return;
     }
 
@@ -182,10 +253,11 @@ function wireRelayPair(
 
   upstream.on('open', () => {
     if (disposed) return;
-    const pending = queue.splice(0);
-    if (queuedBytes > 0) options.onQueueDelta?.(-queuedBytes, -pending.length);
-    queuedBytes = 0;
-    for (const item of pending) {
+    while (queue.length && !disposed) {
+      const item = queue.shift()!;
+      queuedBytes -= item.bytes;
+      options.onQueueDelta(-item.bytes, -1);
+      options.onPairLevels(queuedBytes, inflightBytes);
       if (upstream.readyState !== WebSocket.OPEN) break;
       forward(upstream, item.data, item.binary);
     }
@@ -263,16 +335,23 @@ export async function startRelayServer(
   // An upgraded downstream reserves one outbound WebSocket and a bounded
   // startup queue. Do not let unauthenticated/over-budget arrivals allocate it.
   const maxConnections = config.maxConnections ?? 128;
+  const maxPendingHandshakes = config.maxPendingUpstreamHandshakes ?? maxConnections;
+  const memory = new RelayMemoryBudget(config.globalMemoryBudgetBytes ?? DEFAULT_GLOBAL_MEMORY_BUDGET_BYTES);
   // Incomplete HTTP headers must not hold sockets for Node's long defaults.
   server.headersTimeout = 10_000;
   server.requestTimeout = 10_000;
   server.keepAliveTimeout = 1_000;
   server.maxHeadersCount = 64;
   const pairs = new Map<WebSocket, WebSocket>();
-  let startupQueuedBytes = 0;
+  const admissionReservations = new WeakMap<WebSocket, () => void>();
+  let reservedConnectionSlots = 0;
+  let pendingAdmissions = 0;
+  let pendingUpstreamHandshakes = 0;
   let startupQueuedFrames = 0;
-  let peakStartupQueuedBytes = 0;
   let peakStartupQueuedFrames = 0;
+  let peakPerConnectionQueuedBytes = 0;
+  let peakPerConnectionInflightBytes = 0;
+  let budgetRejectionCount = 0;
   let overload503Count = 0;
   const disconnectCodes = new Map<string, number>();
   let closing = false;
@@ -309,15 +388,44 @@ export async function startRelayServer(
       rejectUpgrade(socket, 401);
       return;
     }
-    if (wss.clients.size >= maxConnections) {
+    if (reservedConnectionSlots >= maxConnections ||
+        pendingUpstreamHandshakes >= maxPendingHandshakes ||
+        !memory.reserve('connection', PAIR_RESERVATION_BYTES)) {
       overload503Count++;
       rejectUpgrade(socket, 503);
       return;
     }
-
-    wss.handleUpgrade(request, socket, head, (downstream) => {
-      wss.emit('connection', downstream, request);
-    });
+    reservedConnectionSlots++;
+    pendingAdmissions++;
+    let transferred = false;
+    let released = false;
+    const releaseSlot = (): void => {
+      if (released) return;
+      released = true;
+      reservedConnectionSlots--;
+      memory.release('connection', PAIR_RESERVATION_BYTES);
+    };
+    const onRawClose = (): void => {
+      if (transferred) return;
+      transferred = true;
+      pendingAdmissions--;
+      releaseSlot();
+    };
+    socket.once('close', onRawClose);
+    try {
+      wss.handleUpgrade(request, socket, head, downstream => {
+        transferred = true;
+        pendingAdmissions--;
+        socket.off('close', onRawClose);
+        admissionReservations.set(downstream, releaseSlot);
+        wss.emit('connection', downstream, request);
+      });
+    } catch {
+      if (!transferred) onRawClose();
+      // Listener exceptions must never strand an admission reservation.
+      else releaseSlot();
+      socket.destroy();
+    }
   });
 
   wss.on('connection', (downstream: WebSocket) => {
@@ -329,6 +437,8 @@ export async function startRelayServer(
         }
       : undefined;
 
+    const releaseSlot = admissionReservations.get(downstream);
+    if (!releaseSlot) { downstream.terminate(); return; }
     const upstream = new WebSocket(config.upstreamWsUrl, {
       ...(headers ? { headers } : {}),
       handshakeTimeout: config.upstreamHandshakeTimeoutMs ?? 10_000,
@@ -336,17 +446,52 @@ export async function startRelayServer(
       perMessageDeflate: false,
     });
     pairs.set(downstream, upstream);
-    downstream.once('close', () => { pairs.delete(downstream); });
+    let downstreamClosed = false;
+    let upstreamClosed = false;
+    let finalized = false;
+    const finalize = (): void => {
+      if (finalized || !downstreamClosed || !upstreamClosed) return;
+      finalized = true;
+      pairs.delete(downstream);
+      releaseSlot();
+    };
+    downstream.once('close', () => { downstreamClosed = true; finalize(); });
+    upstream.once('close', () => { upstreamClosed = true; finalize(); });
+    let pendingHandshake = true;
+    ++pendingUpstreamHandshakes;
+    const finishHandshake = (): void => {
+      if (!pendingHandshake) return;
+      pendingHandshake = false;
+      --pendingUpstreamHandshakes;
+    };
+    upstream.once('open', finishHandshake);
+    upstream.once('error', finishHandshake);
+    upstream.once('close', finishHandshake);
 
     wireRelayPair(downstream, upstream, {
       maxPayloadBytes: config.maxPayloadBytes,
       heartbeatMs: config.heartbeatMs,
       metrics: options.metrics,
       onQueueDelta: (bytes, frames) => {
-        startupQueuedBytes = Math.max(0, startupQueuedBytes + bytes);
-        startupQueuedFrames = Math.max(0, startupQueuedFrames + frames);
-        peakStartupQueuedBytes = Math.max(peakStartupQueuedBytes, startupQueuedBytes);
+        if (bytes > 0 && !memory.reserve('queue', bytes)) {
+          budgetRejectionCount++;
+          return false;
+        }
+        if (bytes < 0) memory.release('queue', -bytes);
+        startupQueuedFrames += frames;
+        if (startupQueuedFrames < 0) throw new Error('Relay startup frame reservation underflow');
         peakStartupQueuedFrames = Math.max(peakStartupQueuedFrames, startupQueuedFrames);
+        return true;
+      },
+      onInflightReserve: (bytes) => {
+        if (memory.reserve('inflight', bytes)) return true;
+        budgetRejectionCount++;
+        return false;
+      },
+      onInflightRelease: (bytes) => { memory.release('inflight', bytes); },
+      onPairLevels: (queued, inflight) => {
+        peakPerConnectionQueuedBytes = Math.max(peakPerConnectionQueuedBytes, queued);
+        peakPerConnectionInflightBytes = Math.max(peakPerConnectionInflightBytes, inflight);
       },
       onDownstreamClose: (code) => {
         const name = String(code);
@@ -396,9 +541,21 @@ export async function startRelayServer(
       return {
         activeConnections: wss.clients.size,
         connectingUpstreams,
-        startupQueuedBytes,
+        startupQueuedBytes: memory.queueBytes,
         startupQueuedFrames,
-        peakStartupQueuedBytes,
+        globalMemoryBudgetBytes: memory.limitBytes,
+        totalReservedBytes: memory.totalBytes,
+        peakTotalReservedBytes: memory.peakTotalReservedBytes,
+        connectionReservedBytes: memory.connectionBytes,
+        reservedConnectionSlots,
+        inflightReservedBytes: memory.inflightBytes,
+        peakInflightReservedBytes: memory.peakInflightBytes,
+        pendingAdmissions,
+        pendingUpstreamHandshakes,
+        budgetRejectionCount,
+        peakPerConnectionQueuedBytes,
+        peakPerConnectionInflightBytes,
+        peakStartupQueuedBytes: memory.peakQueueBytes,
         peakStartupQueuedFrames,
         outboundBufferedBytes,
         overload503Count,

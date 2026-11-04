@@ -4,8 +4,9 @@ import {spawnSync} from 'node:child_process';
 import {promises as fs} from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import {readCloudflareTunnelCredential} from '../src/mcp/cloudflare-credential-custody.js';
-import {prepareTrustedCloudflared,OFFICIAL_CLOUDFLARED_SHA256} from '../src/mcp/cloudflare-binary-trust.js';
+import {readCloudflareTunnelCredential,CloudflareCredentialCustodyError} from '../src/mcp/cloudflare-credential-custody.js';
+import {prepareTrustedCloudflared,OFFICIAL_CLOUDFLARED_SHA256,CloudflaredPublisherAuditError} from '../src/mcp/cloudflare-binary-trust.js';
+import {windowsDpapiChildEnvironment} from '../src/security/windows-dpapi.js';
 
 const ICACLS='C:\\Windows\\System32\\icacls.exe';
 const WHOAMI='C:\\Windows\\System32\\whoami.exe';
@@ -34,18 +35,48 @@ test('CLEAN-13 P1-D Windows exact SID, inherited ACE and parent replacement righ
   for(const target of [dir,file])
     cmd(ICACLS,[target,'/inheritance:r','/grant:r',
       '*'+user+':(F)','*S-1-5-18:(F)','*S-1-5-32-544:(F)']);
-  const good=await readCloudflareTunnelCredential(file);
+  let good:Buffer;
+  try{good=await readCloudflareTunnelCredential(file);}
+  catch(error){
+    if(error instanceof CloudflareCredentialCustodyError){
+      console.info('CLEAN13_WINDOWS_ACL_OWNER_ONLY_DIAG='+JSON.stringify({
+        reason:error.code,elapsedMs:error.elapsedMs,exitCode:error.childExitCode,
+      }));
+    }
+    throw error;
+  }
   assert.equal(good.toString('utf8'),'{"fake":true}');
 
   cmd(ICACLS,[file,'/grant','*S-1-5-11:(R)']);
-  await assert.rejects(readCloudflareTunnelCredential(file),/credential custody unsafe/);
+  await assert.rejects(readCloudflareTunnelCredential(file),(error:unknown)=>{
+    assert.ok(error instanceof CloudflareCredentialCustodyError);
+    assert.match(error.message,/credential custody unsafe/);
+    assert.equal(error.code,'FILE_UNTRUSTED_ACE');
+    return true;
+  });
   cmd(ICACLS,[file,'/remove:g','*S-1-5-11']);
   assert.equal((await readCloudflareTunnelCredential(file)).toString('utf8'),'{"fake":true}');
+
+  // Real foreign file owner, not just a simulated SID passed to the verifier.
+  // Restrict all mutations to this disposable credential fixture.
+  cmd(ICACLS,[file,'/setowner','*S-1-5-32-544']);
+  await assert.rejects(readCloudflareTunnelCredential(file),(error:unknown)=>{
+    assert.ok(error instanceof CloudflareCredentialCustodyError);
+    assert.match(error.message,/credential custody unsafe/);
+    assert.equal(error.code,'FOREIGN_OWNER');
+    return true;
+  });
+  cmd(ICACLS,[file,'/setowner','*'+user]);
 
   // A world-readable file may be masked by a private parent. Parent writes
   // must be denied independently to block rename/replace attacks.
   cmd(ICACLS,[dir,'/grant','*S-1-5-32-545:(M)']);
-  await assert.rejects(readCloudflareTunnelCredential(file),/credential custody unsafe/);
+  await assert.rejects(readCloudflareTunnelCredential(file),(error:unknown)=>{
+    assert.ok(error instanceof CloudflareCredentialCustodyError);
+    assert.match(error.message,/credential custody unsafe/);
+    assert.equal(error.code,'PARENT_REPLACE_ACE');
+    return true;
+  });
 });
 
 // CI downloads an independently hash-verified official image before this test.
@@ -57,5 +88,54 @@ test('CLEAN-13 P1-B Windows official image requires native immutable launch guar
   const image=process.env.NEXOWIRE_CLOUDFLARED_TEST_BINARY;
   assert.ok(image,'hosted Windows must provision official checked Cloudflare artifact');
   await assert.rejects(prepareTrustedCloudflared(image,OFFICIAL_CLOUDFLARED_SHA256['win32-x64']),
-    /native signed handle custodian/);
+    (error:unknown)=>{
+      if(error instanceof CloudflaredPublisherAuditError){
+        console.info('CLEAN13_WINDOWS_PS51_AUTHENTICODE_DIAG='+JSON.stringify({
+          reason:error.reason,elapsedMs:error.elapsedMs,exitCode:error.childExitCode,
+        }));
+      }
+      assert.ok(error instanceof Error);
+      assert.match(error.message,/native signed handle custodian/);
+      return true;
+    });
+});
+
+
+/** Hosted signer baseline: PowerShell 7 is the independently observed signer
+ * check. The production audit above deliberately uses Windows PowerShell 5.1;
+ * compare its classified failure separately instead of trusting this baseline
+ * to authorize execution or masking the native image-section NO-GO.
+ */
+test('CLEAN-13 P1-B Windows independent PowerShell 7 signer baseline',{
+  skip:process.platform!=='win32',timeout:45000,
+},()=>{
+  const image=process.env.NEXOWIRE_CLOUDFLARED_TEST_BINARY;
+  assert.ok(image,'exact release artifact must be available on Windows CI');
+  const ps=[
+    "$ErrorActionPreference='Stop'",
+    "$s=Get-AuthenticodeSignature -LiteralPath $env:NEXOWIRE_CLOUDFLARED_IMAGE -ErrorAction Stop",
+    "$c=$s.SignerCertificate",
+    "$hash=(Get-FileHash -LiteralPath $env:NEXOWIRE_CLOUDFLARED_IMAGE -Algorithm SHA256).Hash.ToLowerInvariant()",
+    "$o=@{major=$PSVersionTable.PSVersion.Major;status=[string]$s.Status;signerPresent=($null -ne $c);subjectMatchesCloudflare=($null -ne $c -and $c.Subject -match 'Cloudflare');thumbprint=$(if($null -ne $c){$c.Thumbprint}else{'NONE'});sha256Pinned=($hash -eq '4d2490e74082c5d48dbfedaf92576fa5bd1702379ab88eb7faa0cfbe8dc891b6')}",
+    "[Console]::Out.Write(($o | ConvertTo-Json -Compress))",
+  ].join('\n');
+  const started=Date.now();
+  const result=spawnSync('C:\\Program Files\\PowerShell\\7\\pwsh.exe',
+    ['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(ps,'utf16le').toString('base64')],
+    {encoding:'utf8',windowsHide:true,timeout:30000,maxBuffer:4096,
+      env:{...windowsDpapiChildEnvironment(),NEXOWIRE_CLOUDFLARED_IMAGE:image}});
+  const report={engine:'PowerShell 7',exitCode:result.status,
+    errorCode:(result.error as NodeJS.ErrnoException|undefined)?.code??null,
+    elapsedMs:Date.now()-started};
+  console.info('CLEAN13_WINDOWS_PS7_AUTHENTICODE_PROCESS='+JSON.stringify(report));
+  assert.equal(result.status,0,'PowerShell 7 independent signer diagnostic must succeed');
+  const data=JSON.parse(result.stdout.trim()) as {major:number;status:string;signerPresent:boolean;
+    subjectMatchesCloudflare:boolean;thumbprint:string;sha256Pinned:boolean};
+  console.info('CLEAN13_WINDOWS_PS7_AUTHENTICODE_RESULT='+JSON.stringify(data));
+  assert.equal(data.major,7);
+  assert.equal(data.status,'Valid');
+  assert.equal(data.signerPresent,true);
+  assert.equal(data.subjectMatchesCloudflare,true);
+  assert.match(data.thumbprint,/^[A-Fa-f0-9]{40}$/);
+  assert.equal(data.sha256Pinned,true);
 });

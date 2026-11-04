@@ -158,3 +158,88 @@ Original #1044 AI-11 test blobs were rechecked at the above SHA, all **byte-iden
 The owner branch diff from 4d8f215f36de7fe05e85a9c19fc40cc35716d705 contained only three added V2-06 fixture files and this evidence document: zero source-product edits and no changed original assertions.
 
 **P1-A/B/C/D + hosted OAuth + offhost WSS + immediate revocation + Windows process tree: NO-GO.** Actual Windows Authenticode self-signed/wrong-publisher and reparse/SID/DACL/ACE physical negatives, offhost OAuth/WSS, dispatch-time epoch fence, both siblings integrated at a single source SHA, and physical two-PC reboot/credential revocation remain **NOT_RUN or FAIL**, not PASS. The V2-08 independent handoff is recorded in the #1044 PR Conversation and #1083. No production action, CORE, Cloudflare DNS/tunnel, live PCs, main merge, branch deletion or duplicate CI dispatch occurred.
+
+
+
+# ROUND 2 — Independent security acceptance of #1085 (2026-11-04)
+
+## Immutable source and original negative assertions
+
+Original QA HEAD 4d8f215f36de7fe05e85a9c19fc40cc35716d705, #1044 prior HEAD d38b30fec77cce5c9b5e29c491b11f8fe6806bef, and integrated #1085 SHA 3fe8a64517f0213151e7f3f154d4fed0bbff08a2 contain **three exact identical original blobs**:
+
+| Test | Blob SHA | Original source lines |
+|---|---|---:|
+| ai11-cloudflare-address-and-credential-custody.test.ts | f74ee761bfe00ff304b8c6070a26654c7c481e88 | 118 |
+| ai11-cloudflared-path-race-negative.test.ts | d75ab8ddcc8ab887220bea203026f1ed98eb77a9 | 95 |
+| ai11-connection-v2-negative.test.ts | 963393d00cc3368b9c76a7d8e9bb8cd4e455b706 | 179 |
+
+The three Round-1 additional tests are also identical between #1044 and #1085: real redirect 74e38898336882aec5c8c6f258c3714fb7fdd688, Linux identity 36839592d382433b197c67cea7bfbc7a777efc76, real HTTP/WSS dfee7c5796123e48821cbd3f0a87efc92cf0069c. No original assertion weakened, removed or skipped.
+
+## Exact-source PR evidence (do not mix child and integrated runs)
+
+| Scope | Exact HEAD | Own workflow result |
+|---|---|---|
+| #1003 V2-03 core | 95d9f9e431ad5a9c46adde1ecf716f84d60d8455 | CI 41825938764 FAILURE; release readiness 41825938820 FAILURE |
+| #1044 original QA | d38b30fec77cce5c9b5e29c491b11f8fe6806bef | CI 41827144628 FAILURE (intentional original-source RED) |
+| #1077 V2-01 | 67fa411c6aa6135aeeac93f7197b5fd46c804884 | CI 41824607523 FAILURE; Linux P1-A/B/D targeted PASS; Windows custody / immutable-image FAIL |
+| #1074 V2-02 | 5997a6d7ae43c34170016eb0963718ee35bf4a15 | CI 41825684508 FAILURE; redirect/DNS PASS; publication admission + dispatch-time revoke FAIL |
+| #1083 V2-07 | 4d8e7b359d572a6ee4cf22fd02ad9ee7ed81808e | CI 41826191877 SUCCESS for isolated reconnect/UNKNOWN work |
+| #1085 combined | **3fe8a64517f0213151e7f3f154d4fed0bbff08a2** | CI **41842123094 FAILURE**; Relay **41842123119 SUCCESS**; Release Readiness **41842123142 SUCCESS** |
+
+#1085 main base: 939b4d6beecf996f2750c736c5d4b4beb7b64488. Its DAG job 126616378792 succeeded but does not prove runtime security. No PR review was present on #1044 or #1085 at the observed checkpoint.
+
+### Independent RED -> GREEN / NOT_RUN threat matrix
+
+| Security property | Old #1044 against vulnerable #1003 | #1085 exact integration | Qualification |
+|---|---|---|---|
+| P1-A executable checksum/spawn race | **RED** executed swapped file marker, CI 41402284467 | **GREEN** Linux sealed FD and path swap, original AI-11 assertion | Real Windows signed held-image exec **NOT_RUN/NOT_IMPLEMENTED** |
+| P1-B profile hash confusion | **RED** nonofficial native accepted | **GREEN** negative nonofficial hash on Linux + Windows selection | Windows positive official signed image **FAIL** before guard |
+| P1-C public authority URLs | **RED** original three admission classes | **GREEN** original tests, including mapped IPv6, compact IPv4 and private/metadata | Public DNS/hosted Cloudflare not physically exercised |
+| P1-C secret redirect/DNS rebinding | **RED** Agent POST 307 body reached collector | **GREEN** real 301/302/307/308 collector, A/AAAA, real UDP CNAME and pinned TCP | Only disposable runner networking |
+| P1-D POSIX custody, parent, symlink, hardlink | **RED** 0640/0644, parent and hardlink | **GREEN** Linux real inode/mode rejection at named boundary | Windows owner-only positive **FAIL**; later ACE negative **NOT_RUN** in failing test |
+| WSS pre-101, wrong device, revocation | Partial earlier local evidence | **GREEN** real loopback HTTP authority + Hub/Agent WebSocket; no unauthorized 101 | Actual public WSS/issuer/owner not proven |
+| Revoke before next 60s periodic check | **RED** on isolated #1074 negative | **GREEN** combined CLEAN-14 received-zero-dispatch test | New precise denial-reason oracle pending |
+| Lost ACK/UNKNOWN/no replay | Existing simulated evidence | **GREEN** V2-07 same-instance replacement + Hub restart / same UUID / no resend | New independent stale-ACK / duplicate UUID oracle pending |
+| Windows Task Scheduler/child cleanup | Earlier failing parent/descendant | Historical 20/20 PASS at earlier SHA e9e598dbf689cb4e063ce5b5d4ce430ef7e58804, run 41833352347 job 126585876171 | Exact #1085 physical reboot/rollback **NOT_RUN** |
+| OAuth remote MCP tool + two-PC acceptance | **NOT_RUN** | **NOT_RUN** | Never upgrade source-level green to hosted GO |
+
+### Exact #1085 CI: separate OS matrix
+
+- GitHub Actions run 41842123094 attempt 1, completed FAILURE.
+- Linux Node22 job 126616378853: SUCCESS. Linux Node24 job 126616378935: SUCCESS; dedicated security invocation with all three original AI-11 + three Round-1 V2-06 files = **60 PASS / 0 FAIL**. Specific source-targeted Linux evidence includes P1-A FD staging, P1-D modes, P1-C URLs, 301/302/307/308, CNAME/rebinding, V2-07 revocation before next 60s check, lost ACK/UNKNOWN.
+- Windows Node22 negative job 126616378947 = **41 PASS / 0 FAIL**; Windows Node24 negative job 126616378817 = **41 PASS / 0 FAIL**. The explicit Windows command covers ai11-connection-v2-negative, clean14 network, clean14 dispatch-revoke, Round-1 redirect/WSS, V2-03 and V2-07. **It does not execute** the original cloudflared path-race, credential custody or Linux filesystem suites and must not be reported as Windows P1-A/B/D physical acceptance.
+- Windows browser-live job 126616378364 = **43 PASS / 3 FAIL**, exit code 1. Failures: Windows CLEAN-13 credential owner-only positive, official image expected native immutability guard but got publisher rejection, and synthetic wrong-binary credential-stage expectation got earlier publisher rejection.
+- Relay run 41842123119: Windows/Linux Node22/24 4/4 SUCCESS. Release Readiness run 41842123142: package jobs SUCCESS. Neither bypasses Windows browser-live FAIL.
+
+### Windows native error-stage split and false-green defense
+
+Read-only CI diagnostic before the Windows browser-live suite reported:
+NEXOWIRE_P1B_WINDOWS_SIGNATURE_DIAGNOSTIC = {status:Valid, signerPresent:true, signerSubjectMatchesCloudflare:true, independentlyPinnedSha256:true, nativeHandleBoundCustodian:false}.
+
+1. CLEAN-13 P1-D Windows owner-only positive FAIL after approximately 37.5s with generic credential custody unsafe. As the **positive prerequisite** failed, inherited untrusted ACE and parent replacement denial CANNOT be claimed PASS. Product collapses ACL, file, ancestor and subprocess errors to one generic custody reason. Need actual Windows Get-Acl SID/DACL/ACE and process timeout classification.
+2. CLEAN-13 P1-B official signed image FAIL after approximately 25.1s: expected native signed handle custodian, actual Cloudflared publisher/signature provenance rejected. External Authenticode status Valid and hash match do **not** prove product's sanitized PowerShell child succeeded. Distinguish spawnSync ETIMEDOUT vs child exit/nonzero vs real certificate Status/chain error. Do not label this wrong-publisher proof. Windows native immutability is still absent.
+3. local-first-cloudflare checksum/tunnel identity FAIL because an unofficial synthetic binary is rejected at publisher/provenance before credential validation. This is a correctly earlier P1-B refusal and a **stale test-stage expectation**, not a P1-D credential success. Source owner should create separate trusted-image fixture or direct credential-custody unit test instead of weakening product trust ordering.
+
+### New Round-2 independently owned fixtures
+
+- test/v206-round2-windows-native-reason.test.ts: six **Windows-only** real API scenarios. Direct PowerShell Get-AuthenticodeSignature on real pinned official binary under normal AND sanitized child environments; Microsoft signed wrong-signer notepad.exe; actual unsigned PowerShell file; disposable CurrentUser self-signed code-signing certificate; actual icacls owner-only DACL positive plus inherited Authenticated Users ACE negative; real NTFS credential hardlink and parent junction/reparse; post-swap official image replacement and mandatory checksum refusal. The cert is temporary and deleted. Diagnostic categorizes TIMEOUT, PROCESS_ERROR and EXIT_NONZERO separately from certificate Status. Requires independent positive preconditions; no fake negative proof. **No Windows test is registered on Linux/macOS, so Windows outcomes there are NOT_RUN rather than skipped-PASS.** Actual post-verification native CreateProcess handle-binding race is still NOT_RUN until a real custodian exists.
+- test/v206-round2-dispatch-reason.test.ts: real disposable HTTP credential authority + actual Hub/Agent WebSocket + Broker. After initial 101, revoke before the 60-second periodic revalidation: **exact AGENT_AUTH_REVOKED**, a second actual HTTP authority request and ZERO dispatched native mutation frames. Separate pending duplicate UUID denial, lost ACK = MUTATION_STATE_UNKNOWN, late ACK ignored and no re-dispatch. This is stricter than a generic throws or no-write test.
+- These new tests are **NOT_RUN against the integrated #1085 SHA 3fe8a645...** until coordinator incorporates the new #1044 test-only commit and exact-SHA CI executes them. No new result is fabricated.
+
+Required isolated-run command, once integrated:
+npm ci
+node --test --import tsx --test-concurrency=1 test/v206-round2-dispatch-reason.test.ts test/v206-round2-windows-native-reason.test.ts
+node --test --import tsx --test-concurrency=1 test/ai11-cloudflare-address-and-credential-custody.test.ts test/ai11-cloudflared-path-race-negative.test.ts test/ai11-connection-v2-negative.test.ts
+npm run check
+Record SHA, OS, full command, exit code, run/attempt/job IDs and exact failure phase. No duplicate workflow dispatch.
+
+### Owner handoffs
+
+- V2-01 #1077: official signed artifact native child may fail on timeout or sanitized PowerShell rather than invalid publisher. Fix phase diagnostics and provide positive authenticated image readback to explicit immutable-image denial. Parent ACL owner-only true positive and real inherited untrusted ACE denial must be separately proven; Windows held-image launch is still not implemented.
+- V2-02 #1074: preserve all real 301/302/307/308, header AND JSON body leak denials, URL normalization, IPv4/IPv6 metadata, CNAME/A/AAAA pinned lookup. Review R2 exact dispatch-time denial/revalidation test. GREEN local transport does not certify external Cloudflare.
+- V2-03 #1003: synthetic nonofficial binary must be rejected by P1-B **before** credentials. Fix legacy fixture stage expectation, never broaden regex to treat P1-B as successful P1-D. OAuth protected resource binding, same owner and 101 before auth remain independent.
+- V2-07 #1083: preserve UNKNOWN/no replay, stale ACK and duplicate mutation UUID; require actual R2 dispatch reason and zero frames. Reconnect may not authorize mutations after device-owner revoke.
+
+## Final release decision
+
+**NO-GO**. Linux targeted security GREEN; selected Windows negative suites GREEN; **Windows real Authenticode/immutable-image positive and credential custody owner-only positive FAIL**, integrated Windows browser-live FAIL, offhost two-PC OAuth/WSS and reboot NOT_RUN. No source/** modifications, production Cloudflare, NAVEAX/Work-PC, CORE, main merge or release.

@@ -42,9 +42,15 @@ const patch=git(['patch-id','--stable'],{input:diff.stdout});
 if(patch.status!==0||!patch.stdout.trim())failures.push('git patch-id --stable failed');
 const merge=git(['merge-tree','--write-tree','--messages',heads['1074'],heads['1077']]);
 if(merge.status!==0)failures.push('sibling merge-tree unresolved conflict or command error');
+const clean10Base=evidence.integration_clean10_parent;
+if(!clean10Base)failures.push('CLEAN-10 pre-integration base not recorded');
+const clean10Merge=clean10Base
+  ? git(['merge-tree','--write-tree','--messages',clean10Base,heads['1075']])
+  : {status:1,stdout:'',stderr:'missing base'};
+if(clean10Merge.status!==0)failures.push('CLEAN-10 source merge-tree conflict or missing full DAG');
 const rows=readFileSync('docs/connection-v2/source-preservation-matrix.csv','utf8').trim().split(/\r?\n/).slice(1)
   .map(line=>[...line.matchAll(/"((?:[^"]|"")*)"/g)].map(x=>x[1].replace(/""/g,'"')));
-if(rows.length!==54)failures.push('matrix row count differs from 54');
+if(rows.length!==73)failures.push('matrix row count differs from 73');
 let sourceBlobPass=0,candidateBlobPass=0;
 for(const r of rows){
   if(r.length!==7){failures.push('invalid CSV row');continue;}
@@ -59,7 +65,7 @@ const report={
   git_merge_base_siblings:{actual:sibling,expected:expectedSibling},
   git_cherry:{exit_code:cherry.status,entries:cherryLines.length,positive:cherryLines.filter(x=>x.startsWith('+')).length},
   git_patch_id_stable:{exit_code:patch.status,result:patch.stdout.trim().slice(0,120)},
-  git_merge_tree:{exit_code:merge.status,stdout_excerpt:merge.stdout.slice(0,2000),stderr_excerpt:merge.stderr.slice(0,1000)},
+  git_merge_tree:{exit_code:merge.status,stdout_excerpt:merge.stdout.slice(0,2000),stderr_excerpt:merge.stderr.slice(0,1000),clean10_merge_exit:clean10Merge.status,clean10_excerpt:clean10Merge.stdout.slice(0,1000)},
   matrix:{rows:rows.length,source_blob_pass:sourceBlobPass,candidate_blob_pass:candidateBlobPass},
   failures,decision:failures.length===0?'DAG_AND_BLOBS_PASS_RELEASE_NOT_AUTHORIZED':'NO_GO'
 };

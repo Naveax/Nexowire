@@ -105,6 +105,40 @@ export function normalizeControlPlaneBase(input:string):string{
   return url.toString().replace(/\/$/,'');
 }
 
+
+/** Public Cloudflare publication is a separate trust boundary from local-only
+ * HTTP loopback development. Only a single canonical HTTPS authority may
+ * control authentication for an Internet-exposed connector.
+ *
+ * Synchronous form is intended for cloudflareConnectionConfig(), before
+ * admission. The outbound native transport must still resolve and pin the
+ * actual peer IP for every secret request; a one-time DNS preflight alone
+ * cannot close a later DNS rebinding race.
+ */
+export function normalizePublicControlPlaneAuthority(input:string):string{
+  const normalized=normalizeControlPlaneBase(input);
+  const url=new URL(normalized);
+  if(url.protocol!=='https:'||url.pathname!=='/'||
+     url.port||normalized!==input||
+     url.username||url.password||url.search||url.hash)
+    throw new Error('CONTROL_PLANE_PUBLIC_AUTHORITY_INVALID');
+  // Public DNS names are checked again on resolution, including every
+  // A/AAAA answer. Literal numeric hosts already passed global-IP policy.
+  return normalized;
+}
+
+/** Optional pre-publication DNS evidence; it cannot replace per-request
+ * pinned socket admission when the DNS mapping changes afterward. */
+export async function resolvePublicControlPlaneAuthority(
+  input:string,
+  resolver?:ControlPlaneResolver,
+  signal?:AbortSignal,
+):Promise<ResolvedAddress>{
+  const canonical=normalizePublicControlPlaneAuthority(input);
+  return resolveControlPlaneAddress(new URL(canonical).hostname,
+    resolver??realResolver,signal);
+}
+
 const realResolver:ControlPlaneResolver=async hostname=>
   (await dnsLookup(hostname,{all:true,verbatim:true})).map(item=>({
     address:item.address,family:item.family as 4|6,

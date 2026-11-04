@@ -7,7 +7,7 @@ import {mkdtemp,rm,copyFile,writeFile,readFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {loadConfig} from '../src/config.js';
-import {cloudflareConnectionConfig,cloudflareChildEnvironment,startCloudflareConnection} from '../src/mcp/local-first-cloudflare.js';
+import {cloudflareConnectionConfig,cloudflareChildEnvironment,startCloudflareConnection,verifyCloudflareTunnelCredentialIdentity} from '../src/mcp/local-first-cloudflare.js';
 
 function config(port=43110){return loadConfig({
   NEXOWIRE_HTTP_PORT:String(port),NEXOWIRE_MCP_RESOURCE_URL:'https://mcp.example.test/mcp',
@@ -48,8 +48,25 @@ test('checksum and tunnel identity are checked before any network exposure',asyn
   const p={...profile(),binary,credentialsFile:path.join(dir,'credential.json')};
   await assert.rejects(startCloudflareConnection(p,config()),/checksum mismatch/);
   p.binarySha256=createHash('sha256').update('not an executable').digest('hex');
-  await writeFile(p.credentialsFile,JSON.stringify({TunnelID:randomUUID(),AccountTag:'a'.repeat(32),TunnelSecret:Buffer.alloc(32).toString('base64')}),{mode:0o600});
-  await assert.rejects(startCloudflareConnection(p,config()),/credentials do not match|credential custody unsafe/);
+  const mismatched=Buffer.from(JSON.stringify({
+    TunnelID:randomUUID(),AccountTag:'a'.repeat(32),
+    TunnelSecret:Buffer.alloc(32).toString('base64'),
+  }));
+  await writeFile(p.credentialsFile,mismatched,{mode:0o600});
+  // The mismatch negative is exercised at its actual pure credential stage.
+  // An arbitrary image is *not* allowed to bypass publisher provenance to
+  // reach that stage in startCloudflareConnection.
+  assert.throws(()=>verifyCloudflareTunnelCredentialIdentity(mismatched,p.tunnelId),
+    /credentials do not match/);
+  const matching=Buffer.from(JSON.stringify({
+    TunnelID:p.tunnelId,AccountTag:'a'.repeat(32),
+    TunnelSecret:Buffer.alloc(32).toString('base64'),
+  }));
+  assert.doesNotThrow(()=>verifyCloudflareTunnelCredentialIdentity(matching,p.tunnelId));
+  await assert.rejects(startCloudflareConnection(p,config()),
+    /publisher|provenance/);
+  // No process or loopback listener should ever be exposed by the fake image.
+  assert.notEqual(p.binarySha256,'a'.repeat(64));
 });
 test('unofficial local binary cannot launch a connector or disrupt the Hub',async t=>{
   const dir=await mkdtemp(path.join(os.tmpdir(),'nw-cf-exit-'));t.after(()=>rm(dir,{recursive:true,force:true}));

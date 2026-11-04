@@ -406,3 +406,45 @@ jobs:
           name: connection-v2-native-git-dag
           path: ${{ runner.temp }}/connection-v2-native-git-dag.json
           if-no-files-found: error
+  connection-v2-clean10-windows:
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'coord/connection-v2-release-candidate-')
+    runs-on: windows-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - name: Run QA-02 output ordering and CLEAN-10 no-replay oracle without skip
+        shell: pwsh
+        run: |
+          node --test --import tsx --test-concurrency=1 test/qa-02-windows-output-ordering.test.ts test/qa-02-error-contract-no-replay.test.ts test/clean-10/idempotency-reservation-negative.test.ts test/clean-10/timeout-reconnect-no-replay.test.ts test/clean-10/runbook-unknown-acceptance-red.test.ts
+          if ($LASTEXITCODE -ne 0) { throw 'CLEAN10_NO_REPLAY_RED' }
+  connection-v2-round2-security:
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'coord/connection-v2-release-candidate-')
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - name: Fail-closed V2 Round 2 security, OAuth, WSS and Windows rollback
+        run: node --test --import tsx --test-concurrency=1 test/v206-round2-dispatch-reason.test.ts test/v206-round2-windows-native-reason.test.ts test/clean14-wss-tls-negative.test.ts test/v2-03-authenticated-mcp-acceptance.test.ts test/v2-07/round2-revocation.test.ts test/v2-07/round2-transport-fixtures.test.ts test/connection-v2-windows-hub-rollback.test.ts

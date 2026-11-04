@@ -71,3 +71,23 @@ Each passing scenario logs one `RELAY_V2_05_BENCH_JSON={...}` record with enviro
 6. Compare measured direct/P2P bytes with relay/provider bytes and collect actual price/egress evidence; set a hard user-visible spend cap.
 
 **Release recommendation:** **NO-GO** until exact-checkout CI, actual benchmark logs, hosted soak, streaming protocol integration and separate #1003/#1044 security gates are green. Synthetic loopback throughput is not a zero-cost or unlimited-capacity claim.
+
+## Round 2: global memory reservation / pending handshakes (2026-11-04)
+
+**Source:** existing #1081 Draft, no new PR or production deployment. **Default global accounting budget: 32 MiB** (`NEXOWIRE_RELAY_GLOBAL_MEMORY_BUDGET_BYTES`, valid 256 KiB–512 MiB). Every accepted/upgrading pair reserves 64 KiB until **both** downstream and upstream sockets close. A default 128 connections reserve **8 MiB**, leaving **24 MiB** shared by all startup queues and uncompleted WebSocket send callbacks. The old theoretical `128 × 2 MiB = 256 MiB` startup queue now cannot be fully reserved; global queue plus inflight plus connection reservations must remain ≤ 32 MiB. This is an **accounting cap, not an absolute process RSS cap**: inbound WebSocket parsing, TLS, Node runtime, kernel send buffers and other allocations are not completely covered.
+
+The optional `NEXOWIRE_RELAY_MAX_PENDING_HANDSHAKES` (1–512; defaults to max connections) separately caps outstanding upstream handshakes. Admission checks include already reserved pair slots, pending upgrades, pending handshakes and global budget **before** outbound socket allocation. An authenticated over-capacity upgrade receives HTTP 503 and `Retry-After: 1`. Existing peers that cannot acquire queue/inflight bytes fail closed with code 1013. Startup queues still cap at 2 MiB or 64 frames per pair. Inflight bytes are reserved before `send`; per-send callback or pair disposal releases exactly once. Pair slots are released only after both endpoints' close events.
+
+`resourceSnapshot()` now contains the redacted global current/high-water reservation, per-kind byte buckets, connection/pending counters, global reject count and per-pair queued/inflight high-water. The reservation invariant is:
+`totalReservedBytes === connectionReservedBytes + startupQueuedBytes + inflightReservedBytes`.
+After controlled close and cleanup all current counters must become zero. A stalled upstream and a healthy second peer are exercised together to prove the slow peer cannot steal all reserved bytes or starve the healthy ACK.
+
+**Benchmark methodology:** GitHub Windows/Linux Node22/24 ephemeral loopback TLS/WSS with authenticated Broker requests in `test/relay-resource-budgets.test.ts`. New records include `globalMemoryBudgetBytes`, `reservedBytes`, `peakReservedBytes`, `connectionReservedBytes`, `inflightReservedBytes`, pending handshake/admission counts, budget rejects and per-connection byte high-water. Each CI job must be mapped to exact run ID, job ID, PR HEAD SHA, checkout SHA, invocation command and exit status before claiming PASS. Metrics are whole Node fixture-process RSS/CPU, not isolated hosted relay cost.
+
+**1 GiB transfer contract only (NOT_RUN):** Before implementing, version a standalone transfer session with owner/device-bound `transferId`, stable authenticated `fileId`, bounded chunk size and in-flight window, `chunkIndex`, offset/length, SHA256 per chunk and final file, explicit cancel ACK and persistent durable resume bitmap. Reject overlapping/conflicting chunks; stage into uniquely named protected temporary storage, require fsync/atomic verified finalization, verify file-ID and revocation at commit, and never replay unknown mutations. No transfer implementation is claimed.
+
+**P2P backlog (NOT_RUN):** evaluate WebRTC/ICE/STUN plus TURN fallback for bulk file, desktop pixels and telemetry streams with consent and device binding; use measured egress and quota spending guards. Authenticated MCP control, owner authorization, revocation and mutation ACK stay authoritative and are **not** replaced by P2P.
+
+**Public hosted Cloudflare 101+ WSS:** NOT_RUN. **Cross-device 1 GiB verified stream:** NOT_RUN. **24-hour soak and actual provider egress/billing:** NOT_RUN. **Production GO:** NO-GO until external security gates, hosted capacity and transfer correctness validation.
+
+**Additional Round 2 negative:** the 256 KiB global reservation cap, at 64 KiB per pair, accepts four authenticated upgrades and returns HTTP 503 on the fifth despite an eight-connection configured ceiling. A separate 128 KiB-max-frame stalled-upstream fixture proves global queue 1013 is reached before the per-pair startup cap. Both assert cleanup to zero without skipping tests.
