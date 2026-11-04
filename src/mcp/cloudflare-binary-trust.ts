@@ -56,7 +56,7 @@ export async function prepareTrustedCloudflared(binary:string,profileDigest:stri
   if(!path.isAbsolute(binary)||path.resolve(binary)!==binary||/[\r\n\0]/.test(binary))
     deny('Cloudflared binary must have an absolute safe path');
   const original=await fs.lstat(binary,{bigint:true});
-  if(!original.isFile()||original.isSymbolicLink()||original.nlink!==1||
+  if(!original.isFile()||original.isSymbolicLink()||original.nlink!==1n||
      original.size<1n||original.size>BigInt(LIMIT))
     deny('Cloudflared binary path, hardlink or size is unsafe');
   const source=await fs.open(binary,flags.O_RDONLY|(process.platform==='win32'?0:flags.O_NOFOLLOW));
@@ -101,7 +101,7 @@ export async function stageDescriptorBoundImage(bytes:Buffer,expectedDigest:stri
     const named=await fs.lstat(stage,{bigint:true});
     const dirStat=await fs.lstat(directory,{bigint:true});
     const uid=BigInt(typeof process.getuid==='function'?process.getuid():-1);
-    if(!observed.isFile()||observed.nlink!==1||observed.uid!==uid||
+    if(!observed.isFile()||observed.nlink!==1n||observed.uid!==uid||
        (observed.mode&0o222n)!==0n||!sameFile(observed,named)||
        !dirStat.isDirectory()||dirStat.isSymbolicLink()||dirStat.uid!==uid||
        (dirStat.mode&0o077n)!==0n)
