@@ -97,3 +97,22 @@ The standalone script does not maintain a process lifecycle monitor.
 - Internet-origin MCP tool call, WSS authorization, real TLS/DNS: NOT_RUN.
 - Real two-PC migration/reboot and 24-hour soak: NOT_RUN.
 - Release integration and production-ready: NO-GO until V2-08 complete.
+
+
+## Readiness monitor implementation notes
+
+\`ConnectionV2ReadinessMonitor\` is a non-authoritative ephemeral status
+machine, not a token validator. \`observeLocalProcess\` must only consume local
+supervisor observations. \`inspectPublicBoundary\` invokes the real public
+doctor; \`proveAuthenticatedMcp\` invokes the bounded MCP read-only protocol
+probe, not a boolean provided by remote HTTP input. \`observeHubAgentAdmission\`
+may be called only by trusted Hub authorization code after device-bound
+credential verification, never by an untrusted Agent/client. The actual
+V2-02/V2-07 mutation dispatch authority and revocation epoch remain
+independent mandatory enforcement points.
+
+Default proof age is 60 seconds; caller must refresh local process evidence
+and independent proof before TTL. Stale proof, wrong device identity, revoked
+grant, transport outage or lost Hub triggers DEGRADED. A local stop triggers
+UNAVAILABLE. The monitor never auto-retries unknown mutations, persistently
+grants access, or claims real ChatGPT OAuth consent.

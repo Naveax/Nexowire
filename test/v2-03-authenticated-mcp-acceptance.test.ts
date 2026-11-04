@@ -2,7 +2,7 @@ import test,{type TestContext} from 'node:test';
 import assert from 'node:assert/strict';
 import {createServer,type Server} from 'node:http';
 import type {AddressInfo} from 'node:net';
-import {verifyConnectionV2AuthenticatedReadOnly} from '../src/mcp/cloudflare-connection-doctor.js';
+import {ConnectionV2ReadinessMonitor,verifyConnectionV2AuthenticatedReadOnly} from '../src/mcp/cloudflare-connection-doctor.js';
 
 const TOKEN='disposable_token_no_real_authority_123';
 const MARKER='v1-contract-expected-marker';
@@ -70,13 +70,14 @@ async function fixture(t:TestContext,mode:Mode='healthy'){
     server.closeAllConnections();
     await new Promise<void>(resolve=>server.close(()=>resolve()));
   });
+  const options={
+    resourceUrl,issuerUrl:'https://issuer.example.test',
+    bearerToken:TOKEN,expectedOutputContains:MARKER,
+    allowLoopbackHttpFixture:true,timeoutMs:1000,
+  } as const;
   const run=(overrides:Partial<Parameters<typeof verifyConnectionV2AuthenticatedReadOnly>[0]>={})=>
-    verifyConnectionV2AuthenticatedReadOnly({
-      resourceUrl,issuerUrl:'https://issuer.example.test',
-      bearerToken:TOKEN,expectedOutputContains:MARKER,
-      allowLoopbackHttpFixture:true,timeoutMs:1000,...overrides,
-    });
-  return {run,requests,resourceUrl};
+    verifyConnectionV2AuthenticatedReadOnly({...options,...overrides});
+  return {run,requests,resourceUrl,options};
 }
 test('V2-03 real loopback HTTP+SSE read-only protocol: initialize, session, list, matching completed tool',async t=>{
   const f=await fixture(t);
@@ -151,4 +152,32 @@ test('V2-03 hub disconnect before metadata is UNAVAILABLE, no false ready',async
   assert.equal(result.authenticatedToolVerified,false);
   assert.deepEqual(result.completedSteps,[]);
   assert.ok(url.includes('/mcp'));
+});
+
+test('V2-03 authenticated MCP state requires completed tool; Hub Agent owner/device identity and expiry are fenced',async t=>{
+  let now=1000;
+  const monitor=new ConnectionV2ReadinessMonitor({maxEvidenceAgeMs:1000,clock:()=>now});
+  const f=await fixture(t);
+  assert.equal(monitor.current(),'UNAVAILABLE');
+  assert.equal(monitor.observeLocalProcess(true),'LOCAL_PROCESS_RUNNING');
+  const result=await monitor.proveAuthenticatedMcp(f.options);
+  assert.equal(result.authenticatedToolVerified,true);
+  assert.equal(monitor.current(),'AUTHENTICATED_MCP_READY');
+  assert.equal(monitor.observeHubAgentAdmission({
+    remoteOnly:true,hubAdmissionContract:'device-bound-revalidate-v1',
+    boundDeviceId:'pc-one',helloDeviceId:'pc-one',expiresAtMs:now+800,
+  }),'AGENT_AUTHENTICATED');
+  now+=1001;
+  assert.equal(monitor.current(),'DEGRADED');
+  assert.equal(monitor.observeDisconnect('local-process'),'UNAVAILABLE');
+  assert.equal(monitor.observeLocalProcess(true),'LOCAL_PROCESS_RUNNING');
+  assert.equal(monitor.observeHubAgentAdmission({
+    remoteOnly:true,hubAdmissionContract:'device-bound-revalidate-v1',
+    boundDeviceId:'pc-one',helloDeviceId:'pc-two',expiresAtMs:now+500,
+  }),'DEGRADED');
+  assert.equal(monitor.observeHubAgentAdmission({
+    remoteOnly:true,hubAdmissionContract:'device-bound-revalidate-v1',
+    boundDeviceId:'pc-one',helloDeviceId:'pc-one',expiresAtMs:now-1,revoked:true,
+  }),'DEGRADED');
+  assert.equal(monitor.observeDisconnect('hub'),'DEGRADED');
 });

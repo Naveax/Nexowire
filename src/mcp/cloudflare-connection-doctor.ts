@@ -180,7 +180,8 @@ function exactHttpsMcpResource(raw:string,allowLoopback:boolean):URL {
 function expectedIssuer(raw:string):string{
   const url=new URL(raw);
   if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||
-     url.pathname!=='/'||url.port||url.toString().replace(/\/$/,'')!==raw.replace(/\/$/,''))
+     url.port||url.toString().replace(/\/$/,'')!==raw.replace(/\/$/,'')||
+     /%(?:2e|2f|5c|00)/i.test(raw))
     throw new Error('STAGING_ISSUER_INVALID');
   return url.toString().replace(/\/$/,'');
 }
@@ -262,10 +263,14 @@ export async function verifyConnectionV2AuthenticatedReadOnly(
       signal:controller.signal,headers:{accept:'application/json'}});
     if(metadata.status!==200){await metadata.body?.cancel().catch(()=>{});return fail('MCP_METADATA_HTTP_'+metadata.status);}
     const body=await boundedJson(metadata) as Record<string,unknown>|null;
-    if(!body||body.resource!==resource.toString()||
-       !Array.isArray(body.authorization_servers)||body.authorization_servers.length!==1||
-       typeof body.authorization_servers[0]!=='string'||
-       new URL(body.authorization_servers[0]).toString().replace(/\/$/,'')!==issuer)
+    let advertisedIssuer:string|undefined;
+    try{
+      if(Array.isArray(body?.authorization_servers)&&
+         body.authorization_servers.length===1&&
+         typeof body.authorization_servers[0]==='string')
+        advertisedIssuer=new URL(body.authorization_servers[0]).toString().replace(/\/$/,'');
+    }catch{/* A malformed advertised issuer is a boundary mismatch. */}
+    if(!body||body.resource!==resource.toString()||advertisedIssuer!==issuer)
       return fail('MCP_OAUTH_RESOURCE_OR_ISSUER_MISMATCH');
     completed.push('metadata');
     const rpcBody=(id:number,method:string,params:unknown)=>JSON.stringify({
@@ -335,4 +340,112 @@ export async function verifyConnectionV2AuthenticatedReadOnly(
       /^MCP_[A-Z0-9_]+$/.test(cause)?cause:'MCP_UPSTREAM_UNAVAILABLE';
     return fail(code,publicBoundaryVerified?'DEGRADED':'UNAVAILABLE');
   }finally{clearTimeout(timer);}
+}
+
+
+/** Readiness state is ephemeral and evidence-derived, never persisted as an
+ * authorization grant. The Hub auth and Agent grant remain authoritative. */
+export interface ConnectionV2AgentGrantObservation {
+  remoteOnly:boolean;
+  hubAdmissionContract:string;
+  boundDeviceId:string;
+  helloDeviceId:string;
+  expiresAtMs:number;
+  revoked?:boolean;
+}
+export class ConnectionV2ReadinessMonitor {
+  private local=false;
+  private boundaryAt:number|undefined;
+  private mcpAt:number|undefined;
+  private agentAt:number|undefined;
+  private degraded=false;
+  private processObservedAt:number|undefined;
+  private readonly ttl:number;
+  private readonly clock:()=>number;
+
+  constructor(options:{maxEvidenceAgeMs?:number;clock?:()=>number}={}){
+    const ttl=options.maxEvidenceAgeMs??60_000;
+    if(!Number.isSafeInteger(ttl)||ttl<250||ttl>300_000)
+      throw Error('READINESS_EVIDENCE_TTL_INVALID');
+    this.ttl=ttl;
+    this.clock=options.clock??(()=>Date.now());
+  }
+  /** Caller must source this event from its trusted local process supervisor. */
+  observeLocalProcess(running:boolean):ConnectionV2State{
+    this.local=running;
+    this.processObservedAt=this.clock();
+    if(!running){this.boundaryAt=undefined;this.mcpAt=undefined;
+      this.agentAt=undefined;this.degraded=false;}
+    return this.current();
+  }
+  /** Calls the real diagnostic; a synthetic HTTP 200 is never accepted alone. */
+  async inspectPublicBoundary(input:unknown,config:NexowireConfig,
+    fetchImpl:typeof fetch=fetch):Promise<ConnectionV2State>{
+    if(!this.local)return 'UNAVAILABLE';
+    const result=await inspectCloudflareConnection(input,config,fetchImpl);
+    if(result.publicBoundaryVerified){
+      this.boundaryAt=this.clock();this.degraded=false;
+    }else{
+      this.boundaryAt=undefined;this.mcpAt=undefined;this.agentAt=undefined;
+      this.degraded=true;
+    }
+    return this.current();
+  }
+  /** The probe executes a real authorized read-only tool; no caller-supplied
+   * "ready" boolean can promote this status. */
+  async proveAuthenticatedMcp(input:ConnectionV2AuthenticatedProbe):
+    Promise<ConnectionV2AuthenticatedResult>{
+    if(!this.local)return {
+      stage:'UNAVAILABLE',code:'LOCAL_PROCESS_NOT_RUNNING',
+      publicBoundaryVerified:false,authenticatedToolVerified:false,
+      sessionIdObserved:false,completedSteps:[],
+    };
+    const result=await verifyConnectionV2AuthenticatedReadOnly(input);
+    if(result.authenticatedToolVerified&&result.publicBoundaryVerified&&
+       result.completedSteps.includes('tools_call_completed')){
+      this.boundaryAt=this.clock();this.mcpAt=this.clock();this.degraded=false;
+    }else{this.mcpAt=undefined;this.degraded=true;}
+    return result;
+  }
+  /** Only a trusted Hub/device-auth layer may invoke this after verifying
+   * the real credential. A client-supplied device ID is NOT sufficient. */
+  observeHubAgentAdmission(grant:ConnectionV2AgentGrantObservation):ConnectionV2State{
+    const now=this.clock();
+    if(!this.local||!grant.remoteOnly||
+       grant.hubAdmissionContract!=='device-bound-revalidate-v1'||
+       !grant.boundDeviceId||grant.boundDeviceId!==grant.helloDeviceId||
+       grant.revoked===true||!Number.isFinite(grant.expiresAtMs)||
+       grant.expiresAtMs<=now){
+      this.agentAt=undefined;this.degraded=true;
+      return this.current();
+    }
+    this.agentAt=now;
+    this.degraded=false;
+    return this.current();
+  }
+  /** Disconnects and revocations must fail closed rather than recycling stale
+   * readiness. In particular, never replay UNKNOWN mutations here. */
+  observeDisconnect(kind:'hub'|'agent'|'local-process'):ConnectionV2State{
+    if(kind==='local-process')return this.observeLocalProcess(false);
+    this.degraded=true;
+    if(kind==='hub'){this.boundaryAt=undefined;this.mcpAt=undefined;this.agentAt=undefined;}
+    else this.agentAt=undefined;
+    return this.current();
+  }
+  current():ConnectionV2State{
+    if(!this.local)return 'UNAVAILABLE';
+    const now=this.clock();
+    const fresh=(time:number|undefined)=>time!==undefined &&
+      now>=time && now-time<=this.ttl;
+    const stale=(time:number|undefined)=>time!==undefined&&!fresh(time);
+    if(this.degraded||stale(this.processObservedAt)||
+       stale(this.boundaryAt)||stale(this.mcpAt)||stale(this.agentAt))
+      return 'DEGRADED';
+    return deriveConnectionV2State({
+      localProcessRunning:this.local,
+      publicOauthBoundaryOk:fresh(this.boundaryAt),
+      authenticatedMcpToolComplete:fresh(this.mcpAt),
+      agentAuthenticated:fresh(this.agentAt),
+    });
+  }
 }

@@ -5,7 +5,7 @@ import {randomUUID} from 'node:crypto';
 import type {AddressInfo} from 'node:net';
 import WebSocket from 'ws';
 import {loadConfig} from '../src/config.js';
-import {deriveConnectionV2State,inspectCloudflareConnection} from '../src/mcp/cloudflare-connection-doctor.js';
+import {ConnectionV2ReadinessMonitor,deriveConnectionV2State,inspectCloudflareConnection} from '../src/mcp/cloudflare-connection-doctor.js';
 import {createLocalFirstIngressServer} from '../src/mcp/local-first-ingress.js';
 
 test('V2-03 readiness matrix never promotes process/status 401 to authenticated MCP',()=>{
@@ -155,4 +155,21 @@ test('V2-03 bridge rejects upstream HTTP 101 with forged WebSocket accept',async
   });
   assert.equal(status,503);
   assert.equal(opened,false);
+});
+
+test('V2-03 boundary monitor transitions from process to verified OAuth and degrades on issuer mismatch',async()=>{
+  let now=1000;
+  const monitor=new ConnectionV2ReadinessMonitor({maxEvidenceAgeMs:1000,clock:()=>now});
+  assert.equal(monitor.current(),'UNAVAILABLE');
+  assert.equal(monitor.observeLocalProcess(true),'LOCAL_PROCESS_RUNNING');
+  const metadata={resource,authorization_servers:['https://control.example.test']};
+  assert.equal(await monitor.inspectPublicBoundary(profile(),config(),
+    fetchFixture(metadata)),'PUBLIC_OAUTH_BOUNDARY_OK');
+  now+=1001;
+  assert.equal(monitor.current(),'DEGRADED','expired boundary evidence must not remain ready');
+  now+=1;
+  monitor.observeLocalProcess(true);
+  assert.equal(await monitor.inspectPublicBoundary(profile(),config(),
+    fetchFixture({resource,authorization_servers:['https://forged.example.test']})),'DEGRADED');
+  assert.equal(monitor.observeDisconnect('local-process'),'UNAVAILABLE');
 });
