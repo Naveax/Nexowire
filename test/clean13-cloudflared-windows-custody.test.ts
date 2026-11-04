@@ -31,10 +31,15 @@ test('CLEAN-13 P1-D Windows exact SID, inherited ACE and parent replacement righ
   const file=path.join(dir,'fake-tunnel.json');
   await fs.writeFile(file,'{"fake":true}',{mode:0o600});
   const user=sid();
-  // These ACL changes affect only test-owned temporary fixtures.
-  for(const target of [dir,file])
+  // Windows elevated runner tokens can create new files with the
+  // Administrators GROUP as owner, even when current-user full-control
+  // ACEs are explicit. ACL grants do NOT change ownership. Establish the
+  // real logon user's exact SID on these disposable objects only.
+  for(const target of [dir,file]){
     cmd(ICACLS,[target,'/inheritance:r','/grant:r',
       '*'+user+':(F)','*S-1-5-18:(F)','*S-1-5-32-544:(F)']);
+    cmd(ICACLS,[target,'/setowner','*'+user]);
+  }
   let good:Buffer;
   try{good=await readCloudflareTunnelCredential(file);}
   catch(error){
