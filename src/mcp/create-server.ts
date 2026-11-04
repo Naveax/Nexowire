@@ -932,7 +932,11 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
               : await ctx.idempotency.getByOperationId(operation_id!)
             ].filter((record): record is IdempotencyRecord => record!==undefined)
           : await ctx.idempotency.list(limit ?? 100, allowedDeviceIds);
+      const capacity = ctx.idempotency
+        ? await ctx.idempotency.capacitySnapshot(allowedDeviceIds)
+        : null;
       return toolResult({
+        capacity,
         records: candidates
           .filter((record) =>
             allowedDeviceIds === undefined ||
