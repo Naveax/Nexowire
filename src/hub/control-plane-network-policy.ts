@@ -136,6 +136,7 @@ export async function controlPlaneSecretPost(
   input:string,
   init:RequestInit,
   injectedFetch?:typeof fetch,
+  resolver:ControlPlaneResolver=realResolver,
 ):Promise<Response>{
   if(init.method!=='POST'||init.redirect!=='error'||typeof init.body!=='string')
     throw new Error('CONTROL_PLANE_REQUEST_INVALID');
@@ -146,7 +147,7 @@ export async function controlPlaneSecretPost(
     if(response.status>=300&&response.status<400)throw new Error('CONTROL_PLANE_REDIRECT_DENIED');
     return response;
   }
-  const pinned=await resolveControlPlaneAddress(url.hostname,realResolver,init.signal??undefined);
+  const pinned=await resolveControlPlaneAddress(url.hostname,resolver,init.signal??undefined);
   if(init.signal?.aborted)throw new Error('CONTROL_PLANE_ABORTED');
   return await new Promise<Response>((resolve,reject)=>{
     const request=(url.protocol==='https:'?httpsRequest:httpRequest)(url,{
