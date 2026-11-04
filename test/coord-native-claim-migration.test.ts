@@ -111,9 +111,12 @@ test('native readback verification cannot be silently cleared during dispatch',(
     assert.throws(()=>db.prepare(`UPDATE device_core_console_operations
       SET native_claim_verified=0 WHERE request_id='r4'`).run(),
       /CORE_NATIVE_CLAIM_DOWNGRADE_DENIED/);
+    assert.throws(()=>db.prepare(`UPDATE device_core_console_operations
+      SET state='unknown',native_claim_verified=0 WHERE request_id='r4'`).run(),
+      /CORE_NATIVE_CLAIM_DOWNGRADE_DENIED/);
     db.prepare(`UPDATE device_core_console_operations
-      SET state='unknown',native_claim_verified=0 WHERE request_id='r4'`).run();
-    assert.deepEqual(row(db,'r4'),{state:'unknown',nativeClaimVerified:0});
+      SET state='unknown' WHERE request_id='r4'`).run();
+    assert.deepEqual(row(db,'r4'),{state:'unknown',nativeClaimVerified:1});
   }finally{db.close();}
 });
 
