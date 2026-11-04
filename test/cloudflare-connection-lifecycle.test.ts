@@ -4,6 +4,7 @@ import {mkdtemp,rm,writeFile,readFile} from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import {randomUUID} from 'node:crypto';
+import './connection-v2-windows-recovery.test.js';
 import {spawnSync} from 'node:child_process';
 import {buildCloudflareConnectionLauncher,cloudflareConnectionLifecycle,windowsConnectionControllerSourceForTest} from '../src/mcp/cloudflare-connection-lifecycle.js';
 import {inspectCloudflareConnection} from '../src/mcp/cloudflare-connection-doctor.js';
@@ -163,7 +164,8 @@ fs.writeFileSync(${JSON.stringify(pidFile)},JSON.stringify({parent:process.pid,c
   const alive=(pid:number)=>{try{process.kill(pid,0);return true;}catch{return false;}};
   t.after(async()=>{
     await cloudflareConnectionLifecycle('stop',undefined,options);
-    if(pids)for(const pid of [pids.child,pids.parent])if(alive(pid))process.kill(pid,'SIGKILL');
+    // No bare-PID kill: a PID may have been recycled into a foreign process.
+    // Stop-ScheduledTask and the owned Job Object are the only cleanup path.
     await cloudflareConnectionLifecycle('uninstall',undefined,options);
     await rm(root,{recursive:true,force:true,maxRetries:10,retryDelay:100});
   });

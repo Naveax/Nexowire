@@ -9,10 +9,14 @@ import {cloudflareConnectionLifecycle} from '../src/mcp/cloudflare-connection-li
 
 // This is a destructive test ONLY of the disposable, randomly named task it
 // registers. It never queries or changes NAVEAX / Work-PC system tasks.
-// The lab operator sets this flag inside a disposable Windows VM.
-const enabled=process.platform==='win32' &&
-  process.env.NEXOWIRE_V2_04_DISPOSABLE_WINDOWS_VM==='YES' &&
-  process.env.GITHUB_ACTIONS!=='true';
+// The exact CI workflow runs on GitHub-hosted windows-latest, an ephemeral VM.
+// Explicit local VM testing is also allowed, never a self-hosted CI runner.
+const githubHostedVM=process.env.GITHUB_ACTIONS==='true' &&
+  process.env.RUNNER_OS==='Windows' &&
+  process.env.RUNNER_ENVIRONMENT==='github-hosted';
+const explicitDisposableVM=process.env.GITHUB_ACTIONS!=='true' &&
+  process.env.NEXOWIRE_V2_04_DISPOSABLE_WINDOWS_VM==='YES';
+const enabled=process.platform==='win32' && (githubHostedVM||explicitDisposableVM);
 
 const pause=(ms:number)=>new Promise<void>(resolve=>setTimeout(resolve,ms));
 type Identity={pid:number;creationDate:string;executablePath:string};
@@ -100,5 +104,7 @@ test('V2-04: 20 real disposable Windows Scheduler start/stop cycles and descenda
     await cloudflareConnectionLifecycle('stop',undefined,options);
     for(const id of ids)assert.equal(await identityGone(id!),true,'survivor on cycle '+cycle+' PID '+id!.pid);
     assert.notEqual((await cloudflareConnectionLifecycle('status',undefined,options)).state,'Running');
+    process.stdout.write(JSON.stringify({event:'V2_04_NATIVE_VM_CYCLE_PASS',
+      cycle,identity:ids,stopped:true})+'\n');
   }
 });
