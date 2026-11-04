@@ -177,7 +177,9 @@ if($task){
  if(-not (Test-Path -LiteralPath $hashPath -PathType Leaf)){throw 'CONNECTION_LAUNCHER_MANIFEST_MISSING'}
  if(((Get-Item -LiteralPath $hashPath -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw 'CONNECTION_LAUNCHER_MANIFEST_REPARSE'}
  $expectedHash=[IO.File]::ReadAllText($hashPath).Trim()
- if($expectedHash -notmatch '^[a-fA-F0-9]{64}
+ if($expectedHash -notmatch '^[a-fA-F0-9]{64}$'){throw 'CONNECTION_LAUNCHER_MANIFEST_INVALID'}
+ if((Get-FileHash -LiteralPath $launcher -Algorithm SHA256).Hash -cne $expectedHash.ToUpperInvariant()){throw 'CONNECTION_LAUNCHER_HASH_MISMATCH'}
+ foreach($protectedPath in @($launcher,$hashPath,(Split-Path -Parent $launcher))){
    $acl=Get-Acl -LiteralPath $protectedPath
    $aclOwner=$acl.Owner
    try{if($aclOwner -ne $sid){$aclOwner=([Security.Principal.NTAccount]$aclOwner).Translate([Security.Principal.SecurityIdentifier]).Value}}catch{throw 'CONNECTION_LAUNCHER_OWNER_UNKNOWN'}
@@ -191,7 +193,6 @@ if($task){
      }
    }
  }
-
 }
 switch($env:NEXOWIRE_CONNECTION_ACTION){
  'install' {
@@ -272,97 +273,6 @@ export async function cloudflareConnectionLifecycle(action:Action,profile?:strin
     try{if(!(await operate('status',launcher,task)).installed){
       await fs.rm(launcher,{force:true});await fs.rm(launcher+'.sha256',{force:true});
     }}catch{}
-    throw error;
-  }
-}
-){throw 'CONNECTION_LAUNCHER_MANIFEST_INVALID'}
- if((Get-FileHash -LiteralPath $launcher -Algorithm SHA256).Hash -cne $expectedHash.ToUpperInvariant()){throw 'CONNECTION_LAUNCHER_HASH_MISMATCH'}
- foreach($protectedPath in @($launcher,$hashPath,(Split-Path -Parent $launcher))){
-   $acl=Get-Acl -LiteralPath $protectedPath
-   $aclOwner=$acl.Owner
-   try{if($aclOwner -ne $sid){$aclOwner=([Security.Principal.NTAccount]$aclOwner).Translate([Security.Principal.SecurityIdentifier]).Value}}catch{throw 'CONNECTION_LAUNCHER_OWNER_UNKNOWN'}
-   if($aclOwner -ne $sid){throw 'CONNECTION_LAUNCHER_OWNER_MISMATCH'}
-   foreach($ace in $acl.Access){
-     if($ace.AccessControlType -ne 'Allow'){continue}
-     try{$aceSid=$ace.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value}catch{throw 'CONNECTION_LAUNCHER_ACL_UNKNOWN'}
-     if($aceSid -in @('S-1-1-0','S-1-5-11','S-1-5-32-545','S-1-5-32-546')){
-       $writeRights=[Security.AccessControl.FileSystemRights]::Write -bor [Security.AccessControl.FileSystemRights]::Delete -bor [Security.AccessControl.FileSystemRights]::ChangePermissions -bor [Security.AccessControl.FileSystemRights]::TakeOwnership
-       if(($ace.FileSystemRights -band $writeRights) -ne 0){throw 'CONNECTION_LAUNCHER_BROAD_WRITE'}
-     }
-   }
- }
-
-}
-switch($env:NEXOWIRE_CONNECTION_ACTION){
- 'install' {
-  if($task){throw 'CONNECTION_ALREADY_INSTALLED'}
-  $action=New-ScheduledTaskAction -Execute 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' -Argument $argument
-  $trigger=New-ScheduledTaskTrigger -AtLogOn -User $user
-  $principal=New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
-  $settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-  Register-ScheduledTask -TaskName $name -TaskPath '\' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description 'Nexowire Cloudflare-only MCP connection' | Out-Null
- }
- 'start' {if(-not $task){throw 'CONNECTION_NOT_INSTALLED'};Start-ScheduledTask -InputObject $task}
- 'stop' {if($task){Stop-ScheduledTask -InputObject $task}}
- 'uninstall' {if($task){if($task.State -in @('Running','Queued')){throw 'CONNECTION_STOP_BEFORE_UNINSTALL'};Unregister-ScheduledTask -InputObject $task -Confirm:$false}}
- 'status' {}
- default {throw 'INVALID_CONNECTION_ACTION'}
-}
-$task=Get-ScheduledTask -TaskName $name -TaskPath '\' -ErrorAction SilentlyContinue
-[pscustomobject]@{installed=($null -ne $task);state=$(if($task){[string]$task.State}else{'NotInstalled'});autostart=($null -ne $task -and @($task.Triggers).Count -gt 0);limited=($null -ne $task -and [string]$task.Principal.RunLevel -eq 'Limited')} | ConvertTo-Json -Compress
-`;
-async function operate(action:Action,launcher:string,taskName:string){
-  return await new Promise<{installed:boolean;state:string;autostart:boolean;limited:boolean}>((resolve,reject)=>{
-    const child=spawn(PS,['-NoLogo','-NoProfile','-NonInteractive','-Command',SCRIPT],{
-      cwd:'C:\\Windows\\System32',windowsHide:true,stdio:['ignore','pipe','pipe'],
-      env:{...windowsDpapiChildEnvironment(),NEXOWIRE_CONNECTION_ACTION:action,
-        NEXOWIRE_CONNECTION_TASK:taskName,NEXOWIRE_CONNECTION_LAUNCHER:launcher},
-    });
-    let out='',done=false;
-    const finish=(error?:Error)=>{if(done)return;done=true;clearTimeout(timer);
-      if(error){reject(error);return;}
-      try{const value=JSON.parse(out);if(typeof value.installed!=='boolean'||typeof value.state!=='string'||typeof value.autostart!=='boolean'||typeof value.limited!=='boolean')throw Error();resolve(value);}
-      catch{reject(Error('Invalid connection task status'));}
-    };
-    const timer=setTimeout(()=>{child.kill();finish(Error('Connection task operation timed out'));},30000);
-    child.stdout.on('data',b=>{out+=String(b);if(out.length>65536){child.kill();finish(Error('Connection task output exceeded bound'));}});
-    child.stderr.resume();
-    child.once('error',()=>finish(Error('Connection task controller unavailable')));
-    child.once('close',code=>finish(code===0?undefined:Error('Connection task operation refused; existing task was not overwritten')));
-  });
-}
-export async function cloudflareConnectionLifecycle(action:Action,profile?:string,options:CloudflareLifecycleOptions={}){
-  if(process.platform!=='win32')throw Error('Cloudflare connection autostart currently supports Windows user logon');
-  const root=absolute(options.root??path.join(os.homedir(),'.nexowire','cloudflare-connection'));
-  const task=options.taskName??TASK;
-  if(!/^[A-Za-z0-9 _-]{1,100}$/.test(task)||/^(Nexowire Hub|Nexowire Hub Boot|Nexowire Stack)$/i.test(task))throw Error('Invalid connection task name');
-  const launcher=path.join(root,'launch.ps1');
-  if(action!=='install'){
-    if(action!=='uninstall')return await operate(action,launcher,task);
-    const before=await operate('status',launcher,task);
-    const result=await operate(action,launcher,task);
-    if(before.installed&&!result.installed){
-      const source=await fs.readFile(launcher,'utf8');
-      if(source.startsWith('\uFEFF# Nexowire Cloudflare connection user launcher v1'))await fs.unlink(launcher);
-    }
-    return result;
-  }
-  if(!profile)throw Error('Connection install requires one absolute profile path');
-  absolute(profile);
-  const stat=await fs.lstat(profile);
-  if(!stat.isFile()||stat.isSymbolicLink()||stat.size>16384)throw Error('Invalid connection profile file');
-  cloudflareConnectionConfig(JSON.parse(await fs.readFile(profile,'utf8')),loadConfig(options.env??process.env));
-  const source=buildCloudflareConnectionLauncher(profile,options);
-  const status=await operate('status',launcher,task);
-  if(status.installed)throw Error('Connection already installed; stop/uninstall before replacing it');
-  await fs.mkdir(root,{recursive:true,mode:0o700});
-  // Exclusive creation refuses an unknown launcher and concurrent installers.
-  await fs.writeFile(launcher,source,{flag:'wx',mode:0o600});
-  try{return await operate('install',launcher,task);}
-  catch(error){
-    // A timeout may have committed registration. Retain its launcher whenever
-    // current ownership cannot be established; never break an installed task.
-    try{if(!(await operate('status',launcher,task)).installed)await fs.unlink(launcher);}catch{}
     throw error;
   }
 }
