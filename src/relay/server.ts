@@ -22,6 +22,18 @@ export interface RelayServerHandle {
   wss: WebSocketServer;
   url: string;
   close(): Promise<void>;
+  /** Safe in-process gauges; never exports tokens or payloads. */
+  resourceSnapshot(): RelayResourceSnapshot;
+}
+
+export interface RelayResourceSnapshot {
+  activeConnections: number;
+  connectingUpstreams: number;
+  startupQueuedBytes: number;
+  peakStartupQueuedBytes: number;
+  outboundBufferedBytes: number;
+  overload503Count: number;
+  disconnectCodes: Record<string, number>;
 }
 
 function isLoopbackAddress(address: string | undefined): boolean {
@@ -65,6 +77,8 @@ function wireRelayPair(
     maxPayloadBytes: number;
     heartbeatMs: number;
     metrics?: ScaleTransportMetrics;
+    onQueueDelta?: (bytes: number) => void;
+    onDownstreamClose?: (code: number) => void;
   },
 ): () => void {
   const queue: Array<{
@@ -83,6 +97,15 @@ function wireRelayPair(
     if (disposed) return;
     disposed = true;
     clearInterval(heartbeat);
+    // Release retained frames even when a peer dies during handshake.
+    if (queuedBytes > 0) options.onQueueDelta?.(-queuedBytes);
+    queuedBytes = 0;
+    queue.length = 0;
+  };
+
+  const failPair = (code: number, reason: string): void => {
+    closePeer(downstream, code, reason);
+    closePeer(upstream, code, reason);
   };
 
   const forward = (
@@ -98,12 +121,12 @@ function wireRelayPair(
           Array.isArray(data) ? data.reduce((n, part) => n + part.length, 0) : data.length)
         > options.maxPayloadBytes * 2
     ) {
-      closePeer(destination, 1013, 'Relay backpressure limit');
+      failPair(1013, 'Relay backpressure limit');
       return;
     }
     destination.send(data, { binary }, (error) => {
       if (error) {
-        closePeer(destination, 1011, 'Relay forwarding error');
+        failPair(1011, 'Relay forwarding error');
       }
     });
     if (options.metrics) {
@@ -139,15 +162,12 @@ function wireRelayPair(
     }
 
     if (upstream.readyState !== WebSocket.OPEN) {
-      queuedBytes += bytes;
-      if (
-        queue.length >= 64 ||
-        queuedBytes > maxStartupQueueBytes
-      ) {
-        closePeer(downstream, 1013, 'Relay startup queue limit');
-        closePeer(upstream, 1013, 'Relay startup queue limit');
+      if (queue.length >= 64 || queuedBytes + bytes > maxStartupQueueBytes) {
+        failPair(1013, 'Relay startup queue limit');
         return;
       }
+      queuedBytes += bytes;
+      options.onQueueDelta?.(bytes);
       queue.push({ data, binary, bytes });
       return;
     }
@@ -156,11 +176,13 @@ function wireRelayPair(
   });
 
   upstream.on('open', () => {
-    for (const item of queue.splice(0)) {
-      queuedBytes -= item.bytes;
+    const pending = queue.splice(0);
+    if (queuedBytes > 0) options.onQueueDelta?.(-queuedBytes);
+    queuedBytes = 0;
+    for (const item of pending) {
+      if (upstream.readyState !== WebSocket.OPEN) break;
       forward(upstream, item.data, item.binary);
     }
-    queuedBytes = 0;
   });
 
   upstream.on('message', (data, binary) => {
@@ -169,6 +191,7 @@ function wireRelayPair(
 
   downstream.once('close', (code, reason) => {
     dispose();
+    options.onDownstreamClose?.(code);
     closePeer(
       upstream,
       code >= 1000 && code <= 4999 ? code : 1001,
@@ -233,7 +256,16 @@ export async function startRelayServer(
   // An upgraded downstream reserves one outbound WebSocket and a bounded
   // startup queue. Do not let unauthenticated/over-budget arrivals allocate it.
   const maxConnections = config.maxConnections ?? 128;
+  // Incomplete HTTP headers must not hold sockets for Node's long defaults.
+  server.headersTimeout = 10_000;
+  server.requestTimeout = 10_000;
+  server.keepAliveTimeout = 1_000;
+  server.maxHeadersCount = 64;
   const pairs = new Map<WebSocket, WebSocket>();
+  let startupQueuedBytes = 0;
+  let peakStartupQueuedBytes = 0;
+  let overload503Count = 0;
+  const disconnectCodes = new Map<string, number>();
   let closing = false;
   let closePromise: Promise<void> | undefined;
   // Ordinary GET requests are not a relay API and must never hang.
@@ -251,7 +283,7 @@ export async function startRelayServer(
   });
 
   server.on('upgrade', (request, socket, head) => {
-    if (closing) { rejectUpgrade(socket, 503); return; }
+    if (closing) { overload503Count++; rejectUpgrade(socket, 503); return; }
     // Reject queries and arbitrary paths before opening an upstream socket.
     if (request.url !== '/agent') { rejectUpgrade(socket, 404); return; }
 
@@ -269,6 +301,7 @@ export async function startRelayServer(
       return;
     }
     if (wss.clients.size >= maxConnections) {
+      overload503Count++;
       rejectUpgrade(socket, 503);
       return;
     }
@@ -300,6 +333,14 @@ export async function startRelayServer(
       maxPayloadBytes: config.maxPayloadBytes,
       heartbeatMs: config.heartbeatMs,
       metrics: options.metrics,
+      onQueueDelta: (delta) => {
+        startupQueuedBytes = Math.max(0, startupQueuedBytes + delta);
+        peakStartupQueuedBytes = Math.max(peakStartupQueuedBytes, startupQueuedBytes);
+      },
+      onDownstreamClose: (code) => {
+        const name = String(code);
+        disconnectCodes.set(name, (disconnectCodes.get(name) ?? 0) + 1);
+      },
     });
   });
 
@@ -334,6 +375,23 @@ export async function startRelayServer(
     server,
     wss,
     url,
+    resourceSnapshot(): RelayResourceSnapshot {
+      let outboundBufferedBytes = 0;
+      let connectingUpstreams = 0;
+      for (const [downstream, upstream] of pairs) {
+        outboundBufferedBytes += downstream.bufferedAmount + upstream.bufferedAmount;
+        if (upstream.readyState === WebSocket.CONNECTING) connectingUpstreams++;
+      }
+      return {
+        activeConnections: wss.clients.size,
+        connectingUpstreams,
+        startupQueuedBytes,
+        peakStartupQueuedBytes,
+        outboundBufferedBytes,
+        overload503Count,
+        disconnectCodes: Object.fromEntries(disconnectCodes),
+      };
+    },
     close(): Promise<void> {
       return closePromise ??= (async () => {
         closing = true;
