@@ -148,8 +148,13 @@ $ErrorActionPreference='Stop'
 trap {
  $type=$_.Exception.GetType().Name
  if($type -match '^[A-Za-z]{1,40}$') { [Console]::Error.WriteLine('CONNECTION_PS_'+$type.ToUpperInvariant()) }
+ if($stage -match '^CONNECTION_STAGE_[A-Z_]{3,64}$') { [Console]::Error.WriteLine($stage) }
+ $line=0
+ try{$line=[int]$_.InvocationInfo.ScriptLineNumber}catch{}
+ if($line -ge 1 -and $line -le 1000) { [Console]::Error.WriteLine('CONNECTION_SCRIPT_LINE_'+$line) }
  exit 1
 }
+$stage='CONNECTION_STAGE_INIT'
 $env:PSModulePath='C:\Windows\System32\WindowsPowerShell\v1.0\Modules'
 Import-Module 'C:\Windows\System32\WindowsPowerShell\v1.0\Modules\ScheduledTasks\ScheduledTasks.psd1'
 $name=$env:NEXOWIRE_CONNECTION_TASK
@@ -201,21 +206,25 @@ if($task){
 }
 switch($env:NEXOWIRE_CONNECTION_ACTION){
  'protect' {
+  $stage='CONNECTION_STAGE_PROTECT_ENTRY'
   // Only invoked after exclusive creation of this connection's launcher and
   // digest, and only when the named user task does not yet exist.
   if($task){throw 'CONNECTION_ALREADY_INSTALLED'}
   $paths=@((Split-Path -Parent $launcher),$launcher,($launcher+'.sha256'))
   $ownerSid=[Security.Principal.WindowsIdentity]::GetCurrent().User
   foreach($p in $paths){
+    $stage='CONNECTION_STAGE_PROTECT_PATH'
     if(-not (Test-Path -LiteralPath $p)){throw 'CONNECTION_PROTECT_PATH_MISSING'}
     $item=Get-Item -LiteralPath $p -Force
     if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw 'CONNECTION_PROTECT_REPARSE'}
+    $stage='CONNECTION_STAGE_PROTECT_ACL_PREPARE'
     try{
       $acl=Get-Acl -LiteralPath $p -ErrorAction Stop
       $acl.SetAccessRuleProtection($true,$false)
       foreach($oldAce in @($acl.Access)){[void]$acl.RemoveAccessRuleAll($oldAce)}
     }catch{throw 'CONNECTION_PROTECT_ACL_PREPARE'}
     $inherit=if($item.PSIsContainer){[Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [Security.AccessControl.InheritanceFlags]::ObjectInherit}else{[Security.AccessControl.InheritanceFlags]::None}
+    $stage='CONNECTION_STAGE_PROTECT_RULE_CREATE'
     foreach($id in @($ownerSid.Value,'S-1-5-18','S-1-5-32-544')){
       try{
         $sidObj=[Security.Principal.SecurityIdentifier]::new($id)
@@ -223,9 +232,12 @@ switch($env:NEXOWIRE_CONNECTION_ACTION){
         [void]$acl.AddAccessRule($rule)
       }catch{throw 'CONNECTION_PROTECT_RULE_CREATE'}
     }
+    $stage='CONNECTION_STAGE_PROTECT_OWNER_SET'
     try{$acl.SetOwner($ownerSid)}catch{throw 'CONNECTION_PROTECT_OWNER_SET'}
+    $stage='CONNECTION_STAGE_PROTECT_ACL_COMMIT'
     try{Set-Acl -LiteralPath $p -AclObject $acl -ErrorAction Stop}catch{throw 'CONNECTION_PROTECT_ACL_COMMIT'}
   }
+  $stage='CONNECTION_STAGE_PROTECT_DONE'
  }
  'install' {
   if($task){throw 'CONNECTION_ALREADY_INSTALLED'}
@@ -251,7 +263,7 @@ async function operate(action:Action,launcher:string,taskName:string){
       env:{...windowsDpapiChildEnvironment(),NEXOWIRE_CONNECTION_ACTION:action,
         NEXOWIRE_CONNECTION_TASK:taskName,NEXOWIRE_CONNECTION_LAUNCHER:launcher},
     });
-    let out='',safeErrorCode='',stderrTail='',done=false;
+    let out='',safeErrorCode='',stderrTail='',safeStage='',safeLine='',done=false;
     const finish=(error?:Error)=>{if(done)return;done=true;clearTimeout(timer);
       if(error){reject(error);return;}
       try{const value=JSON.parse(out);if(typeof value.installed!=='boolean'||typeof value.state!=='string'||typeof value.autostart!=='boolean'||typeof value.limited!=='boolean')throw Error();resolve(value);}
@@ -263,12 +275,16 @@ async function operate(action:Action,launcher:string,taskName:string){
     // command lines, task XML, environment values or credential paths.
     child.stderr.on('data',chunk=>{
       stderrTail=(stderrTail+String(chunk)).slice(-16384);
-      const match=stderrTail.match(/CONNECTION_[A-Z_]{3,64}/);
+      const match=stderrTail.match(/CONNECTION_(?!STAGE_|SCRIPT_LINE_)[A-Z_]{3,64}/);
+      const stageMatch=stderrTail.match(/CONNECTION_STAGE_[A-Z_]{3,64}/);
+      const lineMatch=stderrTail.match(/CONNECTION_SCRIPT_LINE_\d{1,4}/);
       if(match)safeErrorCode=match[0];
       else if(/ParserError|UnexpectedToken|MissingEndCurlyBrace/i.test(stderrTail))safeErrorCode='CONNECTION_PS_PARSER_ERROR';
+      if(stageMatch)safeStage=stageMatch[0];
+      if(lineMatch)safeLine=lineMatch[0];
     });
     child.once('error',()=>finish(Error('Connection task controller unavailable')));
-    child.once('close',code=>finish(code===0?undefined:Error('Connection task operation refused'+(safeErrorCode?' ('+safeErrorCode+')':'')+'; existing task was not overwritten')));
+    child.once('close',code=>finish(code===0?undefined:Error('Connection task operation refused'+(safeErrorCode?' ('+safeErrorCode+')':'')+(safeStage?' '+safeStage:'')+(safeLine?' '+safeLine:'')+'; existing task was not overwritten')));
   });
 }
 export async function cloudflareConnectionLifecycle(action:Action,profile?:string,options:CloudflareLifecycleOptions={}){
