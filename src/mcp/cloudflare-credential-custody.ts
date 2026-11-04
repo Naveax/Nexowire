@@ -40,13 +40,14 @@ function windowsCredentialAcl(file:string){
     "  if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw 'REPARSE'}",
     "  $acl=Get-Acl -LiteralPath $cur -ErrorAction Stop",
     "  if($file){",
-    "    $owner=$acl.Owner",
-    "    try{$owner=([Security.Principal.NTAccount]$owner).Translate([Security.Principal.SecurityIdentifier]).Value}catch{}",
+    "    $owner=$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value",
     "    if($owner -ne $me){throw 'FOREIGN_OWNER'}",
     "  }",
-    "  foreach($ace in $acl.Access){",
+    // GetAccessRules returns stored SIDs, avoiding unbounded NTAccount
+    // directory/LDAP translation for every inherited ACE.
+    "  foreach($ace in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){",
     "    if($ace.AccessControlType -ne 'Allow'){continue}",
-    "    try{$sid=$ace.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value}catch{throw 'UNRESOLVED_ACE'}",
+    "    $sid=$ace.IdentityReference.Value",
     "    if($trusted -contains $sid){continue}",
     "    $rights=[int64]$ace.FileSystemRights",
     "    $read=[int64]0x120089",
@@ -64,7 +65,7 @@ function windowsCredentialAcl(file:string){
   const env={...windowsDpapiChildEnvironment(),NEXOWIRE_CUSTODY_PATH:file};
   const child=spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
     ['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',b64],
-    {env,encoding:'utf8',timeout:25000,maxBuffer:1024,windowsHide:true});
+    {env,encoding:'utf8',timeout:45000,maxBuffer:1024,windowsHide:true});
   if(child.error||child.status!==0||child.stdout.trim()!=='OK')deny();
 }
 /** Open without following links; fstat and pathname identity must stay fixed. */
