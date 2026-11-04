@@ -62,6 +62,20 @@ test('CLEAN-13 P1-D Windows exact SID, inherited ACE and parent replacement righ
   cmd(ICACLS,[file,'/remove:g','*S-1-5-11']);
   assert.equal((await readCloudflareTunnelCredential(file)).toString('utf8'),'{"fake":true}');
 
+  // Real inherited ACE negative: the parent grants read-through inheritance,
+  // not an explicit ACE on the credential. Re-enable only this disposable
+  // child's inheritance, then restore its locked DACL afterwards.
+  cmd(ICACLS,[dir,'/grant','*S-1-5-11:(OI)(CI)(R)']);
+  cmd(ICACLS,[file,'/inheritance:e']);
+  await assert.rejects(readCloudflareTunnelCredential(file),(error:unknown)=>{
+    assert.ok(error instanceof CloudflareCredentialCustodyError);
+    assert.equal(error.code,'FILE_UNTRUSTED_ACE');
+    return true;
+  });
+  cmd(ICACLS,[file,'/inheritance:r']);
+  cmd(ICACLS,[dir,'/remove:g','*S-1-5-11']);
+  assert.equal((await readCloudflareTunnelCredential(file)).toString('utf8'),'{"fake":true}');
+
   // Real foreign file owner, not just a simulated SID passed to the verifier.
   // Restrict all mutations to this disposable credential fixture.
   cmd(ICACLS,[file,'/setowner','*S-1-5-32-544']);
