@@ -49,9 +49,9 @@ test('checksum and tunnel identity are checked before any network exposure',asyn
   await assert.rejects(startCloudflareConnection(p,config()),/checksum mismatch/);
   p.binarySha256=createHash('sha256').update('not an executable').digest('hex');
   await writeFile(p.credentialsFile,JSON.stringify({TunnelID:randomUUID(),AccountTag:'a'.repeat(32),TunnelSecret:Buffer.alloc(32).toString('base64')}));
-  await assert.rejects(startCloudflareConnection(p,config()),/credentials do not match/);
+  await assert.rejects(startCloudflareConnection(p,config()),/credentials do not match|credential custody unsafe/);
 });
-test('connector exit closes only its own origin; existing local Hub stays available',async t=>{
+test('unofficial local binary cannot launch a connector or disrupt the Hub',async t=>{
   const dir=await mkdtemp(path.join(os.tmpdir(),'nw-cf-exit-'));t.after(()=>rm(dir,{recursive:true,force:true}));
   const hub=createServer((req,res)=>{
     res.setHeader('content-type','application/json');
@@ -71,11 +71,8 @@ test('connector exit closes only its own origin; existing local Hub stays availa
   await copyFile(process.execPath,binary);
   const p={...profile(),binary,listenPort:free.port,credentialsFile:path.join(dir,'credential.json'),
     binarySha256:createHash('sha256').update(await readFile(binary)).digest('hex')};
-  await writeFile(p.credentialsFile,JSON.stringify({TunnelID:p.tunnelId,AccountTag:'a'.repeat(32),TunnelSecret:Buffer.alloc(32,7).toString('base64')}));
-  const handle=await startCloudflareConnection(p,config(address.port));
-  t.after(()=>handle.close());
-  await assert.rejects(handle.done,/connector exited/);
-  await handle.close();await handle.close();
+  await writeFile(p.credentialsFile,JSON.stringify({TunnelID:p.tunnelId,AccountTag:'a'.repeat(32),TunnelSecret:Buffer.alloc(32,7).toString('base64')}),{mode:0o600});
+  await assert.rejects(startCloudflareConnection(p,config(address.port)),/publisher|provenance|credential custody unsafe/i);
   assert.equal((await fetch(`http://127.0.0.1:${address.port}/health`)).status,200);
   // Port can be rebound immediately: no orphan origin after unexpected exit.
   const probe=createServer();await new Promise<void>((resolve,reject)=>{probe.once('error',reject);probe.listen(free.port,'127.0.0.1',resolve);});
