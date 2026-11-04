@@ -97,15 +97,15 @@ test('Windows controller PowerShell 5.1 source parses without executing any task
 },()=>{
   const parse=String.raw`$source=[Console]::In.ReadToEnd()
 $tokens=$null
-$errors=$null
-[System.Management.Automation.Language.Parser]::ParseInput($source,[ref]$tokens,[ref]$errors) | Out-Null
-foreach($error in $errors){
+$parseErrors=$null
+[System.Management.Automation.Language.Parser]::ParseInput($source,[ref]$tokens,[ref]$parseErrors) | Out-Null
+foreach($parseErr in $parseErrors){
   # Only bounded parser diagnostic IDs/line/column, never source or secrets.
-  $id=[string]$error.ErrorId
+  $id=[string]$parseErr.ErrorId
   if($id -notmatch '^[a-zA-Z0-9_-]{1,100}$'){$id='UNRECOGNIZED'}
-  [Console]::Out.WriteLine($id+'@'+$error.Extent.StartLineNumber+':'+$error.Extent.StartColumnNumber)
+  [Console]::Out.WriteLine($id+'@'+$parseErr.Extent.StartLineNumber+':'+$parseErr.Extent.StartColumnNumber)
 }
-if(@($errors).Count -gt 0){exit 3}
+if($parseErrors.Count -gt 0){exit 3}
 exit 0`;
   const result=spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
     ['-NoLogo','-NoProfile','-NonInteractive','-Command',parse],{
