@@ -219,7 +219,7 @@ async function operate(action:Action,launcher:string,taskName:string){
       env:{...windowsDpapiChildEnvironment(),NEXOWIRE_CONNECTION_ACTION:action,
         NEXOWIRE_CONNECTION_TASK:taskName,NEXOWIRE_CONNECTION_LAUNCHER:launcher},
     });
-    let out='',done=false;
+    let out='',safeErrorCode='',done=false;
     const finish=(error?:Error)=>{if(done)return;done=true;clearTimeout(timer);
       if(error){reject(error);return;}
       try{const value=JSON.parse(out);if(typeof value.installed!=='boolean'||typeof value.state!=='string'||typeof value.autostart!=='boolean'||typeof value.limited!=='boolean')throw Error();resolve(value);}
@@ -227,9 +227,15 @@ async function operate(action:Action,launcher:string,taskName:string){
     };
     const timer=setTimeout(()=>{child.kill();finish(Error('Connection task operation timed out'));},30000);
     child.stdout.on('data',b=>{out+=String(b);if(out.length>65536){child.kill();finish(Error('Connection task output exceeded bound'));}});
-    child.stderr.resume();
+    // Expose only our fixed, non-secret refusal code; never echo stderr,
+    // command lines, task XML, environment values or credential paths.
+    child.stderr.on('data',chunk=>{
+      if(safeErrorCode)return;
+      const match=String(chunk).match(/CONNECTION_[A-Z_]{3,64}/);
+      if(match)safeErrorCode=match[0];
+    });
     child.once('error',()=>finish(Error('Connection task controller unavailable')));
-    child.once('close',code=>finish(code===0?undefined:Error('Connection task operation refused; existing task was not overwritten')));
+    child.once('close',code=>finish(code===0?undefined:Error('Connection task operation refused'+(safeErrorCode?' ('+safeErrorCode+')':'')+'; existing task was not overwritten')));
   });
 }
 export async function cloudflareConnectionLifecycle(action:Action,profile?:string,options:CloudflareLifecycleOptions={}){
