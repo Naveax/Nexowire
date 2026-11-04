@@ -33,6 +33,8 @@ node --test --import tsx --test-concurrency=1 test/connection-v2-windows-recover
 Remove-Item Env:NEXOWIRE_V2_04_DISPOSABLE_WINDOWS_VM
 ```
 
+The hosted CI `browser-live` suite imports this test only on `RUNNER_ENVIRONMENT=github-hosted`, `RUNNER_OS=Windows`, `GITHUB_ACTIONS=true`. This provides 20 actual Task Scheduler cycles on a GitHub disposable Windows VM when CI reaches the test, **not reboot/logoff acceptance**; before exact SHA/job evidence the gate remains NOT_RUN. The lab operator can separately set the manual VM gate without touching live owner machines.
+
 The gated VM test uses one random disposable task name, an isolated temporary directory, synthetic file-path credential placeholder, and no listening connector. It executes **20 real Scheduler starts/stops**, verifies a parent/child/grandchild process chain, compares native Windows executable path and creation time per PID, rejects survivors and PID reuse confusion, and cleans up only its own test task. Its environment gate also excludes GitHub Actions so a hosted runner cannot be mislabeled a disposable reboot lab.
 
 **Additional required VM stress plan (not yet executed):**

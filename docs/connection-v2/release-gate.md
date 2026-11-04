@@ -5,7 +5,7 @@
 ## Frozen source snapshot
 - Candidate identifier: `1.0.8-connection-v2-rc.0+939b4d6` (no release tag)
 - Current main parent: `939b4d6beecf996f2750c736c5d4b4beb7b64488`; old #1003 base: `a19a228dc6f19fd484cf935e941a00ea625233f8` (62 main-side commits)
-- Source HEAD snapshot: #1003 `95d9f9e431ad5a9c46adde1ecf716f84d60d8455`; #1044 `d38b30fec77cce5c9b5e29c491b11f8fe6806bef`; #1074 `5997a6d7ae43c34170016eb0963718ee35bf4a15`; #1077 `67fa411c6aa6135aeeac93f7197b5fd46c804884`; #1081 `707db9728c883d1bb027788793f4cc072768f325`; #1083 `4d8e7b359d572a6ee4cf22fd02ad9ee7ed81808e`; #1084 `b9312a456b0feafede4b4f3c9bd53e108f5af5c6`.
+- Source HEAD snapshot: #1003 `95d9f9e431ad5a9c46adde1ecf716f84d60d8455`; #1044 `d38b30fec77cce5c9b5e29c491b11f8fe6806bef`; #1074 `5997a6d7ae43c34170016eb0963718ee35bf4a15`; #1077 `67fa411c6aa6135aeeac93f7197b5fd46c804884`; #1081 `707db9728c883d1bb027788793f4cc072768f325`; #1083 `4d8e7b359d572a6ee4cf22fd02ad9ee7ed81808e`; #1084 `385109b87c22ae677ba06f517b7872b732b142dc`.
 - Git DAG: original six-parent commit (main plus #1003/#1044/#1074/#1077/#1081); next integration commit records #1083, #1084 and newer #1003/#1044 as additional parents. Source refs stay untouched.
 - Selected source paths: **47**, preservation rows **54**. Status distribution: `{"MERGED_MAIN_SECURITY_REVIEW_REQUIRED":4,"EXACT_BLOB":45,"EVOLVED_SOURCE_SEMANTIC_REVIEW_REQUIRED":5}`. Exact SHA matching is not equivalent to semantic verification..
 - `.github/workflows/ci.yml` merged with current-main QA checks and official Cloudflared security checks; `scripts/ai-screen-launch-sinks-baseline.json` union retains main journal owner and new Cloudflare launch sinks. No branch source file was deleted.
@@ -60,8 +60,13 @@
 - Exact SHA `524497acee4d2078828019eb99ff4ad5d8b418df` CI run `41829279333`: `test (24)` failed before adversarial steps because preservation matrix still referenced pre-Oracle `ci.yml` blob; `two_pc_read_only` had an ambiguous non-`NOT_RUN` value. Updated candidate matrix to actual Git blob SHA and restored strict `NOT_RUN` for unperformed v2 acceptance. This change is **not** a security PASS.
 
 ## V2-04 source refresh
-- #1084 Windows recovery source advanced by three commits: `84cfcaa...` → `b9312a456b0feafede4b4f3c9bd53e108f5af5c6`. `src/mcp/cloudflare-connection-lifecycle.ts` and `test/cloudflare-connection-lifecycle.test.ts` exact new blobs incorporated. Previous candidate CI remains attached to its original SHA; successor must pass its own checks.
+- #1084 Windows recovery source advanced by three commits: `84cfcaa...` → `385109b87c22ae677ba06f517b7872b732b142dc`. `src/mcp/cloudflare-connection-lifecycle.ts` and `test/cloudflare-connection-lifecycle.test.ts` exact new blobs incorporated. Previous candidate CI remains attached to its original SHA; successor must pass its own checks.
 
 ## Separate Windows negative oracle (latest coordinator patch)
 - Prior exact SHA `aa4fc209ac4fd8486bf4dd68b65238a9f0584994`, CI `41830183272`: Windows browser-live ended RED at the first newly added negative job step, leaving downstream Cloudflared custody/Task validation unexecuted.
 - Split Windows CI into independent matrix job `connection-v2-negative-windows` on Node 22 and Node 24. Existing `browser-live` original Cloudflared credential custody, native image and Windows process cleanup tests remain intact and can now run separately. Both jobs **must pass**. Current new exact SHA result is pending.
+
+## V2-04 refresh at 385109b87c22ae677ba06f517b7872b732b142dc
+- Exact latest four #1084 source blobs carried into the coordinator candidate; source branch unchanged.
+- Windows PowerShell task code uses UTF-16LE `-EncodedCommand`; revised tests avoid bare-PID kills and may run 20 real Scheduler cycles on GitHub disposable Windows runners when `RUNNER_ENVIRONMENT=github-hosted`. This is **NOT_RUN until matching CI emits the cycle evidence**. Reboot/logoff remain NOT_RUN.
+- Any previously completed CI run belongs to its previous exact SHA and cannot approve the refreshed candidate.

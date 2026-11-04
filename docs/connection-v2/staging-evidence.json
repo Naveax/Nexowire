@@ -12,7 +12,7 @@
     "1077": "67fa411c6aa6135aeeac93f7197b5fd46c804884",
     "1081": "707db9728c883d1bb027788793f4cc072768f325",
     "1083": "4d8e7b359d572a6ee4cf22fd02ad9ee7ed81808e",
-    "1084": "b9312a456b0feafede4b4f3c9bd53e108f5af5c6"
+    "1084": "385109b87c22ae677ba06f517b7872b732b142dc"
   },
   "source_files": 47,
   "matrix_rows": 54,
@@ -159,6 +159,20 @@
         "test/cloudflare-connection-lifecycle.test.ts"
       ],
       "reason": "Windows lifecycle owner latest source edits; release remains NO_GO"
+    },
+    {
+      "pr": 1084,
+      "old_sha": "b9312a456b0feafede4b4f3c9bd53e108f5af5c6",
+      "new_sha": "385109b87c22ae677ba06f517b7872b732b142dc",
+      "source_paths": [
+        "docs/connection-v2/windows-recovery-acceptance.md",
+        "src/mcp/cloudflare-connection-lifecycle.ts",
+        "test/cloudflare-connection-lifecycle.test.ts",
+        "test/connection-v2-windows-recovery.test.ts"
+      ],
+      "status": "SOURCE_BLOBS_INTEGRATED",
+      "github_hosted_20_cycles": "NOT_RUN_AT_THIS_SHA",
+      "reboot": "NOT_RUN"
     }
   ],
   "integrated_negative_ci": {
