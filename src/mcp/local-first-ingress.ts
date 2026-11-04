@@ -24,12 +24,14 @@ export interface LocalFirstIngressOptions {
   allowAgentWebSocket?: boolean;
   maxConcurrent?: number;
   maxRequestBytes?: number;
+  /** Maximum total upstream response bytes per HTTP request, including SSE. */
+  maxResponseBytes?: number;
   /** DEV only. Operator-supplied trusted tunnel+app scope, NEVER HTTP input. */
   stagingTransportBudget?: LocalFirstTransportBudgetHook;
 }
 
 export function validateLocalFirstIngress(input: LocalFirstIngressOptions): Required<
-  Pick<LocalFirstIngressOptions, 'hubPort'|'listenPort'|'maxConcurrent'|'maxRequestBytes'>
+  Pick<LocalFirstIngressOptions, 'hubPort'|'listenPort'|'maxConcurrent'|'maxRequestBytes'|'maxResponseBytes'>
 > & {publicHostname?: string;allowAgentWebSocket?:boolean;stagingTransportBudget?: LocalFirstTransportBudgetHook} {
   for (const [name, value] of [
     ['hubPort', input.hubPort], ['listenPort',input.listenPort],
@@ -43,12 +45,17 @@ export function validateLocalFirstIngress(input: LocalFirstIngressOptions): Requ
   }
   const maxConcurrent = input.maxConcurrent ?? 32;
   const maxRequestBytes = input.maxRequestBytes ?? 1024 * 1024;
+  const maxResponseBytes = input.maxResponseBytes ?? 16 * 1024 * 1024;
   if (!Number.isInteger(maxConcurrent) || maxConcurrent < 1 || maxConcurrent > 256) {
     throw new Error('Invalid bounded ingress concurrency');
   }
   if (!Number.isInteger(maxRequestBytes) || maxRequestBytes < 1024 ||
       maxRequestBytes > 16 * 1024 * 1024) {
     throw new Error('Invalid bounded request body maximum');
+  }
+  if (!Number.isInteger(maxResponseBytes) || maxResponseBytes < 4096 ||
+      maxResponseBytes > 64 * 1024 * 1024) {
+    throw new Error('Invalid bounded response body maximum');
   }
   let publicHostname: string | undefined;
   if (input.publicHostname !== undefined) {
@@ -63,7 +70,7 @@ export function validateLocalFirstIngress(input: LocalFirstIngressOptions): Requ
     publicHostname = value;
   }
   return {hubPort:input.hubPort,listenPort:input.listenPort,maxConcurrent,
-    maxRequestBytes,...(publicHostname ? {publicHostname}:{}),
+    maxRequestBytes,maxResponseBytes,...(publicHostname ? {publicHostname}:{}),
     ...(input.allowAgentWebSocket===true?{allowAgentWebSocket:true}:{}),
     ...(input.stagingTransportBudget
       ? {stagingTransportBudget:input.stagingTransportBudget}:{}),
@@ -253,6 +260,15 @@ export function createLocalFirstIngressServer(options:LocalFirstIngressOptions):
         if (value !== undefined) res.setHeader(key,value);
       }
       res.setHeader('x-content-type-options','nosniff');
+      let responseBytes=0;
+      upstreamResponse.on('data',(chunk:Buffer)=>{
+        responseBytes+=chunk.length;
+        if(responseBytes>settings.maxResponseBytes){
+          release();
+          upstreamResponse.destroy(new Error('bounded_upstream_output_exceeded'));
+          res.destroy();
+        }
+      });
       upstreamResponse.on('error',()=>res.destroy());
       upstreamResponse.pipe(res);
       upstreamResponse.once('end',release);
@@ -280,6 +296,9 @@ export function createLocalFirstIngressServer(options:LocalFirstIngressOptions):
     });
     req.pipe(upstream);
   });
+  // Never accept proxy-style CONNECT tunnels or 100-Continue on disallowed routes.
+  server.on('connect',(_req,socket)=>socket.destroy());
+  server.on('checkContinue',(_req,res)=>reject(res,417,'expectation_not_supported'));
   const agentSockets=new Set<Duplex>();upgradedSockets.set(server,agentSockets);
   server.on('upgrade',(req,socket,head)=>{
     // Denied WebSocket upgrades are STILL observed as arrival attempts.
