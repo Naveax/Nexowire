@@ -199,6 +199,20 @@ jobs:
           Invoke-WebRequest -Uri 'https://github.com/cloudflare/cloudflared/releases/download/2026.10.1/cloudflared-windows-amd64.exe' -OutFile $binary
           if ((Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant() -ne '4d2490e74082c5d48dbfedaf92576fa5bd1702379ab88eb7faa0cfbe8dc891b6') { throw 'Official cloudflared checksum mismatch' }
           $env:NEXOWIRE_CLOUDFLARED_TEST_BINARY = $binary
+          # Observation only. The existing immutable-image/publisher negative
+          # assertions still decide PASS/FAIL. Never treat a profile SHA as
+          # publisher proof or print certificate private material.
+          $signature = Get-AuthenticodeSignature -LiteralPath $binary -ErrorAction Stop
+          $signerPresent = ($null -ne $signature.SignerCertificate)
+          $subjectMatchesCloudflare = ($signerPresent -and ($signature.SignerCertificate.Subject -match 'Cloudflare'))
+          $summary = [ordered]@{
+            status = [string]$signature.Status
+            signerPresent = [bool]$signerPresent
+            signerSubjectMatchesCloudflare = [bool]$subjectMatchesCloudflare
+            independentlyPinnedSha256 = $true
+            nativeHandleBoundCustodian = $false
+          }
+          Write-Host ('NEXOWIRE_P1B_WINDOWS_SIGNATURE_DIAGNOSTIC=' + ($summary | ConvertTo-Json -Compress))
           node --test --import tsx test/clean13-cloudflared-windows-custody.test.ts test/local-first-cloudflare.test.ts test/cloudflare-connection-lifecycle.test.ts test/cloudflare-agent-upgrade.test.ts test/connection-active-authorization.test.ts test/control-plane-agent-auth.test.ts test/agent-broker.e2e.test.ts
           if ($LASTEXITCODE -ne 0) { throw 'Connection Core verification failed' }
       - name: Verify recycled WAL and consecutive journal process restarts

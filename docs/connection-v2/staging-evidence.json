@@ -623,5 +623,20 @@
     "provider_hard_stop": "NOT_RUN"
   },
   "source_refresh_exact_head_ci": "PENDING",
-  "release_gate_decision": "NO_GO"
+  "release_gate_decision": "NO_GO",
+  "p1b_windows_signer_diagnostic": {
+    "status": "NOT_RUN_ON_NEW_EXACT_SHA",
+    "run_id": null,
+    "job_id": null,
+    "property": "NEXOWIRE_P1B_WINDOWS_SIGNATURE_DIAGNOSTIC",
+    "fields": [
+      "status",
+      "signerPresent",
+      "signerSubjectMatchesCloudflare",
+      "independentlyPinnedSha256",
+      "nativeHandleBoundCustodian"
+    ],
+    "note": "Observation only. Does not relax publisher verification or alter original negative test assertions.",
+    "sensitive_values_printed": false
+  }
 }
