@@ -216,8 +216,50 @@
     "source_branches_modified": false,
     "implemented": [
       "Cloudflare public control plane requires global HTTPS authority",
-      "Mutation dispatch per-socket reauthorization with epoch guard"
+      "Mutation dispatch per-socket reauthorization with epoch guard",
+      "Windows pre-credential publisher verification for public Cloudflare connector; native immutable-image launch still fail-closed"
     ],
     "negative_oracle_sha": "PENDING_NEXT_COORDINATOR_SHA"
+  },
+  "latest_adversarial_evidence": {
+    "sha": "89d9c336e8a6587069f32a4ea00befbb649692ca",
+    "ci": 41834121454,
+    "linux_node24": {
+      "job": 126588539754,
+      "status": "success",
+      "negative_cases": "60/60_PASS"
+    },
+    "linux_node22": {
+      "job": 126588540068,
+      "status": "success"
+    },
+    "windows_node22": {
+      "job": 126588540209,
+      "status": "failure",
+      "remaining": "AI11 P1-B publisher"
+    },
+    "windows_node24": {
+      "job": 126588540133,
+      "status": "failure",
+      "remaining": "AI11 P1-B publisher"
+    },
+    "relay": {
+      "run": 41834121413,
+      "status": "success",
+      "jobs": "4/4"
+    },
+    "current_release": "NO_GO"
+  },
+  "windows_disposable_vm_evidence": {
+    "sha": "e9e598dbf689cb4e063ce5b5d4ce430ef7e58804",
+    "run": 41833352347,
+    "job": 126585876171,
+    "cycles_pass": 20,
+    "cycles_total": 20,
+    "pid_create_time_parent_child_grandchild": true,
+    "cleanup": "PASS",
+    "reboot": "NOT_RUN",
+    "rollback": "NOT_RUN",
+    "cloudflared_windows_security": "FAIL"
   }
 }

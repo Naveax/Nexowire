@@ -75,3 +75,8 @@
 - Added public Cloudflare admission guard using existing `normalizeControlPlaneBase()` and HTTPS requirement in `src/mcp/local-first-cloudflare.ts`. This is a candidate-only integration correction, not an owner branch edit.
 - Bound the WebSocket session's real authorization checker to `AgentBroker.register()`, and invoked it at each mutation admission before queuing or sending. A revoked credential, verifier failure, or changed socket epoch must fail closed, with no mutation replay.
 - Existing original AI-11 and CLEAN-14 negative tests remain unchanged. **P1-C stays NO-GO until exact-head CI shows them GREEN on both Linux and Windows, and source owners review the 3 candidate-only changed files.**
+
+## P1-B Windows provenance ordering / source-owner approval pending
+- Candidate-only early Windows `prepareTrustedCloudflared()` precheck runs before credential read or Hub probe, preventing a profile-matching SHA of an unrelated executable from being treated as publisher proof. Windows native immutable-image launch remains denied without signed handle custodian.
+- Prior exact SHA `89d9c336e8a6587069f32a4ea00befbb649692ca`: Linux Node22/24 general CI SUCCESS, Node24 explicit security negative 60/60 PASS (CI `41834121454`, job `126588539754`). Windows 22/24 explicit suite has only P1-B publisher assertion RED, not waived.
+- GitHub-hosted disposable Windows VM on previous SHA `e9e598dbf689cb4e063ce5b5d4ce430ef7e58804` run `41833352347`, job `126585876171`: **20/20 real Scheduler start-stop/descendant cleanup cycles PASS**. Reboot/rollback NOT_RUN. Cloudflared Windows P1-B/D remains a separate blocker.

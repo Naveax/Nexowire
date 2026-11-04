@@ -132,6 +132,11 @@ export async function startCloudflareConnection(input:unknown,config:NexowireCon
   const binary=await regularFile(profile.binary,256*1024*1024);
   if(createHash('sha256').update(binary).digest('hex')!==profile.binarySha256)
     throw new Error('Cloudflare connector binary checksum mismatch');
+  // Windows has no approved immutable-image launcher. Refuse untrusted
+  // publisher/provenance before consuming credentials or contacting Hub.
+  // A profile-controlled digest alone never authenticates the publisher.
+  if(process.platform==='win32')
+    await prepareTrustedCloudflared(profile.binary,profile.binarySha256);
   const credentialBytes=await readCloudflareTunnelCredential(profile.credentialsFile);
   let credentials:{TunnelID?:string;AccountTag?:string;TunnelSecret?:string};
   try{credentials=JSON.parse(credentialBytes.toString('utf8')) as typeof credentials;}
