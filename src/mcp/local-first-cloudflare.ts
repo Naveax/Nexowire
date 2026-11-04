@@ -115,6 +115,25 @@ export async function cleanupOwnedCloudflareRuntime(
   finally{await handle?.close().catch(()=>{});}
 }
 
+/** Pure, side-effect-free credential fixture/identity gate. Unlike launching
+ * an untrusted executable, this validation can be tested at its own stage
+ * without bypassing the independent publisher gate or contacting a Hub.
+ */
+export function verifyCloudflareTunnelCredentialIdentity(bytes:Buffer,tunnelId:string):void{
+  let credential:unknown;
+  try{credential=JSON.parse(bytes.toString('utf8'));}
+  catch{throw Error('Cloudflare tunnel credential format invalid');}
+  if(!credential||typeof credential!=='object'||Array.isArray(credential))
+    throw Error('Cloudflare tunnel credential format invalid');
+  const data=credential as {TunnelID?:unknown;AccountTag?:unknown;TunnelSecret?:unknown};
+  if(data.TunnelID!==tunnelId ||
+      typeof data.AccountTag!=='string'||!/^[a-f0-9]{32}$/i.test(data.AccountTag)||
+      typeof data.TunnelSecret!=='string'||
+      !/^[A-Za-z0-9+/]{43}=$/.test(data.TunnelSecret)||
+      Buffer.from(data.TunnelSecret,'base64').length!==32)
+    throw Error('Cloudflare tunnel credentials do not match the selected tunnel');
+}
+
 /** Foreground owner process, suitable for a user-logon task. Stops only its
  * own connector/origin; never restarts Hub, Agent, Broker or Tailscale. */
 export async function startCloudflareConnection(input:unknown,config:NexowireConfig){
@@ -122,16 +141,13 @@ export async function startCloudflareConnection(input:unknown,config:NexowireCon
   const binary=await regularFile(profile.binary,256*1024*1024);
   if(createHash('sha256').update(binary).digest('hex')!==profile.binarySha256)
     throw new Error('Cloudflare connector binary checksum mismatch');
+  // A Windows image must pass the independent release+publisher gate before
+  // consuming any tunnel secret or probing the local Hub. Native launch remains
+  // deliberately disabled without a signed image-section custodian.
+  if(process.platform==='win32')
+    await prepareTrustedCloudflared(profile.binary,profile.binarySha256);
   const credentialBytes=await readCloudflareTunnelCredential(profile.credentialsFile);
-  let credentials:{TunnelID?:string;AccountTag?:string;TunnelSecret?:string};
-  try{credentials=JSON.parse(credentialBytes.toString('utf8')) as typeof credentials;}
-  catch{throw Error('Cloudflare tunnel credential format invalid');}
-  if(credentials.TunnelID!==profile.tunnelId ||
-      !/^[a-f0-9]{32}$/i.test(credentials.AccountTag??'') ||
-      typeof credentials.TunnelSecret!=='string' ||
-      !/^[A-Za-z0-9+/]{43}=$/.test(credentials.TunnelSecret) ||
-      Buffer.from(credentials.TunnelSecret,'base64').length!==32)
-    throw new Error('Cloudflare tunnel credentials do not match the selected tunnel');
+  verifyCloudflareTunnelCredentialIdentity(credentialBytes,profile.tunnelId);
   await verifyLocalFirstPublicUpstream({hubPort:config.port,expectedResourceUrl:config.mcpResourceUrl!,
     requireRemoteAgentAdmission:profile.publishAgentEndpoint});
   // Windows has no approved held-image custodian. Reject before writing even a
