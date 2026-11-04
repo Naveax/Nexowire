@@ -1,4 +1,4 @@
-import {promises as fs,constants as flags} from 'node:fs';
+import {promises as fs,constants as flags,lstatSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 import path from 'node:path';
 import {windowsDpapiChildEnvironment} from '../security/windows-dpapi.js';
@@ -35,6 +35,22 @@ async function parents(file:string){
     if(next===current)break;
     current=next;
   }
+}
+/** Windows PowerShell 5.1 has repeatedly stalled in hosted SID/ACL audits
+ * while the independently checked PowerShell 7 executable completes promptly.
+ * Prefer the fixed system-wide PS7 installation, never PATH or an env override.
+ * On machines without a verified location, retain the built-in PS5.1 fallback,
+ * which remains fail-closed on errors/timeouts. This does NOT authorize tunnel
+ * launch on Windows (native image-section custodian is still required).
+ */
+function windowsCredentialAuditInterpreter():string{
+  const pwsh='C:\\Program Files\\PowerShell\\7\\pwsh.exe';
+  try{
+    const info=lstatSync(pwsh);
+    if(info.isFile()&&!info.isSymbolicLink()&&info.nlink===1)
+      return pwsh;
+  }catch{/* no trusted fixed PS7 installation; use built-in fallback */}
+  return 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
 }
 /** Read-only SID and DACL verification. Failure reasons are fixed enums and
  * durations, not paths, SIDs, credentials, or raw PowerShell stderr.
@@ -92,7 +108,7 @@ function windowsCredentialAcl(file:string){
   const b64=Buffer.from(ps,'utf16le').toString('base64');
   const env={...windowsDpapiChildEnvironment(),NEXOWIRE_CUSTODY_PATH:file};
   const started=Date.now();
-  const child=spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+  const child=spawnSync(windowsCredentialAuditInterpreter(),
     ['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',b64],
     {env,encoding:'utf8',timeout:45000,maxBuffer:4096,windowsHide:true});
   if(child.error||child.status!==0||child.stdout.trim()!=='OK'){
