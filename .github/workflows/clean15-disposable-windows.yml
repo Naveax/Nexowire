@@ -18,6 +18,7 @@ jobs:
       NEXOWIRE_CLEAN15_ISOLATED_VM: '1'
     steps:
       - name: VM boundary
+        id: vm_guard
         shell: pwsh
         run: |
           if ($env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or $env:RUNNER_OS -ne 'Windows') { throw 'NOT_RUN_NOT_DISPOSABLE_VM' }
@@ -44,16 +45,74 @@ jobs:
         run: |
           node --import tsx scripts/qa/clean15-windows-scheduler-150.ts
           if ($LASTEXITCODE -ne 0) { throw 'CLEAN15_REAL_150_RED' }
+      - name: Validate completed 150-cycle evidence and safe task cleanup
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $dir=@(Get-ChildItem -LiteralPath $env:RUNNER_TEMP -Directory -Filter 'clean15-evidence-*')
+          if ($dir.Count -ne 1) { throw 'CLEAN15_EVIDENCE_DIRECTORY_NOT_UNIQUE' }
+          $report=Get-Content -LiteralPath (Join-Path $dir[0].FullName 'summary.json') -Raw | ConvertFrom-Json
+          if ($report.status -ne 'PASS' -or [int]$report.completed -ne 150 -or $report.cleanup -ne 'UNINSTALLED') {
+            throw "CLEAN15_150_OR_CLEANUP_UNPROVEN: $($report.status)/$($report.completed)/$($report.cleanup)"
+          }
+          $rows=@(Get-Content -LiteralPath (Join-Path $dir[0].FullName 'cycles.ndjson'))
+          if ($rows.Count -ne 150) { throw 'CLEAN15_EVIDENCE_NOT_150' }
+          Write-Host 'CLEAN15_150_SCHEDULER_CYCLES_AND_UNINSTALL_VERIFIED'
       - name: Windows guardian, orphan, PID and retention negatives
-        if: always()
+        if: ${{ always() && steps.vm_guard.outcome == 'success' }}
         timeout-minutes: 12
         run: node --test --import tsx --test-concurrency=1 test/native-agent-task-job-ownership.test.ts test/windows-job-owner.test.ts test/process-manager-tree-cleanup.test.ts
       - name: Journal legacy NULL and recycled WAL fixture regressions
-        if: always()
+        if: ${{ always() && steps.vm_guard.outcome == 'success' }}
         timeout-minutes: 12
         run: node --test --import tsx --test-concurrency=1 test/agent-journal-owner-incarnation.test.ts test/qa-journal-wal-recycle-p11.test.ts test/agent-journal-restart-regression.test.ts
+      - name: Run PowerShell 5.1 rollback fixture with production isolated environment
+        if: ${{ always() && steps.vm_guard.outcome == 'success' }}
+        shell: pwsh
+        timeout-minutes: 7
+        run: |
+          $ErrorActionPreference='Stop'
+          $p='test/machine-update-rollback-integrity.test.ts'
+          $source=Get-Content -LiteralPath $p -Raw
+          $source=$source.Replace("import {renderMachineCutoverScript} from '../src/update/machine-update.js';", "import {renderMachineCutoverScript,isolatedMachineUpdateChildEnvironment} from '../src/update/machine-update.js';")
+          $source=$source.Replace('...process.env,','...isolatedMachineUpdateChildEnvironment(),')
+          if (!$source.Contains('...isolatedMachineUpdateChildEnvironment(),') -or $source.Contains('...process.env,')) { throw 'CLEAN15_PROD_ENV_REWRITE_FAILED' }
+          $file='test/clean15-temporary-rollback-prod-env.test.ts'
+          [IO.File]::WriteAllText((Join-Path $PWD $file),$source,[Text.UTF8Encoding]::new($false))
+          try {
+            node --test --import tsx --test-concurrency=1 $file
+            if ($LASTEXITCODE -ne 0) { throw 'CLEAN15_PS51_PROD_ENV_ROLLBACK_RED' }
+          } finally { Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue }
+      - name: Check out PR 647 W26 exact immutable SHA
+        if: ${{ always() && steps.vm_guard.outcome == 'success' }}
+        uses: actions/checkout@v4
+        with:
+          repository: Naveax/Nexowire
+          ref: 3b3f26d068f169b941383308a1763124e3a3feef
+          path: clean15-w26-reference
+          persist-credentials: false
+      - name: Execute unchanged W26 native handle provenance tests
+        if: ${{ always() && steps.vm_guard.outcome == 'success' }}
+        timeout-minutes: 8
+        shell: pwsh
+        run: |
+          node --test --import tsx clean15-w26-reference/test/p0-native-handle-provenance-w26.test.ts
+          if ($LASTEXITCODE -ne 0) { throw 'CLEAN15_W26_REFERENCE_RED' }
+      - name: Report native helper signature admission gap
+        if: ${{ always() && steps.vm_guard.outcome == 'success' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $source=Get-Content -LiteralPath src/agent/native-agent-lifecycle.ts -Raw
+          $start=$source.IndexOf('async function installWindows(')
+          $finish=$source.IndexOf('export interface WindowsAgentTaskOwnerReadback')
+          if ($start -lt 0 -or $finish -le $start) { throw 'CLEAN15_HELPER_TRUST_AUDIT_UNAVAILABLE' }
+          $install=$source.Substring($start,$finish-$start)
+          if ($install -notmatch 'Get-AuthenticodeSignature|assertTrustedNativeAgentHelper|verifyNativeAgentHelperSignature') {
+            throw 'CLEAN15_UNSIGNED_OR_TAMPERED_HELPER_NOT_REJECTED_BY_INSTALL'
+          }
       - name: Preserve lifecycle evidence
-        if: always()
+        if: ${{ always() && steps.vm_guard.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: clean15-windows-cycle-results
