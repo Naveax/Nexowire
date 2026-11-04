@@ -30,7 +30,9 @@ export interface RelayResourceSnapshot {
   activeConnections: number;
   connectingUpstreams: number;
   startupQueuedBytes: number;
+  startupQueuedFrames: number;
   peakStartupQueuedBytes: number;
+  peakStartupQueuedFrames: number;
   outboundBufferedBytes: number;
   overload503Count: number;
   disconnectCodes: Record<string, number>;
@@ -77,7 +79,7 @@ function wireRelayPair(
     maxPayloadBytes: number;
     heartbeatMs: number;
     metrics?: ScaleTransportMetrics;
-    onQueueDelta?: (bytes: number) => void;
+    onQueueDelta?: (bytes: number, frames: number) => void;
     onDownstreamClose?: (code: number) => void;
   },
 ): () => void {
@@ -98,7 +100,7 @@ function wireRelayPair(
     disposed = true;
     clearInterval(heartbeat);
     // Release retained frames even when a peer dies during handshake.
-    if (queuedBytes > 0) options.onQueueDelta?.(-queuedBytes);
+    if (queuedBytes > 0) options.onQueueDelta?.(-queuedBytes, -queue.length);
     queuedBytes = 0;
     queue.length = 0;
   };
@@ -167,7 +169,7 @@ function wireRelayPair(
         return;
       }
       queuedBytes += bytes;
-      options.onQueueDelta?.(bytes);
+      options.onQueueDelta?.(bytes, 1);
       queue.push({ data, binary, bytes });
       return;
     }
@@ -177,7 +179,7 @@ function wireRelayPair(
 
   upstream.on('open', () => {
     const pending = queue.splice(0);
-    if (queuedBytes > 0) options.onQueueDelta?.(-queuedBytes);
+    if (queuedBytes > 0) options.onQueueDelta?.(-queuedBytes, -pending.length);
     queuedBytes = 0;
     for (const item of pending) {
       if (upstream.readyState !== WebSocket.OPEN) break;
@@ -263,7 +265,9 @@ export async function startRelayServer(
   server.maxHeadersCount = 64;
   const pairs = new Map<WebSocket, WebSocket>();
   let startupQueuedBytes = 0;
+  let startupQueuedFrames = 0;
   let peakStartupQueuedBytes = 0;
+  let peakStartupQueuedFrames = 0;
   let overload503Count = 0;
   const disconnectCodes = new Map<string, number>();
   let closing = false;
@@ -333,9 +337,11 @@ export async function startRelayServer(
       maxPayloadBytes: config.maxPayloadBytes,
       heartbeatMs: config.heartbeatMs,
       metrics: options.metrics,
-      onQueueDelta: (delta) => {
-        startupQueuedBytes = Math.max(0, startupQueuedBytes + delta);
+      onQueueDelta: (bytes, frames) => {
+        startupQueuedBytes = Math.max(0, startupQueuedBytes + bytes);
+        startupQueuedFrames = Math.max(0, startupQueuedFrames + frames);
         peakStartupQueuedBytes = Math.max(peakStartupQueuedBytes, startupQueuedBytes);
+        peakStartupQueuedFrames = Math.max(peakStartupQueuedFrames, startupQueuedFrames);
       },
       onDownstreamClose: (code) => {
         const name = String(code);
@@ -386,7 +392,9 @@ export async function startRelayServer(
         activeConnections: wss.clients.size,
         connectingUpstreams,
         startupQueuedBytes,
+        startupQueuedFrames,
         peakStartupQueuedBytes,
+        peakStartupQueuedFrames,
         outboundBufferedBytes,
         overload503Count,
         disconnectCodes: Object.fromEntries(disconnectCodes),
