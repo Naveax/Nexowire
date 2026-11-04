@@ -6,20 +6,20 @@ import {windowsDpapiChildEnvironment} from '../security/windows-dpapi.js';
 const CUSTODY_ERROR='Cloudflare tunnel credential custody unsafe';
 const MAX_CREDENTIAL_BYTES=16*1024;
 function deny():never {throw Error(CUSTODY_ERROR);}
-function sameIdentity(a:import('node:fs').Stats,b:import('node:fs').Stats){
+function sameIdentity(a:import('node:fs').BigIntStats,b:import('node:fs').BigIntStats){
   return a.dev===b.dev&&a.ino===b.ino&&a.size===b.size&&
-    a.mtimeMs===b.mtimeMs&&a.ctimeMs===b.ctimeMs;
+    a.mtimeNs===b.mtimeNs&&a.ctimeNs===b.ctimeNs;
 }
 async function parents(file:string){
   let current=path.dirname(file);
-  const uid=typeof process.getuid==='function'?process.getuid():-1;
+  const uid=BigInt(typeof process.getuid==='function'?process.getuid():-1);
   for(;;){
-    const stat=await fs.lstat(current);
+    const stat=await fs.lstat(current,{bigint:true});
     if(!stat.isDirectory()||stat.isSymbolicLink())deny();
     if(process.platform!=='win32'){
-      if(stat.uid!==0&&stat.uid!==uid)deny();
-      const stickyRoot=stat.uid===0&&(stat.mode&0o1000)!==0;
-      if((stat.mode&0o022)!==0&&!stickyRoot)deny();
+      if(stat.uid!==0n&&stat.uid!==uid)deny();
+      const stickyRoot=stat.uid===0n&&(stat.mode&0o1000n)!==0n;
+      if((stat.mode&0o022n)!==0n&&!stickyRoot)deny();
     }
     const next=path.dirname(current);
     if(next===current)break;
@@ -73,21 +73,21 @@ export async function readCloudflareTunnelCredential(file:string):Promise<Buffer
   try{
     await parents(file);
     if(process.platform==='win32')windowsCredentialAcl(file);
-    const prior=await fs.lstat(file);
+    const prior=await fs.lstat(file,{bigint:true});
     if(!prior.isFile()||prior.isSymbolicLink()||prior.nlink!==1||
-       prior.size<1||prior.size>MAX_CREDENTIAL_BYTES)deny();
+       prior.size<1n||prior.size>BigInt(MAX_CREDENTIAL_BYTES))deny();
     if(process.platform!=='win32'){
-      const uid=typeof process.getuid==='function'?process.getuid():-1;
-      if(prior.uid!==uid||(prior.mode&0o077)!==0)deny();
+      const uid=BigInt(typeof process.getuid==='function'?process.getuid():-1);
+      if(prior.uid!==uid||(prior.mode&0o077n)!==0n)deny();
     }
     const fd=await fs.open(file,flags.O_RDONLY|(process.platform==='win32'?0:flags.O_NOFOLLOW));
     try{
-      const opened=await fd.stat();
+      const opened=await fd.stat({bigint:true});
       if(!sameIdentity(prior,opened))deny();
       const data=await fd.readFile();
-      if(data.length!==prior.size||data.length>MAX_CREDENTIAL_BYTES)deny();
-      if(!sameIdentity(opened,await fd.stat())||
-         !sameIdentity(opened,await fs.lstat(file)))deny();
+      if(BigInt(data.length)!==prior.size||data.length>MAX_CREDENTIAL_BYTES)deny();
+      if(!sameIdentity(opened,await fd.stat({bigint:true}))||
+         !sameIdentity(opened,await fs.lstat(file,{bigint:true})))deny();
       await parents(file);
       if(process.platform==='win32')windowsCredentialAcl(file);
       return data;
