@@ -8,6 +8,8 @@ import type {NexowireConfig} from '../config.js';
 import {createLocalFirstIngressServer,validateLocalFirstIngress,closeLocalFirstAgentSockets,
   verifyLocalFirstPublicUpstream} from './local-first-ingress.js';
 import {windowsDpapiChildEnvironment} from '../security/windows-dpapi.js';
+import {readCloudflareTunnelCredential} from './cloudflare-credential-custody.js';
+import {prepareTrustedCloudflared,type TrustedCloudflared} from './cloudflare-binary-trust.js';
 
 const absoluteFile=z.string().min(1).max(4096).refine(value=>
   path.isAbsolute(value)&&!/[\r\n\0]/.test(value),'Absolute local file path required');
@@ -71,7 +73,7 @@ export async function startCloudflareConnection(input:unknown,config:NexowireCon
   const binary=await regularFile(profile.binary,256*1024*1024);
   if(createHash('sha256').update(binary).digest('hex')!==profile.binarySha256)
     throw new Error('Cloudflare connector binary checksum mismatch');
-  const credentials=JSON.parse((await regularFile(profile.credentialsFile,16*1024)).toString('utf8'));
+  const credentials=JSON.parse((await readCloudflareTunnelCredential(profile.credentialsFile)).toString('utf8'));
   if(credentials.TunnelID!==profile.tunnelId ||
       !/^[a-f0-9]{32}$/i.test(credentials.AccountTag??'') ||
       typeof credentials.TunnelSecret!=='string' ||
@@ -83,6 +85,7 @@ export async function startCloudflareConnection(input:unknown,config:NexowireCon
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-cloudflare-'));
   const origin=createLocalFirstIngressServer(safe);
   let child:ReturnType<typeof spawn>|undefined;
+  let trusted:TrustedCloudflared|undefined;
   let stopped=false;
   let exit:Promise<void>|undefined;
   let closePromise:Promise<void>|undefined;
@@ -95,20 +98,26 @@ export async function startCloudflareConnection(input:unknown,config:NexowireCon
     }
     closeLocalFirstAgentSockets(origin);origin.closeAllConnections();
     await new Promise<void>(resolve=>origin.close(()=>resolve()));
+    await trusted?.dispose();
     await fs.rm(dir,{recursive:true,force:true});
   })();
   try{
+    // Custody and official provenance are checked before exposing a local origin.
+    // On Linux, exec uses a file descriptor referring to the verified staged image.
+    // Windows cannot safely launch until a native handle-bound custodian exists.
+    trusted=await prepareTrustedCloudflared(profile.binary,profile.binarySha256);
     const file=path.join(dir,'config.json');
     await fs.writeFile(file,JSON.stringify(tunnelConfig),{mode:0o600,flag:'wx'});
     await new Promise<void>((resolve,reject)=>{
       origin.once('error',reject);
       origin.listen(profile.listenPort,'127.0.0.1',()=>{origin.off('error',reject);resolve();});
     });
-    // #402 reviewed headless sink: hash-pinned absolute executable; no shell,
-    // raw token, inherited environment, stdin, or unbounded secret-bearing log.
-    child=spawn(profile.binary,['tunnel','--config',file,'--no-autoupdate',
+    // #402 reviewed sink: verified opened image fd (not mutable profile path),
+    // fixed arguments, no shell, inherited env, stdin, or secret-bearing logs.
+    child=spawn(trusted.command,['tunnel','--config',file,'--no-autoupdate',
       '--protocol','auto','--loglevel','error','run',profile.tunnelId],{
-      cwd:dir,env:cloudflareChildEnvironment(),windowsHide:true,stdio:'ignore',
+      cwd:dir,env:cloudflareChildEnvironment(),windowsHide:true,
+      stdio:['ignore','ignore','ignore',trusted.imageFd],
     });
     exit=new Promise<void>(resolve=>{child!.once('exit',()=>resolve());child!.once('error',()=>resolve());});
     const current=child;
