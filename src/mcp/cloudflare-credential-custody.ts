@@ -110,7 +110,8 @@ function windowsCredentialAcl(file:string){
   const started=Date.now();
   const child=spawnSync(windowsCredentialAuditInterpreter(),
     ['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',b64],
-    {env,encoding:'utf8',timeout:45000,maxBuffer:4096,windowsHide:true});
+    {env,encoding:'utf8',timeout:45000,maxBuffer:4096,windowsHide:true,
+      cwd:'C:\\Windows\\System32'});
   if(child.error||child.status!==0||child.stdout.trim()!=='OK'){
     const childCode=(child.error as NodeJS.ErrnoException|undefined)?.code;
     const marker=/C13:(REPARSE|FOREIGN_OWNER|FILE_UNTRUSTED_ACE|PARENT_REPLACE_ACE|PARENT_DEPTH|ERROR_(?:START|ITEM|ACL|OWNER|ACE))/.exec(child.stderr??'');
