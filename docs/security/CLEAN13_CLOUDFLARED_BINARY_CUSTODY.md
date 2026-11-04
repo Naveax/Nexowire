@@ -33,7 +33,10 @@ Source of release evidence: https://github.com/cloudflare/cloudflared/releases/t
 | Credential hardlink, symlink or group-writable parent | Reject | CLEAN-13 custody negatives | Source guarded |
 | Credential replacement after read | Cloudflared never opens original path | Private byte-copy admission | Source guarded; same-UID threat not solved |
 | Windows inherited Everyone/Users/Auth Users file read or parent write | Reject | SID/DACL/ACE guard | Needs hosted/native negative |
-| Credential cleanup interrupted or process/child orphaned | Never assert safe teardown until process exits | Existing #1003 lifecycle test still RED | NO-GO |
+| Temporary credential inode replaced before cleanup | Never unlink replacement, return custody drift | CLEAN-13 cleanup replacement negative | New regression; exact-HEAD CI pending |
+| Runtime directory swapped for symlink to foreign credential tree | Never follow symlink or delete foreign contents | CLEAN-13 cleanup parent-swap negative | New regression; exact-HEAD CI pending |
+| Temporary config/credential owned and unchanged | Delete only recorded inodes via open Linux directory FD; remove empty original directory | CLEAN-13 positive identity-bound cleanup test | New regression; exact-HEAD CI pending |
+| Credential cleanup interrupted or process/child orphaned | Never assert safe teardown until process exits; do not recursively remove untrusted path | Existing #1003 lifecycle test still RED | NO-GO |
 
 ## Preserved negative tests
 
@@ -53,3 +56,21 @@ The P1-C public-origin failures and separate Windows task parent/descendant life
 5. #1003 Windows parent-and-descendant task stop and off-network two-PC/revocation acceptance must independently pass.
 
 **Release gate: NO-GO**. This candidate changes no CORE/Broker, Hub control-plane, production credentials, DNS, tunnel, device, CI execution or release.
+
+## Hosted run evidence and incremental remediation (2026-11-04)
+
+- Starting PR #1077 SHA: `c1dd252180404e6afbe9527ed34b00c720cf5e41`; base #1044: `4d8f215f36de7fe05e85a9c19fc40cc35716d705`.
+- CI run **41812885695**, Node 22 job **126516759381** and Node 24 job **126516759620** both executed official Cloudflare 2026.10.1 x64 unlinked-FD `--version` positive with exit 0. All original AI-11 **P1-A/B/D** and CLEAN-13 Linux source tests reported PASS. Five separate **P1-C** tests were FAIL; that stays assigned to V2-02.
+- Windows `browser-live` job **126516759824** FAIL: the read-only PowerShell publisher/credential audit returned fail-closed after ~25s (no Windows positive proof); also **task stop must stop the managed parent** failed in #1003's lifecycle test. These are NOT passed or suppressed.
+- A later V2-01 incremental patch replaces `fs.rm(directory,{recursive:true})` with a narrow cleanup method that first checks original directory/file identity, refuses unknown files or substituted inodes, and on Linux uses an opened directory FD for unlinking known entries. This is defense-in-depth for the **cross-user path-swap** threat model, not a same-UID or elevated-attacker guarantee. If drift is detected it refuses deletion and reports custody failure; operational cleanup may then be required by a trusted owner.
+- An additional change places the Windows immutable-image deny **before** any runtime credential copy is staged. The Windows release remains **NO-GO**, not a regression waiver.
+- New cleanup tests live only in `test/clean13-cloudflared-custody.test.ts`; the three #1044 AI-11 negative source files remain unmodified. Await the later exact-HEAD run before claiming these additions passed.
+
+### Current gate (strict)
+
+| Control | Linux x64 source gate | Windows native gate | Production |
+|---|---|---|---|
+| P1-A immutable executed image | Conditional pass for cross-UID path swap; same-UID sealed-memfd proof missing | **NO-GO**, native signed held-section custodian absent | **NO-GO** |
+| P1-B publisher provenance | Source-pinned official 2026.10.1 hash and positive official executable test | **NO-GO**, Authenticode audit does not complete successfully on hosted runner | **NO-GO** |
+| P1-D original credential custody | Conditional pass, owner/mode/inode/no-follow | **NO-GO**, SID/ACE positive fails hosted; descriptor native proof missing | **NO-GO** |
+| P1-D temporary cleanup | Identity-bound cleanup plus adversarial regressions pending exact-HEAD CI | No credential staging until native image acceptance; runtime cleanup not physically accepted | **NO-GO** |
