@@ -106,6 +106,8 @@ function wireRelayPair(
   };
 
   const failPair = (code: number, reason: string): void => {
+    // Guard against already-buffered frames racing with WebSocket close events.
+    dispose();
     closePeer(downstream, code, reason);
     closePeer(upstream, code, reason);
   };
@@ -115,7 +117,7 @@ function wireRelayPair(
     data: WebSocket.RawData,
     binary: boolean,
   ): void => {
-    if (destination.readyState !== WebSocket.OPEN) return;
+    if (disposed || destination.readyState !== WebSocket.OPEN) return;
     if (
       destination.bufferedAmount +
         (typeof data === 'string' ? Buffer.byteLength(data) :
@@ -148,6 +150,7 @@ function wireRelayPair(
   });
 
   downstream.on('message', (data, binary) => {
+    if (disposed || downstream.readyState !== WebSocket.OPEN) return;
     const bytes =
       typeof data === 'string'
         ? Buffer.byteLength(data)
@@ -178,6 +181,7 @@ function wireRelayPair(
   });
 
   upstream.on('open', () => {
+    if (disposed) return;
     const pending = queue.splice(0);
     if (queuedBytes > 0) options.onQueueDelta?.(-queuedBytes, -pending.length);
     queuedBytes = 0;
@@ -188,6 +192,7 @@ function wireRelayPair(
   });
 
   upstream.on('message', (data, binary) => {
+    if (disposed) return;
     forward(downstream, data, binary);
   });
 
