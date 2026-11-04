@@ -14,9 +14,9 @@ export const OFFICIAL_CLOUDFLARED_SHA256=Object.freeze({
   'win32-x64':'4d2490e74082c5d48dbfedaf92576fa5bd1702379ab88eb7faa0cfbe8dc891b6',
 });
 const sha256=(data:Buffer)=>createHash('sha256').update(data).digest('hex');
-function sameFile(a:import('node:fs').Stats,b:import('node:fs').Stats){
+function sameFile(a:import('node:fs').BigIntStats,b:import('node:fs').BigIntStats){
   return a.dev===b.dev&&a.ino===b.ino&&a.size===b.size&&
-    a.mtimeMs===b.mtimeMs&&a.ctimeMs===b.ctimeMs;
+    a.mtimeNs===b.mtimeNs&&a.ctimeNs===b.ctimeNs;
 }
 function deny(message:string):never{throw Error(message);}
 export interface TrustedCloudflared{
@@ -55,17 +55,17 @@ export async function prepareTrustedCloudflared(binary:string,profileDigest:stri
   if(!expected)deny('Cloudflared platform has no approved official binary provenance');
   if(!path.isAbsolute(binary)||path.resolve(binary)!==binary||/[\r\n\0]/.test(binary))
     deny('Cloudflared binary must have an absolute safe path');
-  const original=await fs.lstat(binary);
+  const original=await fs.lstat(binary,{bigint:true});
   if(!original.isFile()||original.isSymbolicLink()||original.nlink!==1||
-     original.size<1||original.size>LIMIT)
+     original.size<1n||original.size>BigInt(LIMIT))
     deny('Cloudflared binary path, hardlink or size is unsafe');
   const source=await fs.open(binary,flags.O_RDONLY|(process.platform==='win32'?0:flags.O_NOFOLLOW));
   let bytes:Buffer;
   try{
-    if(!sameFile(original,await source.stat()))
+    if(!sameFile(original,await source.stat({bigint:true})))
       deny('Cloudflared binary changed during verification');
     bytes=await source.readFile();
-    if(bytes.length!==original.size||!sameFile(original,await source.stat()))
+    if(BigInt(bytes.length)!==original.size||!sameFile(original,await source.stat()))
       deny('Cloudflared binary changed while reading');
   }finally{await source.close();}
   const digest=sha256(bytes);
@@ -97,17 +97,17 @@ export async function stageDescriptorBoundImage(bytes:Buffer,expectedDigest:stri
     try{await out.writeFile(bytes);await out.sync();}finally{await out.close();}
     await fs.chmod(stage,0o500);
     descriptor=await fs.open(stage,flags.O_RDONLY|flags.O_NOFOLLOW);
-    const observed=await descriptor.stat();
-    const named=await fs.lstat(stage);
-    const dirStat=await fs.lstat(directory);
-    const uid=typeof process.getuid==='function'?process.getuid():-1;
+    const observed=await descriptor.stat({bigint:true});
+    const named=await fs.lstat(stage,{bigint:true});
+    const dirStat=await fs.lstat(directory,{bigint:true});
+    const uid=BigInt(typeof process.getuid==='function'?process.getuid():-1);
     if(!observed.isFile()||observed.nlink!==1||observed.uid!==uid||
-       (observed.mode&0o222)!==0||!sameFile(observed,named)||
+       (observed.mode&0o222n)!==0n||!sameFile(observed,named)||
        !dirStat.isDirectory()||dirStat.isSymbolicLink()||dirStat.uid!==uid||
-       (dirStat.mode&0o077)!==0)
+       (dirStat.mode&0o077n)!==0n)
       deny('Cloudflared sealed staging custody rejected');
     const verified=await descriptor.readFile();
-    if(sha256(verified)!==expectedDigest||!sameFile(observed,await descriptor.stat()))
+    if(sha256(verified)!==expectedDigest||!sameFile(observed,await descriptor.stat({bigint:true})))
       deny('Cloudflared staged image verification failed');
     // Inherited fd 3 names the already-open inode in the child. Renaming or
     // replacing the staging pathname cannot redirect execve to another image.
