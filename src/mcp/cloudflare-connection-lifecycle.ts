@@ -172,7 +172,7 @@ if($task){
  $launcherItem=Get-Item -LiteralPath $launcher -Force
  if(($launcherItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw 'CONNECTION_LAUNCHER_REPARSE'}
  $launcherText=[IO.File]::ReadAllText($launcher)
- if(-not $launcherText.StartsWith([char]0xFEFF+'# Nexowire Cloudflare connection user launcher v1')){throw 'CONNECTION_LAUNCHER_UNTRUSTED'}
+ if(-not $launcherText.StartsWith('# Nexowire Cloudflare connection user launcher v1')){throw 'CONNECTION_LAUNCHER_UNTRUSTED'}
  $hashPath=$launcher+'.sha256'
  if(-not (Test-Path -LiteralPath $hashPath -PathType Leaf)){throw 'CONNECTION_LAUNCHER_MANIFEST_MISSING'}
  if(((Get-Item -LiteralPath $hashPath -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw 'CONNECTION_LAUNCHER_MANIFEST_REPARSE'}
