@@ -142,3 +142,197 @@ export async function inspectCloudflareConnection(input:unknown,config:NexowireC
   return doctorResult(unauthorized.status===401&&challengeValid?
     'PUBLIC_OAUTH_BOUNDARY_OK':httpStage(unauthorized.status,'authorization'));
 }
+
+/** Only non-mutating, explicitly reviewed acceptance tools may be invoked.
+ * The tool response must contain a caller-supplied, non-secret expected marker.
+ * This probe NEVER performs OAuth consent or exchanges authorization codes. */
+export type StagingReadOnlyTool='nexowire_surface_info'|'machine_health'|'machine_snapshot';
+export interface ConnectionV2AuthenticatedProbe {
+  resourceUrl:string;
+  issuerUrl:string;
+  bearerToken:string;
+  expectedOutputContains:string;
+  toolName?:StagingReadOnlyTool;
+  toolArguments?:Record<string,unknown>;
+  fetchImpl?:typeof fetch;
+  timeoutMs?:number;
+  /** Disposable loopback HTTP fixtures only. Never enable for public acceptance. */
+  allowLoopbackHttpFixture?:boolean;
+}
+export interface ConnectionV2AuthenticatedResult {
+  stage:'AUTHENTICATED_MCP_READY'|'DEGRADED'|'UNAVAILABLE';
+  code:string;
+  publicBoundaryVerified:boolean;
+  authenticatedToolVerified:boolean;
+  sessionIdObserved:boolean;
+  completedSteps:readonly string[];
+}
+
+function exactHttpsMcpResource(raw:string,allowLoopback:boolean):URL {
+  const url=new URL(raw);
+  const loopback=['localhost','127.0.0.1','[::1]'].includes(url.hostname);
+  if(url.toString()!==raw || url.username||url.password||url.search||url.hash||
+     url.pathname!=='/mcp'||!url.hostname||
+     !(url.protocol==='https:' || (allowLoopback&&loopback&&url.protocol==='http:')))
+    throw new Error('STAGING_RESOURCE_INVALID');
+  return url;
+}
+function expectedIssuer(raw:string):string{
+  const url=new URL(raw);
+  if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||
+     url.pathname!=='/'||url.port||url.toString().replace(/\/$/,'')!==raw.replace(/\/$/,''))
+    throw new Error('STAGING_ISSUER_INVALID');
+  return url.toString().replace(/\/$/,'');
+}
+async function boundedMcpRpc(response:Response,requestId:number):Promise<Record<string,unknown>>{
+  const reader=response.body?.getReader();
+  if(!reader)throw new Error('MCP_EMPTY_RESPONSE');
+  const chunks:Uint8Array[]=[];
+  let total=0;
+  try{
+    while(true){
+      const result=await reader.read();
+      if(result.done)break;
+      total+=result.value.byteLength;
+      if(total>1024*1024)throw new Error('MCP_OUTPUT_LIMIT');
+      chunks.push(result.value);
+    }
+  }finally{await reader.cancel().catch(()=>{});}
+  const text=Buffer.concat(chunks).toString('utf8');
+  const contentType=response.headers.get('content-type')?.toLowerCase()??'';
+  let candidates:string[]=[];
+  if(contentType.includes('text/event-stream')){
+    const events=text.split(/\r?\n\r?\n/);
+    candidates=events.map(event=>event.split(/\r?\n/).filter(line=>line.startsWith('data:'))
+      .map(line=>line.slice(5).trimStart()).join('\n')).filter(Boolean);
+  }else if(contentType.includes('application/json')){
+    candidates=[text];
+  }else throw new Error('MCP_CONTENT_TYPE_INVALID');
+  for(const candidate of candidates){
+    let parsed:unknown;
+    try{parsed=JSON.parse(candidate);}catch{throw new Error('MCP_JSON_INVALID');}
+    if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))continue;
+    const message=parsed as Record<string,unknown>;
+    if(message.id===requestId&&message.jsonrpc==='2.0')return message;
+  }
+  throw new Error('MCP_RESPONSE_ID_MISMATCH');
+}
+
+/** Authenticated, single-attempt MCP protocol proof for a disposable/staging
+ * endpoint. This is NOT evidence of ChatGPT OAuth consent; that separate real
+ * connect flow must be witnessed by V2-08. No automatic retries or replay. */
+export async function verifyConnectionV2AuthenticatedReadOnly(
+  input:ConnectionV2AuthenticatedProbe,
+):Promise<ConnectionV2AuthenticatedResult>{
+  const completed:string[]=[];
+  let publicBoundaryVerified=false;
+  let sessionIdObserved=false;
+  const fail=(code:string,stage:'DEGRADED'|'UNAVAILABLE'='DEGRADED'):ConnectionV2AuthenticatedResult=>({
+    stage,code,publicBoundaryVerified,authenticatedToolVerified:false,
+    sessionIdObserved,completedSteps:[...completed],
+  });
+  const timeout=input.timeoutMs??5000;
+  if(!Number.isSafeInteger(timeout)||timeout<250||timeout>15000)
+    throw new Error('STAGING_TIMEOUT_INVALID');
+  if(!/^[-A-Za-z0-9_./+=]{16,4096}$/.test(input.bearerToken))
+    throw new Error('STAGING_BEARER_INVALID');
+  if(!input.expectedOutputContains||input.expectedOutputContains.length>256||
+     /[\r\n\0]/.test(input.expectedOutputContains))
+    throw new Error('STAGING_EXPECTED_MARKER_INVALID');
+  const tool=input.toolName??'nexowire_surface_info';
+  if(!['nexowire_surface_info','machine_health','machine_snapshot'].includes(tool))
+    throw new Error('STAGING_TOOL_NOT_READ_ONLY');
+  const resource=exactHttpsMcpResource(input.resourceUrl,input.allowLoopbackHttpFixture===true);
+  const issuer=expectedIssuer(input.issuerUrl);
+  const metadataUrl=new URL('/.well-known/oauth-protected-resource/mcp',resource);
+  const send=input.fetchImpl??fetch;
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),timeout);
+  timer.unref();
+  let sessionId:string|undefined;
+  const headers=(authenticated:boolean):Record<string,string>=>({
+    accept:'application/json, text/event-stream',
+    'content-type':'application/json',
+    ...(authenticated?{authorization:'Bearer '+input.bearerToken}:{}),
+    ...(sessionId?{'mcp-session-id':sessionId}:{}),
+    'mcp-protocol-version':'2025-03-26',
+  });
+  try{
+    const metadata=await send(metadataUrl,{method:'GET',redirect:'error',
+      signal:controller.signal,headers:{accept:'application/json'}});
+    if(metadata.status!==200){await metadata.body?.cancel().catch(()=>{});return fail('MCP_METADATA_HTTP_'+metadata.status);}
+    const body=await boundedJson(metadata) as Record<string,unknown>|null;
+    if(!body||body.resource!==resource.toString()||
+       !Array.isArray(body.authorization_servers)||body.authorization_servers.length!==1||
+       typeof body.authorization_servers[0]!=='string'||
+       new URL(body.authorization_servers[0]).toString().replace(/\/$/,'')!==issuer)
+      return fail('MCP_OAUTH_RESOURCE_OR_ISSUER_MISMATCH');
+    completed.push('metadata');
+    const rpcBody=(id:number,method:string,params:unknown)=>JSON.stringify({
+      jsonrpc:'2.0',id,method,params,
+    });
+    const initParams={protocolVersion:'2025-03-26',capabilities:{},
+      clientInfo:{name:'nexowire-v2-03-staging-probe',version:'1'}};
+    const anonymous=await send(resource,{method:'POST',redirect:'error',signal:controller.signal,
+      headers:headers(false),body:rpcBody(0,'initialize',initParams)});
+    const challenge=anonymous.headers.get('www-authenticate')??'';
+    await anonymous.body?.cancel().catch(()=>{});
+    if(anonymous.status!==401||
+       !challenge.startsWith('Bearer ')||
+       !challenge.includes('resource_metadata="'+metadataUrl.toString()+'"'))
+      return fail('MCP_ANONYMOUS_OAUTH_CHALLENGE_MISMATCH');
+    publicBoundaryVerified=true;
+    completed.push('oauth_challenge');
+    const call=async(id:number,method:string,params:unknown):Promise<Record<string,unknown>>=>{
+      const response=await send(resource,{method:'POST',redirect:'error',signal:controller.signal,
+        headers:headers(true),body:rpcBody(id,method,params)});
+      if(response.status!==200&&response.status!==202){
+        await response.body?.cancel().catch(()=>{});
+        throw new Error('MCP_AUTHENTICATED_HTTP_'+response.status);
+      }
+      const responseSession=response.headers.get('mcp-session-id');
+      if(responseSession!==null){
+        if(!/^[A-Za-z0-9_-]{1,128}$/.test(responseSession)||
+          (sessionId&&responseSession!==sessionId))
+          throw new Error('MCP_SESSION_ID_INVALID');
+        sessionId=responseSession;
+        sessionIdObserved=true;
+      }
+      if(response.status===202)throw new Error('MCP_NO_COMPLETION');
+      const message=await boundedMcpRpc(response,id);
+      if(message.error||!message.result||typeof message.result!=='object')
+        throw new Error('MCP_RPC_FAILED');
+      return message.result as Record<string,unknown>;
+    };
+    const initialized=await call(1,'initialize',initParams);
+    if(initialized.protocolVersion!=='2025-03-26'||
+       !initialized.serverInfo||typeof initialized.serverInfo!=='object'||
+       (initialized.serverInfo as Record<string,unknown>).name!=='nexowire')
+      return fail('MCP_INITIALIZE_INVALID');
+    completed.push('initialize');
+    const tools=await call(2,'tools/list',{});
+    if(!Array.isArray(tools.tools)||!tools.tools.some(x=>x&&typeof x==='object'&&
+       (x as Record<string,unknown>).name===tool &&
+       (x as Record<string,unknown>).annotations!==null &&
+       (!((x as Record<string,unknown>).annotations)||
+          (x as {annotations?:{readOnlyHint?:boolean}}).annotations?.readOnlyHint!==false)))
+      return fail('MCP_READ_ONLY_TOOL_NOT_ADVERTISED');
+    completed.push('tools_list');
+    const result=await call(3,'tools/call',{name:tool,
+      arguments:input.toolArguments??(tool==='nexowire_surface_info'?{include_tools:false}:{})});
+    if(result.isError===true||!Array.isArray(result.content)||
+       !result.content.some(x=>x&&typeof x==='object'&&
+         (x as {type?:unknown}).type==='text'&&typeof (x as {text?:unknown}).text==='string'&&
+         (x as {text:string}).text.includes(input.expectedOutputContains)))
+      return fail('MCP_READ_ONLY_OUTPUT_MISMATCH');
+    completed.push('tools_call_completed');
+    return {stage:'AUTHENTICATED_MCP_READY',code:'MCP_AUTHENTICATED_READ_ONLY_COMPLETE',
+      publicBoundaryVerified:true,authenticatedToolVerified:true,
+      sessionIdObserved,completedSteps:[...completed]};
+  }catch(error){
+    const cause=error instanceof Error?error.message:'MCP_UNAVAILABLE';
+    const code=controller.signal.aborted?'MCP_TIMEOUT_OR_CANCELLED':
+      /^MCP_[A-Z0-9_]+$/.test(cause)?cause:'MCP_UPSTREAM_UNAVAILABLE';
+    return fail(code,publicBoundaryVerified?'DEGRADED':'UNAVAILABLE');
+  }finally{clearTimeout(timer);}
+}
