@@ -5,6 +5,7 @@ import {
   type Server as HttpsServer,
 } from 'node:https';
 import type { Server as HttpServer } from 'node:http';
+import type { Socket } from 'node:net';
 import WebSocket, { WebSocketServer } from 'ws';
 import {
   assertSafeRelayConfig,
@@ -30,6 +31,14 @@ function isLoopbackAddress(address: string | undefined): boolean {
     address === '::1' ||
     address === '::ffff:127.0.0.1'
   );
+}
+
+function rejectUpgrade(socket: Socket, status: 401 | 404 | 503): void {
+  const reason = status === 401 ? 'Unauthorized' :
+    status === 404 ? 'Not Found' : 'Service Unavailable';
+  socket.end('HTTP/1.1 ' + status + ' ' + reason + '\r\n' +
+    'Connection: close\r\nContent-Length: 0\r\nCache-Control: no-store\r\n' +
+    (status === 503 ? 'Retry-After: 1\r\n' : '') + '\r\n');
 }
 
 function closePeer(
@@ -64,6 +73,8 @@ function wireRelayPair(
     bytes: number;
   }> = [];
   let queuedBytes = 0;
+  // A slow upstream must not reserve 2 x 64-MiB payload per pending peer.
+  const maxStartupQueueBytes = Math.min(options.maxPayloadBytes * 2, 2 * 1024 * 1024);
   let disposed = false;
   let downstreamAlive = true;
   let upstreamAlive = true;
@@ -81,8 +92,11 @@ function wireRelayPair(
   ): void => {
     if (destination.readyState !== WebSocket.OPEN) return;
     if (
-      destination.bufferedAmount >
-      options.maxPayloadBytes * 2
+      destination.bufferedAmount +
+        (typeof data === 'string' ? Buffer.byteLength(data) :
+          data instanceof ArrayBuffer ? data.byteLength :
+          Array.isArray(data) ? data.reduce((n, part) => n + part.length, 0) : data.length)
+        > options.maxPayloadBytes * 2
     ) {
       closePeer(destination, 1013, 'Relay backpressure limit');
       return;
@@ -128,7 +142,7 @@ function wireRelayPair(
       queuedBytes += bytes;
       if (
         queue.length >= 64 ||
-        queuedBytes > options.maxPayloadBytes * 2
+        queuedBytes > maxStartupQueueBytes
       ) {
         closePeer(downstream, 1013, 'Relay startup queue limit');
         closePeer(upstream, 1013, 'Relay startup queue limit');
@@ -216,6 +230,20 @@ export async function startRelayServer(
       })
     : createHttpServer();
 
+  // An upgraded downstream reserves one outbound WebSocket and a bounded
+  // startup queue. Do not let unauthenticated/over-budget arrivals allocate it.
+  const maxConnections = config.maxConnections ?? 128;
+  const pairs = new Map<WebSocket, WebSocket>();
+  let closing = false;
+  let closePromise: Promise<void> | undefined;
+  // Ordinary GET requests are not a relay API and must never hang.
+  server.on('request', (_req, res) => {
+    res.writeHead(404, {
+      'connection': 'close', 'content-length': '0', 'cache-control': 'no-store',
+    });
+    res.end();
+  });
+
   const wss = new WebSocketServer({
     noServer: true,
     maxPayload: config.maxPayloadBytes,
@@ -223,8 +251,9 @@ export async function startRelayServer(
   });
 
   server.on('upgrade', (request, socket, head) => {
-    const url = new URL(request.url ?? '/', 'http://localhost');
-    if (url.pathname !== '/agent') return;
+    if (closing) { rejectUpgrade(socket, 503); return; }
+    // Reject queries and arbitrary paths before opening an upstream socket.
+    if (request.url !== '/agent') { rejectUpgrade(socket, 404); return; }
 
     const authenticated =
       config.inboundAgentTokens.length > 0
@@ -236,10 +265,11 @@ export async function startRelayServer(
 
     if (!authenticated) {
       safelyRecordScaleMetric(options.metrics, 'relay.auth_denials');
-      socket.write(
-        'HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n',
-      );
-      socket.destroy();
+      rejectUpgrade(socket, 401);
+      return;
+    }
+    if (wss.clients.size >= maxConnections) {
+      rejectUpgrade(socket, 503);
       return;
     }
 
@@ -257,10 +287,14 @@ export async function startRelayServer(
         }
       : undefined;
 
-    const upstream = new WebSocket(
-      config.upstreamWsUrl,
-      headers ? { headers } : undefined,
-    );
+    const upstream = new WebSocket(config.upstreamWsUrl, {
+      ...(headers ? { headers } : {}),
+      handshakeTimeout: config.upstreamHandshakeTimeoutMs ?? 10_000,
+      maxPayload: config.maxPayloadBytes,
+      perMessageDeflate: false,
+    });
+    pairs.set(downstream, upstream);
+    downstream.once('close', () => { pairs.delete(downstream); });
 
     wireRelayPair(downstream, upstream, {
       maxPayloadBytes: config.maxPayloadBytes,
@@ -300,16 +334,31 @@ export async function startRelayServer(
     server,
     wss,
     url,
-    async close(): Promise<void> {
-      for (const client of wss.clients) {
-        client.close(1001, 'Relay shutting down');
-      }
-      await new Promise<void>((resolve) => {
-        wss.close(() => resolve());
-      });
-      await new Promise<void>((resolve) => {
-        server.close(() => resolve());
-      });
+    close(): Promise<void> {
+      return closePromise ??= (async () => {
+        closing = true;
+        for (const [downstream, upstream] of pairs) {
+          closePeer(downstream, 1001, 'Relay shutting down');
+          closePeer(upstream, 1001, 'Relay shutting down');
+        }
+        // Uncooperative clients/upstreams cannot hold process shutdown forever.
+        const timer = setTimeout(() => {
+          for (const [downstream, upstream] of pairs) {
+            downstream.terminate();
+            upstream.terminate();
+          }
+          server.closeAllConnections();
+        }, config.shutdownGraceMs ?? 1_500);
+        timer.unref();
+        try {
+          await Promise.all([
+            new Promise<void>(resolve => wss.close(() => resolve())),
+            new Promise<void>(resolve => server.close(() => resolve())),
+          ]);
+        } finally {
+          clearTimeout(timer);
+        }
+      })();
     },
   };
 }
