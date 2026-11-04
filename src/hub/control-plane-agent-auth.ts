@@ -100,6 +100,8 @@ export function createControlPlaneAgentCredentialVerifier(
         body.authenticated !== true ||
         typeof deviceId !== 'string' ||
         !deviceId.trim() ||
+        deviceId!==deviceId.trim() ||
+        /[\u0000-\u001f\u007f]/.test(deviceId) ||
         deviceId.length > 128
       ) {
         return undefined;
@@ -155,7 +157,8 @@ export function createControlPlaneAgentPresenceReporter(
     if (
       !deviceId ||
       deviceId.length > 128 ||
-      /[\r\n\0]/.test(deviceId) ||
+      deviceId!==presence.deviceId ||
+      /[\u0000-\u001f\u007f]/.test(deviceId) ||
       !Number.isFinite(atMs)
     ) {
       return false;
