@@ -105,6 +105,32 @@ function windowsCredentialAcl(file:string){
     throw new CloudflareCredentialCustodyError(code,Date.now()-started,child.status);
   }
 }
+/** Read-only early filesystem admission. Does NOT read or copy credential
+ * bytes. The definitive open-once owner/inode/access checks still happen in
+ * readCloudflareTunnelCredential, so this early proof cannot authorize use
+ * of a path swapped between admission and read.
+ * Used before an executable launch audit only to reject a provably unsafe
+ * POSIX credential fixture, preserving independent P1-D negatives.
+ */
+export async function preflightCloudflareTunnelCredentialMetadata(file:string):Promise<void>{
+  if(!path.isAbsolute(file)||path.resolve(file)!==file||/[\r\n\0]/.test(file))deny();
+  try{
+    await parents(file);
+    const prior=await fs.lstat(file,{bigint:true});
+    if(!prior.isFile()||prior.isSymbolicLink()||prior.nlink!==1n||
+       prior.size<1n||prior.size>BigInt(MAX_CREDENTIAL_BYTES))deny();
+    if(process.platform!=='win32'){
+      const uid=BigInt(typeof process.getuid==='function'?process.getuid():-1);
+      if(prior.uid!==uid||(prior.mode&0o077n)!==0n)deny();
+    }else{
+      windowsCredentialAcl(file);
+    }
+  }catch(error){
+    if(error instanceof CloudflareCredentialCustodyError)throw error;
+    deny('CUSTODY_METADATA_REJECTED');
+  }
+}
+
 /** Open without following links; fstat and pathname identity must stay fixed. */
 export async function readCloudflareTunnelCredential(file:string):Promise<Buffer>{
   if(!path.isAbsolute(file)||path.resolve(file)!==file||/[\r\n\0]/.test(file))deny();
