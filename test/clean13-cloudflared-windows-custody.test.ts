@@ -26,7 +26,10 @@ test('CLEAN-13 P1-D Windows exact SID, inherited ACE and parent replacement righ
   skip:process.platform!=='win32',
   timeout:90000,
 },async t=>{
-  const dir=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-clean13-win-'));
+  // GitHub's runner-wide TEMP ancestry can grant cross-user replacement
+  // rights. A genuinely owner-private positive must live under the disposable
+  // runner account's protected profile, not a shared runner scratch tree.
+  const dir=await fs.mkdtemp(path.join(os.homedir(),'nexowire-clean13-win-'));
   t.after(()=>fs.rm(dir,{recursive:true,force:true,maxRetries:5,retryDelay:200}));
   const file=path.join(dir,'fake-tunnel.json');
   await fs.writeFile(file,'{"fake":true}',{mode:0o600});
