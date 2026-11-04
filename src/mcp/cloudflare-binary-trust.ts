@@ -53,7 +53,7 @@ export async function prepareTrustedCloudflared(binary:string,profileDigest:stri
   const expected=OFFICIAL_CLOUDFLARED_SHA256[
     (process.platform+'-'+process.arch) as keyof typeof OFFICIAL_CLOUDFLARED_SHA256];
   if(!expected)deny('Cloudflared platform has no approved official binary provenance');
-  if(!path.isAbsolute(binary)||/[\r\n\0]/.test(binary))
+  if(!path.isAbsolute(binary)||path.resolve(binary)!==binary||/[\r\n\0]/.test(binary))
     deny('Cloudflared binary must have an absolute safe path');
   const original=await fs.lstat(binary);
   if(!original.isFile()||original.isSymbolicLink()||original.nlink!==1||
