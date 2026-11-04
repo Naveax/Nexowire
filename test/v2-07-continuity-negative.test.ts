@@ -102,6 +102,7 @@ async function fixture(t: import('node:test').TestContext, options = {}) {
   await new Promise<void>(resolve => http.listen(0, '127.0.0.1', resolve));
   const address = http.address();
   assert.ok(address && typeof address === 'object');
+  const port = address.port;
   const sockets: WebSocket[] = [];
   t.after(async () => {
     sockets.forEach(s => s.terminate());
@@ -110,7 +111,7 @@ async function fixture(t: import('node:test').TestContext, options = {}) {
     await new Promise<void>(resolve => http.close(() => resolve()));
   });
   async function agent(deviceId: string, instanceId: string, epoch: number) {
-    const socket = new WebSocket('ws://127.0.0.1:' + address.port + '/agent',
+    const socket = new WebSocket('ws://127.0.0.1:' + port + '/agent',
       {headers: {Authorization: 'Bearer ' + TOKEN}});
     sockets.push(socket);
     const inbound: string[] = [];

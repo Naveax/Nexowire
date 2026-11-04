@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import {setTimeout as sleep} from 'node:timers/promises';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -447,6 +448,7 @@ export async function runNativeAgent(
   );
 
   let stopped = false;
+  const shutdown = new AbortController();
   let currentSocket: WebSocket | undefined;
   const emitAgentEvent = (topic: string, data: unknown): void => {
     if (!currentSocket || currentSocket.readyState !== WebSocket.OPEN) return;
@@ -520,6 +522,7 @@ export async function runNativeAgent(
   const stop = (): void => {
     coreConsole.close();
     stopped = true;
+    shutdown.abort();
     clearInterval(progressWatchdogTimer);
     currentSocket?.close(1001, 'Agent shutting down');
     void processes.shutdown();
@@ -789,11 +792,14 @@ export async function runNativeAgent(
     });
     if (!retry.retryable) {
       stopped = true;
+      shutdown.abort();
       clearInterval(progressWatchdogTimer);
       coreConsole.close();
-      void processes.shutdown();
-      operationJournal.close();
-      await singletonLock?.close();
+      try { await processes.shutdown(); }
+      finally {
+        operationJournal.close();
+        await singletonLock?.close();
+      }
       throw new Error('Hub reconnect denied: ' + retry.reason + '. Manual remediation required.');
     }
 
@@ -813,7 +819,12 @@ export async function runNativeAgent(
       minimumDelayMs: retry.minimumDelayMs,
       consecutiveFailures,
     });
-    await new Promise((resolve) => setTimeout(resolve, waitMs));
+    try {
+      await sleep(waitMs, undefined, {signal: shutdown.signal});
+    } catch {
+      // An operator shutdown interrupts a long reconnect cooldown immediately.
+      if (!shutdown.signal.aborted) throw new Error('Reconnect delay failed.');
+    }
   }
 
   process.exit(0);
