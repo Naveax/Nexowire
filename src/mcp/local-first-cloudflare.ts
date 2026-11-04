@@ -73,7 +73,8 @@ export async function startCloudflareConnection(input:unknown,config:NexowireCon
   const binary=await regularFile(profile.binary,256*1024*1024);
   if(createHash('sha256').update(binary).digest('hex')!==profile.binarySha256)
     throw new Error('Cloudflare connector binary checksum mismatch');
-  const credentials=JSON.parse((await readCloudflareTunnelCredential(profile.credentialsFile)).toString('utf8'));
+  const credentialBytes=await readCloudflareTunnelCredential(profile.credentialsFile);
+  const credentials=JSON.parse(credentialBytes.toString('utf8'));
   if(credentials.TunnelID!==profile.tunnelId ||
       !/^[a-f0-9]{32}$/i.test(credentials.AccountTag??'') ||
       typeof credentials.TunnelSecret!=='string' ||
@@ -102,9 +103,17 @@ export async function startCloudflareConnection(input:unknown,config:NexowireCon
     await fs.rm(dir,{recursive:true,force:true});
   })();
   try{
-    // Custody and official provenance are checked before exposing a local origin.
-    // On Linux, exec uses a file descriptor referring to the verified staged image.
-    // Windows cannot safely launch until a native handle-bound custodian exists.
+    // Cloudflared must NEVER reopen the original mutable credential pathname.
+    // The private configuration points to a new owner-only copy of verified bytes.
+    const secretCopy=path.join(dir,'tunnel-credentials.json');
+    await fs.writeFile(secretCopy,credentialBytes,{flag:'wx',mode:0o600});
+    const secretStat=await fs.lstat(secretCopy);
+    if(!secretStat.isFile()||secretStat.isSymbolicLink()||secretStat.nlink!==1||
+       (process.platform!=='win32'&&(secretStat.mode&0o077)!==0))
+      throw Error('Cloudflare tunnel credential custody unsafe');
+    tunnelConfig['credentials-file']=secretCopy;
+    // Linux uses descriptor-bound exec, never the owner-supplied binary path.
+    // Windows remains fail closed until a native immutable-image launch exists.
     trusted=await prepareTrustedCloudflared(profile.binary,profile.binarySha256);
     const file=path.join(dir,'config.json');
     await fs.writeFile(file,JSON.stringify(tunnelConfig),{mode:0o600,flag:'wx'});
