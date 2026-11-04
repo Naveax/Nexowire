@@ -28,3 +28,46 @@ The relay is a **fallback data plane**. It does not implement WebRTC/STUN/ICE/TU
 3. Streaming data-plane: adaptive chunk sizing, flow control, cancel fencing, resumable verified chunks. Keep small MCP control messages separate from large file/display payloads.
 4. Optional ICE/P2P for **first-party** device-to-device streams, with measured relay fraction and hard spend cap; P2P does not eliminate hosted MCP admission.
 5. Authenticated two-device reboot, 101+ hosted WSS, 1 GiB transfer and 24h provider-metered soak.
+
+## 2026-11-04 V2-05 measured-gate expansion
+
+### Runtime changes (relay-only)
+
+- Clear queued pre-handshake frames immediately on either peer closing; track aggregate startup queued bytes and frame depth, including high-water marks. Backpressure failure now closes **both** peers rather than leaving a source sending at a dead destination.
+- Expose `resourceSnapshot()` (active/connecting connections, queued bytes/frames, buffered socket bytes, 503 counter, downstream disconnect-code histogram). Snapshots intentionally omit identity, credentials and payloads.
+- Bound pre-upgrade HTTP header and request timeouts to 10 seconds and keepalive to 1 second; partial-header probes verify no upstream pair is allocated. A full timeout/slowloris soak across network edge infrastructure remains **NOT_RUN**.
+- Keep the 128 connection default; do **not** inflate this by assumption. The 2 MiB per-pair queue allows up to 256 MiB pre-handshake buffered payloads at 128 connections before protocol, kernel, TLS and V8 overhead. The default 16 MiB payload and 2× per-destination buffered check can impose further worst-case memory pressure. A hosted memory cap must be set from measured peak/soak evidence.
+
+### Reproducible isolated authenticated WSS benchmark
+
+Command: `node --test --import tsx test/relay-resource-budgets.test.ts test/relay.test.ts`
+
+The dedicated matrix runs Windows/Linux × Node22/24 in an ephemeral runner. This bench generates its own one-day **loopback-only TLS key/certificate in the OS temporary directory** using OpenSSL, validates TLS, then opens actual TCP/WSS clients with a bearer token. Each accepted client performs the Agent HELLO protocol followed by a **real AgentBroker read-only request/response ACK**; merely opening a socket is **not** counted as completed. The upstream Hub remains loopback, not provider-hosted.
+
+Sizes tested: **1, 32, 64, 101, 128, 129, 256 attempted connections**. At 129 and 256, retain 128 authenticated peers while expecting each extra attempt to receive HTTP 503. Synthetic adversarial cases also cover an unresponsive handshake, oversized incoming frames (1009), startup queue overflow (1013), ordinary HTTP/unknown upgrade paths, and partial headers.
+
+Each passing scenario logs one `RELAY_V2_05_BENCH_JSON={...}` record with environment, checked-out commit SHA, PR HEAD SHA (when available), attempted/admitted/completed counts, handshake and Broker ACK p50/p95/p99, process CPU percentage relative to one core, sampled process peak RSS, queued frames/bytes and their peaks, 503, application-layer bytes, disconnect codes, and simple completion fairness ratio. Collect these **actual CI logs** into separate CSV/JSON; do not fabricate a benchmark result when CI is waiting or red.
+
+**Measurement limitations:** process CPU and RSS include test client, Broker, upstream and relay in a single Node process, so these are **whole-process loopback totals**, not isolated central-relay instance cost. Application bytes count decoded Agent request/response bodies, **not TLS/TCP egress or provider billing**. `fairnessCompletedRatio` checks one completed request per admitted synthetic agent, not long-term multi-tenant fairness. Socket close codes are recorded by the relay's downstream listener.
+
+### Not executed and release gates
+
+| Gate | Status | Reason |
+| --- | --- | --- |
+| 1 GiB authenticated cross-device streaming | **NOT_RUN** | No authorized isolated two-device staging with tested bounded chunk transport |
+| SHA256/file-ID resumable chunk + no-double-write under reconnect | **NOT_RUN** | Belongs to a separately versioned transfer protocol; must not spoof successful MCP mutation completion |
+| Hosted 101+ public WSS + quota/billing egress measurement | **NOT_RUN** | Current fixture is encrypted loopback with synthetic agents |
+| Multi-hour soak / provider p95/p99 / actual cost | **NOT_RUN** | No authorized metered staging or reliable cost baseline |
+| WebRTC/STUN/ICE/TURN P2P implementation | **NOT_RUN** | Architecture backlog only |
+| Real production endpoints and NAVEAX/Work-PC stress | **NOT_RUN** | Explicitly prohibited |
+
+### Next P2P/streaming prototype backlog (unimplemented)
+
+1. Identify bulk file, screen/video and telemetry blobs as eligible P2P candidates. Leave authenticated MCP command/control and authoritative mutation ACK/revoke in a server-controlled plane.
+2. Prototype ICE/STUN peer candidate gathering with opt-in scoped consent and relay/TURN fallback, authenticated device-to-device session binding, NAT traversal metrics and deny-by-default when peer binding mismatches.
+3. Define independent `transferId`, authenticated `fileId`, `chunkIndex`, `byteOffset`, `length`, per-chunk SHA256, whole-file SHA256, capped in-flight byte window and resume bitmap. Commit to destination only after atomic verified finalization.
+4. Cancellation must close transport, remove partial files without changing authoritative mutation result, and never blindly reissue an unknown mutation. All retries are idempotent by transferId/chunkIndex/fileId and server-side acknowledged offset.
+5. Test lost ACK, duplicate chunk, reordered chunk, symlink swap, file-ID mutation, disk full, hash mismatch, mid-transfer revoke, fair scheduling among 101 clients, and bounded RSS on local ephemeral fixtures before any hosted rollout.
+6. Compare measured direct/P2P bytes with relay/provider bytes and collect actual price/egress evidence; set a hard user-visible spend cap.
+
+**Release recommendation:** **NO-GO** until exact-checkout CI, actual benchmark logs, hosted soak, streaming protocol integration and separate #1003/#1044 security gates are green. Synthetic loopback throughput is not a zero-cost or unlimited-capacity claim.
