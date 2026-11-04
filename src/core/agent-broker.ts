@@ -103,6 +103,9 @@ export class AgentBroker {
   private readonly healthByDevice = new Map<string, AgentConnectionHealth>();
   private readonly socketDeviceIds = new WeakMap<WebSocket, string>();
   private readonly heartbeatTimedOut = new WeakSet<WebSocket>();
+  // Bound to one authenticated WebSocket: never promote an expired device
+  // credential into permission to dispatch a new mutation.
+  private readonly dispatchAuthorization = new WeakMap<WebSocket, () => Promise<boolean>>();
   private readonly events: StoredBrokerEvent[] = [];
   private readonly eventWaiters = new Set<() => void>();
   private readonly maxEvents: number;
@@ -133,7 +136,9 @@ export class AgentBroker {
     this.onDeviceState = options.onDeviceState;
   }
 
-  register(socket: WebSocket, hello: AgentHello): void {
+  register(socket: WebSocket, hello: AgentHello, reauthorizeMutation?: () => Promise<boolean>): void {
+    // Install before connection events can expose the device to callers.
+    if(reauthorizeMutation)this.dispatchAuthorization.set(socket,reauthorizeMutation);
     const deviceId = hello.device.id;
     const existing = this.agents.get(deviceId);
     if (existing && existing.socket !== socket) {
@@ -401,6 +406,32 @@ export class AgentBroker {
       );
     }
 
+    // An authenticated HTTP 101 is not a permanent mutation grant. The
+    // credential may be revoked between WebSocket periodic checks; revalidate
+    // on *every* mutation, fail closed, and check the socket epoch after await.
+    if (!isReadOnlyCapability(capability)) {
+      const reauthorize = this.dispatchAuthorization.get(connection.socket);
+      if (reauthorize) {
+        let allowed = false;
+        try { allowed = await reauthorize(); } catch { /* fail closed */ }
+        if (!allowed) {
+          throw new NexowireError(
+            'AGENT_AUTH_REVOKED',
+            'Agent device authorization expired or was revoked before mutation dispatch.',
+            {deviceId, capability, requestId},
+          );
+        }
+        if (this.agents.get(deviceId) !== connection || !this.has(deviceId)) {
+          throw new NexowireError(
+            'AGENT_OFFLINE',
+            'Agent connection changed while revalidating mutation authorization.',
+          );
+        }
+      }
+    }
+
+    // Recheck after asynchronous authorization to prevent duplicate UUID
+    // races between concurrent callers; neither request can be dispatched twice.
     if (this.pending.has(requestId)) {
       throw new NexowireError(
         'AGENT_REQUEST_EXISTS',
