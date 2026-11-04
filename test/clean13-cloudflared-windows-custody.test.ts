@@ -5,6 +5,7 @@ import {promises as fs} from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import {readCloudflareTunnelCredential} from '../src/mcp/cloudflare-credential-custody.js';
+import {prepareTrustedCloudflared,OFFICIAL_CLOUDFLARED_SHA256} from '../src/mcp/cloudflare-binary-trust.js';
 
 const ICACLS='C:\\Windows\\System32\\icacls.exe';
 const WHOAMI='C:\\Windows\\System32\\whoami.exe';
@@ -45,4 +46,16 @@ test('CLEAN-13 P1-D Windows exact SID, inherited ACE and parent replacement righ
   // must be denied independently to block rename/replace attacks.
   cmd(ICACLS,[dir,'/grant','*S-1-5-32-545:(M)']);
   await assert.rejects(readCloudflareTunnelCredential(file),/credential custody unsafe/);
+});
+
+// CI downloads an independently hash-verified official image before this test.
+// A valid signer must pass provenance but MUST NOT bypass the missing native
+// held-handle execution boundary. No actual cloudflared process is launched.
+test('CLEAN-13 P1-B Windows official image requires native immutable launch guard',{
+  skip:process.platform!=='win32',timeout:90000,
+},async()=>{
+  const image=process.env.NEXOWIRE_CLOUDFLARED_TEST_BINARY;
+  assert.ok(image,'hosted Windows must provision official checked Cloudflare artifact');
+  await assert.rejects(prepareTrustedCloudflared(image,OFFICIAL_CLOUDFLARED_SHA256['win32-x64']),
+    /native signed handle custodian/);
 });
