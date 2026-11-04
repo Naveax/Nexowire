@@ -26,6 +26,19 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
+      - name: Verify CLEAN-13 official Linux descriptor-bound binary
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          binary="$RUNNER_TEMP/nexowire-clean13-cloudflared-2026.10.1"
+          curl --fail --location --silent --show-error --retry 2 \
+            https://github.com/cloudflare/cloudflared/releases/download/2026.10.1/cloudflared-linux-amd64 \
+            --output "$binary"
+          echo "3bfc539f45d2620c71debb7a86be0efa737ed5ccbad9eb85c787116900e5c586  $binary" | sha256sum --check --status
+          chmod 0500 "$binary"
+          NEXOWIRE_CLOUDFLARED_TEST_BINARY="$binary" node --test --import tsx test/clean13-cloudflared-official-launch.test.ts
+          echo "NEXOWIRE_CLOUDFLARED_TEST_BINARY=$binary" >> "$GITHUB_ENV"
       - run: npm run check
       - run: npm run build
 
