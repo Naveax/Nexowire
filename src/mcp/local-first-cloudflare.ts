@@ -8,7 +8,7 @@ import type {NexowireConfig} from '../config.js';
 import {createLocalFirstIngressServer,validateLocalFirstIngress,closeLocalFirstAgentSockets,
   verifyLocalFirstPublicUpstream} from './local-first-ingress.js';
 import {windowsDpapiChildEnvironment} from '../security/windows-dpapi.js';
-import {readCloudflareTunnelCredential} from './cloudflare-credential-custody.js';
+import {readCloudflareTunnelCredential,preflightCloudflareTunnelCredentialMetadata} from './cloudflare-credential-custody.js';
 import {prepareTrustedCloudflared,type TrustedCloudflared} from './cloudflare-binary-trust.js';
 
 const absoluteFile=z.string().min(1).max(4096).refine(value=>
@@ -141,6 +141,11 @@ export async function startCloudflareConnection(input:unknown,config:NexowireCon
   const binary=await regularFile(profile.binary,256*1024*1024);
   if(createHash('sha256').update(binary).digest('hex')!==profile.binarySha256)
     throw new Error('Cloudflare connector binary checksum mismatch');
+  // Reject already-insecure POSIX credential metadata before any executable
+  // admission, without reading the secret. This preserves the independent P1-D
+  // custody negative even if an unrelated fake publisher also fails.
+  if(process.platform!=='win32')
+    await preflightCloudflareTunnelCredentialMetadata(profile.credentialsFile);
   // Bind official image provenance BEFORE reading tunnel secrets or probing
   // the Hub. Linux preserves the sealed open descriptor through preflight;
   // Windows refuses at the native custodian boundary (never path-spawns).
