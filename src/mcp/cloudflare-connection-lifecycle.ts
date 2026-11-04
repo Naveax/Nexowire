@@ -145,6 +145,11 @@ public static class NexowireConnectionJob {
 }`;
 const SCRIPT=String.raw`
 $ErrorActionPreference='Stop'
+trap {
+ $type=$_.Exception.GetType().Name
+ if($type -match '^[A-Za-z]{1,40}$') { [Console]::Error.WriteLine('CONNECTION_PS_'+$type.ToUpperInvariant()) }
+ exit 1
+}
 $env:PSModulePath='C:\Windows\System32\WindowsPowerShell\v1.0\Modules'
 Import-Module 'C:\Windows\System32\WindowsPowerShell\v1.0\Modules\ScheduledTasks\ScheduledTasks.psd1'
 $name=$env:NEXOWIRE_CONNECTION_TASK
@@ -246,7 +251,7 @@ async function operate(action:Action,launcher:string,taskName:string){
       env:{...windowsDpapiChildEnvironment(),NEXOWIRE_CONNECTION_ACTION:action,
         NEXOWIRE_CONNECTION_TASK:taskName,NEXOWIRE_CONNECTION_LAUNCHER:launcher},
     });
-    let out='',safeErrorCode='',done=false;
+    let out='',safeErrorCode='',stderrTail='',done=false;
     const finish=(error?:Error)=>{if(done)return;done=true;clearTimeout(timer);
       if(error){reject(error);return;}
       try{const value=JSON.parse(out);if(typeof value.installed!=='boolean'||typeof value.state!=='string'||typeof value.autostart!=='boolean'||typeof value.limited!=='boolean')throw Error();resolve(value);}
@@ -257,9 +262,10 @@ async function operate(action:Action,launcher:string,taskName:string){
     // Expose only our fixed, non-secret refusal code; never echo stderr,
     // command lines, task XML, environment values or credential paths.
     child.stderr.on('data',chunk=>{
-      if(safeErrorCode)return;
-      const match=String(chunk).match(/CONNECTION_[A-Z_]{3,64}/);
+      stderrTail=(stderrTail+String(chunk)).slice(-16384);
+      const match=stderrTail.match(/CONNECTION_[A-Z_]{3,64}/);
       if(match)safeErrorCode=match[0];
+      else if(/ParserError|UnexpectedToken|MissingEndCurlyBrace/i.test(stderrTail))safeErrorCode='CONNECTION_PS_PARSER_ERROR';
     });
     child.once('error',()=>finish(Error('Connection task controller unavailable')));
     child.once('close',code=>finish(code===0?undefined:Error('Connection task operation refused'+(safeErrorCode?' ('+safeErrorCode+')':'')+'; existing task was not overwritten')));
