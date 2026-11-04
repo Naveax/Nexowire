@@ -74,8 +74,8 @@ export async function startCloudflareConnection(input:unknown,config:NexowireCon
   if(createHash('sha256').update(binary).digest('hex')!==profile.binarySha256)
     throw new Error('Cloudflare connector binary checksum mismatch');
   const credentialBytes=await readCloudflareTunnelCredential(profile.credentialsFile);
-  let credentials:Record<string,unknown>;
-  try{credentials=JSON.parse(credentialBytes.toString('utf8')) as Record<string,unknown>;}
+  let credentials:{TunnelID?:string;AccountTag?:string;TunnelSecret?:string};
+  try{credentials=JSON.parse(credentialBytes.toString('utf8')) as typeof credentials;}
   catch{throw Error('Cloudflare tunnel credential format invalid');}
   if(credentials.TunnelID!==profile.tunnelId ||
       !/^[a-f0-9]{32}$/i.test(credentials.AccountTag??'') ||
