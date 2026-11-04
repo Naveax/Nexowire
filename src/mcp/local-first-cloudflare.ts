@@ -74,7 +74,9 @@ export async function startCloudflareConnection(input:unknown,config:NexowireCon
   if(createHash('sha256').update(binary).digest('hex')!==profile.binarySha256)
     throw new Error('Cloudflare connector binary checksum mismatch');
   const credentialBytes=await readCloudflareTunnelCredential(profile.credentialsFile);
-  const credentials=JSON.parse(credentialBytes.toString('utf8'));
+  let credentials:Record<string,unknown>;
+  try{credentials=JSON.parse(credentialBytes.toString('utf8')) as Record<string,unknown>;}
+  catch{throw Error('Cloudflare tunnel credential format invalid');}
   if(credentials.TunnelID!==profile.tunnelId ||
       !/^[a-f0-9]{32}$/i.test(credentials.AccountTag??'') ||
       typeof credentials.TunnelSecret!=='string' ||
@@ -99,8 +101,8 @@ export async function startCloudflareConnection(input:unknown,config:NexowireCon
     }
     closeLocalFirstAgentSockets(origin);origin.closeAllConnections();
     await new Promise<void>(resolve=>origin.close(()=>resolve()));
-    await trusted?.dispose();
-    await fs.rm(dir,{recursive:true,force:true});
+    try{await trusted?.dispose();}
+    finally{await fs.rm(dir,{recursive:true,force:true});}
   })();
   try{
     // Cloudflared must NEVER reopen the original mutable credential pathname.
