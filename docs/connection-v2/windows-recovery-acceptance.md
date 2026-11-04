@@ -11,11 +11,18 @@
 - The prior launcher invoked Node using PowerShell's `&`; stopping the PowerShell scheduled action does not guarantee child/descendant termination. Its scheduler restart count was 999.
 - Work-PC 2026-11-04 field notes: `Nexowire Hub Boot` SYSTEM task `HUB_BOOT_TASK_IDENTITY_MISMATCH`, last result 1, v1.0.4 protected launcher vs 1.0.8 Agent/Broker; separate user Hub task Disabled. Local Hub HTTP 200 after a controlled user Hub restart, but Native Agent initially disconnected; one controlled Agent restart restored both reported device sessions. **This is not a reboot or no-disconnect acceptance test.**
 
+## Verified native Windows evidence (exact SHA 385109b, before further hardening)
+
+- GitHub Actions [41831455876](https://github.com/Naveax/Nexowire/actions/runs/41831455876) attempt 1: **7/7 SUCCESS**. Windows `browser-live` job **126579694573** completed successfully, alongside Node 22/24, security, Linux, macOS and WSL2.
+- Parsed Windows job log contains exactly **20** `V2_04_NATIVE_VM_CYCLE_PASS` events, cycles **1..20** inclusive with no gaps or duplicates. Each event has three distinct native Windows process identities (PID, creation-date string and Node executable path) and `stopped:true`. The strict original parent cleanup test is preserved and PASS.
+- This is real Task Scheduler on a **disposable GitHub-hosted Windows runner**, not a physically rebooted VM or live owner machine. The new root-junction/foreign-action negative cases (later child amendment) require independent exact-HEAD CI and do not inherit this success.
+
 ## Implemented source boundaries
 
 - `Nexowire Cloudflare Connection` is a separate **Interactive/Limited** user-logon task, with exact owner SID, fixed System32 PowerShell action, exact launcher path, exactly one matching user AtLogOn trigger, `IgnoreNew`, and a bounded **3 restarts / 1-minute scheduler interval**. No automatic privileged task or CORE enrollment.
 - Task identity mismatch fails closed. Reserved names `Nexowire Hub`, `Nexowire Hub Boot`, `Nexowire Stack` are rejected.
 - The launcher builds a Windows **kill-on-job-close Job Object**, then creates the Node process **suspended**, assigns it to the job before resume and waits on the process handle. No PID-only kill, borrowed guardian, shell pipeline or unmanaged spawn window. If the launcher owner exits or Task Scheduler kills it, its job handle closes and all inherited descendants terminate. A failure to create/assign the job aborts before executing Node.
+- Connection root and all existing ancestors are checked against symlink/junction redirection **before** mkdir, and checked again before launcher write; the task controller rejects reparse points for its protected files and task root. This is a fail-closed source preflight, not a proof against hostile same-owner races or filesystem handle-ID substitutions.
 - Launcher SHA256 digest is written exclusively to a separate owner-protected file, verified along with launcher banner and reparse/ACL/owner checks on lifecycle control. This rejects accidental or cross-principal modifications. **This is not a publisher signature nor a defense against arbitrary code already running as the same owner.** V2-01 must independently prove first-party executable/publisher/credential custody.
 - Environment injection: existing launcher strips `NODE_*`, `NEXOWIRE_*`, tunnel and proxy variables before reintroducing allowlisted protected Hub parameters. Startup does not adopt `Nexowire Hub Boot` or old protected launcher identities.
 - Existing-task actions and principal are never forcibly replaced. No credential file is read, rotated or deleted during stop/uninstall; cleanup is limited to the verified disposable user connection launcher and its digest after owned task removal.
@@ -96,11 +103,11 @@ Run separately on NAVEAX and Work-PC only with owner-directed read-only authoriz
 | Bounded task restart settings | SOURCE IMPLEMENTED | runtime Windows proof pending |
 | Strict user-task action/SID/AtLogOn/IgnoreNew checks | SOURCE IMPLEMENTED | native negative fixtures pending |
 | Stop kills parent and descendants | SOURCE IMPLEMENTED | exact child Windows CI pending |
-| 20 native VM lifecycle cycles | **NOT_RUN** | gated test added, VM not accessed |
+| 20 native hosted Windows VM lifecycle cycles | **PASS at 385109b** | run 41831455876, job 126579694573: 20/20 distinct PID + creation-time + stopped records; later edits must revalidate |
 | Parent-first/child-first/reused PID/foreign guardian | **NOT_RUN** | VM stress plan required |
 | Login/logoff/reboot/two-PC no-disconnect | **NOT_RUN** | not inferred from CI |
 | Old protected launcher secure repair | **BLOCKED** | requires signed compatible artifact and complete backup |
 | Rollback exact task principal and credentials | **NOT_RUN** | no authorized VM repair performed |
 | Production Connection v2 / CORE | **NO-GO** | #1003 P1-A/B/C/D and physical acceptance still pending |
 
-**Decision:** **WINDOWS RELIABILITY NO-GO** until real VM tests and independent review pass. A green Linux/unit suite or hosted Windows task test alone cannot certify 24/7 reboot reliability.
+**Decision:** **WINDOWS RELIABILITY NO-GO** until reboot/login/logoff, outage/recovery, wrong identity and rollback are physically tested and independently reviewed. A green Linux/unit suite or hosted Windows task test alone cannot certify 24/7 reboot reliability.

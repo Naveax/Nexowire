@@ -12,7 +12,7 @@
     "1077": "67fa411c6aa6135aeeac93f7197b5fd46c804884",
     "1081": "707db9728c883d1bb027788793f4cc072768f325",
     "1083": "4d8e7b359d572a6ee4cf22fd02ad9ee7ed81808e",
-    "1084": "385109b87c22ae677ba06f517b7872b732b142dc"
+    "1084": "bf913cb1a8ca3c40b25bb9a69d1bc1833f384744"
   },
   "source_files": 47,
   "matrix_rows": 54,
@@ -173,6 +173,18 @@
       "status": "SOURCE_BLOBS_INTEGRATED",
       "github_hosted_20_cycles": "NOT_RUN_AT_THIS_SHA",
       "reboot": "NOT_RUN"
+    },
+    {
+      "pr": 1084,
+      "old_sha": "385109b87c22ae677ba06f517b7872b732b142dc",
+      "new_sha": "bf913cb1a8ca3c40b25bb9a69d1bc1833f384744",
+      "changed": [
+        "docs/connection-v2/windows-recovery-acceptance.md",
+        "src/mcp/cloudflare-connection-lifecycle.ts",
+        "test/cloudflare-connection-lifecycle.test.ts"
+      ],
+      "source_branch_modified": false,
+      "release_gate": "NO_GO"
     }
   ],
   "integrated_negative_ci": {
@@ -263,7 +275,7 @@
     "cloudflared_windows_security": "FAIL"
   },
   "native_git_dag_evidence": {
-    "status": "NOT_RUN",
+    "status": "PRIOR_SHA_SUCCESS_NEW_SHA_PENDING",
     "workflow_job": "connection-v2-native-git-dag",
     "checkout": "EXACT_HEAD_FULL_HISTORY",
     "commands": [
@@ -274,6 +286,15 @@
       "git rev-parse"
     ],
     "artifact": "connection-v2-native-git-dag.json",
-    "source_matrix_rows": 54
+    "source_matrix_rows": 54,
+    "prior_sha": "e3384c89001f49ca1a525ff04639752b23f35c6a",
+    "prior_run": 41835856330,
+    "prior_job": 126594742469,
+    "prior_exit": 0,
+    "prior_merge_tree_exit": 0,
+    "prior_git_cherry_entries": 110,
+    "prior_patch_id_exit": 0,
+    "prior_source_blobs": 54,
+    "prior_candidate_blobs": 54
   }
 }

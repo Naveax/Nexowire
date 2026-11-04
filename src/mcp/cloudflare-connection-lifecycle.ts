@@ -19,6 +19,28 @@ function absolute(value:string){
   if(!path.isAbsolute(value)||/[\r\n\0]/.test(value))throw Error('Connection lifecycle needs absolute paths');
   return value;
 }
+/**
+ * Reject linked or non-directory ancestors before claiming a user task root.
+ * This is a fail-closed preflight, not a substitute for the later Windows DACL
+ * and exact file-identity readback. Only scoped lifecycle files are touched.
+ */
+async function assertUnlinkedConnectionRoot(root:string):Promise<void>{
+  let cursor=path.resolve(root);
+  for(let depth=0;depth<64;depth++){
+    try{
+      const entry=await fs.lstat(cursor);
+      if(entry.isSymbolicLink())throw Error('CONNECTION_ROOT_REPARSE');
+      if(!entry.isDirectory())throw Error('CONNECTION_ROOT_NOT_DIRECTORY');
+    }catch(error){
+      if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;
+    }
+    const parent=path.dirname(cursor);
+    if(parent===cursor)return;
+    cursor=parent;
+  }
+  throw Error('CONNECTION_ROOT_DEPTH_LIMIT');
+}
+
 export function buildCloudflareConnectionLauncher(profile:string,options:CloudflareLifecycleOptions={}){
   absolute(profile);
   const executable=absolute(options.executable??process.execPath);
@@ -190,6 +212,8 @@ if($task){
  if($expectedHash -notmatch '^[a-fA-F0-9]{64}$'){throw 'CONNECTION_LAUNCHER_MANIFEST_INVALID'}
  if((Get-FileHash -LiteralPath $launcher -Algorithm SHA256).Hash -cne $expectedHash.ToUpperInvariant()){throw 'CONNECTION_LAUNCHER_HASH_MISMATCH'}
  foreach($protectedPath in @($launcher,$hashPath,(Split-Path -Parent $launcher))){
+   $protectedItem=Get-Item -LiteralPath $protectedPath -Force
+   if(($protectedItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw 'CONNECTION_ROOT_REPARSE'}
    $acl=Get-Acl -LiteralPath $protectedPath
    $aclOwner=$acl.Owner
    try{if($aclOwner -ne $sid){$aclOwner=([Security.Principal.NTAccount]$aclOwner).Translate([Security.Principal.SecurityIdentifier]).Value}}catch{throw 'CONNECTION_LAUNCHER_OWNER_UNKNOWN'}
@@ -319,7 +343,10 @@ export async function cloudflareConnectionLifecycle(action:Action,profile?:strin
   const source=buildCloudflareConnectionLauncher(profile,options);
   const status=await operate('status',launcher,task);
   if(status.installed)throw Error('Connection already installed; stop/uninstall before replacing it');
+  // Never write a launcher or alter ACLs through a junction/symlinked root.
+  await assertUnlinkedConnectionRoot(root);
   await fs.mkdir(root,{recursive:true,mode:0o700});
+  await assertUnlinkedConnectionRoot(root);
   // Exclusive creation refuses an unknown launcher and concurrent installers.
   await fs.writeFile(launcher,source,{flag:'wx',mode:0o600});
   try{
