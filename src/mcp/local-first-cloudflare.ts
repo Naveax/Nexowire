@@ -141,18 +141,17 @@ export async function startCloudflareConnection(input:unknown,config:NexowireCon
   const binary=await regularFile(profile.binary,256*1024*1024);
   if(createHash('sha256').update(binary).digest('hex')!==profile.binarySha256)
     throw new Error('Cloudflare connector binary checksum mismatch');
-  // A Windows image must pass the independent release+publisher gate before
-  // consuming any tunnel secret or probing the local Hub. Native launch remains
-  // deliberately disabled without a signed image-section custodian.
-  if(process.platform==='win32')
-    await prepareTrustedCloudflared(profile.binary,profile.binarySha256);
-  const credentialBytes=await readCloudflareTunnelCredential(profile.credentialsFile);
-  verifyCloudflareTunnelCredentialIdentity(credentialBytes,profile.tunnelId);
-  await verifyLocalFirstPublicUpstream({hubPort:config.port,expectedResourceUrl:config.mcpResourceUrl!,
-    requireRemoteAgentAdmission:profile.publishAgentEndpoint});
-  // Windows has no approved held-image custodian. Reject before writing even a
-  // temporary copy of the secret. Linux opens and stages the approved image.
+  // Bind official image provenance BEFORE reading tunnel secrets or probing
+  // the Hub. Linux preserves the sealed open descriptor through preflight;
+  // Windows refuses at the native custodian boundary (never path-spawns).
   const approvedImage=await prepareTrustedCloudflared(profile.binary,profile.binarySha256);
+  let credentialBytes:Buffer;
+  try{
+    credentialBytes=await readCloudflareTunnelCredential(profile.credentialsFile);
+    verifyCloudflareTunnelCredentialIdentity(credentialBytes,profile.tunnelId);
+    await verifyLocalFirstPublicUpstream({hubPort:config.port,expectedResourceUrl:config.mcpResourceUrl!,
+      requireRemoteAgentAdmission:profile.publishAgentEndpoint});
+  }catch(error){await approvedImage.dispose();throw error;}
   let dir:string;
   try{dir=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-cloudflare-'));}
   catch(error){await approvedImage.dispose();throw error;}
