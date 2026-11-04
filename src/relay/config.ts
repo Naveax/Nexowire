@@ -34,6 +34,10 @@ export interface NexowireRelayConfig {
   upstreamHandshakeTimeoutMs?: number;
   /** Shutdown grace before terminating stalled relay pairs. */
   shutdownGraceMs?: number;
+  /** Limits outbound TCP/WebSocket handshakes, separately from established pairs. */
+  maxPendingUpstreamHandshakes?: number;
+  /** Accounting cap shared by connection slots, startup queues and pending sends. */
+  globalMemoryBudgetBytes?: number;
 }
 
 function optional(value: string | undefined): string | undefined {
@@ -214,6 +218,15 @@ export function loadRelayConfig(
     ...(env.NEXOWIRE_RELAY_SHUTDOWN_GRACE_MS?.trim()
       ? { shutdownGraceMs: parseBoundedInt(env.NEXOWIRE_RELAY_SHUTDOWN_GRACE_MS,
           1_500, 100, 10_000, 'NEXOWIRE_RELAY_SHUTDOWN_GRACE_MS') } : {}),
+    ...(env.NEXOWIRE_RELAY_MAX_PENDING_HANDSHAKES?.trim()
+      ? { maxPendingUpstreamHandshakes: parseBoundedInt(
+          env.NEXOWIRE_RELAY_MAX_PENDING_HANDSHAKES, 128, 1, 512,
+          'NEXOWIRE_RELAY_MAX_PENDING_HANDSHAKES') } : {}),
+    ...(env.NEXOWIRE_RELAY_GLOBAL_MEMORY_BUDGET_BYTES?.trim()
+      ? { globalMemoryBudgetBytes: parseBoundedInt(
+          env.NEXOWIRE_RELAY_GLOBAL_MEMORY_BUDGET_BYTES, 32 * 1024 * 1024,
+          256 * 1024, 512 * 1024 * 1024,
+          'NEXOWIRE_RELAY_GLOBAL_MEMORY_BUDGET_BYTES') } : {}),
   };
 }
 
@@ -232,6 +245,8 @@ export function assertSafeRelayConfig(
     ['maxConnections', config.maxConnections, 1, 512],
     ['upstreamHandshakeTimeoutMs', config.upstreamHandshakeTimeoutMs, 250, 30_000],
     ['shutdownGraceMs', config.shutdownGraceMs, 100, 10_000],
+    ['maxPendingUpstreamHandshakes', config.maxPendingUpstreamHandshakes, 1, 512],
+    ['globalMemoryBudgetBytes', config.globalMemoryBudgetBytes, 256 * 1024, 512 * 1024 * 1024],
   ] as const) {
     if (value !== undefined &&
         (!Number.isSafeInteger(value) || value < low || value > high)) {
