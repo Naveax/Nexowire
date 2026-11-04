@@ -26,6 +26,19 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
+      - name: Verify CLEAN-13 official Linux descriptor-bound binary
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          binary="$RUNNER_TEMP/nexowire-clean13-cloudflared-2026.10.1"
+          curl --fail --location --silent --show-error --retry 2 \
+            https://github.com/cloudflare/cloudflared/releases/download/2026.10.1/cloudflared-linux-amd64 \
+            --output "$binary"
+          echo "3bfc539f45d2620c71debb7a86be0efa737ed5ccbad9eb85c787116900e5c586  $binary" | sha256sum --check --status
+          chmod 0500 "$binary"
+          NEXOWIRE_CLOUDFLARED_TEST_BINARY="$binary" node --test --import tsx test/clean13-cloudflared-official-launch.test.ts
+          echo "NEXOWIRE_CLOUDFLARED_TEST_BINARY=$binary" >> "$GITHUB_ENV"
       - run: npm run check
       - name: Verify delegated batch-2 offline MJS and TS negative QA
         # npm test discovers .test.ts only. These source MJS checks must execute,
@@ -161,6 +174,16 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - name: Verify Cloudflare-only connector lifecycle and active Agent authorization
+        timeout-minutes: 5
+        shell: pwsh
+        run: |
+          $binary = Join-Path $env:RUNNER_TEMP 'nexowire-cloudflared-2026.10.1.exe'
+          Invoke-WebRequest -Uri 'https://github.com/cloudflare/cloudflared/releases/download/2026.10.1/cloudflared-windows-amd64.exe' -OutFile $binary
+          if ((Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant() -ne '4d2490e74082c5d48dbfedaf92576fa5bd1702379ab88eb7faa0cfbe8dc891b6') { throw 'Official cloudflared checksum mismatch' }
+          $env:NEXOWIRE_CLOUDFLARED_TEST_BINARY = $binary
+          node --test --import tsx test/clean13-cloudflared-windows-custody.test.ts test/local-first-cloudflare.test.ts test/cloudflare-connection-lifecycle.test.ts test/cloudflare-agent-upgrade.test.ts test/connection-active-authorization.test.ts test/control-plane-agent-auth.test.ts test/agent-broker.e2e.test.ts
+          if ($LASTEXITCODE -ne 0) { throw 'Connection Core verification failed' }
       - name: Verify recycled WAL and consecutive journal process restarts
         timeout-minutes: 5
         run: node --test --import tsx --test-concurrency=1 test/qa-journal-wal-recycle-p11.test.ts test/agent-operation-wal-integrity.test.ts test/agent-journal-restart-regression.test.ts test/agent-journal-owner-incarnation.test.ts test/native-agent-startup-diagnostic.test.ts

@@ -1,4 +1,5 @@
 import { bearerFromHeader } from '../security/tokens.js';
+import {normalizeControlPlaneBase,controlPlaneSecretPost} from './control-plane-network-policy.js';
 
 export interface RemoteAgentAuthorization {
   deviceId: string;
@@ -9,38 +10,6 @@ export interface ControlPlaneAgentVerifierOptions {
   serviceToken: string;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
-}
-
-function normalizeControlPlaneBase(input: string): string {
-  const raw = input.trim();
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    throw new Error('Control-plane URL is invalid.');
-  }
-
-  const loopback =
-    url.hostname === '127.0.0.1' ||
-    url.hostname === 'localhost' ||
-    url.hostname === '[::1]' ||
-    url.hostname === '::1';
-
-  if (
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash ||
-    (url.protocol !== 'https:' &&
-      !(loopback && url.protocol === 'http:'))
-  ) {
-    throw new Error(
-      'Control-plane URL must use HTTPS except for loopback development.',
-    );
-  }
-
-  url.pathname = url.pathname.replace(/\/+$/, '');
-  return url.toString().replace(/\/$/, '');
 }
 
 function validateServiceToken(input: string): string {
@@ -59,6 +28,7 @@ export function createControlPlaneAgentCredentialVerifier(
   options: ControlPlaneAgentVerifierOptions,
 ): (
   authorizationHeader: string | undefined,
+  signal?: AbortSignal,
 ) => Promise<RemoteAgentAuthorization | undefined> {
   const base = normalizeControlPlaneBase(
     options.controlPlaneUrl,
@@ -66,7 +36,7 @@ export function createControlPlaneAgentCredentialVerifier(
   const serviceToken = validateServiceToken(
     options.serviceToken,
   );
-  const fetchImpl = options.fetchImpl ?? fetch;
+  const fetchImpl = options.fetchImpl;
   const timeoutMs = options.timeoutMs ?? 3_000;
 
   if (
@@ -81,6 +51,7 @@ export function createControlPlaneAgentCredentialVerifier(
 
   return async (
     authorizationHeader: string | undefined,
+    signal?: AbortSignal,
   ): Promise<RemoteAgentAuthorization | undefined> => {
     const credential = bearerFromHeader(
       authorizationHeader,
@@ -101,7 +72,7 @@ export function createControlPlaneAgentCredentialVerifier(
     timer.unref?.();
 
     try {
-      const response = await fetchImpl(
+      const response = await controlPlaneSecretPost(
         base + '/api/v1/internal/device/authenticate',
         {
           method: 'POST',
@@ -111,8 +82,10 @@ export function createControlPlaneAgentCredentialVerifier(
             authorization: 'Bearer ' + serviceToken,
           },
           body: JSON.stringify({ credential }),
-          signal: controller.signal,
+          signal: signal ? AbortSignal.any([signal,controller.signal]) : controller.signal,
+          redirect: 'error',
         },
+      fetchImpl,
       );
 
       if (!response.ok) return undefined;
@@ -127,6 +100,8 @@ export function createControlPlaneAgentCredentialVerifier(
         body.authenticated !== true ||
         typeof deviceId !== 'string' ||
         !deviceId.trim() ||
+        deviceId!==deviceId.trim() ||
+        /[\u0000-\u001f\u007f]/.test(deviceId) ||
         deviceId.length > 128
       ) {
         return undefined;
@@ -161,7 +136,7 @@ export function createControlPlaneAgentPresenceReporter(
   const serviceToken = validateServiceToken(
     options.serviceToken,
   );
-  const fetchImpl = options.fetchImpl ?? fetch;
+  const fetchImpl = options.fetchImpl;
   const timeoutMs = options.timeoutMs ?? 3_000;
 
   if (
@@ -182,7 +157,8 @@ export function createControlPlaneAgentPresenceReporter(
     if (
       !deviceId ||
       deviceId.length > 128 ||
-      /[\r\n\0]/.test(deviceId) ||
+      deviceId!==presence.deviceId ||
+      /[\u0000-\u001f\u007f]/.test(deviceId) ||
       !Number.isFinite(atMs)
     ) {
       return false;
@@ -196,7 +172,7 @@ export function createControlPlaneAgentPresenceReporter(
     timer.unref?.();
 
     try {
-      const response = await fetchImpl(
+      const response = await controlPlaneSecretPost(
         base + '/api/v1/internal/device/presence',
         {
           method: 'POST',
@@ -223,7 +199,9 @@ export function createControlPlaneAgentPresenceReporter(
               : {}),
           }),
           signal: controller.signal,
+          redirect: 'error',
         },
+      fetchImpl,
       );
       return response.ok;
     } catch {

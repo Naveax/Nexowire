@@ -1,0 +1,73 @@
+{
+  "schema": "connection-v2-staging-evidence/v1",
+  "captured_at": "2026-11-04",
+  "candidate_version": "1.0.8-connection-v2-rc.0+939b4d6",
+  "verdict": "NO_GO",
+  "main_parent": "939b4d6beecf996f2750c736c5d4b4beb7b64488",
+  "main_tree": "46f30e68c3df6984a27c2b65b52a6e6687a8f325",
+  "source_heads": {
+    "1003": "bf9e54227f6dc19bcca440718dc822c2af91e318",
+    "1044": "835d17e05e7d06c7ea30b53635dec2a34e7f8968",
+    "1074": "5997a6d7ae43c34170016eb0963718ee35bf4a15",
+    "1077": "67fa411c6aa6135aeeac93f7197b5fd46c804884",
+    "1081": "707db9728c883d1bb027788793f4cc072768f325"
+  },
+  "source_files": 40,
+  "matrix_rows": 45,
+  "matrix_status": {
+    "MERGED_MAIN_SECURITY_REVIEW_REQUIRED": 4,
+    "EXACT_BLOB": 38,
+    "EVOLVED_SOURCE_SEMANTIC_REVIEW_REQUIRED": 3
+  },
+  "source_candidate_manifest_blob": "b00a6e3ff5d803575b3093c642c9d994c958b2be",
+  "candidate_tree_sha": "CREATED_AFTER_EVIDENCE_BLOB",
+  "git": {
+    "github_compare_merge_base": "OBSERVED",
+    "git_cherry": "NOT_RUN",
+    "git_patch_id_stable": "NOT_RUN",
+    "git_merge_tree": "NOT_RUN"
+  },
+  "previous_runs": [
+    {
+      "pr": 1074,
+      "sha": "82c596d93829ec402777fa2f856f1b2f45153df0",
+      "run_id": 41812040060,
+      "conclusion": "failure"
+    },
+    {
+      "pr": 1077,
+      "sha": "c1dd252180404e6afbe9527ed34b00c720cf5e41",
+      "run_id": 41812885695,
+      "conclusion": "failure"
+    },
+    {
+      "pr": 1081,
+      "sha": "fe40994b56d4b4ec1388b224fc22d8007a351d83",
+      "run_id": 41821338857,
+      "conclusion": "success",
+      "suite": "relay_qa_4_of_4"
+    }
+  ],
+  "acceptance": {
+    "candidate_exact_head_ci": "NOT_RUN",
+    "adversarial_negatives": "NOT_RUN",
+    "windows_task_reboot": "NOT_RUN",
+    "mcp_offnetwork_oauth_readonly": "NOT_RUN",
+    "owner_device_wss_binding": "NOT_RUN",
+    "revocation_inflight": "NOT_RUN",
+    "lost_ack_no_replay": "NOT_RUN",
+    "two_pc_read_only": "NOT_RUN",
+    "wss_101": "NOT_RUN",
+    "transfer_1gib": "NOT_RUN",
+    "soak_24hours": "NOT_RUN",
+    "provider_cost_quota": "NOT_RUN"
+  },
+  "future_sources": [
+    "V2-04",
+    "V2-07"
+  ],
+  "production_modified": false,
+  "billing_changed": false,
+  "source_branches_modified": false,
+  "main_merged": false
+}

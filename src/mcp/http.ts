@@ -63,12 +63,13 @@ export function loadedMcpRouterSha256(): string {
 }
 
 /** Metadata only: configured OAuth is not proof of a successful owner acceptance test. */
-export function hubRuntimeIdentity(ownerOauthConfigured: boolean) {
+export function hubRuntimeIdentity(ownerOauthConfigured: boolean, remoteAgentAdmission=false) {
   return {
     packageVersion: NEXOWIRE_VERSION,
     mcpRouterSha256: loadedMcpRouterSha256(),
     ownerAutoRoutingContract: 'owner-auto-v1',
     ownerOauthConfigured,
+    ...(remoteAgentAdmission?{remoteAgentAdmissionContract:'device-bound-revalidate-v1'}:{}),
   };
 }
 
@@ -169,7 +170,8 @@ export async function runHttpServer(
   });
   const tlsEnabled = hasDirectTls(config);
   const scheme = tlsEnabled ? 'https' : 'http';
-  const runtimeIdentity = hubRuntimeIdentity(Boolean(remoteMcpClient));
+  const runtimeIdentity = hubRuntimeIdentity(Boolean(remoteMcpClient),
+    config.remoteAgentAuthOnly===true&&Boolean(remoteAgentCredentialVerifier));
 
   app.get('/health', (_req: Request, res: Response) => {
     res.json({
@@ -398,6 +400,7 @@ export async function runHttpServer(
     agentAuthTokens(config),
     {
       credentialStore: context.credentials,
+      remoteOnly:config.remoteAgentAuthOnly===true,
       ...(remoteAgentCredentialVerifier
         ? {
             remoteCredentialVerifier:

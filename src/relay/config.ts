@@ -28,6 +28,12 @@ export interface NexowireRelayConfig {
   allowInsecureUpstream?: boolean;
   heartbeatMs: number;
   maxPayloadBytes: number;
+  /** Per-relay admission cap, independent of global provider capacity. */
+  maxConnections?: number;
+  /** Outbound WebSocket handshake deadline (prevents half-open resource leaks). */
+  upstreamHandshakeTimeoutMs?: number;
+  /** Shutdown grace before terminating stalled relay pairs. */
+  shutdownGraceMs?: number;
 }
 
 function optional(value: string | undefined): string | undefined {
@@ -61,8 +67,9 @@ function parseBoundedInt(
   name: string,
 ): number {
   if (!raw?.trim()) return fallback;
-  const value = Number.parseInt(raw, 10);
-  if (!Number.isInteger(value) || value < min || value > max) {
+  const trimmed = raw.trim();
+  const value = Number(trimmed);
+  if (!/^\d+$/.test(trimmed) || !Number.isSafeInteger(value) || value < min || value > max) {
     throw new Error(`Invalid ${name}: ${raw}`);
   }
   return value;
@@ -197,6 +204,16 @@ export function loadRelayConfig(
       64 * 1024 * 1024,
       'NEXOWIRE_RELAY_MAX_PAYLOAD_BYTES',
     ),
+    ...(env.NEXOWIRE_RELAY_MAX_CONNECTIONS?.trim()
+      ? { maxConnections: parseBoundedInt(env.NEXOWIRE_RELAY_MAX_CONNECTIONS,
+          128, 1, 512, 'NEXOWIRE_RELAY_MAX_CONNECTIONS') } : {}),
+    ...(env.NEXOWIRE_RELAY_UPSTREAM_HANDSHAKE_TIMEOUT_MS?.trim()
+      ? { upstreamHandshakeTimeoutMs: parseBoundedInt(
+          env.NEXOWIRE_RELAY_UPSTREAM_HANDSHAKE_TIMEOUT_MS,
+          10_000, 250, 30_000, 'NEXOWIRE_RELAY_UPSTREAM_HANDSHAKE_TIMEOUT_MS') } : {}),
+    ...(env.NEXOWIRE_RELAY_SHUTDOWN_GRACE_MS?.trim()
+      ? { shutdownGraceMs: parseBoundedInt(env.NEXOWIRE_RELAY_SHUTDOWN_GRACE_MS,
+          1_500, 100, 10_000, 'NEXOWIRE_RELAY_SHUTDOWN_GRACE_MS') } : {}),
   };
 }
 
@@ -211,6 +228,16 @@ function isLoopbackUrl(url: URL): boolean {
 export function assertSafeRelayConfig(
   config: NexowireRelayConfig,
 ): void {
+  for (const [name, value, low, high] of [
+    ['maxConnections', config.maxConnections, 1, 512],
+    ['upstreamHandshakeTimeoutMs', config.upstreamHandshakeTimeoutMs, 250, 30_000],
+    ['shutdownGraceMs', config.shutdownGraceMs, 100, 10_000],
+  ] as const) {
+    if (value !== undefined &&
+        (!Number.isSafeInteger(value) || value < low || value > high)) {
+      throw new Error('Invalid relay resource budget: ' + name);
+    }
+  }
   if (!isLoopbackHost(config.host)) {
     if (config.inboundAgentTokens.length === 0) {
       throw new Error(
