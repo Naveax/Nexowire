@@ -324,6 +324,8 @@ test('global queue budget fails closed, releases every reservation and preserves
   await slowClosed;
   await until(() => relay.resourceSnapshot().startupQueuedBytes === 0);
   assert.ok(relay.resourceSnapshot().budgetRejectionCount >= 1);
+  // A slot remains reserved until both downstream and upstream close events fire.
+  await until(() => relay.resourceSnapshot().reservedConnectionSlots === 1);
   assert.equal(relay.resourceSnapshot().reservedConnectionSlots, 1);
   fast.close();
   await closed(fast);
