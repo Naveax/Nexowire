@@ -210,8 +210,8 @@ switch($env:NEXOWIRE_CONNECTION_ACTION){
     foreach($oldAce in @($acl.Access)){[void]$acl.RemoveAccessRuleAll($oldAce)}
     $inherit=if($item.PSIsContainer){[Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [Security.AccessControl.InheritanceFlags]::ObjectInherit}else{[Security.AccessControl.InheritanceFlags]::None}
     foreach($id in @($ownerSid.Value,'S-1-5-18','S-1-5-32-544')){
-      $sidObj=New-Object Security.Principal.SecurityIdentifier($id)
-      $rule=New-Object Security.AccessControl.FileSystemAccessRule($sidObj,[Security.AccessControl.FileSystemRights]::FullControl,$inherit,[Security.AccessControl.PropagationFlags]::None,[Security.AccessControl.AccessControlType]::Allow)
+      $sidObj=[Security.Principal.SecurityIdentifier]::new($id)
+      $rule=[Security.AccessControl.FileSystemAccessRule]::new($sidObj,[Security.AccessControl.FileSystemRights]::FullControl,$inherit,[Security.AccessControl.PropagationFlags]::None,[Security.AccessControl.AccessControlType]::Allow)
       [void]$acl.AddAccessRule($rule)
     }
     $acl.SetOwner($ownerSid)
