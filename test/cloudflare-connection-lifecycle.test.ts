@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import {randomUUID} from 'node:crypto';
 import './connection-v2-windows-recovery.test.js';
+import './connection-v2-windows-hub-rollback.test.js';
 import {spawnSync} from 'node:child_process';
 import {buildCloudflareConnectionLauncher,cloudflareConnectionLifecycle,windowsConnectionControllerSourceForTest} from '../src/mcp/cloudflare-connection-lifecycle.js';
 import {inspectCloudflareConnection} from '../src/mcp/cloudflare-connection-doctor.js';

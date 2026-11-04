@@ -151,3 +151,15 @@ SYSTEM task replacement or rollback are **NOT_RUN**. A hosted Actions runner
 cannot survive a physical reboot, so its Scheduler tests cannot be labeled
 reboot acceptance. Provisioning a persistent disposable Windows VM is required;
 NAVEAX and Work-PC remain untouched. **Windows Reliability: NO-GO.**
+
+### Native rollback negative fixture (added to the Windows suite)
+
+The disposable GitHub-hosted Windows runner also registers one random
+Interactive/Limited test task, snapshots XML and the exact native definition,
+simulates a foreign action takeover and confirms guarded rollback refuses
+it without touching the changed task, then restores its original action,
+principal, logon, run level, trigger, instance policy and bounded restart
+settings from the saved XML. A synthetic credential file must remain intact.
+The marker `V2_04_NATIVE_VM_ROLLBACK_PASS` records the original XML SHA256
+and the verified dimensions. This remains **not** a SYSTEM credential rollback
+or a physical reboot test.
