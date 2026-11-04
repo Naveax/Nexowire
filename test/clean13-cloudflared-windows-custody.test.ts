@@ -116,7 +116,7 @@ test('CLEAN-13 P1-B Windows independent PowerShell 7 signer baseline',{
     "$s=Get-AuthenticodeSignature -LiteralPath $env:NEXOWIRE_CLOUDFLARED_IMAGE -ErrorAction Stop",
     "$c=$s.SignerCertificate",
     "$hash=(Get-FileHash -LiteralPath $env:NEXOWIRE_CLOUDFLARED_IMAGE -Algorithm SHA256).Hash.ToLowerInvariant()",
-    "$o=@{major=$PSVersionTable.PSVersion.Major;status=[string]$s.Status;signerPresent=($null -ne $c);subjectMatchesCloudflare=($null -ne $c -and $c.Subject -match 'Cloudflare');thumbprint=if($null -ne $c){$c.Thumbprint}else{'NONE'};sha256Pinned=($hash -eq '4d2490e74082c5d48dbfedaf92576fa5bd1702379ab88eb7faa0cfbe8dc891b6')}",
+    "$o=@{major=$PSVersionTable.PSVersion.Major;status=[string]$s.Status;signerPresent=($null -ne $c);subjectMatchesCloudflare=($null -ne $c -and $c.Subject -match 'Cloudflare');thumbprint=$(if($null -ne $c){$c.Thumbprint}else{'NONE'});sha256Pinned=($hash -eq '4d2490e74082c5d48dbfedaf92576fa5bd1702379ab88eb7faa0cfbe8dc891b6')}",
     "[Console]::Out.Write(($o | ConvertTo-Json -Compress))",
   ].join('\n');
   const started=Date.now();
