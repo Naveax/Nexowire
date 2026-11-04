@@ -79,6 +79,7 @@ export function normalizeControlPlaneBase(input:string):string{
     throw new Error('CONTROL_PLANE_URL_INVALID');
   const local=loopbackAddress(parsedHost)||url.hostname==='localhost';
   if(url.protocol==='http:'&&!local)throw new Error('CONTROL_PLANE_HTTPS_REQUIRED');
+  if(url.protocol==='https:'&&local)throw new Error('CONTROL_PLANE_UNSAFE_DESTINATION');
   if(numeric&&!local&&!(isIP(parsedHost)===4?ipv4Global(parsedHost):ipv6Global(parsedHost)))
     throw new Error('CONTROL_PLANE_UNSAFE_DESTINATION');
   if(url.port&&url.protocol==='https:'&&url.port!=='443'&&!local)
@@ -150,6 +151,7 @@ export async function controlPlaneSecretPost(
   return await new Promise<Response>((resolve,reject)=>{
     const request=(url.protocol==='https:'?httpsRequest:httpRequest)(url,{
       method:'POST',headers:Object.fromEntries(new Headers(init.headers)),
+      agent:false,
       signal:init.signal??undefined,
       family:pinned.family,
       lookup:(_hostname,_options,callback)=>callback(null,pinned.address,pinned.family),
