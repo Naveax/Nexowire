@@ -1,3 +1,4 @@
+import {isIP} from 'node:net';
 import type {NexowireConfig} from '../config.js';
 import {cloudflareConnectionConfig} from './local-first-cloudflare.js';
 
@@ -168,19 +169,30 @@ export interface ConnectionV2AuthenticatedResult {
   completedSteps:readonly string[];
 }
 
+function publicStagingHostname(hostname:string):boolean{
+  const host=hostname.toLowerCase().replace(/^\[|\]$/g,'');
+  if(!host||isIP(host)!==0||!host.includes('.')||
+     ['localhost','metadata','instance-data'].includes(host)||
+     ['.localhost','.local','.internal','.home.arpa','.onion'].some(x=>host.endsWith(x)))
+    return false;
+  return /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(host);
+}
 function exactHttpsMcpResource(raw:string,allowLoopback:boolean):URL {
   const url=new URL(raw);
   const loopback=['localhost','127.0.0.1','[::1]'].includes(url.hostname);
   if(url.toString()!==raw || url.username||url.password||url.search||url.hash||
      url.pathname!=='/mcp'||!url.hostname||
-     !(url.protocol==='https:' || (allowLoopback&&loopback&&url.protocol==='http:')))
+     !(url.protocol==='https:' || (allowLoopback&&loopback&&url.protocol==='http:'))||
+     (!allowLoopback&&!publicStagingHostname(url.hostname))||
+     (!loopback&&url.port))
     throw new Error('STAGING_RESOURCE_INVALID');
   return url;
 }
 function expectedIssuer(raw:string):string{
   const url=new URL(raw);
   if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||
-     url.port||url.toString().replace(/\/$/,'')!==raw.replace(/\/$/,'')||
+     url.port||!publicStagingHostname(url.hostname)||
+     url.toString().replace(/\/$/,'')!==raw.replace(/\/$/,'')||
      /%(?:2e|2f|5c|00)/i.test(raw))
     throw new Error('STAGING_ISSUER_INVALID');
   return url.toString().replace(/\/$/,'');
