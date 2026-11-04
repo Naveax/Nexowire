@@ -167,8 +167,10 @@ test('V2-03 authenticated MCP state requires completed tool; Hub Agent owner/dev
     remoteOnly:true,hubAdmissionContract:'device-bound-revalidate-v1',
     boundDeviceId:'pc-one',helloDeviceId:'pc-one',expiresAtMs:now+800,
   }),'AGENT_AUTHENTICATED');
-  now+=1001;
-  assert.equal(monitor.current(),'DEGRADED');
+  now+=801;
+  assert.equal(monitor.current(),'DEGRADED','device grant expires before the evidence TTL');
+  now+=200;
+  assert.equal(monitor.current(),'DEGRADED','expired evidence must not be reused');
   assert.equal(monitor.observeDisconnect('local-process'),'UNAVAILABLE');
   assert.equal(monitor.observeLocalProcess(true),'LOCAL_PROCESS_RUNNING');
   assert.equal(monitor.observeHubAgentAdmission({

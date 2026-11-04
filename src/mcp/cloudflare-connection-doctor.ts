@@ -358,6 +358,7 @@ export class ConnectionV2ReadinessMonitor {
   private boundaryAt:number|undefined;
   private mcpAt:number|undefined;
   private agentAt:number|undefined;
+  private agentExpiresAt:number|undefined;
   private degraded=false;
   private processObservedAt:number|undefined;
   private readonly ttl:number;
@@ -375,7 +376,7 @@ export class ConnectionV2ReadinessMonitor {
     this.local=running;
     this.processObservedAt=this.clock();
     if(!running){this.boundaryAt=undefined;this.mcpAt=undefined;
-      this.agentAt=undefined;this.degraded=false;}
+      this.agentAt=undefined;this.agentExpiresAt=undefined;this.degraded=false;}
     return this.current();
   }
   /** Calls the real diagnostic; a synthetic HTTP 200 is never accepted alone. */
@@ -416,10 +417,11 @@ export class ConnectionV2ReadinessMonitor {
        !grant.boundDeviceId||grant.boundDeviceId!==grant.helloDeviceId||
        grant.revoked===true||!Number.isFinite(grant.expiresAtMs)||
        grant.expiresAtMs<=now){
-      this.agentAt=undefined;this.degraded=true;
+      this.agentAt=undefined;this.agentExpiresAt=undefined;this.degraded=true;
       return this.current();
     }
     this.agentAt=now;
+    this.agentExpiresAt=grant.expiresAtMs;
     this.degraded=false;
     return this.current();
   }
@@ -428,8 +430,8 @@ export class ConnectionV2ReadinessMonitor {
   observeDisconnect(kind:'hub'|'agent'|'local-process'):ConnectionV2State{
     if(kind==='local-process')return this.observeLocalProcess(false);
     this.degraded=true;
-    if(kind==='hub'){this.boundaryAt=undefined;this.mcpAt=undefined;this.agentAt=undefined;}
-    else this.agentAt=undefined;
+    if(kind==='hub'){this.boundaryAt=undefined;this.mcpAt=undefined;this.agentAt=undefined;this.agentExpiresAt=undefined;}
+    else {this.agentAt=undefined;this.agentExpiresAt=undefined;}
     return this.current();
   }
   current():ConnectionV2State{
@@ -438,7 +440,9 @@ export class ConnectionV2ReadinessMonitor {
     const fresh=(time:number|undefined)=>time!==undefined &&
       now>=time && now-time<=this.ttl;
     const stale=(time:number|undefined)=>time!==undefined&&!fresh(time);
-    if(this.degraded||stale(this.processObservedAt)||
+    if(this.degraded||
+       (this.agentExpiresAt!==undefined&&now>=this.agentExpiresAt)||
+       stale(this.processObservedAt)||
        stale(this.boundaryAt)||stale(this.mcpAt)||stale(this.agentAt))
       return 'DEGRADED';
     return deriveConnectionV2State({
