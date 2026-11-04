@@ -1,0 +1,62 @@
+name: CLEAN15 Disposable Windows 150 Agent Cycles
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/clean15-disposable-windows.yml'
+      - 'scripts/qa/clean15-*'
+permissions:
+  contents: read
+concurrency:
+  group: clean15-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+jobs:
+  real-scheduler-150:
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'qa/clean15-')
+    runs-on: windows-latest
+    timeout-minutes: 75
+    env:
+      NEXOWIRE_CLEAN15_ISOLATED_VM: '1'
+    steps:
+      - name: VM boundary
+        shell: pwsh
+        run: |
+          if ($env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or $env:RUNNER_OS -ne 'Windows') { throw 'NOT_RUN_NOT_DISPOSABLE_VM' }
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Build native guardian for VM only
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist/native -Force | Out-Null
+          ./scripts/build-windows-job-owner.ps1 -OutputPath "$PWD/dist/native/windows-job-owner.exe"
+          if (!(Test-Path dist/native/windows-job-owner.exe)) { throw 'HELPER_MISSING' }
+          Write-Host "Unsigned QA helper: $((Get-AuthenticodeSignature dist/native/windows-job-owner.exe).Status)"
+      - name: Execute real Scheduler cycles
+        timeout-minutes: 60
+        shell: pwsh
+        run: |
+          node --import tsx scripts/qa/clean15-windows-scheduler-150.ts
+          if ($LASTEXITCODE -ne 0) { throw 'CLEAN15_REAL_150_RED' }
+      - name: Windows guardian, orphan, PID and retention negatives
+        if: always()
+        timeout-minutes: 12
+        run: node --test --import tsx --test-concurrency=1 test/native-agent-task-job-ownership.test.ts test/windows-job-owner.test.ts test/process-manager-tree-cleanup.test.ts
+      - name: Journal legacy NULL and recycled WAL fixture regressions
+        if: always()
+        timeout-minutes: 12
+        run: node --test --import tsx --test-concurrency=1 test/agent-journal-owner-incarnation.test.ts test/qa-journal-wal-recycle-p11.test.ts test/agent-journal-restart-regression.test.ts
+      - name: Preserve lifecycle evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clean15-windows-cycle-results
+          path: ${{ runner.temp }}/clean15-evidence-*/*
+          retention-days: 30
+          if-no-files-found: warn
