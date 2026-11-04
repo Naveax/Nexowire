@@ -122,3 +122,39 @@ Safety: no src/** edits; no CORE, live PCs, DNS, Cloudflare tunnel, service cred
 - Negative #3: revoke an open real-HTTP-verified device after precisely one native mutation dispatch; revalidation must close the socket and yield MUTATION_STATE_UNKNOWN with no replay. Verify empty WebSocket registry.
 - Source-only and synthetic authorization policy: this does not prove live provider issuer/owner, production service token, offhost TLS/WSS or multi-host CAS. This is real TCP/HTTP/WS product-path negative evidence; additional V2-08 owner-epoch and physical acceptance remain NOT_RUN.
 - **Status at authoring: NOT_RUN** for this new file until matching automatic exact-SHA CI finishes. No skip or weakened original assertions.
+
+
+## Latest V2-06 exact-head CI results (2026-11-04)
+
+Source SHA **84d66e964e319e6fbc1c9a747059c35dedc6fddf**. GitHub Actions [run 41826248796](https://github.com/Naveax/Nexowire/actions/runs/41826248796), attempt 1, completed **FAILURE**. Linux Node 24 job **126561611349**, command **npm run check**, exit code **1**. Windows browser-live job **126561611396**, exit code **1**. Node 22 job cancelled after security failures. Other jobs that succeeded do not override mandatory RED security cases.
+
+| New isolated attack or verification | Result | Evidence on this exact SHA |
+|---|---|---|
+| P1-C real HTTP 307 Agent authentication redirect | FAIL | Second real localhost HTTP server received 1 request, **device credential present in redirected JSON body**, Authorization header **absent**. Fetch stripped Authorization, but not the device secret in POST JSON. |
+| P1-C real HTTP 307 Agent presence redirect | FAIL | Second localhost HTTP server received 1 request, presence device ID present in redirected body, Authorization header absent. Secret-bearing requests must not redirect to another target. |
+| P1-D Linux credential hardlink | FAIL | Actual filesystem link alias not denied with the required custody reason |
+| P1-D Linux writable parent mode 0777 | FAIL | Actual chmod and file admission failed to reject parent custody violation |
+| P1-A Linux executable hardlink | FAIL | Actual filesystem alias not rejected for binary identity |
+| P1-D Linux credential symlink | PASS | Real symlink rejected before connector launch |
+| WSS wrong/shared/expired credential before HTTP 101 | PASS | Real loopback HTTP authority, Hub and ingress origin; zero unauthorized WebSocket upgrades |
+| WSS mismatched Agent hello device | PASS | Hub sends close 1008 and no Agent is registered under the wrong device |
+| WSS open-session revoke after one mutation dispatch | PASS | Actual HTTP-bound Hub session, one files.write dispatch, revalidation closes WSS, MUTATION_STATE_UNKNOWN, **exactly one** dispatch, no automatic replay |
+
+The WSS verification deliberately accelerates authorization revalidation to 250ms. It does **not** prove production 60-second behavior, immediate mutation dispatch-time revocation, real offhost HTTPS/WSS, issuer authenticity, owner enrollment or multi-host epoch CAS. The redirect fixture reports boolean secret-presence indicators without logging credential bytes. Original AI-11 P1-A/B/C/D source negatives remain RED on the unpatched #1003 stack.
+
+### Independent sibling exact-SHA checks (not integrated)
+
+- V2-01 / #1077 source **67fa411c6aa6135aeeac93f7197b5fd46c804884**: [CI 41824607523](https://github.com/Naveax/Nexowire/actions/runs/41824607523), Linux Node 24 job **126556283541**: original P1-A/B/D and CLEAN-13 Linux sealed-FD, symlink, hardlink and credential tests PASS; P1-C original admission and redirect negatives FAIL. Windows browser-live job **126556283485**: SID/ACE/parent custody, immutable-image launch and managed parent stop FAIL. Overall CI **FAIL**. Binary publisher preflight rejection alone is not trusted-image TOCTOU proof.
+- V2-02 / #1074 source **5997a6d7ae43c34170016eb0963718ee35bf4a15**: [CI 41825684508](https://github.com/Naveax/Nexowire/actions/runs/41825684508), Linux Node 24 job **126559682459**: four secret POST redirect:error tests, real HTTP 301/302/307/308 no-forward collector, DNS rebinding/A/AAAA pin, Unicode and alternate IP tests PASS. Three original P1-C Cloudflare **publication boundary** negative tests FAIL. A distinct revoke-between-session-checks negative **FAILS**, proving an owner/device revoked before the next 60-second check may still dispatch a mutation. Overall CI **FAIL**.
+- Parent #1003 new doctor at **95d9f9e431ad5a9c46adde1ecf716f84d60d8455** requires a 401 with matching WWW-Authenticate Bearer resource_metadata challenge before recording public OAuth boundary success. Legacy cloudflare-connection-lifecycle test fixture expects success for a bare 401, generating false !== true on #1044 Node 24 and Windows CI. This is fixture drift under a stricter security contract. Source-owner must update **its own test** to provide a correctly bound challenge and negative missing/wrong-challenge assertions; do not weaken product validation.
+
+### Final acceptance and preservation
+
+Original #1044 AI-11 test blobs were rechecked at the above SHA, all **byte-identical**:
+- f74ee761bfe00ff304b8c6070a26654c7c481e88 (address and credential custody, 118 lines)
+- d75ab8ddcc8ab887220bea203026f1ed98eb77a9 (path race, 95 lines)
+- 963393d00cc3368b9c76a7d8e9bb8cd4e455b706 (connection v2 negative, 179 lines)
+
+The owner branch diff from 4d8f215f36de7fe05e85a9c19fc40cc35716d705 contained only three added V2-06 fixture files and this evidence document: zero source-product edits and no changed original assertions.
+
+**P1-A/B/C/D + hosted OAuth + offhost WSS + immediate revocation + Windows process tree: NO-GO.** Actual Windows Authenticode self-signed/wrong-publisher and reparse/SID/DACL/ACE physical negatives, offhost OAuth/WSS, dispatch-time epoch fence, both siblings integrated at a single source SHA, and physical two-PC reboot/credential revocation remain **NOT_RUN or FAIL**, not PASS. The V2-08 independent handoff is recorded in the #1044 PR Conversation and #1083. No production action, CORE, Cloudflare DNS/tunnel, live PCs, main merge, branch deletion or duplicate CI dispatch occurred.
