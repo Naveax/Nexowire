@@ -37,12 +37,13 @@ BEGIN
   SELECT RAISE(ABORT, 'CORE_NATIVE_CLAIM_MARK_DENIED');
 END;
 
--- Never reset a verified in-flight claim to "unverified dispatched": it must
--- instead be quarantined as UNKNOWN on revoke/uncertain or failed readback.
+-- The native-verified marker is monotonic, including terminal UNKNOWN.
+-- Quarantine changes state only: historical verification may not be erased.
+-- Once verified, only a terminal state may remove execution eligibility.
 CREATE TRIGGER IF NOT EXISTS core_console_native_claim_no_silent_downgrade
 BEFORE UPDATE OF native_claim_verified ON device_core_console_operations
 WHEN OLD.native_claim_verified = 1
- AND NEW.native_claim_verified = 0 AND NEW.state <> 'unknown'
+ AND NEW.native_claim_verified = 0
 BEGIN
   SELECT RAISE(ABORT, 'CORE_NATIVE_CLAIM_DOWNGRADE_DENIED');
 END;
