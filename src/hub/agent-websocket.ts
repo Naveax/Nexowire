@@ -209,7 +209,9 @@ export function attachAgentWebSocketServer(
         return;
       }
 
-      broker.register(socket, hello.data);
+      // The same per-socket verifier used by periodic checks must also gate
+      // mutation admission; owner/device revocation must not wait 60 seconds.
+      broker.register(socket, hello.data, sessionChecks.get(socket));
     });
   });
 

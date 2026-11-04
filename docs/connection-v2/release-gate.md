@@ -70,3 +70,8 @@
 - Exact latest four #1084 source blobs carried into the coordinator candidate; source branch unchanged.
 - Windows PowerShell task code uses UTF-16LE `-EncodedCommand`; revised tests avoid bare-PID kills and may run 20 real Scheduler cycles on GitHub disposable Windows runners when `RUNNER_ENVIRONMENT=github-hosted`. This is **NOT_RUN until matching CI emits the cycle evidence**. Reboot/logoff remain NOT_RUN.
 - Any previously completed CI run belongs to its previous exact SHA and cannot approve the refreshed candidate.
+
+## Coordinator-only P1-C hardening proposal (not yet accepted)
+- Added public Cloudflare admission guard using existing `normalizeControlPlaneBase()` and HTTPS requirement in `src/mcp/local-first-cloudflare.ts`. This is a candidate-only integration correction, not an owner branch edit.
+- Bound the WebSocket session's real authorization checker to `AgentBroker.register()`, and invoked it at each mutation admission before queuing or sending. A revoked credential, verifier failure, or changed socket epoch must fail closed, with no mutation replay.
+- Existing original AI-11 and CLEAN-14 negative tests remain unchanged. **P1-C stays NO-GO until exact-head CI shows them GREEN on both Linux and Windows, and source owners review the 3 candidate-only changed files.**

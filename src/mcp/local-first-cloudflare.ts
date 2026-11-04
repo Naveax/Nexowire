@@ -10,6 +10,7 @@ import {createLocalFirstIngressServer,validateLocalFirstIngress,closeLocalFirstA
 import {windowsDpapiChildEnvironment} from '../security/windows-dpapi.js';
 import {readCloudflareTunnelCredential} from './cloudflare-credential-custody.js';
 import {prepareTrustedCloudflared,type TrustedCloudflared} from './cloudflare-binary-trust.js';
+import {normalizeControlPlaneBase} from '../hub/control-plane-network-policy.js';
 
 const absoluteFile=z.string().min(1).max(4096).refine(value=>
   path.isAbsolute(value)&&!/[\r\n\0]/.test(value),'Absolute local file path required');
@@ -37,6 +38,15 @@ export function cloudflareConnectionConfig(input:unknown,config:NexowireConfig){
       safe.publicHostname!.endsWith('.trycloudflare.com') ||
       safe.publicHostname!.endsWith('.ts.net'))
     throw new Error('Cloudflare connection requires stable HTTPS MCP resource and hosted OAuth authority');
+  // A local-only loopback authority is valid for development, but must never
+  // become the authenticated control plane for a publicly published tunnel.
+  // Reuse the DNS/IP-safe network policy instead of trusting URL() parsing.
+  try {
+    const controlPlane=normalizeControlPlaneBase(config.controlPlaneAgentAuth.url);
+    if(new URL(controlPlane).protocol!=='https:')throw new Error('HTTPS required');
+  } catch {
+    throw new Error('Public Cloudflare connection requires a canonical global HTTPS control-plane authority');
+  }
   if(profile.publishAgentEndpoint&&config.remoteAgentAuthOnly!==true)
     throw new Error('Public Agent endpoint requires remote-only Agent authentication');
   const tunnelConfig={

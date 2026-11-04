@@ -18,8 +18,8 @@
   "matrix_rows": 54,
   "matrix_status": {
     "MERGED_MAIN_SECURITY_REVIEW_REQUIRED": 4,
-    "EXACT_BLOB": 45,
-    "EVOLVED_SOURCE_SEMANTIC_REVIEW_REQUIRED": 5
+    "EXACT_BLOB": 42,
+    "EVOLVED_SOURCE_SEMANTIC_REVIEW_REQUIRED": 8
   },
   "source_candidate_manifest_blob": "b00a6e3ff5d803575b3093c642c9d994c958b2be",
   "candidate_tree_sha": "CREATED_AFTER_EVIDENCE_BLOB",
@@ -52,7 +52,7 @@
   ],
   "acceptance": {
     "candidate_exact_head_ci": "PENDING_NEW_SHA",
-    "adversarial_negatives": "EXPLICIT_CI_STEP_ADDED_PENDING_EXECUTION",
+    "adversarial_negatives": "PENDING_EXACT_HEAD_CANDIDATE_FIX_TEST",
     "windows_task_reboot": "SOURCE_INCLUDED_DISPOSABLE_VM_NOT_RUN",
     "mcp_offnetwork_oauth_readonly": "NOT_RUN",
     "owner_device_wss_binding": "NOT_RUN",
@@ -205,5 +205,19 @@
     "job_id": 126575061350,
     "status": "FAILURE",
     "blocker": "sequential Windows negative gate failed before original browser-live Cloudflared tests, now separated"
+  },
+  "candidate_only_security_change": {
+    "status": "UNVALIDATED_OWNER_REVIEW_REQUIRED",
+    "files": [
+      "src/mcp/local-first-cloudflare.ts",
+      "src/core/agent-broker.ts",
+      "src/hub/agent-websocket.ts"
+    ],
+    "source_branches_modified": false,
+    "implemented": [
+      "Cloudflare public control plane requires global HTTPS authority",
+      "Mutation dispatch per-socket reauthorization with epoch guard"
+    ],
+    "negative_oracle_sha": "PENDING_NEXT_COORDINATOR_SHA"
   }
 }
