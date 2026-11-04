@@ -256,6 +256,8 @@ switch($env:NEXOWIRE_CONNECTION_ACTION){
 $task=Get-ScheduledTask -TaskName $name -TaskPath '\' -ErrorAction SilentlyContinue
 [pscustomobject]@{installed=($null -ne $task);state=$(if($task){[string]$task.State}else{'NotInstalled'});autostart=($null -ne $task -and @($task.Triggers).Count -gt 0);limited=($null -ne $task -and [string]$task.Principal.RunLevel -eq 'Limited')} | ConvertTo-Json -Compress
 `;
+/** Static controller parse-audit only; no task action or secret is executed. */
+export function windowsConnectionControllerSourceForTest(){return SCRIPT;}
 async function operate(action:Action,launcher:string,taskName:string){
   return await new Promise<{installed:boolean;state:string;autostart:boolean;limited:boolean}>((resolve,reject)=>{
     const child=spawn(PS,['-NoLogo','-NoProfile','-NonInteractive','-Command',SCRIPT],{
