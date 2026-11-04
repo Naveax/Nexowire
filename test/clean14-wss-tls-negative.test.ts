@@ -110,30 +110,27 @@ test('CLEAN-14 P1-C: actual WSS verifies TLS certificate and device before 101, 
     await new Promise<void>(resolve=>authority.close(()=>resolve()));
   });
   const failedTls=dial(good,{ca:undefined});
-  const tlsFailure=await Promise.race([
-    once(failedTls,'error').then(([e])=>(e as NodeJS.ErrnoException).code),
-    once(failedTls,'open').then(()=> 'TLS_UNEXPECTED_SUCCESS'),
-  ]);
+  const tlsFailure=await new Promise<string|undefined>(resolve=>{
+    failedTls.once('error',e=>resolve((e as NodeJS.ErrnoException).code));
+    failedTls.once('open',()=>resolve('TLS_UNEXPECTED_SUCCESS'));
+  });
   assert.equal(tlsFailure,'DEPTH_ZERO_SELF_SIGNED_CERT',
     'system CA must not trust disposable cert implicitly');
 
   const wrongHostname=dial(good,{servername:'other.example.test'});
-  const hostError=await Promise.race([
-    once(wrongHostname,'error').then(([e])=>(e as NodeJS.ErrnoException).code),
-    once(wrongHostname,'open').then(()=> 'TLS_UNEXPECTED_SUCCESS'),
-  ]);
+  const hostError=await new Promise<string|undefined>(resolve=>{
+    wrongHostname.once('error',e=>resolve((e as NodeJS.ErrnoException).code));
+    wrongHostname.once('open',()=>resolve('TLS_UNEXPECTED_SUCCESS'));
+  });
   assert.equal(hostError,'ERR_TLS_CERT_ALTNAME_INVALID');
 
   const unauthorized=dial('nwx_dev_shared-legacy-credential');
-  const rejectedStatus=await Promise.race([
-    new Promise<number>((resolve,reject)=>{
-      unauthorized.once('unexpected-response',(_request,response)=>{
-        response.resume();unauthorized.terminate();resolve(response.statusCode??0);
-      });
-      unauthorized.once('open',()=>reject(Error('HTTP 101 before owner/device verification')));
-    }),
-    new Promise<never>((_,reject)=>setTimeout(()=>reject(Error('auth response timeout')),5000)),
-  ]);
+  const rejectedStatus=await new Promise<number>((resolve,reject)=>{
+    unauthorized.once('unexpected-response',(_request,response)=>{
+      response.resume();unauthorized.terminate();resolve(response.statusCode??0);
+    });
+    unauthorized.once('open',()=>reject(Error('HTTP 101 before owner/device verification')));
+  });
   assert.equal(rejectedStatus,401);
   assert.equal(broker.has(device),false);
 
