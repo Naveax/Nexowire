@@ -205,17 +205,21 @@ switch($env:NEXOWIRE_CONNECTION_ACTION){
     if(-not (Test-Path -LiteralPath $p)){throw 'CONNECTION_PROTECT_PATH_MISSING'}
     $item=Get-Item -LiteralPath $p -Force
     if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw 'CONNECTION_PROTECT_REPARSE'}
-    $acl=Get-Acl -LiteralPath $p -ErrorAction Stop
-    $acl.SetAccessRuleProtection($true,$false)
-    foreach($oldAce in @($acl.Access)){[void]$acl.RemoveAccessRuleAll($oldAce)}
+    try{
+      $acl=Get-Acl -LiteralPath $p -ErrorAction Stop
+      $acl.SetAccessRuleProtection($true,$false)
+      foreach($oldAce in @($acl.Access)){[void]$acl.RemoveAccessRuleAll($oldAce)}
+    }catch{throw 'CONNECTION_PROTECT_ACL_PREPARE'}
     $inherit=if($item.PSIsContainer){[Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [Security.AccessControl.InheritanceFlags]::ObjectInherit}else{[Security.AccessControl.InheritanceFlags]::None}
     foreach($id in @($ownerSid.Value,'S-1-5-18','S-1-5-32-544')){
-      $sidObj=[Security.Principal.SecurityIdentifier]::new($id)
-      $rule=[Security.AccessControl.FileSystemAccessRule]::new($sidObj,[Security.AccessControl.FileSystemRights]::FullControl,$inherit,[Security.AccessControl.PropagationFlags]::None,[Security.AccessControl.AccessControlType]::Allow)
-      [void]$acl.AddAccessRule($rule)
+      try{
+        $sidObj=[Security.Principal.SecurityIdentifier]::new($id)
+        $rule=[Security.AccessControl.FileSystemAccessRule]::new($sidObj,[Security.AccessControl.FileSystemRights]::FullControl,$inherit,[Security.AccessControl.PropagationFlags]::None,[Security.AccessControl.AccessControlType]::Allow)
+        [void]$acl.AddAccessRule($rule)
+      }catch{throw 'CONNECTION_PROTECT_RULE_CREATE'}
     }
-    $acl.SetOwner($ownerSid)
-    Set-Acl -LiteralPath $p -AclObject $acl -ErrorAction Stop
+    try{$acl.SetOwner($ownerSid)}catch{throw 'CONNECTION_PROTECT_OWNER_SET'}
+    try{Set-Acl -LiteralPath $p -AclObject $acl -ErrorAction Stop}catch{throw 'CONNECTION_PROTECT_ACL_COMMIT'}
   }
  }
  'install' {
