@@ -30,7 +30,11 @@ test('candidate preserves each recorded source path at its expected Git blob',()
   for (const id of ['1003','1044','1074','1077','1081']) assert.ok(matrix.some(row=>row[0]===id),id+' missing');
   for(const row of matrix) {
     assert.equal(row.length,7,'matrix schema mismatch');
-    const [id,,path,original,expected,status]=row;
+    const id = row[0]!;
+    const path = row[2]!;
+    const original = row[3]!;
+    const expected = row[4]!;
+    const status = row[5]!;
     assert.ok(!path.startsWith('/')&&!path.includes('..'),'unsafe path');
     assert.equal(sha(readFileSync(resolve(path))),expected,id+': blob changed '+path);
     if(status==='EXACT_BLOB')assert.equal(original,expected,id+': false exact claim '+path);
