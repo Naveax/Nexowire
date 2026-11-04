@@ -151,7 +151,7 @@ export async function controlPlaneSecretPost(
     const request=(url.protocol==='https:'?httpsRequest:httpRequest)(url,{
       method:'POST',headers:Object.fromEntries(new Headers(init.headers)),
       signal:init.signal??undefined,
-      family:pinned.family,autoSelectFamily:false,
+      family:pinned.family,
       lookup:(_hostname,_options,callback)=>callback(null,pinned.address,pinned.family),
     },response=>{
       const status=response.statusCode??502;
