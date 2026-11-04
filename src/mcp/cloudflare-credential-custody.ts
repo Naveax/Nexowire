@@ -83,6 +83,10 @@ function windowsCredentialAcl(file:string){
     "    $stage='ACE'",
     "    foreach($ace in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){",
     "      if($ace.AccessControlType -ne 'Allow'){continue}",
+    // An INHERIT_ONLY ACE does not grant permissions on THIS object. The
+    // child object's effective inherited ACE is inspected on its own DACL.
+    // Do not ignore ordinary inherited ACEs without InheritOnly.
+    "      if(($ace.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly) -ne 0){continue}",
     "      $sid=$ace.IdentityReference.Value",
     "      if($trusted -contains $sid){continue}",
     "      $rights=[int64]$ace.FileSystemRights",
