@@ -94,33 +94,89 @@ async function listen(server:Server):Promise<number>{
 async function close(server:Server):Promise<void>{
   await new Promise<void>(resolve=>server.close(()=>resolve()));
 }
-test('CLEAN-14 P1-C: real TCP/HTTP 307 never forwards MCP or Agent secrets to redirect target',async t=>{
-  let targetCalls=0;
-  const target=createServer((req,res)=>{targetCalls++;req.resume();res.writeHead(200).end('stolen');});
-  const targetPort=await listen(target);
-  t.after(()=>close(target));
-  let sourceCalls=0;
-  let sourceSawSecrets=0;
-  const source=createServer((req,res)=>{
-    sourceCalls++;
-    if(req.headers.authorization==='Bearer '+secret)sourceSawSecrets++;
-    req.resume();
-    res.writeHead(307,{location:`http://127.0.0.1:${targetPort}/collector`});
-    res.end();
+test('CLEAN-14 P1-C: real TCP/HTTP 301, 302, 307, 308 never forward credentials',async t=>{
+  for(const status of [301,302,307,308] as const){
+    await t.test('HTTP '+status+' with all four secret POST endpoints',async scenario=>{
+      let targetCalls=0;
+      const target=createServer((req,res)=>{
+        targetCalls++;req.resume();res.writeHead(200).end('stolen');
+      });
+      const targetPort=await listen(target);
+      scenario.after(()=>close(target));
+      let sourceCalls=0;
+      let sourceSawSecrets=0;
+      const source=createServer((req,res)=>{
+        sourceCalls++;
+        if(req.headers.authorization==='Bearer '+secret)sourceSawSecrets++;
+        req.resume();
+        res.writeHead(status,{location:`http://127.0.0.1:${targetPort}/collector`});
+        res.end();
+      });
+      const sourcePort=await listen(source);
+      scenario.after(()=>close(source));
+      const url=`http://127.0.0.1:${sourcePort}`;
+      const mc=new ControlPlaneMcpClient({controlPlaneUrl:url,serviceToken:secret});
+      await assert.rejects(mc.authenticate(mcp),ControlPlaneMcpVerifierUnavailableError);
+      assert.equal(await mc.chargeTool({accountId:'disposable',eventId:'id',toolName:'tool'}),undefined);
+      const verify=createControlPlaneAgentCredentialVerifier({controlPlaneUrl:url,serviceToken:secret});
+      const presence=createControlPlaneAgentPresenceReporter({controlPlaneUrl:url,serviceToken:secret});
+      assert.equal(await verify(agent),undefined);
+      assert.equal(await presence({deviceId:'disposable',online:false,at:'2026-11-04T00:00:00Z'}),false);
+      assert.equal(sourceCalls,4);
+      assert.equal(sourceSawSecrets,4);
+      assert.equal(targetCalls,0,'redirect receiver must never see either service or device credentials');
+    });
+  }
+});
+
+test('CLEAN-14 P1-C: full request URL validation rejects credentials, query and fragments before DNS',async()=>{
+  for(const target of [
+    'http://user:pass@localhost:54321/collect',
+    'http://localhost:54321/collect?destination=127.0.0.1',
+    'http://localhost:54321/collect#secret',
+    'http://localhost:54321/%2e%2e/collect',
+  ]){
+    await assert.rejects(controlPlaneSecretPost(target,{
+      method:'POST',redirect:'error',body:'{}',headers:{authorization:'Bearer '+secret},
+    }),/CONTROL_PLANE_URL_INVALID/,target);
+  }
+});
+
+test('CLEAN-14 P1-C: Unicode, punycode and encoded authority disguises fail closed',()=>{
+  for(const target of [
+    'https://ｅxample.test','https://ᴄontrol.example.test',
+    'https://xn--e1afmkfd.test','https://%63ontrol.example.test',
+    'https://control..example.test','https://control.example.test..',
+  ])assert.throws(()=>normalizeControlPlaneBase(target),/CONTROL_PLANE_URL_INVALID/,target);
+});
+
+test('CLEAN-14 P1-C: rebinding to nonpublic CNAME final A/AAAA denies before socket creation',async()=>{
+  let calls=0;
+  for(const address of ['127.0.0.1','169.254.169.254','10.0.0.8','192.168.1.10']){
+    await assert.rejects(controlPlaneSecretPost('https://control.example.test/api/v1/internal/mcp/authenticate',{
+      method:'POST',redirect:'error',body:'{}',headers:{authorization:'Bearer '+secret},
+    },undefined,async()=>{
+      calls++;
+      return [{address,family:4}];
+    }),/CONTROL_PLANE_DNS_UNSAFE/);
+  }
+  assert.equal(calls,4);
+});
+
+test('CLEAN-14 P1-C: revoked credential and ambiguous device identities do not authenticate',async()=>{
+  let result:Record<string,unknown>={authenticated:true,device:{deviceId:'expected-device-id'}};
+  const verify=createControlPlaneAgentCredentialVerifier({
+    controlPlaneUrl:'https://control.example.test',serviceToken:secret,
+    fetchImpl:async()=>Response.json(result),
   });
-  const sourcePort=await listen(source);
-  t.after(()=>close(source));
-  const url=`http://127.0.0.1:${sourcePort}`;
-  const mc=new ControlPlaneMcpClient({controlPlaneUrl:url,serviceToken:secret});
-  await assert.rejects(mc.authenticate(mcp),ControlPlaneMcpVerifierUnavailableError);
-  assert.equal(await mc.chargeTool({accountId:'disposable',eventId:'id',toolName:'tool'}),undefined);
-  const verify=createControlPlaneAgentCredentialVerifier({controlPlaneUrl:url,serviceToken:secret});
-  const presence=createControlPlaneAgentPresenceReporter({controlPlaneUrl:url,serviceToken:secret});
-  assert.equal(await verify(agent),undefined);
-  assert.equal(await presence({deviceId:'disposable',online:false,at:'2026-11-04T00:00:00Z'}),false);
-  assert.equal(sourceCalls,4);
-  assert.equal(sourceSawSecrets,4);
-  assert.equal(targetCalls,0,'redirect receiver must never see service or device credentials');
+  assert.deepEqual(await verify(agent),{deviceId:'expected-device-id'});
+  for(const id of [' expected-device-id','expected-device-id ','bad\\nidentifier','bad\\u0000identifier']){
+    result={authenticated:true,device:{deviceId:id.replace('\\n','\n').replace('\\u0000','\u0000')}};
+    assert.equal(await verify(agent),undefined,'invalid identity must be refused');
+  }
+  result={authenticated:false,device:{deviceId:'expected-device-id'}};
+  assert.equal(await verify(agent),undefined,'revoked or expired authority must deny on fresh verification');
+  assert.equal(await verify('Bearer shared-legacy-token'),undefined,'shared token is not a device credential');
 });
 
 test('CLEAN-14 P1-C: real TCP lookup pins the first checked DNS answer despite later rebinding',async t=>{
