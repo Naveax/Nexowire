@@ -260,7 +260,10 @@ $task=Get-ScheduledTask -TaskName $name -TaskPath '\' -ErrorAction SilentlyConti
 export function windowsConnectionControllerSourceForTest(){return SCRIPT;}
 async function operate(action:Action,launcher:string,taskName:string){
   return await new Promise<{installed:boolean;state:string;autostart:boolean;limited:boolean}>((resolve,reject)=>{
-    const child=spawn(PS,['-NoLogo','-NoProfile','-NonInteractive','-Command',SCRIPT],{
+    // Windows PowerShell 5.1 parses the exact UTF-16LE command rather than a
+    // multi-line -Command argument that Windows argv quoting can distort.
+    const encoded=Buffer.from(SCRIPT,'utf16le').toString('base64');
+    const child=spawn(PS,['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',encoded],{
       cwd:'C:\\Windows\\System32',windowsHide:true,stdio:['ignore','pipe','pipe'],
       env:{...windowsDpapiChildEnvironment(),NEXOWIRE_CONNECTION_ACTION:action,
         NEXOWIRE_CONNECTION_TASK:taskName,NEXOWIRE_CONNECTION_LAUNCHER:launcher},
