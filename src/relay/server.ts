@@ -5,7 +5,7 @@ import {
   type Server as HttpsServer,
 } from 'node:https';
 import type { Server as HttpServer } from 'node:http';
-import type { Socket } from 'node:net';
+import type { Duplex } from 'node:stream';
 import WebSocket, { WebSocketServer } from 'ws';
 import {
   assertSafeRelayConfig,
@@ -33,7 +33,7 @@ function isLoopbackAddress(address: string | undefined): boolean {
   );
 }
 
-function rejectUpgrade(socket: Socket, status: 401 | 404 | 503): void {
+function rejectUpgrade(socket: Duplex, status: 401 | 404 | 503): void {
   const reason = status === 401 ? 'Unauthorized' :
     status === 404 ? 'Not Found' : 'Service Unavailable';
   socket.end('HTTP/1.1 ' + status + ' ' + reason + '\r\n' +

@@ -96,7 +96,7 @@ test('unknown upgrade path and normal HTTP GET fail closed without spawning upst
 
 test('one stalled upstream occupies only one slot and fails at handshake deadline', async t => {
   const upstream = createServer();
-  const sockets = new Set<import('node:net').Socket>();
+  const sockets = new Set<import('node:stream').Duplex>();
   upstream.on('upgrade', (_req, socket) => {
     sockets.add(socket);
     socket.once('close', () => sockets.delete(socket));
@@ -122,7 +122,7 @@ test('one stalled upstream occupies only one slot and fails at handshake deadlin
 
 test('shutdown is idempotent and cannot hang on an unresponsive upstream', async t => {
   const upstream = createServer();
-  const sockets = new Set<import('node:net').Socket>();
+  const sockets = new Set<import('node:stream').Duplex>();
   upstream.on('upgrade', (_req, socket) => {
     sockets.add(socket);
     socket.once('close', () => sockets.delete(socket));
