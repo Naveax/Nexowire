@@ -114,9 +114,10 @@ export async function stageDescriptorBoundImage(bytes:Buffer,expectedDigest:stri
     if(unlinkAfterSeal){await fs.unlink(stage);await fs.rmdir(directory);}
     // Inherited fd 3 names the already-open inode in the child. Renaming or
     // replacing a test-stage pathname cannot redirect execve to another image.
-    const retained=descriptor;const ownedDirectory=directory;
+    const retained=descriptor;const ownedDirectory=unlinkAfterSeal?undefined:directory;
     return {command:'/proc/self/fd/3',imageFd:retained.fd,
-      dispose:async()=>{try{await retained.close();}finally{await fs.rm(ownedDirectory,{recursive:true,force:true});}}};
+      dispose:async()=>{try{await retained.close();}
+        finally{if(ownedDirectory)await fs.rm(ownedDirectory,{recursive:true,force:true});}}};
   }catch(error){
     await descriptor?.close().catch(()=>{});
     if(directory)await fs.rm(directory,{recursive:true,force:true}).catch(()=>{});
