@@ -61,3 +61,7 @@
 
 ## V2-04 source refresh
 - #1084 Windows recovery source advanced by three commits: `84cfcaa...` → `b9312a456b0feafede4b4f3c9bd53e108f5af5c6`. `src/mcp/cloudflare-connection-lifecycle.ts` and `test/cloudflare-connection-lifecycle.test.ts` exact new blobs incorporated. Previous candidate CI remains attached to its original SHA; successor must pass its own checks.
+
+## Separate Windows negative oracle (latest coordinator patch)
+- Prior exact SHA `aa4fc209ac4fd8486bf4dd68b65238a9f0584994`, CI `41830183272`: Windows browser-live ended RED at the first newly added negative job step, leaving downstream Cloudflared custody/Task validation unexecuted.
+- Split Windows CI into independent matrix job `connection-v2-negative-windows` on Node 22 and Node 24. Existing `browser-live` original Cloudflared credential custody, native image and Windows process cleanup tests remain intact and can now run separately. Both jobs **must pass**. Current new exact SHA result is pending.

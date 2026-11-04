@@ -160,5 +160,36 @@
       ],
       "reason": "Windows lifecycle owner latest source edits; release remains NO_GO"
     }
-  ]
+  ],
+  "integrated_negative_ci": {
+    "linux": {
+      "job": "test",
+      "matrix_node_versions": [
+        22,
+        24
+      ],
+      "status": "PENDING_NEXT_HEAD"
+    },
+    "windows": {
+      "job": "connection-v2-negative-windows",
+      "matrix_node_versions": [
+        22,
+        24
+      ],
+      "status": "PENDING_NEXT_HEAD"
+    },
+    "windows_original": {
+      "job": "browser-live",
+      "node_version": 24,
+      "status": "PENDING_NEXT_HEAD"
+    },
+    "fail_closed": true
+  },
+  "previous_candidate_ci_browser_stage": {
+    "sha": "aa4fc209ac4fd8486bf4dd68b65238a9f0584994",
+    "run_id": 41830183272,
+    "job_id": 126575061350,
+    "status": "FAILURE",
+    "blocker": "sequential Windows negative gate failed before original browser-live Cloudflared tests, now separated"
+  }
 }
