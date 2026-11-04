@@ -93,7 +93,12 @@ test('V2-03 ingress rejects query, spoofed Host/Origin, oversized upstream outpu
   assert.equal(await send('/mcp?debug=true','mcp.example.test'),404);
   assert.equal(await send('/mcp','spoof.example.test'),403);
   assert.equal(await send('/mcp','mcp.example.test','https://attacker.example.test'),403);
-  await assert.rejects(send('/mcp','mcp.example.test'));
+  await assert.rejects(async()=>{
+    const response=await fetch('http://127.0.0.1:'+port+'/mcp',{
+      method:'POST',headers:{host:'mcp.example.test',
+        authorization:'Bearer disposable01234567890'},body:'{}'});
+    await response.arrayBuffer();
+  },'bounded ingress must terminate an oversized streamed response');
   const result=await new Promise<boolean>(resolve=>{
     const req=request({host:'127.0.0.1',port,method:'CONNECT',path:'/mcp'});
     req.once('connect',()=>resolve(false));
@@ -105,7 +110,7 @@ test('V2-03 ingress rejects query, spoofed Host/Origin, oversized upstream outpu
 });
 test('V2-03 bridge rejects upstream HTTP 101 with forged WebSocket accept',async t=>{
   const hub=createServer();
-  const peers=new Set<import('node:net').Socket>();
+  const peers=new Set<import('node:stream').Duplex>();
   hub.on('upgrade',(_req,socket)=>{
     peers.add(socket);socket.once('close',()=>peers.delete(socket));
     socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n'+
