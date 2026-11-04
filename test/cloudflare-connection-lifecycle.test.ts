@@ -4,7 +4,8 @@ import {mkdtemp,rm,writeFile,readFile} from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import {randomUUID} from 'node:crypto';
-import {buildCloudflareConnectionLauncher,cloudflareConnectionLifecycle} from '../src/mcp/cloudflare-connection-lifecycle.js';
+import {spawnSync} from 'node:child_process';
+import {buildCloudflareConnectionLauncher,cloudflareConnectionLifecycle,windowsConnectionControllerSourceForTest} from '../src/mcp/cloudflare-connection-lifecycle.js';
 import {inspectCloudflareConnection} from '../src/mcp/cloudflare-connection-doctor.js';
 import {loadConfig} from '../src/config.js';
 
@@ -89,6 +90,93 @@ test('Cloudflare connection task refuses reserved Hub and protected boot task id
   for(const name of ['Nexowire Hub','Nexowire Hub Boot','Nexowire Stack']){
     await assert.rejects(cloudflareConnectionLifecycle('status',undefined,{taskName:name}),/Invalid connection task name/);
   }
+});
+
+test('Windows controller PowerShell 5.1 source parses without executing any task',{
+  skip:process.platform!=='win32',timeout:30000,
+},()=>{
+  const parse=String.raw`$source=[Console]::In.ReadToEnd()
+$tokens=$null
+$errors=$null
+[System.Management.Automation.Language.Parser]::ParseInput($source,[ref]$tokens,[ref]$errors) | Out-Null
+foreach($error in $errors){
+  # Only bounded parser diagnostic IDs/line/column, never source or secrets.
+  $id=[string]$error.ErrorId
+  if($id -notmatch '^[a-zA-Z0-9_-]{1,100}{
+  skip:process.platform!=='win32',timeout:120000,
+},async t=>{
+  const root=await mkdtemp(path.join(os.tmpdir(),'nw-cf-task-'));
+  const file=path.join(root,'profile.json');await writeFile(file,JSON.stringify(profile()));
+  const tokenFile=path.join(root,'protected-token.txt');await writeFile(tokenFile,'disposable-service-token-12345');
+  const options={root,taskName:'Nexowire Cloudflare Test '+randomUUID(),
+    env:{...environment,NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_FILE:tokenFile},
+    executable:process.execPath,cli:path.resolve('dist/src/cli.js')};
+  t.after(async()=>{
+    await cloudflareConnectionLifecycle('uninstall',undefined,options);
+    await rm(root,{recursive:true,force:true,maxRetries:10,retryDelay:100});
+  });
+  const installed=await cloudflareConnectionLifecycle('install',file,options);
+  assert.equal(installed.installed,true);assert.equal(installed.limited,true);assert.equal(installed.autostart,true);
+  assert.notEqual(installed.state,'Running','registration does not interrupt or auto-start any existing process');
+  const before=await readFile(path.join(root,'launch.ps1'),'utf8');
+  const beforeHash=await readFile(path.join(root,'launch.ps1.sha256'),'utf8');
+  assert.match(beforeHash,/^[A-F0-9]{64}\n$/);
+  await assert.rejects(cloudflareConnectionLifecycle('install',file,options),/already installed/);
+  assert.equal(await readFile(path.join(root,'launch.ps1'),'utf8'),before);
+  // An attacker can preserve the BOM and banner; the pinned digest must still deny.
+  await writeFile(path.join(root,'launch.ps1'),before+'# unauthorized change\r\n');
+  await assert.rejects(cloudflareConnectionLifecycle('start',undefined,options),/refused/);
+  await writeFile(path.join(root,'launch.ps1'),before);
+  assert.equal(await readFile(path.join(root,'launch.ps1.sha256'),'utf8'),beforeHash);
+  await cloudflareConnectionLifecycle('uninstall',undefined,options);
+  assert.equal((await cloudflareConnectionLifecycle('status',undefined,options)).installed,false);
+  await assert.rejects(readFile(path.join(root,'launch.ps1.sha256'),'utf8'),{code:'ENOENT'});
+  // A clean uninstall permits a fresh explicit registration.
+  assert.equal((await cloudflareConnectionLifecycle('install',file,options)).installed,true);
+});
+
+test('Windows connection task stop terminates its real disposable process tree',{
+  skip:process.platform!=='win32',timeout:120000,
+},async t=>{
+  const root=await mkdtemp(path.join(os.tmpdir(),'nw-cf-tree-'));
+  const profileFile=path.join(root,'profile.json');await writeFile(profileFile,JSON.stringify(profile()));
+  const tokenFile=path.join(root,'token.txt');await writeFile(tokenFile,'disposable-service-token-12345');
+  const pidFile=path.join(root,'pids.json'),cli=path.join(root,'disposable.cjs');
+  await writeFile(cli,`const {spawn}=require('node:child_process');const fs=require('node:fs');
+const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});
+fs.writeFileSync(${JSON.stringify(pidFile)},JSON.stringify({parent:process.pid,child:child.pid}));setInterval(()=>{},1000);`);
+  const options={root,taskName:'Nexowire Cloudflare Tree Test '+randomUUID(),executable:process.execPath,cli,
+    env:{...environment,NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_FILE:tokenFile}};
+  let pids:{parent:number;child:number}|undefined;
+  const alive=(pid:number)=>{try{process.kill(pid,0);return true;}catch{return false;}};
+  t.after(async()=>{
+    await cloudflareConnectionLifecycle('stop',undefined,options);
+    if(pids)for(const pid of [pids.child,pids.parent])if(alive(pid))process.kill(pid,'SIGKILL');
+    await cloudflareConnectionLifecycle('uninstall',undefined,options);
+    await rm(root,{recursive:true,force:true,maxRetries:10,retryDelay:100});
+  });
+  await cloudflareConnectionLifecycle('install',profileFile,options);
+  await cloudflareConnectionLifecycle('start',undefined,options);
+  const deadline=Date.now()+20000;
+  while(!pids&&Date.now()<deadline){try{pids=JSON.parse(await readFile(pidFile,'utf8'));}catch{await new Promise(r=>setTimeout(r,100));}}
+  assert.ok(pids,'limited user-logon task must actually execute the disposable fixture');
+  assert.equal(alive(pids.parent),true);assert.equal(alive(pids.child),true);
+  await cloudflareConnectionLifecycle('stop',undefined,options);
+  const stopDeadline=Date.now()+10000;
+  while((alive(pids.parent)||alive(pids.child))&&Date.now()<stopDeadline)await new Promise(r=>setTimeout(r,100));
+  assert.equal(alive(pids.parent),false,'task stop must stop the managed parent');
+  assert.equal(alive(pids.child),false,'task stop must leave no orphan connector descendant');
+});
+){$id='UNRECOGNIZED'}
+  [Console]::Out.WriteLine($id+'@'+$error.Extent.StartLineNumber+':'+$error.Extent.StartColumnNumber)
+}
+if(@($errors).Count -gt 0){exit 3}
+exit 0`;
+  const result=spawnSync('C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe',
+    ['-NoLogo','-NoProfile','-NonInteractive','-Command',parse],{
+      input:windowsConnectionControllerSourceForTest(),encoding:'utf8',timeout:15000,windowsHide:true,
+    });
+  assert.equal(result.status,0,'PowerShell parser failures: '+(result.stdout??'').slice(0,1000));
 });
 
 test('Windows user-logon task registers limited and cannot be silently overwritten',{
