@@ -113,7 +113,7 @@ export async function stageDescriptorBoundImage(bytes:Buffer,expectedDigest:stri
     // replacing the staging pathname cannot redirect execve to another image.
     const retained=descriptor;const ownedDirectory=directory;
     return {command:'/proc/self/fd/3',imageFd:retained.fd,
-      dispose:async()=>{await retained.close();await fs.rm(ownedDirectory,{recursive:true,force:true});}};
+      dispose:async()=>{try{await retained.close();}finally{await fs.rm(ownedDirectory,{recursive:true,force:true});}}};
   }catch(error){
     await descriptor?.close().catch(()=>{});
     if(directory)await fs.rm(directory,{recursive:true,force:true}).catch(()=>{});
