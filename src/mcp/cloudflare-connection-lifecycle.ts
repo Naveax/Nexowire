@@ -10,7 +10,7 @@ import {cloudflareConnectionConfig} from './local-first-cloudflare.js';
 
 const PS='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
 const TASK='Nexowire Cloudflare Connection';
-type Action='install'|'status'|'start'|'stop'|'uninstall';
+type Action='install'|'status'|'start'|'stop'|'uninstall'|'protect';
 export interface CloudflareLifecycleOptions{
   root?:string;taskName?:string;env?:NodeJS.ProcessEnv;executable?:string;cli?:string;
 }
@@ -195,6 +195,29 @@ if($task){
  }
 }
 switch($env:NEXOWIRE_CONNECTION_ACTION){
+ 'protect' {
+  // Only invoked after exclusive creation of this connection's launcher and
+  // digest, and only when the named user task does not yet exist.
+  if($task){throw 'CONNECTION_ALREADY_INSTALLED'}
+  $paths=@((Split-Path -Parent $launcher),$launcher,($launcher+'.sha256'))
+  $ownerSid=[Security.Principal.WindowsIdentity]::GetCurrent().User
+  foreach($p in $paths){
+    if(-not (Test-Path -LiteralPath $p)){throw 'CONNECTION_PROTECT_PATH_MISSING'}
+    $item=Get-Item -LiteralPath $p -Force
+    if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw 'CONNECTION_PROTECT_REPARSE'}
+    $acl=Get-Acl -LiteralPath $p -ErrorAction Stop
+    $acl.SetAccessRuleProtection($true,$false)
+    foreach($oldAce in @($acl.Access)){[void]$acl.RemoveAccessRuleAll($oldAce)}
+    $inherit=if($item.PSIsContainer){[Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [Security.AccessControl.InheritanceFlags]::ObjectInherit}else{[Security.AccessControl.InheritanceFlags]::None}
+    foreach($id in @($ownerSid.Value,'S-1-5-18','S-1-5-32-544')){
+      $sidObj=New-Object Security.Principal.SecurityIdentifier($id)
+      $rule=New-Object Security.AccessControl.FileSystemAccessRule($sidObj,[Security.AccessControl.FileSystemRights]::FullControl,$inherit,[Security.AccessControl.PropagationFlags]::None,[Security.AccessControl.AccessControlType]::Allow)
+      [void]$acl.AddAccessRule($rule)
+    }
+    $acl.SetOwner($ownerSid)
+    Set-Acl -LiteralPath $p -AclObject $acl -ErrorAction Stop
+  }
+ }
  'install' {
   if($task){throw 'CONNECTION_ALREADY_INSTALLED'}
   $action=New-ScheduledTaskAction -Execute 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' -Argument $argument
@@ -271,6 +294,7 @@ export async function cloudflareConnectionLifecycle(action:Action,profile?:strin
   try{
     const digest=createHash('sha256').update(Buffer.from(source,'utf8')).digest('hex').toUpperCase();
     await fs.writeFile(launcher+'.sha256',digest+'\n',{flag:'wx',mode:0o600});
+    await operate('protect',launcher,task);
     return await operate('install',launcher,task);
   }
   catch(error){
