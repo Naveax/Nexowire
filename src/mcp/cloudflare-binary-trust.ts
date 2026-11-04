@@ -59,7 +59,7 @@ function windowsPublisherSignature(file:string){
     "  [Console]::Error.Write('C13:ERROR_'+$stage)",
     "  exit 29",
     "}",
-  ].join('\\n');
+  ].join('\n');
   const started=Date.now();
   const result=spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
     ['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(ps,'utf16le').toString('base64')],
