@@ -48,11 +48,23 @@ test('public doctor distinguishes OAuth metadata from authenticated tool readine
     calls++;
     if(calls===1){assert.equal(String(input),'https://mcp.example.test/.well-known/oauth-protected-resource/mcp');
       return Response.json({resource:c.mcpResourceUrl,authorization_servers:['https://control.example.test/']});}
-    assert.equal(init?.method,'POST');return new Response('',{status:401});
+    assert.equal(init?.method,'POST');return new Response('',{status:401,headers:{
+      'www-authenticate':'Bearer resource_metadata="https://mcp.example.test/.well-known/oauth-protected-resource/mcp"',
+    }});
   });
   assert.equal(calls,2);assert.equal(status.publicBoundaryVerified,true);
   assert.equal(status.authenticatedToolVerified,false);
 });
+test('unbound 401 without exact OAuth challenge cannot pass the public boundary',async()=>{
+  let calls=0;
+  const status=await inspectCloudflareConnection(profile(),config(),async()=>{
+    return ++calls===1?Response.json({resource:'https://mcp.example.test/mcp',
+      authorization_servers:['https://control.example.test']}):new Response('',{status:401});
+  });
+  assert.equal(calls,2);assert.equal(status.publicBoundaryVerified,false);
+  assert.equal(status.stage,'PUBLIC_AUTH_BOUNDARY_FAILED');
+});
+
 test('wrong public resource or issuer stops diagnostic before MCP POST',async()=>{
   for(const metadata of [
     {resource:'https://wrong.example.test/mcp',authorization_servers:['https://control.example.test']},
