@@ -77,12 +77,12 @@ export async function prepareTrustedCloudflared(binary:string,profileDigest:stri
     windowsPublisherSignature(binary);
     deny('Cloudflared Windows immutable image launch requires native signed handle custodian');
   }
-  return stageDescriptorBoundImage(bytes,expected);
+  return stageDescriptorBoundImage(bytes,expected,true);
 }
 
 /** Standalone low-level launch primitive for disposable tests; callers must
  * independently authorize provenance before invoking this primitive. */
-export async function stageDescriptorBoundImage(bytes:Buffer,expectedDigest:string):Promise<TrustedCloudflared>{
+export async function stageDescriptorBoundImage(bytes:Buffer,expectedDigest:string,unlinkAfterSeal=false):Promise<TrustedCloudflared>{
   if(process.platform!=='linux')
     deny('Cloudflared immutable file-descriptor launch is unavailable on this platform');
   if(bytes.length<1||bytes.length>LIMIT||sha256(bytes)!==expectedDigest)
@@ -109,8 +109,11 @@ export async function stageDescriptorBoundImage(bytes:Buffer,expectedDigest:stri
     const verified=await descriptor.readFile();
     if(sha256(verified)!==expectedDigest||!sameFile(observed,await descriptor.stat({bigint:true})))
       deny('Cloudflared staged image verification failed');
+    // Production unlinks the verified stage immediately: only the open FD
+    // remains and a pathname/hardlink cannot be swapped in before exec.
+    if(unlinkAfterSeal){await fs.unlink(stage);await fs.rmdir(directory);}
     // Inherited fd 3 names the already-open inode in the child. Renaming or
-    // replacing the staging pathname cannot redirect execve to another image.
+    // replacing a test-stage pathname cannot redirect execve to another image.
     const retained=descriptor;const ownedDirectory=directory;
     return {command:'/proc/self/fd/3',imageFd:retained.fd,
       dispose:async()=>{try{await retained.close();}finally{await fs.rm(ownedDirectory,{recursive:true,force:true});}}};
