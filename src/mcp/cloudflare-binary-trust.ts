@@ -77,8 +77,16 @@ export async function prepareTrustedCloudflared(binary:string,profileDigest:stri
     windowsPublisherSignature(binary);
     deny('Cloudflared Windows immutable image launch requires native signed handle custodian');
   }
+  return stageDescriptorBoundImage(bytes,expected);
+}
+
+/** Standalone low-level launch primitive for disposable tests; callers must
+ * independently authorize provenance before invoking this primitive. */
+export async function stageDescriptorBoundImage(bytes:Buffer,expectedDigest:string):Promise<TrustedCloudflared>{
   if(process.platform!=='linux')
     deny('Cloudflared immutable file-descriptor launch is unavailable on this platform');
+  if(bytes.length<1||bytes.length>LIMIT||sha256(bytes)!==expectedDigest)
+    deny('Cloudflared staging input digest rejected');
   let directory:string|undefined;
   let descriptor:Awaited<ReturnType<typeof fs.open>>|undefined;
   try{
@@ -99,7 +107,7 @@ export async function prepareTrustedCloudflared(binary:string,profileDigest:stri
        (dirStat.mode&0o077)!==0)
       deny('Cloudflared sealed staging custody rejected');
     const verified=await descriptor.readFile();
-    if(sha256(verified)!==expected||!sameFile(observed,await descriptor.stat()))
+    if(sha256(verified)!==expectedDigest||!sameFile(observed,await descriptor.stat()))
       deny('Cloudflared staged image verification failed');
     // Inherited fd 3 names the already-open inode in the child. Renaming or
     // replacing the staging pathname cannot redirect execve to another image.
