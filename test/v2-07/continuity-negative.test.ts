@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {randomUUID} from 'node:crypto';
 import WebSocket from 'ws';
-import {AgentBroker} from '../src/core/agent-broker.js';
-import {attachAgentWebSocketServer} from '../src/hub/agent-websocket.js';
-import {AGENT_PROTOCOL_VERSION} from '../src/protocol/agent.js';
+import {AgentBroker} from '../../src/core/agent-broker.js';
+import {attachAgentWebSocketServer} from '../../src/hub/agent-websocket.js';
+import {AGENT_PROTOCOL_VERSION} from '../../src/protocol/agent.js';
 import {
   boundHubRetryWait, classifyHubReconnectFailure, parseHubEndpoints,
   planNextHubAttempt,
-} from '../src/agent/native-agent.js';
-import {connectionContinuityState} from '../src/operations/agent-connection-journal-reconciliation.js';
+} from '../../src/agent/native-agent.js';
+import {connectionContinuityState} from '../../src/operations/agent-connection-journal-reconciliation.js';
 
 const TOKEN = 'v2-07-isolated-fixture-only';
 const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
@@ -192,9 +192,9 @@ test('V2-07 lost ACK then Hub restart preserves one UUID, UNKNOWN and no second 
   const {mkdtemp, rm} = await import('node:fs/promises');
   const {tmpdir} = await import('node:os');
   const path = await import('node:path');
-  const {IdempotencyStore, operationFingerprint} = await import('../src/operations/idempotency-store.js');
-  const {AgentOperationJournal} = await import('../src/agent/operation-journal.js');
-  const {fingerprintAgentRequest} = await import('../src/agent/request-cache.js');
+  const {IdempotencyStore, operationFingerprint} = await import('../../src/operations/idempotency-store.js');
+  const {AgentOperationJournal} = await import('../../src/agent/operation-journal.js');
+  const {fingerprintAgentRequest} = await import('../../src/agent/request-cache.js');
   const root = await mkdtemp(path.join(tmpdir(), 'v2-07-unknown-'));
   const hub = new IdempotencyStore(path.join(root, 'hub'));
   const journal = new AgentOperationJournal(path.join(root, 'agent.sqlite'));
