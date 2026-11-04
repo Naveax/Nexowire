@@ -112,3 +112,13 @@ Safety: no src/** edits; no CORE, live PCs, DNS, Cloudflare tunnel, service cred
 - #1077 candidate 67fa411c6aa6135aeeac93f7197b5fd46c804884, CI run [41824607523](https://github.com/Naveax/Nexowire/actions/runs/41824607523), attempt 1: Linux Node 24 job 126556283541 showed original P1-A/B/D focused assertions **PASS**, plus Linux CLEAN-13 sealed-FD, symlink/hardlink, custody checks **PASS**. Original P1-C assertions remain **FAIL**. Windows browser-live job 126556283485 failed custody SID/ACE/parent, immutable native launch and task parent stop. Overall CI **FAIL**.
 - #1074 candidate daa834ef588261905529c845d619c9df34b332f7, CI run [41825280799](https://github.com/Naveax/Nexowire/actions/runs/41825280799) was **in_progress** at this follow-up; do not rerun, do not imply all-green.
 - **No combined #1077+#1074+current #1003 exact SHA acceptance was performed. Overall still NO-GO.** Source-owner PR heads are moving; re-read exact HEAD and base for any later gate.
+
+
+## Additional V2-06 real HTTP/WSS authority oracle (candidate before CI)
+
+- New test/v206-wss-authority-real-http.test.ts uses three genuine loopback TCP listeners: a disposable HTTP control-plane credential authority (not a mocked fetch), the actual Hub Agent WebSocket server with real AgentBroker and device-bound verifier, and the actual Cloudflare loopback origin bridge. No public tunnel or real user token.
+- Negative #1: shared/wrong/expired credentials must receive HTTP 401 before HTTP 101; assert no unauthorized websocket or Agent registration and three actual control-plane requests.
+- Negative #2: a syntactically valid token bound to one device cannot register a different Agent hello device (close code 1008, zero registration).
+- Negative #3: revoke an open real-HTTP-verified device after precisely one native mutation dispatch; revalidation must close the socket and yield MUTATION_STATE_UNKNOWN with no replay. Verify empty WebSocket registry.
+- Source-only and synthetic authorization policy: this does not prove live provider issuer/owner, production service token, offhost TLS/WSS or multi-host CAS. This is real TCP/HTTP/WS product-path negative evidence; additional V2-08 owner-epoch and physical acceptance remain NOT_RUN.
+- **Status at authoring: NOT_RUN** for this new file until matching automatic exact-SHA CI finishes. No skip or weakened original assertions.
