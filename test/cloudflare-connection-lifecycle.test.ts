@@ -236,3 +236,29 @@ fs.writeFileSync(${JSON.stringify(pidFile)},JSON.stringify({parent:process.pid,c
   assert.equal(alive(pids.parent),false,'task stop must stop the managed parent');
   assert.equal(alive(pids.child),false,'task stop must leave no orphan connector descendant');
 });
+
+test('V2-04: existing SYSTEM Hub Boot is a separate user-Hub start blocker',async()=>{
+  const {hubHandoffBlockers,assessHubBootRepairPreflight}=await import('../src/hub/hub-lifecycle.js');
+  const args={legacyStackTaskState:null,standaloneHubTaskState:null,listenerPid:null};
+  assert.deepEqual(hubHandoffBlockers({...args,bootTaskState:'Ready',bootTaskPrincipalSid:'S-1-5-18'}),['SYSTEM_HUB_BOOT_ENABLED']);
+  assert.deepEqual(hubHandoffBlockers({...args,bootTaskState:'Disabled',bootTaskPrincipalSid:'S-1-5-18'}),[]);
+  assert.deepEqual(hubHandoffBlockers({...args,bootTaskState:'Disabled',bootTaskPrincipalSid:'S-1-5-21-foreign'}),['HUB_BOOT_PRINCIPAL_UNVERIFIED']);
+  const sha='A'.repeat(64);
+  const evidence={target:'disposable-windows-vm' as const,bootPrincipalSid:'S-1-5-18',
+    originalTaskXmlHash:sha,sealedBackupTaskXmlHash:sha.toLowerCase(),
+    originalTaskActionPrincipalTriggersVerified:true,originalLauncherBackupVerified:true,
+    rollbackCredentialsVerified:true,replacementPublisherVerified:true,
+    replacementSignedDigestVerified:true,agentBrokerCompatibilityVerified:true,
+    userHubDisabled:true,noUnownedHubListener:true};
+  assert.deepEqual(assessHubBootRepairPreflight(evidence),{eligibleForManualLabReview:true,blockers:[],mutationAuthorized:false});
+  const blocked=assessHubBootRepairPreflight({...evidence,target:'production-host',rollbackCredentialsVerified:false,replacementPublisherVerified:false});
+  assert.equal(blocked.eligibleForManualLabReview,false);
+  assert.equal(blocked.mutationAuthorized,false);
+  assert.deepEqual(blocked.blockers,['HUB_BOOT_NON_DISPOSABLE_TARGET','HUB_BOOT_CREDENTIAL_ROLLBACK_UNKNOWN','HUB_BOOT_REPLACEMENT_UNTRUSTED']);
+});
+test('V2-04: connection restart interval, count and working directory are pinned',()=>{
+  const source=windowsConnectionControllerSourceForTest();
+  assert.ok(source.includes('RestartCount -ne 3'));
+  assert.ok(source.includes('XmlConvert]::ToTimeSpan'));
+  assert.ok(source.includes("WorkingDirectory -ne ''"));
+});

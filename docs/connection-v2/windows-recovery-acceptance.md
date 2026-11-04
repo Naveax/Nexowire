@@ -111,3 +111,43 @@ Run separately on NAVEAX and Work-PC only with owner-directed read-only authoriz
 | Production Connection v2 / CORE | **NO-GO** | #1003 P1-A/B/C/D and physical acceptance still pending |
 
 **Decision:** **WINDOWS RELIABILITY NO-GO** until reboot/login/logoff, outage/recovery, wrong identity and rollback are physically tested and independently reviewed. A green Linux/unit suite or hosted Windows task test alone cannot certify 24/7 reboot reliability.
+
+## Round 2: protected Hub Boot ownership, recovery and rollback
+
+**Regression reference:** exact HEAD `03e8507c2d6b18742a6a337356f3d5bb19da6f22`,
+CI run **41836592594**: 7/7 SUCCESS, Windows job **126596968087**.
+This remains the baseline for 20 native disposable Scheduler start/stop cycles.
+At Round-2 start #1085 HEAD `3fe8a64517f0213151e7f3f154d4fed0bbff08a2`
+had byte-identical blobs for all four original V2-04 files.
+
+**SYSTEM versus user:** read-only Hub preflight now reads `Nexowire Hub Boot`
+separately and refuses user Hub start/install while the SYSTEM task is
+Ready, Queued or Running; a task that is merely Ready may restart on next boot.
+A disabled task with verified principal `S-1-5-18` is not an active competing
+owner. Foreign or unresolvable principals fail closed; original SYSTEM launcher
+trust is NOT implied by checking its SID.
+
+**Protected identity mismatch:** `HUB_BOOT_TASK_IDENTITY_MISMATCH` may only be
+repaired in a separately authorized disposable VM using a compatible
+publisher-signed protected launcher, pinned signed manifest, confirmed
+Agent/Broker versions and a complete recoverable snapshot of old XML,
+principal, triggers, action, executable bytes, DACL/SID/file ID and protected
+credentials. `assessHubBootRepairPreflight` refuses unknown evidence and
+returns `mutationAuthorized:false` even after manual lab eligibility.
+NEVER copy the interactive launcher into SYSTEM, suppress signature validation,
+use `-Force` on an unknown task, delete credentials or terminate a foreign PID.
+
+**Rollback contract:** compare the current action/principal/triggers against
+the expected staged generation *before* restoring any owned task. If a foreign
+owner, modified action, unknown backup identity or unrecoverable secret is
+detected, abort without stopping processes. A witnessed rollback must restore
+the exact original SYSTEM XML, bytes, SID, LogonType, run level, triggers,
+launcher hash and protected credentials, followed by native readback. Plain
+Task Scheduler XML is not sufficient for password-backed secret restoration.
+
+**What is NOT proved:** physical VM reboot/logon/logoff, delayed network/DNS,
+Hub crash, bounded runtime cooldown exhaustion, authenticated Agent, protected
+SYSTEM task replacement or rollback are **NOT_RUN**. A hosted Actions runner
+cannot survive a physical reboot, so its Scheduler tests cannot be labeled
+reboot acceptance. Provisioning a persistent disposable Windows VM is required;
+NAVEAX and Work-PC remain untouched. **Windows Reliability: NO-GO.**
