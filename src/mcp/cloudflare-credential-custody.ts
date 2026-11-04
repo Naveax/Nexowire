@@ -69,7 +69,7 @@ function windowsCredentialAcl(file:string){
 }
 /** Open without following links; fstat and pathname identity must stay fixed. */
 export async function readCloudflareTunnelCredential(file:string):Promise<Buffer>{
-  if(!path.isAbsolute(file)||/[\r\n\0]/.test(file))deny();
+  if(!path.isAbsolute(file)||path.resolve(file)!==file||/[\r\n\0]/.test(file))deny();
   try{
     await parents(file);
     if(process.platform==='win32')windowsCredentialAcl(file);
