@@ -50,7 +50,7 @@ function windowsCredentialAcl(file:string){
     "    if($trusted -contains $sid){continue}",
     "    $rights=[int64]$ace.FileSystemRights",
     "    $read=[int64]0x120089",
-    "    $mutate=[int64]0x1f01ff -bor [int64]0x40000000 -bor [int64]0x10000000",
+    "    $mutate=[int64]0x2 -bor [int64]0x4 -bor [int64]0x10 -bor [int64]0x40 -bor [int64]0x100 -bor [int64]0x10000 -bor [int64]0x40000 -bor [int64]0x80000 -bor [int64]0x40000000 -bor [int64]0x10000000",
     "    $danger=if($file){$read -bor $mutate}else{$mutate}",
     "    if(($rights -band $danger) -ne 0){throw 'UNTRUSTED_ACE'}",
     "  }",
