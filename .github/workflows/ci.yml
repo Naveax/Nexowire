@@ -307,3 +307,73 @@ jobs:
         run: node --test --import tsx test/platform-secret-store.test.ts test/macos-keychain-live.test.ts
         env:
           NEXOWIRE_LIVE_MACOS_KEYCHAIN_TEST: "1"
+
+  # CLEAN-11 explicit root-level tests: npm test's test/**/*.test.ts does not
+  # discover test/*.test.ts on the default Linux shell. Never infer Git sandbox
+  # safety from unrelated green jobs. Separate platform jobs preserve evidence.
+  git-sandbox-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Verify source Git scope and reviewed patch negative regressions
+        shell: bash
+        run: |
+          node --test --test-reporter=tap --import tsx --test-concurrency=1 \
+            test/p20-780-git-fsmonitor-hook-escape-negative.test.ts \
+            test/p26-780-git-worktree-root-escape-negative.test.ts \
+            test/p26-811-nested-commitgraph-symlink-negative.test.ts \
+            test/p37-780-adversarial-git-metadata-fuzz.test.ts \
+            test/p37-780-git-packed-objects-escape-negative.test.ts \
+            test/p50-780-git-clean-filter-external-command-negative.test.ts \
+            test/p50-780-git-process-filter-external-command-negative.test.ts \
+            test/reviewed-git-patch.test.ts \
+            > "$RUNNER_TEMP/nw-git-sandbox.tap"
+          cat "$RUNNER_TEMP/nw-git-sandbox.tap"
+          grep -qx '# tests 29' "$RUNNER_TEMP/nw-git-sandbox.tap"
+          grep -qx '# pass 29' "$RUNNER_TEMP/nw-git-sandbox.tap"
+          grep -qx '# fail 0' "$RUNNER_TEMP/nw-git-sandbox.tap"
+          grep -qx '# skipped 0' "$RUNNER_TEMP/nw-git-sandbox.tap"
+          grep -qx '# todo 0' "$RUNNER_TEMP/nw-git-sandbox.tap"
+      - name: Verify native task OS confinement (intentionally RED until real sandbox)
+        run: node --test --import tsx --test-concurrency=1 test/p46-780-cross-platform-task-sandbox-red.test.ts
+
+  git-sandbox-windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Verify source Git scope and reviewed patch negative regressions
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tests = @(
+            'test/p20-780-git-fsmonitor-hook-escape-negative.test.ts',
+            'test/p26-780-git-worktree-root-escape-negative.test.ts',
+            'test/p26-811-nested-commitgraph-symlink-negative.test.ts',
+            'test/p37-780-adversarial-git-metadata-fuzz.test.ts',
+            'test/p37-780-git-packed-objects-escape-negative.test.ts',
+            'test/p50-780-git-clean-filter-external-command-negative.test.ts',
+            'test/p50-780-git-process-filter-external-command-negative.test.ts',
+            'test/reviewed-git-patch.test.ts'
+          )
+          $tapFile = Join-Path $env:RUNNER_TEMP 'nw-git-sandbox.tap'
+          & node --test --test-reporter=tap --import tsx --test-concurrency=1 @tests > $tapFile
+          if ($LASTEXITCODE -ne 0) { Get-Content $tapFile; throw 'GIT_SANDBOX_TEST_FAILED' }
+          $tap = Get-Content $tapFile
+          $tap | ForEach-Object { Write-Host $_ }
+          foreach ($required in @('# tests 29', '# pass 29', '# fail 0', '# skipped 0', '# todo 0')) {
+            if ($tap -notcontains $required) { throw ('GIT_SANDBOX_TAP_MISMATCH: ' + $required) }
+          }
+      - name: Verify native task OS confinement (intentionally RED until real sandbox)
+        run: node --test --import tsx --test-concurrency=1 test/p46-780-cross-platform-task-sandbox-red.test.ts
