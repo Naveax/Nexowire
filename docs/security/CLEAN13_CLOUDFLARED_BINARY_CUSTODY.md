@@ -26,6 +26,7 @@ Source of release evidence: https://github.com/cloudflare/cloudflared/releases/t
 | Valid prior SHA, source pathname atomically replaced | No malicious process | AI-11 P1-A unchanged; hardened preflight | Source guarded; hosted pending |
 | Sealed Linux execution pathname replaced after FD open | Execute original verified inode | CLEAN-13 descriptor-swap negative | Source guarded; hosted pending |
 | Production trusted Linux stage unlinked before exec | No pathname/hardlink alias; FD-backed execution still succeeds | CLEAN-13 deleted-image negative | Source guarded; hosted pending |
+| Official downloaded Cloudflare 2026.10.1 Linux x64 image, no tunnel | SHA must match pinned official digest; execute --version from unlinked FD | CLEAN-13 official-launch test on Node22/24 hosted runners | Hosted acceptance pending |
 | Source symlink, hardlink, reparse | Reject | CLEAN-13 path tests; Windows OS still needs independent test | POSIX source guarded |
 | Unsigned/self-signed/wrong publisher | No execution, even with matching profile SHA | Independent official digest pin + Windows Authenticode status | Windows launch NO-GO |
 | Credential POSIX 0640, 0644 or world-readable | Reject with custody-specific error | AI-11 unmodified + CLEAN-13 | Source guarded |
