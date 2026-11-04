@@ -261,8 +261,9 @@ test('global queue budget fails closed, releases every reservation and preserves
       healthy.emit('connection', peer, req);
     });
   });
-  healthy.on('connection', peer => peer.on('message', (message, binary) => {
-    peer.send(message, { binary });
+  const broker = new AgentBroker();
+  healthy.on('connection', peer => peer.once('message', raw => {
+    broker.register(peer, JSON.parse(raw.toString()));
   }));
   const port = await boundServer(upstream);
   const relay = await startRelayServer(relayConfig(port, {
@@ -291,22 +292,38 @@ test('global queue budget fails closed, releases every reservation and preserves
   assert.equal(initial.globalMemoryBudgetBytes, 256 * 1024);
   const data = Buffer.alloc(64 * 1024, 7);
   slow.send(data);
-  slow.send(data);
-  await until(() => relay.resourceSnapshot().startupQueuedBytes === 128 * 1024);
+  await until(() => relay.resourceSnapshot().startupQueuedBytes === 64 * 1024);
   const atCapacity = relay.resourceSnapshot();
-  assert.equal(atCapacity.totalReservedBytes, 256 * 1024);
+  assert.equal(atCapacity.totalReservedBytes, 192 * 1024);
+  assert.equal(atCapacity.queueControlHeadroomBytes, 64 * 1024);
   assert.ok(atCapacity.peakTotalReservedBytes <= 256 * 1024);
+  // A real read-only Broker ACK must complete while the other peer is stalled.
+  const fastId = 'v2-05-budget-fast-peer';
+  fast.on('message', raw => {
+    const request = JSON.parse(raw.toString()) as { type?: string; requestId?: string };
+    if (request.type !== 'request' || !request.requestId) return;
+    fast.send(JSON.stringify({
+      type: 'response', requestId: request.requestId, ok: true,
+      data: { data: { via: 'fast-peer-ack' } },
+    }));
+  });
+  fast.send(JSON.stringify({
+    type: 'hello', protocolVersion: AGENT_PROTOCOL_VERSION,
+    instanceId: randomUUID(),
+    device: { id: fastId, name: 'Fast Peer', platform: 'linux', arch: 'x64',
+      agentVersion: 'budget-qa', capabilities: ['machine.snapshot'] },
+  }));
+  await until(() => broker.has(fastId));
+  const answer = await broker.request(fastId, 'machine.snapshot', {}, 3_000) as {
+    data?: { via?: string };
+  };
+  assert.equal(answer.data?.via, 'fast-peer-ack');
+  assert.equal(relay.resourceSnapshot().startupQueuedBytes, 64 * 1024);
   const slowClosed = closed(slow, 4_000);
   slow.send(data);
   await slowClosed;
   await until(() => relay.resourceSnapshot().startupQueuedBytes === 0);
   assert.ok(relay.resourceSnapshot().budgetRejectionCount >= 1);
-  const response = new Promise<string>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Fast peer starved')), 3_000);
-    fast.once('message', raw => { clearTimeout(timer); resolve(raw.toString()); });
-  });
-  fast.send('fast-peer-ack');
-  assert.equal(await response, 'fast-peer-ack');
   assert.equal(relay.resourceSnapshot().reservedConnectionSlots, 1);
   fast.close();
   await closed(fast);
@@ -631,6 +648,7 @@ test('isolated WSS relay: 1/32/64/101/128/129/256 attempts, real Broker ACKs and
         peakStartupQueuedFrames: snapshot.peakStartupQueuedFrames,
         outboundBufferedBytes: snapshot.outboundBufferedBytes,
         globalMemoryBudgetBytes: snapshot.globalMemoryBudgetBytes,
+        queueControlHeadroomBytes: snapshot.queueControlHeadroomBytes,
         reservedBytes: snapshot.totalReservedBytes,
         peakReservedBytes: snapshot.peakTotalReservedBytes,
         connectionReservedBytes: snapshot.connectionReservedBytes,

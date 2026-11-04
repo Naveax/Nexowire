@@ -32,6 +32,7 @@ export interface RelayResourceSnapshot {
   startupQueuedBytes: number;
   startupQueuedFrames: number;
   globalMemoryBudgetBytes: number;
+  queueControlHeadroomBytes: number;
   totalReservedBytes: number;
   peakTotalReservedBytes: number;
   connectionReservedBytes: number;
@@ -87,6 +88,8 @@ function closePeer(
 /** Accounting bound, not a guarantee about TLS, V8 or kernel socket RSS. */
 type ReservationKind = 'connection' | 'queue' | 'inflight';
 const PAIR_RESERVATION_BYTES = 64 * 1024;
+// Startup traffic cannot use the final control-response reservation headroom.
+const QUEUE_CONTROL_HEADROOM_BYTES = 64 * 1024;
 const DEFAULT_GLOBAL_MEMORY_BUDGET_BYTES = 32 * 1024 * 1024;
 class RelayMemoryBudget {
   private readonly values: Record<ReservationKind, number> = {
@@ -473,7 +476,9 @@ export async function startRelayServer(
       heartbeatMs: config.heartbeatMs,
       metrics: options.metrics,
       onQueueDelta: (bytes, frames) => {
-        if (bytes > 0 && !memory.reserve('queue', bytes)) {
+        if (bytes > 0 &&
+            (memory.limitBytes - memory.totalBytes - bytes < QUEUE_CONTROL_HEADROOM_BYTES ||
+             !memory.reserve('queue', bytes))) {
           budgetRejectionCount++;
           return false;
         }
@@ -544,6 +549,7 @@ export async function startRelayServer(
         startupQueuedBytes: memory.queueBytes,
         startupQueuedFrames,
         globalMemoryBudgetBytes: memory.limitBytes,
+        queueControlHeadroomBytes: QUEUE_CONTROL_HEADROOM_BYTES,
         totalReservedBytes: memory.totalBytes,
         peakTotalReservedBytes: memory.peakTotalReservedBytes,
         connectionReservedBytes: memory.connectionBytes,
