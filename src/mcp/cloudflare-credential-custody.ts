@@ -10,6 +10,7 @@ export class CloudflareCredentialCustodyError extends Error {
     public readonly code:string='CUSTODY_UNSAFE',
     public readonly elapsedMs:number=0,
     public readonly childExitCode:number|null=null,
+    public readonly aclDetail?:{depth:number;rights:number;propagation:number;inheritance:number;inherited:boolean},
   ){
     super(CUSTODY_ERROR);
     this.name='CloudflareCredentialCustodyError';
@@ -91,7 +92,7 @@ function windowsCredentialAcl(file:string){
     "      $danger=if($file){$read -bor $fileMutate}else{$parentReplace}",
     "      if(($rights -band $danger) -ne 0){",
     "        if($file){[Console]::Error.Write('C13:FILE_UNTRUSTED_ACE');exit 23}",
-    "        [Console]::Error.Write('C13:PARENT_REPLACE_ACE');exit 24",
+    "        [Console]::Error.Write('C13:PARENT_REPLACE_ACE:D'+$depth+':R'+([int64]$ace.FileSystemRights)+':P'+([int]$ace.PropagationFlags)+':I'+([int]$ace.InheritanceFlags)+':H'+([int]$ace.IsInherited));exit 24",
     "      }",
     "    }",
     "    $up=[IO.Directory]::GetParent($cur)",
@@ -119,7 +120,12 @@ function windowsCredentialAcl(file:string){
       childCode==='ENOBUFS'?'POWERSHELL_OUTPUT_BOUND':
       childCode?'POWERSHELL_SPAWN_'+(childCode==='ENOENT'?'MISSING':'FAILED'):
       marker?.[1]??(child.status===0?'INVALID_RESULT':'POWERSHELL_UNCLASSIFIED_EXIT');
-    throw new CloudflareCredentialCustodyError(code,Date.now()-started,child.status);
+    const meta=/C13:PARENT_REPLACE_ACE:D(\\d+):R(-?\\d+):P(\\d+):I(\\d+):H([01])/.exec(child.stderr??'');
+    const detail=meta?{
+      depth:Number(meta[1]),rights:Number(meta[2]),
+      propagation:Number(meta[3]),inheritance:Number(meta[4]),inherited:meta[5]==='1',
+    }:undefined;
+    throw new CloudflareCredentialCustodyError(code,Date.now()-started,child.status,detail);
   }
 }
 /** Read-only early filesystem admission. Does NOT read or copy credential
