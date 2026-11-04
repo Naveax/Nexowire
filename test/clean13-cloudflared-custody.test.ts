@@ -91,3 +91,19 @@ test('CLEAN-13 P1-D: pathname replacement does not silently approve a credential
   await fs.rename(alternate,file);
   await assert.rejects(readCloudflareTunnelCredential(file),/credential custody unsafe/);
 });
+
+test('CLEAN-13 P1-A: production sealed image has no pathname or hardlink alias',{
+  skip:process.platform!=='linux',timeout:15000,
+},async t=>{
+  const dir=await root(t),marker=path.join(dir,'unlinked-marker');
+  const original=Buffer.from('#!/bin/sh\nprintf sealed > '+JSON.stringify(marker)+'\n');
+  const sealed=await stageDescriptorBoundImage(original,digest(original),true);
+  t.after(()=>sealed.dispose());
+  const name=await fs.readlink('/proc/self/fd/'+sealed.imageFd);
+  assert.match(name,/\(deleted\)$/,'production file identity must be open-only');
+  const run=spawnSync(sealed.command,[],{
+    stdio:['ignore','ignore','ignore',sealed.imageFd],timeout:5000,encoding:'utf8',
+  });
+  assert.equal(run.status,0,run.error?.message);
+  assert.equal(await fs.readFile(marker,'utf8'),'sealed');
+});
