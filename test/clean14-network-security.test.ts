@@ -157,7 +157,7 @@ test('CLEAN-14 P1-C: rebinding to nonpublic CNAME final A/AAAA denies before soc
       method:'POST',redirect:'error',body:'{}',headers:{authorization:'Bearer '+secret},
     },undefined,async()=>{
       calls++;
-      return [{address,family:4}];
+      return [{address,family:4 as const}];
     }),/CONTROL_PLANE_DNS_UNSAFE/);
   }
   assert.equal(calls,4);
