@@ -263,3 +263,14 @@ test('V2-04: connection restart interval, count and working directory are pinned
   assert.ok(source.includes('XmlConvert]::ToTimeSpan'));
   assert.ok(source.includes("WorkingDirectory -ne ''"));
 });
+
+test('V2-04: scheduled user Hub launcher fails closed against protected SYSTEM boot owner',async()=>{
+  const {buildHubLauncher}=await import('../src/hub/hub-lifecycle.js');
+  const source=buildHubLauncher({execPath:process.execPath,cliEntrypoint:path.resolve('synthetic-hub-cli.js'),env:{}});
+  assert.ok(source.includes('Get-ScheduledTask -ErrorAction Stop'));
+  assert.ok(source.includes('HUB_BOOT_CONCURRENT_OWNER'));
+  assert.ok(source.includes('HUB_BOOT_PRINCIPAL_UNVERIFIED'));
+  assert.ok(source.indexOf('HUB_BOOT_CONCURRENT_OWNER')<source.indexOf("'http'"));
+  assert.ok(!source.includes('Disable-ScheduledTask'));
+  assert.ok(!source.includes('Unregister-ScheduledTask'));
+});

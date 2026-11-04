@@ -1,3 +1,4 @@
+import {isIP} from 'node:net';
 import type {NexowireConfig} from '../config.js';
 import {cloudflareConnectionConfig} from './local-first-cloudflare.js';
 
@@ -168,19 +169,30 @@ export interface ConnectionV2AuthenticatedResult {
   completedSteps:readonly string[];
 }
 
+function publicStagingHostname(hostname:string):boolean{
+  const host=hostname.toLowerCase().replace(/^\[|\]$/g,'');
+  if(!host||isIP(host)!==0||!host.includes('.')||
+     ['localhost','metadata','instance-data'].includes(host)||
+     ['.localhost','.local','.internal','.home.arpa','.onion'].some(x=>host.endsWith(x)))
+    return false;
+  return /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(host);
+}
 function exactHttpsMcpResource(raw:string,allowLoopback:boolean):URL {
   const url=new URL(raw);
   const loopback=['localhost','127.0.0.1','[::1]'].includes(url.hostname);
   if(url.toString()!==raw || url.username||url.password||url.search||url.hash||
      url.pathname!=='/mcp'||!url.hostname||
-     !(url.protocol==='https:' || (allowLoopback&&loopback&&url.protocol==='http:')))
+     !(url.protocol==='https:' || (allowLoopback&&loopback&&url.protocol==='http:'))||
+     (!allowLoopback&&!publicStagingHostname(url.hostname))||
+     (!loopback&&url.port))
     throw new Error('STAGING_RESOURCE_INVALID');
   return url;
 }
 function expectedIssuer(raw:string):string{
   const url=new URL(raw);
   if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||
-     url.port||url.toString().replace(/\/$/,'')!==raw.replace(/\/$/,'')||
+     url.port||!publicStagingHostname(url.hostname)||
+     url.toString().replace(/\/$/,'')!==raw.replace(/\/$/,'')||
      /%(?:2e|2f|5c|00)/i.test(raw))
     throw new Error('STAGING_ISSUER_INVALID');
   return url.toString().replace(/\/$/,'');
@@ -358,6 +370,7 @@ export class ConnectionV2ReadinessMonitor {
   private boundaryAt:number|undefined;
   private mcpAt:number|undefined;
   private agentAt:number|undefined;
+  private agentExpiresAt:number|undefined;
   private degraded=false;
   private processObservedAt:number|undefined;
   private readonly ttl:number;
@@ -375,7 +388,7 @@ export class ConnectionV2ReadinessMonitor {
     this.local=running;
     this.processObservedAt=this.clock();
     if(!running){this.boundaryAt=undefined;this.mcpAt=undefined;
-      this.agentAt=undefined;this.degraded=false;}
+      this.agentAt=undefined;this.agentExpiresAt=undefined;this.degraded=false;}
     return this.current();
   }
   /** Calls the real diagnostic; a synthetic HTTP 200 is never accepted alone. */
@@ -416,10 +429,11 @@ export class ConnectionV2ReadinessMonitor {
        !grant.boundDeviceId||grant.boundDeviceId!==grant.helloDeviceId||
        grant.revoked===true||!Number.isFinite(grant.expiresAtMs)||
        grant.expiresAtMs<=now){
-      this.agentAt=undefined;this.degraded=true;
+      this.agentAt=undefined;this.agentExpiresAt=undefined;this.degraded=true;
       return this.current();
     }
     this.agentAt=now;
+    this.agentExpiresAt=grant.expiresAtMs;
     this.degraded=false;
     return this.current();
   }
@@ -428,8 +442,8 @@ export class ConnectionV2ReadinessMonitor {
   observeDisconnect(kind:'hub'|'agent'|'local-process'):ConnectionV2State{
     if(kind==='local-process')return this.observeLocalProcess(false);
     this.degraded=true;
-    if(kind==='hub'){this.boundaryAt=undefined;this.mcpAt=undefined;this.agentAt=undefined;}
-    else this.agentAt=undefined;
+    if(kind==='hub'){this.boundaryAt=undefined;this.mcpAt=undefined;this.agentAt=undefined;this.agentExpiresAt=undefined;}
+    else {this.agentAt=undefined;this.agentExpiresAt=undefined;}
     return this.current();
   }
   current():ConnectionV2State{
@@ -438,7 +452,9 @@ export class ConnectionV2ReadinessMonitor {
     const fresh=(time:number|undefined)=>time!==undefined &&
       now>=time && now-time<=this.ttl;
     const stale=(time:number|undefined)=>time!==undefined&&!fresh(time);
-    if(this.degraded||stale(this.processObservedAt)||
+    if(this.degraded||
+       (this.agentExpiresAt!==undefined&&now>=this.agentExpiresAt)||
+       stale(this.processObservedAt)||
        stale(this.boundaryAt)||stale(this.mcpAt)||stale(this.agentAt))
       return 'DEGRADED';
     return deriveConnectionV2State({

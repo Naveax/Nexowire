@@ -228,6 +228,21 @@ export function buildHubLauncher(
     lines.push('$env:' + name + '=' + psLiteral(value));
   }
 
+  // A scheduled AtLogOn invocation bypasses the TypeScript install/start
+  // preflight. Recheck the protected SYSTEM task before Node is ever spawned.
+  // Enumerating scheduled tasks with ErrorAction Stop is fail closed.
+  lines.push(
+    "$env:PSModulePath='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules'",
+    "Import-Module -Name 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules\\ScheduledTasks\\ScheduledTasks.psd1' -ErrorAction Stop",
+    "$bootTasks=@(Get-ScheduledTask -ErrorAction Stop | Where-Object { $_.TaskName -eq 'Nexowire Hub Boot' -and $_.TaskPath -eq '\\' })",
+    "if($bootTasks.Count -gt 1){throw 'HUB_BOOT_TASK_AMBIGUOUS'}",
+    "if($bootTasks.Count -eq 1){",
+    "  $boot=$bootTasks[0]",
+    "  $bootSid=[string]$boot.Principal.UserId",
+    "  if($bootSid -eq 'SYSTEM'){$bootSid='S-1-5-18'}elseif($bootSid -ne 'S-1-5-18'){try{$bootSid=([Security.Principal.NTAccount]$bootSid).Translate([Security.Principal.SecurityIdentifier]).Value}catch{throw 'HUB_BOOT_PRINCIPAL_UNVERIFIED'}}",
+    "  if($bootSid -ne 'S-1-5-18' -or [string]$boot.State -ne 'Disabled'){throw 'HUB_BOOT_CONCURRENT_OWNER'}",
+    "}",
+  );
   lines.push(
     '& ' +
       psLiteral(rt.executable) +
@@ -603,7 +618,7 @@ export async function installHubLifecycle(
       "$action=New-ScheduledTaskAction -Execute 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe' -Argument $argument",
       '$trigger=New-ScheduledTaskTrigger -AtLogOn -User $user',
       '$principal=New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited',
-      '$settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -MultipleInstances IgnoreNew',
+      '$settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -MultipleInstances IgnoreNew',
       "Register-ScheduledTask -TaskName $name -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description 'Nexowire first-party Hub' -Force | Out-Null",
       'if ($restartRequired) {',
       '  Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue',

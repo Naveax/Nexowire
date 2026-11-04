@@ -6,14 +6,14 @@
   "main_parent": "939b4d6beecf996f2750c736c5d4b4beb7b64488",
   "main_tree": "46f30e68c3df6984a27c2b65b52a6e6687a8f325",
   "source_heads": {
-    "1003": "65e702e01dd03eebe8e3804e85c5852dc698321f",
+    "1003": "17b699084ad90cc929db83b5942eed812e80cd83",
     "1044": "48704c908636383d63e6284082f167f1909124d0",
     "1074": "6b00db5bb24e537a6d1c494b3459080a8af3f943",
     "1075": "05a99388c377caa0781fb5a2c257ea1f9b92e5df",
     "1077": "384c05276d2c0116ee13f7b70d6709cdb478f887",
-    "1081": "6f98ae554d2befdee8c5cf483ae4306e468f2c92",
+    "1081": "a28995c25b5575636c929b09d1f6e7c4d9b33e5c",
     "1083": "136627e161872f534dfc30242e59223b378dce09",
-    "1084": "188f5bfedeafd8c326eae523d05f0d1718704ce4"
+    "1084": "f4f80a76a186e84433ae4be6aed829a21d990a0c"
   },
   "source_files": 65,
   "matrix_rows": 73,
@@ -282,6 +282,38 @@
         "test/connection-v2-windows-hub-rollback.test.ts"
       ],
       "state": "frozen_snapshot_not_release_authorization"
+    },
+    {
+      "pr": 1003,
+      "old_sha": "65e702e01dd03eebe8e3804e85c5852dc698321f",
+      "new_sha": "17b699084ad90cc929db83b5942eed812e80cd83",
+      "changed_files": [
+        "src/mcp/cloudflare-connection-doctor.ts",
+        "test/v2-03-authenticated-mcp-acceptance.test.ts"
+      ],
+      "source_branches_written": false
+    },
+    {
+      "pr": 1081,
+      "old_sha": "6f98ae554d2befdee8c5cf483ae4306e468f2c92",
+      "new_sha": "a28995c25b5575636c929b09d1f6e7c4d9b33e5c",
+      "changed_files": [
+        "docs/CONNECTION_V2_RELAY_RESOURCE_BUDGETS_20261104.md",
+        "src/relay/server.ts",
+        "test/relay-resource-budgets.test.ts"
+      ],
+      "source_branches_written": false
+    },
+    {
+      "pr": 1084,
+      "old_sha": "188f5bfedeafd8c326eae523d05f0d1718704ce4",
+      "new_sha": "f4f80a76a186e84433ae4be6aed829a21d990a0c",
+      "changed_files": [
+        "docs/connection-v2/windows-recovery-acceptance.md",
+        "src/hub/hub-lifecycle.ts",
+        "test/cloudflare-connection-lifecycle.test.ts"
+      ],
+      "source_branches_written": false
     }
   ],
   "integrated_negative_ci": {
@@ -388,7 +420,7 @@
     "cloudflared_windows_security": "FAIL"
   },
   "native_git_dag_evidence": {
-    "status": "EXACT_NEW_SHA_NOT_RUN",
+    "status": "NEW_SHA_NOT_RUN",
     "workflow_job": "connection-v2-native-git-dag",
     "checkout": "EXACT_HEAD_FULL_HISTORY",
     "commands": [
@@ -781,14 +813,14 @@
   },
   "integration_round2": {
     "source_heads": {
-      "1003": "65e702e01dd03eebe8e3804e85c5852dc698321f",
+      "1003": "17b699084ad90cc929db83b5942eed812e80cd83",
       "1044": "48704c908636383d63e6284082f167f1909124d0",
       "1074": "6b00db5bb24e537a6d1c494b3459080a8af3f943",
       "1075": "05a99388c377caa0781fb5a2c257ea1f9b92e5df",
       "1077": "384c05276d2c0116ee13f7b70d6709cdb478f887",
-      "1081": "6f98ae554d2befdee8c5cf483ae4306e468f2c92",
+      "1081": "a28995c25b5575636c929b09d1f6e7c4d9b33e5c",
       "1083": "136627e161872f534dfc30242e59223b378dce09",
-      "1084": "188f5bfedeafd8c326eae523d05f0d1718704ce4"
+      "1084": "f4f80a76a186e84433ae4be6aed829a21d990a0c"
     },
     "source_rows": 73,
     "unique_source_paths": 65,
@@ -799,6 +831,46 @@
     "two_pc_v2": "NOT_RUN",
     "reboot_rollback": "NOT_RUN",
     "provider_egress_cost": "NOT_RUN",
-    "soak_24h": "NOT_RUN"
+    "soak_24h": "NOT_RUN",
+    "previous_exact_sha": "5c2155f259798f71f352482c4cddc87b3e156b0e",
+    "previous_ci": {
+      "run_id": 41853910953,
+      "status": "IN_PROGRESS_AT_OBSERVATION",
+      "native_dag": {
+        "job_id": 126657229931,
+        "exit_code": 0,
+        "source_blobs": "73/73",
+        "candidate_blobs": "73/73",
+        "cherry_entries": 148
+      },
+      "clean10_windows22": {
+        "job_id": 126657230114,
+        "conclusion": "failure"
+      },
+      "clean10_windows24": {
+        "job_id": 126657229916,
+        "conclusion": "failure"
+      },
+      "round2_windows22": {
+        "job_id": 126657230093,
+        "conclusion": "failure"
+      },
+      "round2_windows24": {
+        "job_id": 126657230145,
+        "conclusion": "failure"
+      },
+      "browser_live": {
+        "job_id": 126657230375,
+        "status": "IN_PROGRESS"
+      }
+    },
+    "relay": {
+      "run_id": 41853910766,
+      "success": 4,
+      "total": 4
+    },
+    "mandatory_clean10_no_replay": "FAILURE_PREVIOUS_SHA",
+    "windows_round2_p1b_p1d": "FAILURE_PREVIOUS_SHA",
+    "full_ci": "NOT_RUN_NEW_SHA"
   }
 }

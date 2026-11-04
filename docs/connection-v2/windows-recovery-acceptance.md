@@ -163,3 +163,16 @@ settings from the saved XML. A synthetic credential file must remain intact.
 The marker `V2_04_NATIVE_VM_ROLLBACK_PASS` records the original XML SHA256
 and the verified dimensions. This remains **not** a SYSTEM credential rollback
 or a physical reboot test.
+
+### Automatic logon double-Hub prevention
+
+The interactive Hub launch.ps1 now repeats the read-only SYSTEM Boot
+principal/state gate **inside the AtLogOn script** (before Node is spawned);
+a TypeScript API preflight alone cannot protect a task that Windows starts
+without invoking `installHubLifecycle`. This blocks a Ready or Running
+SYSTEM Boot owner, foreign principal and unavailable task inventory.
+Newly registered user Hub tasks use a bounded **3 restarts at 1 minute**,
+rather than 999. A previously installed v1.0.4 task does not automatically
+inherit this launcher or restart policy: migration requires readback, signed
+backup and explicit maintenance. Existing protected SYSTEM boot task settings
+are not changed in this child.

@@ -1,30 +1,21 @@
 # Connection v2 | Round 2 authoritative release gate
 
-**Decision: NO-GO.** Integration candidate Draft only; neither source refs, main nor physical PCs modified.
+**Decision: NO-GO.** #1085 remains Draft. Eight immutable source commits integrated, not approved for production.
 
-- Prior coordinator `3fe8a64517f0213151e7f3f154d4fed0bbff08a2`; base main `939b4d6beecf996f2750c736c5d4b4beb7b64488`.
-- Eight source snapshots: #1003=`65e702e01dd03eebe8e3804e85c5852dc698321f`; #1044=`48704c908636383d63e6284082f167f1909124d0`; #1074=`6b00db5bb24e537a6d1c494b3459080a8af3f943`; #1075=`05a99388c377caa0781fb5a2c257ea1f9b92e5df`; #1077=`384c05276d2c0116ee13f7b70d6709cdb478f887`; #1081=`6f98ae554d2befdee8c5cf483ae4306e468f2c92`; #1083=`136627e161872f534dfc30242e59223b378dce09`; #1084=`188f5bfedeafd8c326eae523d05f0d1718704ce4`.
-- Source preservation **73 PR-path records / 65 unique source paths**: `{"MERGED_MAIN_SECURITY_REVIEW_REQUIRED":4,"EXACT_BLOB":61,"EVOLVED_SOURCE_SEMANTIC_REVIEW_REQUIRED":8}`. New SHA native Git DAG, CI and semantic owner approval **NOT_RUN / PENDING**.
-- Integrated #1003 actual authenticated read-only MCP staging doctor; #1044 new V2-06 hostile assertion fixtures; #1074 canonical public HTTPS/DNS and TLS/WSS negative tests; #1077 binary and credential ACL/source diagnostics; #1081 bounded Relay QA; #1083 revoked mutation/transport fixtures; #1084 Windows Task and Hub rollback; #1075 independent CLEAN-10 same operation UUID and mandatory cloned UNKNOWN no-replay RED. None waived.
-- Manual source combination on `src/mcp/local-first-cloudflare.ts`: new official #1077 binary provenance, credential custody and identity source plus strict #1074 `normalizePublicControlPlaneAuthority()` before publication. Source owners must review; fail-closed status preserved.
-- New independent `connection-v2-round2-security` Linux/Windows Node22/24 job runs new OAuth, negative WSS, V2-06, V2-07 and Windows rollback test files. `connection-v2-clean10-windows` job executes error-contract and cloned runbook tests. RED blocks GO.
-- Prior coordinator `3fe8a64517f0213151e7f3f154d4fed0bbff08a2` CI `41842123094` **FAILED** with three Windows P1-B/P1-D/error-precedence failures. Prior Relay 4/4, Git DAG 54/54 and hosted disposable Task 20/20 PASS are strictly previous-SHA evidence, never acceptance of this candidate.
-- Off-network named Cloudflare tunnel, OAuth token validation, MCP initialize and real read-only response, owner/device 401/403, revoked dispatch across provider, Hub+Agent reboot/rollback, 101+ public WSS, 1 GiB transfer, 24h soak, egress cost and quota hard-stop: **NOT_RUN**.
-- Rollback: keep production v2 flag OFF and previous Tailscale available; on disposable staging failure revoke only staging tokens, stop staging candidate, restore pinned config/binaries, keep UNKNOWN mutation receipts and refuse replay. No billing, source/main merge, live DNS/credential changes.
+- Coordinator parent `5c2155f259798f71f352482c4cddc87b3e156b0e`; base main `939b4d6beecf996f2750c736c5d4b4beb7b64488`. Source snapshot: #1003=`17b699084ad90cc929db83b5942eed812e80cd83`; #1044=`48704c908636383d63e6284082f167f1909124d0`; #1074=`6b00db5bb24e537a6d1c494b3459080a8af3f943`; #1075=`05a99388c377caa0781fb5a2c257ea1f9b92e5df`; #1077=`384c05276d2c0116ee13f7b70d6709cdb478f887`; #1081=`a28995c25b5575636c929b09d1f6e7c4d9b33e5c`; #1083=`136627e161872f534dfc30242e59223b378dce09`; #1084=`f4f80a76a186e84433ae4be6aed829a21d990a0c`.
+- Source preservation: **73 entries / 65 unique paths**, {"MERGED_MAIN_SECURITY_REVIEW_REQUIRED":4,"EXACT_BLOB":61,"EVOLVED_SOURCE_SEMANTIC_REVIEW_REQUIRED":8}. 12 non-identical records require original file-owner semantic approval. New exact SHA DAG and CI **NOT_RUN**.
+- On previous SHA `5c2155f259798f71f352482c4cddc87b3e156b0e`: native Git DAG `41853910953` / job `126657229931` PASS, `git merge-tree` exit 0, `patch-id` exit 0, cherry 148, source/candidate 73/73. Dedicated Relay QA `41853910766` 4/4 SUCCESS, Windows/Linux Node22/24.
+- CLEAN-10 Windows22/24 job IDs `126657230114`/`126657229916` **FAIL**: UNKNOWN incorrectly becomes FAILED, cloned runbook dispatches same uncertain mutation, Windows QA-02 output ordering fails. Ubuntu package `126657236904` also failed CLEAN-10. This is actual no-replay P1 blocker, not a waived test.
+- V2-06 Windows-native negative suites `126657230093`/`126657230145` **FAIL**, including official test binary not provisioned and PowerShell/ACL fixture errors. New independent Windows-only official SHA256 fixture provisioning added to coordinator Round2 job; remaining native failures still block release.
+- Previous Windows browser-live `126657230375` had not completed at last evidence check; P1-B/P1-D is not GREEN. Prior 20/20 disposable Windows Task cycles and 101+ local WSS remain limited on-premise acceptance proxies, not external proof.
+- Real named tunnel, off-network OAuth token and MCP initialize, owner/device read-only execution, 401/403, revocation in-flight over public network, device reboot/rollback, 1 GiB transfer, 24h soak, real provider egress/billing hard-stop: **NOT_RUN**.
+- Rollback: production v2 feature flag OFF; keep Tailscale fallback; in disposable staging only stop candidate, revoke staging tokens, restore pinned config/binary, preserve UNKNOWN mutation receipts without replay. No main merge, release tag, source branch updates or NAVEAX/Work-PC changes.
 
-## Source semantic preservation requiring independent file-owner signoff
-| Path | Exact decision and security rationale | Approval |
-|---|---|---|
-| `.github/workflows/ci.yml` | Main+Cloudflare security checks and new no-replay, V2 Round2, native Git DAG Linux/Windows Node22/24 independently gated; owner review pending | **PENDING** |
-| `scripts/ai-screen-launch-sinks-baseline.json` | Main journal owner and Cloudflared binary launch sink union retained; owner review pending | **PENDING** |
-| `src/hub/agent-websocket.ts` | Authenticated socket session bound to per-mutation AgentBroker reauthorization; owner semantic review pending | **PENDING** |
-| `src/hub/control-plane-agent-auth.ts` | Newer P1-C auth and signed owner/device trust selected over V2-03 older blob; owner approval pending | **PENDING** |
-| `src/hub/hub-lifecycle.ts` | Latest V2-04 protected Task/Hub recovery implementation supersedes earlier #1003; Windows reboot/rollback tests required | **PENDING** |
-| `src/mcp/cloudflare-connection-lifecycle.ts` | Latest #1084 Windows task/principal/descendant cleanup and redacted errors retained; owner review pending | **PENDING** |
-| `src/mcp/local-first-cloudflare.ts` | Manual merge: #1077 latest immutable binary publisher and credential custody/identity + #1074 canonical HTTPS/public authority, no security weakening; owner review pending | **PENDING** |
-| `test/cloudflare-connection-lifecycle.test.ts` | Latest #1084 tests override old V2-03 task tests; original negative sources retained in Git ancestry; owner approval pending | **PENDING** |
-| `test/local-first-cloudflare.test.ts` | Latest #1077 independent fake publisher and credential stage negatives retained; previous source assertion review pending | **PENDING** |
-| `src/core/agent-broker.ts` | Latest #1083 mutation reauthorization is byte-identical to candidate; physical revocation still NOT_RUN | **PENDING** |
+## Outstanding semantic security review
+- `src/mcp/local-first-cloudflare.ts`: #1077 publisher/custody/identity checks and strict #1074 public control-plane HTTPS admission combined without weakening (owner signoff pending).
+- `src/core/agent-broker.ts`: #1083 mutation reauthorization exact blob; separate CLEAN-10 cross-runbook no-replay still RED.
+- `src/hub/hub-lifecycle.ts`: new #1084 Windows task identity/fallback; real reboot/rollback unproven.
+- `.github/workflows/ci.yml`: original main and adversarial suites preserved, plus Windows official fixture with SHA256 pin; test outcomes, not binary hash alone, decide GO.
 
 ## Historical release ledger (archived; do not treat old NOT_RUN table as current)
 

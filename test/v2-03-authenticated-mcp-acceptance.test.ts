@@ -167,8 +167,10 @@ test('V2-03 authenticated MCP state requires completed tool; Hub Agent owner/dev
     remoteOnly:true,hubAdmissionContract:'device-bound-revalidate-v1',
     boundDeviceId:'pc-one',helloDeviceId:'pc-one',expiresAtMs:now+800,
   }),'AGENT_AUTHENTICATED');
-  now+=1001;
-  assert.equal(monitor.current(),'DEGRADED');
+  now+=801;
+  assert.equal(monitor.current(),'DEGRADED','device grant expires before the evidence TTL');
+  now+=200;
+  assert.equal(monitor.current(),'DEGRADED','expired evidence must not be reused');
   assert.equal(monitor.observeDisconnect('local-process'),'UNAVAILABLE');
   assert.equal(monitor.observeLocalProcess(true),'LOCAL_PROCESS_RUNNING');
   assert.equal(monitor.observeHubAgentAdmission({
@@ -180,4 +182,19 @@ test('V2-03 authenticated MCP state requires completed tool; Hub Agent owner/dev
     boundDeviceId:'pc-one',helloDeviceId:'pc-one',expiresAtMs:now-1,revoked:true,
   }),'DEGRADED');
   assert.equal(monitor.observeDisconnect('hub'),'DEGRADED');
+});
+
+test('V2-03 staging bearer must never be sent to private or metadata HTTPS authorities',async t=>{
+  const f=await fixture(t);
+  let externalCalls=0;
+  const fakeFetch:typeof fetch=async()=>{externalCalls++;throw Error('unexpected network');};
+  for(const resourceUrl of [
+    'https://127.0.0.1/mcp','https://10.0.0.1/mcp',
+    'https://169.254.169.254/mcp','https://metadata.google.internal/mcp',
+    'https://[::1]/mcp','https://[fc00::1]/mcp',
+  ])await assert.rejects(f.run({resourceUrl,
+    allowLoopbackHttpFixture:false,fetchImpl:fakeFetch}),/STAGING_RESOURCE_INVALID/);
+  await assert.rejects(f.run({issuerUrl:'https://metadata.google.internal',
+    fetchImpl:fakeFetch}),/STAGING_ISSUER_INVALID/);
+  assert.equal(externalCalls,0);
 });
