@@ -172,6 +172,12 @@ export interface HubReconnectDecision {
   minimumDelayMs: number;
   reason: 'transient' | 'overloaded' | 'reauthorization_required' | 'protocol_rejected';
 }
+/** Parse the exact ws HTTP upgrade rejection used by the runtime reconnect loop. */
+export function parseHubHandshakeStatus(errorMessage:string): number | undefined {
+  const match=/Unexpected server response:\s*(\d{3})/i.exec(errorMessage);
+  return match ? Number(match[1]) : undefined;
+}
+
 export function classifyHubReconnectFailure(input: HubReconnectFailure): HubReconnectDecision {
   const status = input.httpStatus;
   if (status === 401 || status === 403) {
@@ -776,8 +782,7 @@ export async function runNativeAgent(
       socket.once('close', (code) => { closeCode = code; finish(); });
       socket.once('error', (error: Error & {code?: string}) => {
         transportErrorCode = error.code;
-        const matched = /Unexpected server response:\s*(\d{3})/i.exec(error.message);
-        if (matched) httpStatus = Number(matched[1]);
+        httpStatus = parseHubHandshakeStatus(error.message);
         finish();
       });
     });
