@@ -44,6 +44,16 @@ function ipv6Global(address:string):boolean{
 function loopbackAddress(address:string):boolean{
   return address==='127.0.0.1'||address==='::1';
 }
+
+/** The connected peer, not a second DNS lookup, must match the vetted IP.
+ * IPv6 is compared in canonical form so equivalent compressed spelling works. */
+function sameNetworkAddress(actual:string|undefined,expected:string):boolean{
+  if(!actual||isIP(actual)!==isIP(expected))return false;
+  const canonical=(value:string)=>isIP(value)===6
+    ? new URL('http://['+value+']/').hostname.toLowerCase()
+    : value;
+  return canonical(actual)===canonical(expected);
+}
 function forbiddenHost(hostname:string):boolean{
   const host=hostname.toLowerCase().replace(/^\[|\]$/g,'');
   return host==='metadata'||host==='instance-data'||
@@ -64,7 +74,9 @@ export function normalizeControlPlaneBase(input:string):string{
      /%(?:2e|2f|5c|00)/i.test(raw)||
      /\/(?:\.|\.\.)(?:\/|$)/.test(raw))throw new Error('CONTROL_PLANE_URL_INVALID');
   const rawAuthority=/^[a-z][a-z0-9+.-]*:\/\/([^/?#]+)/i.exec(raw)?.[1];
-  if(!rawAuthority||rawAuthority.includes('@'))throw new Error('CONTROL_PLANE_URL_INVALID');
+  if(!rawAuthority||rawAuthority.includes('@')||
+     !/^[\x21-\x7e]+$/.test(rawAuthority)||rawAuthority.includes('%'))
+    throw new Error('CONTROL_PLANE_URL_INVALID');
   const rawHost=rawAuthority.startsWith('[')
     ? rawAuthority.slice(0,rawAuthority.indexOf(']')+1)
     : rawAuthority.replace(/:\d+$/,'');
@@ -75,7 +87,10 @@ export function normalizeControlPlaneBase(input:string):string{
   if(numeric&&rawHost.toLowerCase()!==url.hostname.toLowerCase())
     throw new Error('CONTROL_PLANE_NONCANONICAL_ADDRESS');
   if(forbiddenHost(url.hostname))throw new Error('CONTROL_PLANE_UNSAFE_DESTINATION');
-  if(!numeric&&!/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/i.test(url.hostname))
+  if(!numeric&&(!/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/i.test(url.hostname)||
+      url.hostname.length>253||
+      url.hostname.split('.').some(label=>!label||label.length>63||
+        label.startsWith('-')||label.endsWith('-')||label.startsWith('xn--'))))
     throw new Error('CONTROL_PLANE_URL_INVALID');
   const local=loopbackAddress(parsedHost)||url.hostname==='localhost';
   if(url.protocol==='http:'&&!local)throw new Error('CONTROL_PLANE_HTTPS_REQUIRED');
@@ -140,8 +155,9 @@ export async function controlPlaneSecretPost(
 ):Promise<Response>{
   if(init.method!=='POST'||init.redirect!=='error'||typeof init.body!=='string')
     throw new Error('CONTROL_PLANE_REQUEST_INVALID');
-  const url=new URL(input);
-  normalizeControlPlaneBase(url.origin);
+  // Validate the ENTIRE destination, not merely URL.origin, which discards
+  // userinfo, query and fragment before admission can reject them.
+  const url=new URL(normalizeControlPlaneBase(input));
   if(injectedFetch){
     const response=await injectedFetch(input,init);
     if(response.status>=300&&response.status<400)throw new Error('CONTROL_PLANE_REDIRECT_DENIED');
@@ -174,6 +190,18 @@ export async function controlPlaneSecretPost(
       });
     });
     request.once('error',reject);
-    request.end(init.body);
+    // End() is deliberately delayed: neither Authorization nor the POST body
+    // may leave the process before the connected peer and TLS are verified.
+    request.once('socket',socket=>{
+      socket.once(url.protocol==='https:'?'secureConnect':'connect',()=>{
+        if(!sameNetworkAddress(socket.remoteAddress,pinned.address)||
+           (url.protocol==='https:'&&
+             (!('authorized' in socket)||socket.authorized!==true))){
+          request.destroy(new Error('CONTROL_PLANE_PEER_UNVERIFIED'));
+          return;
+        }
+        request.end(init.body);
+      });
+    });
   });
 }
