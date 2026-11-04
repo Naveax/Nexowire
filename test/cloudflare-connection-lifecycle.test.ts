@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,rm,writeFile,readFile} from 'node:fs/promises';
+import {mkdtemp,rm,writeFile,readFile,mkdir,symlink} from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import {randomUUID} from 'node:crypto';
@@ -22,7 +22,7 @@ const profile=()=>({version:1,hostname:'mcp.example.test',tunnelId:randomUUID(),
 test('connection launcher preserves quoted Unicode paths and only protected Hub configuration',()=>{
   const source=buildCloudflareConnectionLauncher(path.resolve("Ömer's profile.json"),{
     executable:process.execPath,cli:path.resolve("Ömer's cli.js"),
-    env:{...environment,NODE_OPTIONS:'--import evil.js',TUNNEL_URL:'http://evil.test',UNRELATED_SECRET:'never-copy'},
+    env:{...environment,NODE_OPTIONS:'--import evil.js',TUNNEL_URL:'http://evil.test',HTTP_PROXY:'http://proxy.attacker.test',HTTPS_PROXY:'http://proxy.attacker.test',ALL_PROXY:'socks://proxy.attacker.test',NO_PROXY:'localhost.attacker.test',UNRELATED_SECRET:'never-copy'},
   });
   assert.ok(source.startsWith('\uFEFF# Nexowire'));
   assert.ok(source.includes("Ömer''s profile.json"));
@@ -33,6 +33,8 @@ test('connection launcher preserves quoted Unicode paths and only protected Hub 
   assert.ok(source.includes('AssignProcessToJobObject'));
   assert.equal(source.includes('& '+process.execPath),false);
   assert.equal(source.includes('evil.js'),false);assert.equal(source.includes('never-copy'),false);
+  assert.equal(source.includes('proxy.attacker.test'),false);
+  assert.equal(source.includes('localhost.attacker.test'),false);
   assert.ok(source.includes('Remove-Item'));
   assert.throws(()=>buildCloudflareConnectionLauncher('relative.json'));
   assert.throws(()=>buildCloudflareConnectionLauncher(path.resolve('profile.json'),{
@@ -93,6 +95,26 @@ test('Cloudflare connection task refuses reserved Hub and protected boot task id
   }
 });
 
+test('Windows connection install refuses a junction root before touching target files',{
+  skip:process.platform!=='win32',timeout:30000,
+},async t=>{
+  const base=await mkdtemp(path.join(os.tmpdir(),'nwx-cf-junction-'));
+  t.after(async()=>{await rm(base,{recursive:true,force:true,maxRetries:8,retryDelay:100});});
+  const target=path.join(base,'target'),linked=path.join(base,'linked');
+  await mkdir(target);
+  await symlink(target,linked,'junction');
+  const profileFile=path.join(base,'profile.json');
+  const tokenFile=path.join(base,'token.txt');
+  await writeFile(profileFile,JSON.stringify(profile()));
+  await writeFile(tokenFile,'disposable-fixture-token');
+  await assert.rejects(cloudflareConnectionLifecycle('install',profileFile,{
+    root:linked,taskName:'Nexowire Cloudflare Link Test '+randomUUID(),
+    env:{...environment,NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_FILE:tokenFile},
+    executable:process.execPath,cli:path.resolve('dist/src/cli.js'),
+  }),/CONNECTION_ROOT_REPARSE/);
+  await assert.rejects(readFile(path.join(target,'launch.ps1'),'utf8'),{code:'ENOENT'});
+});
+
 test('Windows controller PowerShell 5.1 source parses without executing any task',{
   skip:process.platform!=='win32',timeout:30000,
 },()=>{
@@ -113,6 +135,39 @@ exit 0`;
       input:windowsConnectionControllerSourceForTest(),encoding:'utf8',timeout:15000,windowsHide:true,
     });
   assert.equal(result.status,0,'PowerShell parser failures: '+(result.stdout??'').slice(0,1000));
+});
+
+test('hosted disposable Windows task refuses foreign action without rewriting its principal', {
+  skip:!(process.platform==='win32' && process.env.GITHUB_ACTIONS==='true' &&
+    process.env.RUNNER_OS==='Windows' && process.env.RUNNER_ENVIRONMENT==='github-hosted'),
+  timeout:75000,
+},async t=>{
+  const taskName='Nexowire Cloudflare Foreign '+randomUUID();
+  const invoke=(script:string)=>spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+    ['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{
+      windowsHide:true,encoding:'utf8',timeout:20000,
+      env:{...process.env,NEXOWIRE_TEST_FOREIGN_TASK:taskName},
+    });
+  const install=invoke(String.raw`$ErrorActionPreference='Stop'
+Import-Module 'C:\Windows\System32\WindowsPowerShell\v1.0\Modules\ScheduledTasks\ScheduledTasks.psd1'
+$u=[Security.Principal.WindowsIdentity]::GetCurrent().Name
+$a=New-ScheduledTaskAction -Execute 'C:\Windows\System32\cmd.exe' -Argument '/c exit 0'
+$p=New-ScheduledTaskPrincipal -UserId $u -LogonType Interactive -RunLevel Limited
+$t=New-ScheduledTaskTrigger -AtLogOn -User $u
+Register-ScheduledTask -TaskName $env:NEXOWIRE_TEST_FOREIGN_TASK -TaskPath '\' -Action $a -Principal $p -Trigger $t -Settings (New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew) | Out-Null`);
+  assert.equal(install.status,0,'disposable foreign-task fixture registration');
+  t.after(()=>{
+    const cleaned=invoke(String.raw`Unregister-ScheduledTask -TaskName $env:NEXOWIRE_TEST_FOREIGN_TASK -TaskPath '\' -Confirm:$false -ErrorAction Stop`);
+    assert.equal(cleaned.status,0,'disposable fixture cleanup must succeed');
+  });
+  const exportTask=()=>invoke(String.raw`Export-ScheduledTask -TaskName $env:NEXOWIRE_TEST_FOREIGN_TASK -TaskPath '\' -ErrorAction Stop`);
+  const before=exportTask();
+  assert.equal(before.status,0);
+  await assert.rejects(cloudflareConnectionLifecycle('status',undefined,{taskName}),/CONNECTION_TASK_NOT_OWNED/);
+  await assert.rejects(cloudflareConnectionLifecycle('uninstall',undefined,{taskName}),/CONNECTION_TASK_NOT_OWNED/);
+  const after=exportTask();
+  assert.equal(after.status,0);
+  assert.equal(after.stdout,before.stdout,'foreign task action/principal must be unchanged');
 });
 
 test('Windows user-logon task registers limited and cannot be silently overwritten',{
