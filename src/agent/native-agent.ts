@@ -147,9 +147,72 @@ export function parseHubEndpoints(
     if (seen.has(normalized)) continue;
     seen.add(normalized);
     endpoints.push(normalized);
+    if (endpoints.length > 8) {
+      throw new Error('At most eight distinct Hub endpoints are allowed.');
+    }
   }
 
   return endpoints;
+}
+
+
+/**
+ * Retry policy is for the transport ONLY. A new WebSocket never authorizes a
+ * previously dispatched mutation, and 60-second session revalidation cannot
+ * replace dispatch-time authorization.
+ */
+export type HubReconnectFailure = {
+  httpStatus?: number;
+  wsCloseCode?: number;
+  errorCode?: string;
+};
+export interface HubReconnectDecision {
+  retryable: boolean;
+  minimumDelayMs: number;
+  reason: 'transient' | 'overloaded' | 'reauthorization_required' | 'protocol_rejected';
+}
+export function classifyHubReconnectFailure(input: HubReconnectFailure): HubReconnectDecision {
+  const status = input.httpStatus;
+  if (status === 401 || status === 403) {
+    return {retryable: false, minimumDelayMs: 0, reason: 'reauthorization_required'};
+  }
+  if (status === 429) {
+    return {retryable: true, minimumDelayMs: 5_000, reason: 'overloaded'};
+  }
+  if (status !== undefined && status >= 400 && status < 500) {
+    return {retryable: false, minimumDelayMs: 0, reason: 'protocol_rejected'};
+  }
+  if (input.wsCloseCode === 1008 || input.wsCloseCode === 4001) {
+    return {retryable: false, minimumDelayMs: 0, reason: 'reauthorization_required'};
+  }
+  if ([1002, 1003, 1007, 1009].includes(input.wsCloseCode ?? -1)) {
+    return {retryable: false, minimumDelayMs: 0, reason: 'protocol_rejected'};
+  }
+  if (input.errorCode && [
+    'ERR_TLS_CERT_ALTNAME_INVALID', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+    'DEPTH_ZERO_SELF_SIGNED_CERT', 'CERT_HAS_EXPIRED',
+  ].includes(input.errorCode)) {
+    return {retryable: false, minimumDelayMs: 0, reason: 'protocol_rejected'};
+  }
+  if (input.wsCloseCode === 1013 || status === 503) {
+    return {retryable: true, minimumDelayMs: 5_000, reason: 'overloaded'};
+  }
+  // 1006/1011, 5xx, DNS loss, route changes and TCP half-open can recover.
+  return {retryable: true, minimumDelayMs: 0, reason: 'transient'};
+}
+
+/** Eight short failures maximum per burst; then a 30s cooldown, not a spin. */
+export function boundHubRetryWait(input: {
+  scheduledMs: number;
+  consecutiveFailures: number;
+  minimumDelayMs?: number;
+}): number {
+  const requested = Math.max(
+    input.scheduledMs,
+    input.minimumDelayMs ?? 0,
+    input.consecutiveFailures >= 8 ? 30_000 : 0,
+  );
+  return Math.min(30_000, Math.max(250, Math.ceil(requested)));
 }
 
 export interface NextHubAttempt {
@@ -452,6 +515,7 @@ export async function runNativeAgent(
   progressWatchdogTimer.unref();
   let reconnectDelay = 1_000;
   let endpointIndex = 0;
+  let consecutiveFailures = 0;
 
   const stop = (): void => {
     coreConsole.close();
@@ -469,6 +533,9 @@ export async function runNativeAgent(
     const socket = new WebSocket(hubUrl, headers ? { headers } : undefined);
     currentSocket = socket;
     let openedAt: number | undefined;
+    let closeCode: number | undefined;
+    let httpStatus: number | undefined;
+    let transportErrorCode: string | undefined;
 
     await new Promise<void>((resolve) => {
       const requestLifetime = new AbortController();
@@ -703,12 +770,32 @@ export async function runNativeAgent(
         });
       });
 
-      socket.once('close', finish);
-      socket.once('error', finish);
+      socket.once('close', (code) => { closeCode = code; finish(); });
+      socket.once('error', (error: Error & {code?: string}) => {
+        transportErrorCode = error.code;
+        const matched = /Unexpected server response:\s*(\d{3})/i.exec(error.message);
+        if (matched) httpStatus = Number(matched[1]);
+        finish();
+      });
     });
 
     currentSocket = undefined;
     if (stopped) break;
+
+    const retry = classifyHubReconnectFailure({
+      ...(httpStatus !== undefined ? {httpStatus} : {}),
+      ...(closeCode !== undefined ? {wsCloseCode: closeCode} : {}),
+      ...(transportErrorCode ? {errorCode: transportErrorCode} : {}),
+    });
+    if (!retry.retryable) {
+      stopped = true;
+      clearInterval(progressWatchdogTimer);
+      coreConsole.close();
+      void processes.shutdown();
+      operationJournal.close();
+      await singletonLock?.close();
+      throw new Error('Hub reconnect denied: ' + retry.reason + '. Manual remediation required.');
+    }
 
     const connectedMs =
       openedAt === undefined ? 0 : Date.now() - openedAt;
@@ -720,9 +807,13 @@ export async function runNativeAgent(
     });
     endpointIndex = plan.endpointIndex;
     reconnectDelay = plan.nextBackoffMs;
-    await new Promise((resolve) =>
-      setTimeout(resolve, plan.waitMs),
-    );
+    consecutiveFailures = plan.stableConnection ? 0 : consecutiveFailures + 1;
+    const waitMs = boundHubRetryWait({
+      scheduledMs: plan.waitMs,
+      minimumDelayMs: retry.minimumDelayMs,
+      consecutiveFailures,
+    });
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
   }
 
   process.exit(0);

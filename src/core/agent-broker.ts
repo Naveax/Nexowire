@@ -36,6 +36,9 @@ interface PendingRequest {
 export interface AgentConnectionHealth {
   deviceId: string;
   online: boolean;
+  // AUTHENTICATED_ONLINE is set only after the authorized hello is registered.
+  // Socket OPEN by itself is not an authorization or mutation completion.
+  state: 'AUTHENTICATED_ONLINE' | 'UNKNOWN' | 'DISCONNECTED';
   transport: 'websocket';
   epoch: number;
   reconnectCount: number;
@@ -78,6 +81,8 @@ export interface AgentBrokerOptions {
   maxEventBytes?: number;
   reconnectGraceMs?: number;
   maxReadOnlyReplays?: number;
+  maxResumesPerEpoch?: number;
+  maxGlobalResumesPerSecond?: number;
   metrics?: ScaleTransportMetrics;
   onDeviceState?: (
     event: DeviceStateEvent,
@@ -104,6 +109,9 @@ export class AgentBroker {
   private readonly maxEventBytes: number;
   private readonly reconnectGraceMs: number;
   private readonly maxReadOnlyReplays: number;
+  private readonly maxResumesPerEpoch: number;
+  private readonly maxGlobalResumesPerSecond: number;
+  private readonly recentResumeTimes: number[] = [];
   private readonly metrics?: ScaleTransportMetrics;
   private readonly onDeviceState?: (
     event: DeviceStateEvent,
@@ -120,6 +128,8 @@ export class AgentBroker {
       Math.max(250, options.reconnectGraceMs ?? 5_000),
     );
     this.maxReadOnlyReplays = Math.min(5, Math.max(0, options.maxReadOnlyReplays ?? 2));
+    this.maxResumesPerEpoch = Math.min(512, Math.max(1, options.maxResumesPerEpoch ?? 32));
+    this.maxGlobalResumesPerSecond = Math.min(512, Math.max(1, options.maxGlobalResumesPerSecond ?? 64));
     this.onDeviceState = options.onDeviceState;
   }
 
@@ -142,6 +152,7 @@ export class AgentBroker {
     this.healthByDevice.set(deviceId, {
       deviceId,
       online: true,
+      state: 'AUTHENTICATED_ONLINE',
       transport: 'websocket',
       epoch: (previous?.epoch ?? 0) + 1,
       reconnectCount,
@@ -209,12 +220,17 @@ export class AgentBroker {
 
   has(deviceId: string): boolean {
     const connection = this.agents.get(deviceId);
-    return connection?.socket.readyState === WebSocket.OPEN;
+    return Boolean(connection && connection.socket.readyState === WebSocket.OPEN &&
+      !this.heartbeatTimedOut.has(connection.socket));
   }
 
   getConnectionHealth(deviceId: string): AgentConnectionHealth | undefined {
     const health = this.healthByDevice.get(deviceId);
-    return health ? { ...health } : undefined;
+    if (!health) return undefined;
+    if (health.online && !this.has(deviceId)) {
+      return {...health, online: false, state: 'UNKNOWN'};
+    }
+    return { ...health };
   }
 
   noteHeartbeatPing(socket: WebSocket): void {
@@ -230,6 +246,8 @@ export class AgentBroker {
     const deviceId = this.socketDeviceIds.get(socket);
     if (deviceId && this.agents.get(deviceId)?.socket === socket) {
       this.heartbeatTimedOut.add(socket);
+      const health = this.healthByDevice.get(deviceId);
+      if (health) { health.online = false; health.state = 'UNKNOWN'; }
       this.recordDisconnectReason(deviceId, 'heartbeat_timeout');
     }
   }
@@ -376,7 +394,7 @@ export class AgentBroker {
     accessMode: 'safe' | 'full' = 'safe',
   ): Promise<unknown> {
     const connection = this.agents.get(deviceId);
-    if (!connection || connection.socket.readyState !== WebSocket.OPEN) {
+    if (!connection || !this.has(deviceId)) {
       throw new NexowireError(
         'AGENT_OFFLINE',
         `Native agent "${deviceId}" is not connected.`,
@@ -495,6 +513,7 @@ export class AgentBroker {
     const health = this.healthByDevice.get(deviceId);
     if (health) {
       health.online = false;
+      health.state = 'DISCONNECTED';
       health.lastDisconnectedAt = new Date().toISOString();
       health.lastDisconnectReason = this.heartbeatTimedOut.has(socket)
         ? 'heartbeat_timeout'
@@ -600,6 +619,15 @@ export class AgentBroker {
         clearTimeout(pending.reconnectTimer);
         pending.reconnectTimer = undefined;
       }
+      if (resumed >= this.maxResumesPerEpoch || !this.takeResumeSlot()) {
+        this.rejectPending(pending.requestId, new NexowireError(
+          'AGENT_RECONNECT_BUDGET',
+          'Read-only reconnect resend budget exhausted; caller may retry only after reauthorization.',
+          {deviceId, requestId: pending.requestId, capability: pending.capability},
+        ));
+        rejected++;
+        continue;
+      }
       pending.sentInstanceId = connection.instanceId;
       pending.readOnlyReplays++;
 
@@ -615,11 +643,23 @@ export class AgentBroker {
     return { resumed, rejected };
   }
 
+  private takeResumeSlot(): boolean {
+    const now = Date.now();
+    while (this.recentResumeTimes.length > 0 &&
+      this.recentResumeTimes[0]! <= now - 1_000) {
+      this.recentResumeTimes.shift();
+    }
+    if (this.recentResumeTimes.length >= this.maxGlobalResumesPerSecond) return false;
+    this.recentResumeTimes.push(now);
+    return true;
+  }
+
   private sendPending(
     connection: AgentConnection,
     pending: PendingRequest,
   ): void {
-    if (connection.socket.readyState !== WebSocket.OPEN) {
+    if (connection.socket.readyState !== WebSocket.OPEN ||
+      this.heartbeatTimedOut.has(connection.socket)) {
       throw new NexowireError(
         'AGENT_OFFLINE',
         `Native agent "${pending.deviceId}" is not connected.`,
