@@ -55,3 +55,6 @@
 - The earlier general Node jobs did not actually run several AI-11/CLEAN-14 top-level negative test files. Added explicit fail-closed Linux and Windows security-oracle CI steps. Failed negatives remain RED and cannot be hidden by general green suites.
 - NAVEAX device `adc90bbb-9576-4b4c-b76a-600e5572ad7d` and Work-PC device `aeaa5295-0aa8-4742-bf0c-2a6340dcf187` online on Native Agent 1.0.8 at read-only inspection; different stable device IDs, native Agent and Broker tasks Running. No production modifications, no v2 deployment/reboot.
 - #1084 Windows 20-cycle task start-stop uses explicit disposable VM flag `NEXOWIRE_V2_04_DISPOSABLE_WINDOWS_VM=YES`. It is not run by hosted Actions and does not count as physical PASS.
+
+## Candidate CI metadata correction
+- Exact SHA `524497acee4d2078828019eb99ff4ad5d8b418df` CI run `41829279333`: `test (24)` failed before adversarial steps because preservation matrix still referenced pre-Oracle `ci.yml` blob; `two_pc_read_only` had an ambiguous non-`NOT_RUN` value. Updated candidate matrix to actual Git blob SHA and restored strict `NOT_RUN` for unperformed v2 acceptance. This change is **not** a security PASS.

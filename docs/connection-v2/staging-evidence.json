@@ -58,7 +58,7 @@
     "owner_device_wss_binding": "NOT_RUN",
     "revocation_inflight": "NOT_RUN",
     "lost_ack_no_replay": "SOURCE_INCLUDED_NOT_ACCEPTED",
-    "two_pc_read_only": "CURRENT_AGENT_ONLY_V2_NOT_RUN",
+    "two_pc_read_only": "NOT_RUN",
     "wss_101": "NOT_RUN",
     "transfer_1gib": "NOT_RUN",
     "soak_24hours": "NOT_RUN",
@@ -121,5 +121,32 @@
         "version": "1.0.8"
       }
     ]
+  },
+  "current_native_agent_read_only_status": {
+    "date": "2026-11-04",
+    "status": "PASS_EXISTING_AGENT_ONLY",
+    "v2_oauth_verified": false,
+    "devices": [
+      {
+        "name": "NAVEAX",
+        "id": "adc90bbb-9576-4b4c-b76a-600e5572ad7d",
+        "online": true,
+        "version": "1.0.8"
+      },
+      {
+        "name": "WORK-PC",
+        "id": "aeaa5295-0aa8-4742-bf0c-2a6340dcf187",
+        "online": true,
+        "version": "1.0.8"
+      }
+    ]
+  },
+  "release_gate_clarification": "Existing native Agent read-only connectivity is not an authenticated Connection v2 two-PC acceptance result",
+  "prior_candidate_ci_metadata_error": {
+    "sha": "524497acee4d2078828019eb99ff4ad5d8b418df",
+    "run_id": 41829279333,
+    "issue": "source preservation expected old ci.yml blob; full CI not reached",
+    "second_issue": "two_pc_read_only incorrectly held CURRENT_AGENT_ONLY_V2_NOT_RUN rather than NOT_RUN",
+    "resolved_in_next_candidate": true
   }
 }
