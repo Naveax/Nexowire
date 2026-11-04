@@ -48,7 +48,7 @@ test('checksum and tunnel identity are checked before any network exposure',asyn
   const p={...profile(),binary,credentialsFile:path.join(dir,'credential.json')};
   await assert.rejects(startCloudflareConnection(p,config()),/checksum mismatch/);
   p.binarySha256=createHash('sha256').update('not an executable').digest('hex');
-  await writeFile(p.credentialsFile,JSON.stringify({TunnelID:randomUUID(),AccountTag:'a'.repeat(32),TunnelSecret:Buffer.alloc(32).toString('base64')}));
+  await writeFile(p.credentialsFile,JSON.stringify({TunnelID:randomUUID(),AccountTag:'a'.repeat(32),TunnelSecret:Buffer.alloc(32).toString('base64')}),{mode:0o600});
   await assert.rejects(startCloudflareConnection(p,config()),/credentials do not match|credential custody unsafe/);
 });
 test('unofficial local binary cannot launch a connector or disrupt the Hub',async t=>{
