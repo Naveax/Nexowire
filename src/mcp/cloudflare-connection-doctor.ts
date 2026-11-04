@@ -1,6 +1,37 @@
 import type {NexowireConfig} from '../config.js';
 import {cloudflareConnectionConfig} from './local-first-cloudflare.js';
 
+/** Evidence stages are NOT interchangeable. Only trusted runtime checks may
+ * set these booleans; a running process or anonymous 401 is never MCP-ready. */
+export type ConnectionV2State=
+  |'LOCAL_PROCESS_RUNNING'
+  |'PUBLIC_OAUTH_BOUNDARY_OK'
+  |'AUTHENTICATED_MCP_READY'
+  |'AGENT_AUTHENTICATED'
+  |'DEGRADED'
+  |'UNAVAILABLE';
+
+export interface ConnectionV2ProofEvidence {
+  localProcessRunning:boolean;
+  publicOauthBoundaryOk:boolean;
+  /** True only after actual OAuth-bound MCP initialize AND read-only tool completion. */
+  authenticatedMcpToolComplete:boolean;
+  /** True only after real Hub-bound device auth and Agent handshake. */
+  agentAuthenticated:boolean;
+  /** Health/revalidation failure after establishment. */
+  dependencyFailure?:boolean;
+}
+export function deriveConnectionV2State(proof:ConnectionV2ProofEvidence):ConnectionV2State{
+  if(!proof.localProcessRunning)return 'UNAVAILABLE';
+  if(proof.dependencyFailure===true ||
+     (!proof.publicOauthBoundaryOk &&
+       (proof.authenticatedMcpToolComplete||proof.agentAuthenticated)))return 'DEGRADED';
+  if(proof.publicOauthBoundaryOk&&proof.agentAuthenticated)return 'AGENT_AUTHENTICATED';
+  if(proof.publicOauthBoundaryOk&&proof.authenticatedMcpToolComplete)return 'AUTHENTICATED_MCP_READY';
+  if(proof.publicOauthBoundaryOk)return 'PUBLIC_OAUTH_BOUNDARY_OK';
+  return 'LOCAL_PROCESS_RUNNING';
+}
+
 type DoctorStage=
   |'PUBLIC_CONNECTION_UNAVAILABLE'
   |'PUBLIC_METADATA_UNAVAILABLE'
