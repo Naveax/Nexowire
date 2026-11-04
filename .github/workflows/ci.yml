@@ -368,3 +368,27 @@ jobs:
         run: |
           node --test --import tsx --test-concurrency=1 test/ai11-connection-v2-negative.test.ts test/clean14-network-security.test.ts test/clean14-revocation-dispatch-negative.test.ts test/v206-control-plane-redirect-real-http.test.ts test/v206-wss-authority-real-http.test.ts test/v2-03-ingress-doctor-bridge.test.ts test/v2-07/continuity-negative.test.ts
           if ($LASTEXITCODE -ne 0) { throw 'V2_WINDOWS_NEGATIVE_ORACLE_RED' }
+
+  connection-v2-native-git-dag:
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'coord/connection-v2-release-candidate-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify exact-head native merge-base, cherry, stable patch-id, merge-tree and blob preservation
+        env:
+          NEXOWIRE_EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: node test/connection-v2-release-gate/git-native-dag.mjs
+      - name: Retain native Git DAG evidence even on failing gate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: connection-v2-native-git-dag
+          path: ${{ runner.temp }}/connection-v2-native-git-dag.json
+          if-no-files-found: error

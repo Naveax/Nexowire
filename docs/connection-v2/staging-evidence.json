@@ -261,5 +261,19 @@
     "reboot": "NOT_RUN",
     "rollback": "NOT_RUN",
     "cloudflared_windows_security": "FAIL"
+  },
+  "native_git_dag_evidence": {
+    "status": "NOT_RUN",
+    "workflow_job": "connection-v2-native-git-dag",
+    "checkout": "EXACT_HEAD_FULL_HISTORY",
+    "commands": [
+      "git merge-base",
+      "git cherry -v",
+      "git patch-id --stable",
+      "git merge-tree --write-tree --messages",
+      "git rev-parse"
+    ],
+    "artifact": "connection-v2-native-git-dag.json",
+    "source_matrix_rows": 54
   }
 }

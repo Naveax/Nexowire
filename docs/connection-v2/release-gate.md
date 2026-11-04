@@ -80,3 +80,8 @@
 - Candidate-only early Windows `prepareTrustedCloudflared()` precheck runs before credential read or Hub probe, preventing a profile-matching SHA of an unrelated executable from being treated as publisher proof. Windows native immutable-image launch remains denied without signed handle custodian.
 - Prior exact SHA `89d9c336e8a6587069f32a4ea00befbb649692ca`: Linux Node22/24 general CI SUCCESS, Node24 explicit security negative 60/60 PASS (CI `41834121454`, job `126588539754`). Windows 22/24 explicit suite has only P1-B publisher assertion RED, not waived.
 - GitHub-hosted disposable Windows VM on previous SHA `e9e598dbf689cb4e063ce5b5d4ce430ef7e58804` run `41833352347`, job `126585876171`: **20/20 real Scheduler start-stop/descendant cleanup cycles PASS**. Reboot/rollback NOT_RUN. Cloudflared Windows P1-B/D remains a separate blocker.
+
+## Native Git DAG evidence gate (candidate-only CI)
+- Added `connection-v2-native-git-dag` Linux CI job gated to coordinator PR branch only; full-history checkout at **exact PR head SHA**.
+- New `test/connection-v2-release-gate/git-native-dag.mjs` executes real `git merge-base`, `git cherry -v`, `git patch-id --stable`, `git merge-tree --write-tree --messages`, ancestry and all 54 source/candidate blob checks. A conflict or mismatch is RED, never auto-resolved.
+- Evidence artifact `connection-v2-native-git-dag.json` is produced even on a failed job. Until a matching Actions run exists, native Git checks are **NOT_RUN**. A DAG PASS alone never grants production GO.
