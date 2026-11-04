@@ -49,6 +49,7 @@ test('CLEAN-13 P1-D Windows exact SID, inherited ACE and parent replacement righ
     if(error instanceof CloudflareCredentialCustodyError){
       console.info('CLEAN13_WINDOWS_ACL_OWNER_ONLY_DIAG='+JSON.stringify({
         reason:error.code,elapsedMs:error.elapsedMs,exitCode:error.childExitCode,
+        aclDetail:error.aclDetail??null,
       }));
     }
     throw error;
