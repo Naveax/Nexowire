@@ -25,7 +25,11 @@ test('connection launcher preserves quoted Unicode paths and only protected Hub 
   assert.ok(source.startsWith('\uFEFF# Nexowire'));
   assert.ok(source.includes("Ömer''s profile.json"));
   assert.ok(source.includes("Ömer''s cli.js"));
-  assert.ok(source.includes("'local-first' 'cloudflare-run'"));
+  assert.ok(source.includes("'local-first','cloudflare-run'"));
+  assert.ok(source.includes('JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE'));
+  assert.ok(source.includes('CREATE_SUSPENDED'));
+  assert.ok(source.includes('AssignProcessToJobObject'));
+  assert.equal(source.includes('& '+process.execPath),false);
   assert.equal(source.includes('evil.js'),false);assert.equal(source.includes('never-copy'),false);
   assert.ok(source.includes('Remove-Item'));
   assert.throws(()=>buildCloudflareConnectionLauncher('relative.json'));
@@ -44,11 +48,23 @@ test('public doctor distinguishes OAuth metadata from authenticated tool readine
     calls++;
     if(calls===1){assert.equal(String(input),'https://mcp.example.test/.well-known/oauth-protected-resource/mcp');
       return Response.json({resource:c.mcpResourceUrl,authorization_servers:['https://control.example.test/']});}
-    assert.equal(init?.method,'POST');return new Response('',{status:401});
+    assert.equal(init?.method,'POST');return new Response('',{status:401,headers:{
+      'www-authenticate':'Bearer resource_metadata="https://mcp.example.test/.well-known/oauth-protected-resource/mcp"',
+    }});
   });
   assert.equal(calls,2);assert.equal(status.publicBoundaryVerified,true);
   assert.equal(status.authenticatedToolVerified,false);
 });
+test('unbound 401 without exact OAuth challenge cannot pass the public boundary',async()=>{
+  let calls=0;
+  const status=await inspectCloudflareConnection(profile(),config(),async()=>{
+    return ++calls===1?Response.json({resource:'https://mcp.example.test/mcp',
+      authorization_servers:['https://control.example.test']}):new Response('',{status:401});
+  });
+  assert.equal(calls,2);assert.equal(status.publicBoundaryVerified,false);
+  assert.equal(status.stage,'PUBLIC_AUTH_BOUNDARY_FAILED');
+});
+
 test('wrong public resource or issuer stops diagnostic before MCP POST',async()=>{
   for(const metadata of [
     {resource:'https://wrong.example.test/mcp',authorization_servers:['https://control.example.test']},
@@ -68,6 +84,13 @@ test('network failure, excessive metadata and unauthenticated success never repo
     new Response('',{status:200}))).stage,'PUBLIC_AUTH_BOUNDARY_FAILED');
 });
 
+test('Cloudflare connection task refuses reserved Hub and protected boot task identities',async()=>{
+  if(process.platform!=='win32')return;
+  for(const name of ['Nexowire Hub','Nexowire Hub Boot','Nexowire Stack']){
+    await assert.rejects(cloudflareConnectionLifecycle('status',undefined,{taskName:name}),/Invalid connection task name/);
+  }
+});
+
 test('Windows user-logon task registers limited and cannot be silently overwritten',{
   skip:process.platform!=='win32',timeout:120000,
 },async t=>{
@@ -85,10 +108,18 @@ test('Windows user-logon task registers limited and cannot be silently overwritt
   assert.equal(installed.installed,true);assert.equal(installed.limited,true);assert.equal(installed.autostart,true);
   assert.notEqual(installed.state,'Running','registration does not interrupt or auto-start any existing process');
   const before=await readFile(path.join(root,'launch.ps1'),'utf8');
+  const beforeHash=await readFile(path.join(root,'launch.ps1.sha256'),'utf8');
+  assert.match(beforeHash,/^[A-F0-9]{64}\n$/);
   await assert.rejects(cloudflareConnectionLifecycle('install',file,options),/already installed/);
   assert.equal(await readFile(path.join(root,'launch.ps1'),'utf8'),before);
+  // An attacker can preserve the BOM and banner; the pinned digest must still deny.
+  await writeFile(path.join(root,'launch.ps1'),before+'# unauthorized change\r\n');
+  await assert.rejects(cloudflareConnectionLifecycle('start',undefined,options),/refused/);
+  await writeFile(path.join(root,'launch.ps1'),before);
+  assert.equal(await readFile(path.join(root,'launch.ps1.sha256'),'utf8'),beforeHash);
   await cloudflareConnectionLifecycle('uninstall',undefined,options);
   assert.equal((await cloudflareConnectionLifecycle('status',undefined,options)).installed,false);
+  await assert.rejects(readFile(path.join(root,'launch.ps1.sha256'),'utf8'),{code:'ENOENT'});
   // A clean uninstall permits a fresh explicit registration.
   assert.equal((await cloudflareConnectionLifecycle('install',file,options)).installed,true);
 });

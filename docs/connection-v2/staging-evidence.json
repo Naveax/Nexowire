@@ -6,18 +6,20 @@
   "main_parent": "939b4d6beecf996f2750c736c5d4b4beb7b64488",
   "main_tree": "46f30e68c3df6984a27c2b65b52a6e6687a8f325",
   "source_heads": {
-    "1003": "bf9e54227f6dc19bcca440718dc822c2af91e318",
-    "1044": "835d17e05e7d06c7ea30b53635dec2a34e7f8968",
+    "1003": "95d9f9e431ad5a9c46adde1ecf716f84d60d8455",
+    "1044": "d38b30fec77cce5c9b5e29c491b11f8fe6806bef",
     "1074": "5997a6d7ae43c34170016eb0963718ee35bf4a15",
     "1077": "67fa411c6aa6135aeeac93f7197b5fd46c804884",
-    "1081": "707db9728c883d1bb027788793f4cc072768f325"
+    "1081": "707db9728c883d1bb027788793f4cc072768f325",
+    "1083": "4d8e7b359d572a6ee4cf22fd02ad9ee7ed81808e",
+    "1084": "84cfcaa19095f3210e92ffc22d7ca3dce3d8dd13"
   },
-  "source_files": 40,
-  "matrix_rows": 45,
+  "source_files": 47,
+  "matrix_rows": 54,
   "matrix_status": {
     "MERGED_MAIN_SECURITY_REVIEW_REQUIRED": 4,
-    "EXACT_BLOB": 38,
-    "EVOLVED_SOURCE_SEMANTIC_REVIEW_REQUIRED": 3
+    "EXACT_BLOB": 45,
+    "EVOLVED_SOURCE_SEMANTIC_REVIEW_REQUIRED": 5
   },
   "source_candidate_manifest_blob": "b00a6e3ff5d803575b3093c642c9d994c958b2be",
   "candidate_tree_sha": "CREATED_AFTER_EVIDENCE_BLOB",
@@ -49,25 +51,75 @@
     }
   ],
   "acceptance": {
-    "candidate_exact_head_ci": "NOT_RUN",
-    "adversarial_negatives": "NOT_RUN",
-    "windows_task_reboot": "NOT_RUN",
+    "candidate_exact_head_ci": "PENDING_NEW_SHA",
+    "adversarial_negatives": "EXPLICIT_CI_STEP_ADDED_PENDING_EXECUTION",
+    "windows_task_reboot": "SOURCE_INCLUDED_DISPOSABLE_VM_NOT_RUN",
     "mcp_offnetwork_oauth_readonly": "NOT_RUN",
     "owner_device_wss_binding": "NOT_RUN",
     "revocation_inflight": "NOT_RUN",
-    "lost_ack_no_replay": "NOT_RUN",
-    "two_pc_read_only": "NOT_RUN",
+    "lost_ack_no_replay": "SOURCE_INCLUDED_NOT_ACCEPTED",
+    "two_pc_read_only": "CURRENT_AGENT_ONLY_V2_NOT_RUN",
     "wss_101": "NOT_RUN",
     "transfer_1gib": "NOT_RUN",
     "soak_24hours": "NOT_RUN",
     "provider_cost_quota": "NOT_RUN"
   },
-  "future_sources": [
-    "V2-04",
-    "V2-07"
-  ],
+  "future_sources": [],
   "production_modified": false,
   "billing_changed": false,
   "source_branches_modified": false,
-  "main_merged": false
+  "main_merged": false,
+  "integration_scope": "SEVEN_SOURCE_CANDIDATE_NOT_APPROVED",
+  "previous_candidate_ci": {
+    "sha": "c09ad208dfc34b18a6d91b2cb00a635939df2159",
+    "run_id": 41826788848,
+    "conclusion": "failure",
+    "success_jobs": [
+      "test(22)",
+      "test(24)",
+      "wsl2-live",
+      "security-operational-live",
+      "macos-agent-lifecycle-live",
+      "linux-native-live"
+    ],
+    "failed_jobs": [
+      {
+        "name": "browser-live",
+        "job_id": 126563449512,
+        "exit_code": 1,
+        "failed_assertions": [
+          "CLEAN-13 Windows credential custody",
+          "CLEAN-13 official-image native guard",
+          "OAuth doctor readiness",
+          "Windows task descendant cleanup"
+        ]
+      }
+    ],
+    "relay_qa": {
+      "run_id": 41826788911,
+      "conclusion": "success",
+      "pass": 4,
+      "total": 4
+    },
+    "security_negative_oracle": "NOT_RUN_IN_PRIOR_GENERAL_NODE_JOBS"
+  },
+  "live_current_agent_read_only": {
+    "date": "2026-11-04",
+    "status": "PASS_EXISTING_AGENT_ONLY",
+    "v2_oauth_verified": false,
+    "devices": [
+      {
+        "name": "NAVEAX",
+        "id": "adc90bbb-9576-4b4c-b76a-600e5572ad7d",
+        "online": true,
+        "version": "1.0.8"
+      },
+      {
+        "name": "WORK-PC",
+        "id": "aeaa5295-0aa8-4742-bf0c-2a6340dcf187",
+        "online": true,
+        "version": "1.0.8"
+      }
+    ]
+  }
 }

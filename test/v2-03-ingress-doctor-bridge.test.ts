@@ -5,8 +5,23 @@ import {randomUUID} from 'node:crypto';
 import type {AddressInfo} from 'node:net';
 import WebSocket from 'ws';
 import {loadConfig} from '../src/config.js';
-import {inspectCloudflareConnection} from '../src/mcp/cloudflare-connection-doctor.js';
+import {deriveConnectionV2State,inspectCloudflareConnection} from '../src/mcp/cloudflare-connection-doctor.js';
 import {createLocalFirstIngressServer} from '../src/mcp/local-first-ingress.js';
+
+test('V2-03 readiness matrix never promotes process/status 401 to authenticated MCP',()=>{
+  const base={localProcessRunning:true,publicOauthBoundaryOk:false,
+    authenticatedMcpToolComplete:false,agentAuthenticated:false};
+  assert.equal(deriveConnectionV2State({...base,localProcessRunning:false}),'UNAVAILABLE');
+  assert.equal(deriveConnectionV2State(base),'LOCAL_PROCESS_RUNNING');
+  assert.equal(deriveConnectionV2State({...base,dependencyFailure:true}),'DEGRADED');
+  assert.equal(deriveConnectionV2State({...base,publicOauthBoundaryOk:true}),'PUBLIC_OAUTH_BOUNDARY_OK');
+  assert.equal(deriveConnectionV2State({...base,publicOauthBoundaryOk:true,
+    authenticatedMcpToolComplete:true}),'AUTHENTICATED_MCP_READY');
+  assert.equal(deriveConnectionV2State({...base,publicOauthBoundaryOk:true,
+    agentAuthenticated:true}),'AGENT_AUTHENTICATED');
+  assert.equal(deriveConnectionV2State({...base,authenticatedMcpToolComplete:true}),'DEGRADED');
+  assert.equal(deriveConnectionV2State({...base,agentAuthenticated:true}),'DEGRADED');
+});
 
 const resource='https://mcp.example.test/mcp';
 const metadataUrl='https://mcp.example.test/.well-known/oauth-protected-resource/mcp';

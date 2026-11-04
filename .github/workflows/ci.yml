@@ -159,6 +159,23 @@ jobs:
           grep -qx '# todo 0' "$RUNNER_TEMP/nw-k060708-docs.tap"
       - name: Verify coordinator PR dependency and exact-head CI gates
         run: node --test --import tsx test/qa-v108-integration-gates.test.ts
+      - name: Connection v2 security negative oracle (fail-closed)
+        shell: bash
+        timeout-minutes: 15
+        run: |
+          set -euo pipefail
+          node --test --test-reporter=tap --import tsx --test-concurrency=1 \
+            test/ai11-cloudflare-address-and-credential-custody.test.ts \
+            test/ai11-cloudflared-path-race-negative.test.ts \
+            test/ai11-connection-v2-negative.test.ts \
+            test/clean13-cloudflared-custody.test.ts \
+            test/clean14-network-security.test.ts \
+            test/clean14-revocation-dispatch-negative.test.ts \
+            test/v206-control-plane-redirect-real-http.test.ts \
+            test/v206-linux-file-identity-negative.test.ts \
+            test/v206-wss-authority-real-http.test.ts \
+            test/v2-03-ingress-doctor-bridge.test.ts \
+            test/v2-07/continuity-negative.test.ts
       - run: npm run build
 
   browser-live:
@@ -174,6 +191,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - name: Connection v2 Windows negative oracle (fail-closed)
+        timeout-minutes: 15
+        shell: pwsh
+        run: |
+          node --test --import tsx --test-concurrency=1 test/ai11-connection-v2-negative.test.ts test/clean14-network-security.test.ts test/clean14-revocation-dispatch-negative.test.ts test/v206-control-plane-redirect-real-http.test.ts test/v206-wss-authority-real-http.test.ts test/v2-03-ingress-doctor-bridge.test.ts test/v2-07/continuity-negative.test.ts
+          if ($LASTEXITCODE -ne 0) { throw 'V2_WINDOWS_NEGATIVE_ORACLE_RED' }
       - name: Verify Cloudflare-only connector lifecycle and active Agent authorization
         timeout-minutes: 5
         shell: pwsh

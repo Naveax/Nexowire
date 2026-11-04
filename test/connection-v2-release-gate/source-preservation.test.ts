@@ -26,8 +26,8 @@ const sha=(buffer: Buffer): string =>
 test('candidate preserves each recorded source path at its expected Git blob',() => {
   const matrix=rows(readFileSync(resolve('docs/connection-v2/source-preservation-matrix.csv'),'utf8'));
   assert.deepEqual(matrix.shift(),['source_pr','source_head','path','source_blob','candidate_blob','status','notes']);
-  assert.equal(matrix.length,45);
-  for (const id of ['1003','1044','1074','1077','1081']) assert.ok(matrix.some(row=>row[0]===id),id+' missing');
+  assert.equal(matrix.length,54);
+  for (const id of ['1003','1044','1074','1077','1081','1083','1084']) assert.ok(matrix.some(row=>row[0]===id),id+' missing');
   for(const row of matrix) {
     assert.equal(row.length,7,'matrix schema mismatch');
     const id = row[0]!;
