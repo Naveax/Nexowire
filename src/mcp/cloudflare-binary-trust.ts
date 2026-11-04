@@ -65,7 +65,7 @@ export async function prepareTrustedCloudflared(binary:string,profileDigest:stri
     if(!sameFile(original,await source.stat({bigint:true})))
       deny('Cloudflared binary changed during verification');
     bytes=await source.readFile();
-    if(BigInt(bytes.length)!==original.size||!sameFile(original,await source.stat()))
+    if(BigInt(bytes.length)!==original.size||!sameFile(original,await source.stat({bigint:true})))
       deny('Cloudflared binary changed while reading');
   }finally{await source.close();}
   const digest=sha256(bytes);
