@@ -127,7 +127,7 @@ test('CLEAN-12: restart persists verified marker, UNKNOWN stays terminal',()=>{
     assert.equal(claim(db).changes,0);
     db.exec("UPDATE device_core_console_operations SET state='unknown',native_claim_verified=0");
     assert.equal(claim(db).changes,0);
-    assert.throws(()=>db.exec("UPDATE device_core_console_operations SET state='dispatched'"),/CORE_UNKNOWN_TERMINAL/);
+    assert.throws(()=>db!.exec("UPDATE device_core_console_operations SET state='dispatched'"),/CORE_UNKNOWN_TERMINAL/);
   }finally{db?.close();rmSync(folder,{recursive:true,force:true});}
 });
 
