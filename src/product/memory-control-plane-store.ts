@@ -79,6 +79,10 @@ export class MemoryControlPlaneStore implements ControlPlaneStore {
   private readonly accounts = new Map<string, ProductAccountRecord>();
   private readonly identities = new Map<string, ExternalIdentityRecord>();
   private readonly devices = new Map<string, ProductDeviceRecord>();
+  /** Retains epoch tombstones across owner/credential changes and later deletion. */
+  private readonly remoteAuthorizations = new Map<string, {
+    ownerAccountId: string; epoch: number; active: boolean;
+  }>();
   private readonly rootModeLeases = new Map<string, RootModeLeaseRecord>();
   private readonly maintenancePreferences = new Map<string, DeviceMaintenancePreferenceRecord>();
   private readonly bridgePreferences = new Map<string, DeviceBridgePreferenceRecord>();
@@ -247,7 +251,64 @@ export class MemoryControlPlaneStore implements ControlPlaneStore {
   }
 
   async putDevice(record: ProductDeviceRecord): Promise<void> {
+    const previous = this.devices.get(record.id);
+    const authority = this.remoteAuthorizations.get(record.id);
+    const changed = !previous ||
+      previous.ownerAccountId !== record.ownerAccountId ||
+      previous.credentialHash !== record.credentialHash ||
+      previous.accessMode !== record.accessMode;
+    if (!authority) {
+      this.remoteAuthorizations.set(record.id, {
+        ownerAccountId: record.ownerAccountId, epoch: 1,
+        active: record.accessMode === 'full',
+      });
+    } else if (changed) {
+      if (authority.epoch >= Number.MAX_SAFE_INTEGER) {
+        throw new Error('REMOTE_AUTHORIZATION_EPOCH_EXHAUSTED');
+      }
+      this.remoteAuthorizations.set(record.id, {
+        ownerAccountId: record.ownerAccountId, epoch: authority.epoch + 1,
+        active: record.accessMode === 'full',
+      });
+    }
     this.devices.set(record.id, clone(record));
+  }
+
+  async getRemoteDeviceAuthorization(
+    deviceId: string, credentialHash: string, ownerAccountId: string,
+  ): Promise<number | null> {
+    const device = this.devices.get(deviceId);
+    const authority = this.remoteAuthorizations.get(deviceId);
+    if (!device || !this.accounts.has(ownerAccountId) || !authority ||
+        !authority.active || authority.ownerAccountId !== ownerAccountId ||
+        device.ownerAccountId !== ownerAccountId ||
+        device.credentialHash !== credentialHash || device.accessMode !== 'full' ||
+        !Number.isSafeInteger(authority.epoch) || authority.epoch < 1) return null;
+    return authority.epoch;
+  }
+
+  async revokeRemoteDeviceAuthorization(deviceId: string, ownerAccountId: string): Promise<boolean> {
+    const device = this.devices.get(deviceId);
+    const authority = this.remoteAuthorizations.get(deviceId);
+    if (!device || device.ownerAccountId !== ownerAccountId ||
+        !authority || authority.ownerAccountId !== ownerAccountId || !authority.active) return false;
+    if (authority.epoch >= Number.MAX_SAFE_INTEGER) throw new Error('REMOTE_AUTHORIZATION_EPOCH_EXHAUSTED');
+    authority.epoch++;
+    authority.active = false;
+    return true;
+  }
+
+  async revokeRemoteOwnerAuthorizations(ownerAccountId: string): Promise<number> {
+    let count = 0;
+    for (const [deviceId, authority] of this.remoteAuthorizations) {
+      if (authority.ownerAccountId !== ownerAccountId || !authority.active ||
+          this.devices.get(deviceId)?.ownerAccountId !== ownerAccountId) continue;
+      if (authority.epoch >= Number.MAX_SAFE_INTEGER) throw new Error('REMOTE_AUTHORIZATION_EPOCH_EXHAUSTED');
+      authority.epoch++;
+      authority.active = false;
+      count++;
+    }
+    return count;
   }
 
   async getRootModeLease(deviceId: string): Promise<RootModeLeaseRecord | null> {
