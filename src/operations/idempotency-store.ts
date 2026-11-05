@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { hostname } from 'node:os';
 import * as z from 'zod';
 
 export type IdempotencyStatus =
@@ -34,6 +35,16 @@ const FileSchema = z.object({
 });
 
 export type IdempotencyRecord = z.infer<typeof RecordSchema>;
+
+// Same-process store instances share an incarnation. A second Hub process,
+// including one on a different host using a shared journal, must not claim
+// the same SQLite anti-replay authority while its prior writer is live.
+const HUB_WRITER = Object.freeze({
+  host: hostname(),
+  pid: process.pid,
+  incarnation: randomUUID(),
+});
+
 
 export class IdempotencyStoreError extends Error {
   constructor(
@@ -172,6 +183,59 @@ export class IdempotencyStore {
     });
   }
 
+  private claimExclusiveHubProcess(db: DatabaseSync): void {
+    const row = db.prepare(
+      "SELECT value FROM idempotency_meta WHERE key='hub_writer'",
+    ).get() as { value: string } | undefined;
+    if (row) {
+      let old: unknown;
+      try { old = JSON.parse(row.value); } catch { /* deny corrupt owner */ }
+      if (!old || typeof old !== 'object' || Array.isArray(old)) {
+        throw new IdempotencyStoreError(
+          'IDEMPOTENCY_WRITER_INVALID',
+          'The previous Hub journal owner identity is invalid.',
+        );
+      }
+      const owner = old as Record<string, unknown>;
+      if (typeof owner.host !== 'string' ||
+          typeof owner.pid !== 'number' ||
+          !Number.isSafeInteger(owner.pid) || owner.pid < 1 ||
+          typeof owner.incarnation !== 'string' || !owner.incarnation) {
+        throw new IdempotencyStoreError(
+          'IDEMPOTENCY_WRITER_INVALID',
+          'The previous Hub journal owner identity is invalid.',
+        );
+      }
+      if (owner.host !== HUB_WRITER.host) {
+        throw new IdempotencyStoreError(
+          'IDEMPOTENCY_CROSS_HOST_JOURNAL_DENIED',
+          'A journal owned by another host cannot be claimed automatically.',
+        );
+      }
+      if (owner.pid !== HUB_WRITER.pid ||
+          owner.incarnation !== HUB_WRITER.incarnation) {
+        // An occupied PID (including a recycled one) cannot be distinguished
+        // safely from the old process. Fail closed rather than split authority.
+        let previousProcessAlive = true;
+        try { process.kill(owner.pid, 0); }
+        catch (error) {
+          if (error && typeof error === 'object' && 'code' in error &&
+              error.code === 'ESRCH') previousProcessAlive = false;
+        }
+        if (previousProcessAlive) {
+          throw new IdempotencyStoreError(
+            'IDEMPOTENCY_HUB_WRITER_ACTIVE',
+            'Another live Hub process already owns this SQLite journal.',
+          );
+        }
+      }
+    }
+    db.prepare(
+      "INSERT INTO idempotency_meta (key, value) VALUES ('hub_writer', ?) " +
+      'ON CONFLICT(key) DO UPDATE SET value=excluded.value',
+    ).run(JSON.stringify(HUB_WRITER));
+  }
+
   async initialize(): Promise<void> {
     if (this.loaded) return;
     if (this.loading) return this.loading;
@@ -240,6 +304,8 @@ export class IdempotencyStore {
               'Unknown idempotency schema; refusing mutation.',
             );
           }
+
+          this.claimExclusiveHubProcess(db);
 
           if (!schema) {
             const existingCount = db.prepare(
