@@ -482,7 +482,11 @@ export async function runNativeAgent(
     },
   });
   const taskGraphs = new TaskGraphStore({ stateFile: taskGraphStateFile });
-  const runbooks = new RunbookStore({ stateFile: runbookStateFile });
+  const runbooks = new RunbookStore({
+    stateFile:runbookStateFile,
+    ownerId:os.userInfo().username,
+    deviceId:identity.id,
+  });
   // Acquire before initializing persisted worker/task state. Two installed
   // launchers using the same Windows user/device identity must never both
   // attach to the Hub or mutate the same state files.

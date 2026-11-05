@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
 import * as z from 'zod';
 import {resolveAiWorkspaceTarget} from './ai-workspace-default.js';
+import {
+  semanticEffectFingerprint,semanticEffectGraphId,
+  type VerifyNewEffectIntent,
+} from './runbook-effect-journal.js';
 import type {
   RunbookCheckpoint,
   RunbookCheckpointStep,
@@ -21,6 +25,14 @@ const BaseStepSchema = z.object({
 const TaskGraphStepSchema = BaseStepSchema.extend({
   kind: z.literal('task_graph'),
   task_graph: z.record(z.string(), z.unknown()),
+  // A fresh identical effect is only authorized by a trusted owner/device
+  // receipt verifier. An arbitrary new runbook ID or nonce is not proof.
+  semantic_intent:z.object({
+    id:z.string().uuid(),
+    owner_id:RunbookIdSchema,
+    device_id:RunbookIdSchema,
+    authorization_receipt:z.string().min(24).max(4096),
+  }).strict().optional(),
 });
 
 const AssertionStepSchema = BaseStepSchema.extend({
@@ -53,6 +65,8 @@ const RunInputSchema = z.object({
 export interface RunbookExecutionCallbacks {
   runTaskGraph(input: unknown): Promise<unknown>;
   runAssertions(input: unknown): Promise<unknown>;
+  /** Never populated by raw MCP input. Trusted owner admission only. */
+  authorizeFreshEffect?:VerifyNewEffectIntent;
 }
 
 interface RuntimeStep {
@@ -126,16 +140,6 @@ function validateDependencies(
   if (visited !== steps.length) {
     throw new Error('Runbook contains a dependency cycle.');
   }
-}
-
-function taskGraphId(runbookId: string, stepId: string): string {
-  return (
-    'rb-' +
-    createHash('sha256')
-      .update(runbookId + '\0' + stepId, 'utf8')
-      .digest('hex')
-      .slice(0, 32)
-  );
 }
 
 function resultData(value: unknown): Record<string, unknown> | undefined {
@@ -252,9 +256,9 @@ export async function executeDurableRunbook(
       dependsOn: [...step.depends_on],
       ...(step.kind === 'task_graph'
         ? {
-            taskGraphId: taskGraphId(
-              parsed.runbook_id,
-              step.id,
+            taskGraphId: semanticEffectGraphId(
+              semanticEffectFingerprint(step.task_graph,uiTarget),
+              step.semantic_intent?.id,
             ),
           }
         : {}),
@@ -411,6 +415,21 @@ export async function executeDurableRunbook(
                 : remainingMs,
             ),
           };
+          // O_EXCL reservation is committed before any native task graph is
+          // dispatched. A cloned runbook with a different caller ID cannot
+          // acquire the same semantic effect or re-run an uncertain mutation.
+          await store.reserveSemanticEffect({
+            fingerprint:semanticEffectFingerprint(spec.task_graph,uiTarget),
+            runbookId:parsed.runbook_id,
+            stepId:spec.id,
+            graphId:step.taskGraphId!,
+            ...(spec.semantic_intent?{newIntent:{
+              id:spec.semantic_intent.id,
+              ownerId:spec.semantic_intent.owner_id,
+              deviceId:spec.semantic_intent.device_id,
+              authorizationReceipt:spec.semantic_intent.authorization_receipt,
+            }}:{}),
+          },callbacks.authorizeFreshEffect);
           raw = await callbacks.runTaskGraph(innerInput);
         } else {
           raw = await callbacks.runAssertions(
@@ -435,9 +454,7 @@ export async function executeDurableRunbook(
         // reconciliation may clear this state, never a generic retry.
         const code = errorCode(error);
         step.status = code === 'MUTATION_STATE_UNKNOWN' ||
-          code === 'RUNBOOK_EFFECT_ALREADY_RESERVED' ||
-          code === 'RUNBOOK_EFFECT_JOURNAL_UNAVAILABLE'
-          ? 'unknown' : 'failed';
+          code.startsWith('RUNBOOK_EFFECT_') ? 'unknown' : 'failed';
         step.errorCode = code;
         step.result = {
           message:
