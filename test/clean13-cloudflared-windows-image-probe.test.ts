@@ -21,6 +21,20 @@ function rejectAt(helper:string,mode:'--probe'|'--race',file:string,sha:string,s
   assert.notEqual(result.status,0,'native guard must reject the adversarial fixture');
   assert.match(result.stderr,stage,'native guard rejection must be stage-specific');
 }
+test('CLEAN-13 native trust flags and suspended-only probe remain fail-closed',async()=>{
+  const source=await fs.readFile(new URL('../native/windows-cloudflared-image-probe.c',import.meta.url),'utf8');
+  assert.match(source,/trust\\.fdwRevocationChecks\\s*=\\s*WTD_REVOKE_WHOLECHAIN\\s*;/,
+    'WinTrust source handle must request whole-chain revocation');
+  assert.doesNotMatch(source,/trust\\.fdwRevocationChecks\\s*=\\s*WTD_REVOKE_NONE/,
+    'revocation must never silently degrade to no extra check');
+  assert.match(source,/trust\\.dwProvFlags\\s*=\\s*WTD_CACHE_ONLY_URL_RETRIEVAL\\s*;/,
+    'the disposable probe must remain cache-only');
+  assert.match(source,/CREATE_SUSPENDED/);
+  assert.match(source,/TerminateProcess\\s*\\(/);
+  assert.doesNotMatch(source,/\\bResumeThread\\s*\\(/,
+    'a source-identity probe must never execute the inspected image');
+});
+
 test('CLEAN-13 P1-A Windows native FileIdInfo proof remains suspended and never resumes',{
   skip:process.platform!=='win32',timeout:90000,
 },async t=>{
@@ -109,6 +123,11 @@ test('CLEAN-13 P1-A Windows native FileIdInfo proof remains suspended and never 
   const tampered=path.join(dir,'tampered.exe');
   await fs.writeFile(tampered,'not cloudflared');
   rejectAt(helper,'--probe',tampered,official,/stage=SOURCE_SHA/);
+  // A caller-controlled matching digest must NOT turn unsigned bytes into a
+  // trusted executable. This proves the held-handle signer check is reached
+  // independently of the SHA mismatch guard.
+  const matchingUnsignedDigest=createHash('sha256').update(await fs.readFile(tampered)).digest('hex');
+  rejectAt(helper,'--probe',tampered,matchingUnsignedDigest,/stage=HELD_WINVERIFYTRUST/);
 
   // Independent signed-publisher check must still culminate in a fail-closed
   // native launcher denial. The test probe does not grant launch authority.
