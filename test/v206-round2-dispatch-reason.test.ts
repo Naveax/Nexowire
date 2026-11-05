@@ -9,6 +9,7 @@ import WebSocket from 'ws';
 import {AgentBroker} from '../src/core/agent-broker.js';
 import {attachAgentWebSocketServer} from '../src/hub/agent-websocket.js';
 import {createControlPlaneAgentCredentialVerifier} from '../src/hub/control-plane-agent-auth.js';
+import {bindRemoteAgentMutationReauthorization,hasTrustedRemoteAgentGrant} from '../src/mcp/http.js';
 import {AGENT_PROTOCOL_VERSION} from '../src/protocol/agent.js';
 
 /** Real disposable TCP HTTP authority -> Hub WebSocket -> AgentBroker. */
@@ -31,6 +32,9 @@ async function fixture(t:import('node:test').TestContext){
   const device='v206-dispatch-device';
   const credential='nwx_dev_v206_dispatch_authority_token';
   const service='v206-disposable-service-token-1234567890';
+  const ownerId='owner-v206-dispatch';
+  const authorizationEpoch=3;
+  const leaseExpiresAtMs=Date.now()+60000;
   let revoked=false;
   let verifierCalls=0;
   const authority=createServer((req,res)=>{
@@ -43,20 +47,36 @@ async function fixture(t:import('node:test').TestContext){
       const authenticated=req.method==='POST'&&req.url==='/api/v1/internal/device/authenticate'&&
         req.headers.authorization==='Bearer '+service&&supplied===credential&&!revoked;
       res.setHeader('content-type','application/json');
-      res.end(JSON.stringify(authenticated?{authenticated:true,device:{deviceId:device}}:
-        {authenticated:false}));
+      res.end(JSON.stringify(authenticated?{authenticated:true,device:{
+        deviceId:device,ownerAccountId:ownerId,authorizationEpoch,leaseExpiresAtMs,
+      }}:{authenticated:false}));
     });
   });
   const port=await listen(authority);
-  const broker=new AgentBroker({reconnectGraceMs:100});
+  const broker=new AgentBroker({reconnectGraceMs:100,requireMutationReauthorization:true});
   const verifier=createControlPlaneAgentCredentialVerifier({
     controlPlaneUrl:'http://127.0.0.1:'+port,serviceToken:service,timeoutMs:1250,
   });
   const hub=createServer();
-  const wss=attachAgentWebSocketServer(hub,broker,[],{
-    remoteOnly:true,remoteCredentialVerifier:verifier,
-    authorizationCheckMs:60000,authorizationTimeoutMs:1500,heartbeatMs:60000,
-  });
+  let wss:ReturnType<typeof attachAgentWebSocketServer>;
+  try {
+    wss=attachAgentWebSocketServer(hub,broker,[],{
+      remoteOnly:true,remoteCredentialVerifier:verifier,
+      remoteMutationAuthorizationFactory:(grant,authorizationHeader)=>
+        hasTrustedRemoteAgentGrant(grant)
+          ? bindRemoteAgentMutationReauthorization({
+              grant,authorizationHeader,verify:verifier,timeoutMs:1250,
+            })
+          : undefined,
+      authorizationCheckMs:60000,authorizationTimeoutMs:1500,heartbeatMs:60000,
+    });
+  } catch (error) {
+    // Never strand the actual HTTP authority on a failed strict admission
+    // fixture startup: such a leak hides an assertion behind CI timeout.
+    authority.closeAllConnections();
+    await new Promise<void>(resolve=>authority.close(()=>resolve()));
+    throw error;
+  }
   const hubPort=await listen(hub);
   const agent=new WebSocket('ws://127.0.0.1:'+hubPort+'/agent',{
     handshakeTimeout:3000,headers:{authorization:'Bearer '+credential},
