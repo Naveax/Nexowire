@@ -18,6 +18,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <bcrypt.h>
+#include <psapi.h>
 #include <stdio.h>
 #include <wchar.h>
 #include <stdint.h>
@@ -108,6 +109,34 @@ static int hold_ancestors(const wchar_t *input){
   }
   free(tmp);
   return parent_count>0;
+}
+/* A MEM_IMAGE view is backed by a kernel image section, so this is stronger
+ * evidence than QueryFullProcessImageNameW alone. The API returns the view's
+ * NT OBJECT PATH, not the section HANDLE or FileIdInfo of its underlying
+ * file object. We therefore never treat this as production launch authority.
+ */
+static int mapped_image_name_matches(HANDLE process,HANDLE source){
+  wchar_t source_nt[32768]={0};
+  DWORD n=GetFinalPathNameByHandleW(source,source_nt,32768,VOLUME_NAME_NT);
+  if(!n||n>=32768)return 0;
+  SYSTEM_INFO limits={0};
+  GetNativeSystemInfo(&limits);
+  uintptr_t addr=(uintptr_t)limits.lpMinimumApplicationAddress;
+  uintptr_t highest=(uintptr_t)limits.lpMaximumApplicationAddress;
+  for(unsigned int seen=0;addr<highest && seen<250000;seen++){
+    MEMORY_BASIC_INFORMATION info={0};
+    if(!VirtualQueryEx(process,(const void*)addr,&info,sizeof(info)))break;
+    if(info.Type==MEM_IMAGE && info.State==MEM_COMMIT &&
+       info.AllocationBase==info.BaseAddress){
+      wchar_t mapped[32768]={0};
+      DWORD m=GetMappedFileNameW(process,info.AllocationBase,mapped,32768);
+      if(m>0 && m<32768 && _wcsicmp(mapped,source_nt)==0)return 1;
+    }
+    uintptr_t next=(uintptr_t)info.BaseAddress+info.RegionSize;
+    if(next<=addr)break;
+    addr=next;
+  }
+  return 0;
 }
 int wmain(int argc,wchar_t **argv){
   int rc=1;
@@ -206,6 +235,9 @@ int wmain(int argc,wchar_t **argv){
   int match=no_reparse(image_path)&&file_id(image_path,&reported)&&same_id(&held_id,&reported);
   CloseHandle(image_path);
   if(!match){rc=reason("PROCESS_PATH_FILE_ID");goto done;}
+  if(!mapped_image_name_matches(child.hProcess,file_handle)){
+    rc=reason("MAPPED_MEM_IMAGE_NAME");goto done;
+  }
   FILETIME created={0},ended={0},kernel={0},user={0};
   if(!GetProcessTimes(child.hProcess,&created,&ended,&kernel,&user)){
     rc=reason("PROCESS_CREATION_TIME");goto done;
@@ -213,7 +245,7 @@ int wmain(int argc,wchar_t **argv){
   if(WaitForSingleObject(child.hProcess,0)!=WAIT_TIMEOUT){
     rc=reason("PREMATURE_CHILD_EXIT");goto done;
   }
-  printf("NEXOWIRE_C13_NATIVE_PROBE=OK held_sha256=1 held_file_id=1 process_path_file_id=1 suspended=1 resumed=0 write_delete_lock=%d pid=%lu creation_ticks=%llu\n",
+  printf("NEXOWIRE_C13_NATIVE_PROBE=OK held_sha256=1 held_file_id=1 process_path_file_id=1 mapped_mem_image=1 suspended=1 resumed=0 write_delete_lock=%d pid=%lu creation_ticks=%llu\n",
     race,child.dwProcessId,((unsigned long long)created.dwHighDateTime<<32)|created.dwLowDateTime);
   rc=0;
 done:
