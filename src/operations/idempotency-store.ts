@@ -30,7 +30,7 @@ const RecordSchema = z.object({
 
 const FileSchema = z.object({
   version: z.literal(1),
-  records: z.array(RecordSchema).max(5000),
+  records: z.array(RecordSchema),
 });
 
 export type IdempotencyRecord = z.infer<typeof RecordSchema>;
