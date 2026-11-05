@@ -53,14 +53,16 @@ test('CLEAN-13 P1-A Windows native FileIdInfo proof remains suspended and never 
     windowsHide:true,stdio:['pipe','pipe','pipe'],
   });
   t.after(()=>{if(attacker.exitCode===null)attacker.kill();});
+  const nativeOut=attacker.stdout,nativeErr=attacker.stderr,nativeIn=attacker.stdin;
+  assert.ok(nativeOut&&nativeErr&&nativeIn,'native probe requires three owned pipes');
   let stdout='',stderr='';
-  attacker.stdout.setEncoding('utf8');
-  attacker.stderr.setEncoding('utf8');
-  attacker.stderr.on('data',(data:string)=>{stderr+=data;});
+  nativeOut.setEncoding('utf8');
+  nativeErr.setEncoding('utf8');
+  nativeErr.on('data',(data:string)=>{stderr+=data;});
   await new Promise<void>((resolve,reject)=>{
     const timer=setTimeout(()=>reject(Error('Native lock handshake timeout')),15000);
     attacker.once('error',err=>{clearTimeout(timer);reject(err);});
-    attacker.stdout.on('data',(data:string)=>{
+    nativeOut.on('data',(data:string)=>{
       stdout+=data;
       if(stdout.includes('NEXOWIRE_C13_NATIVE_HOLD=READY')){
         clearTimeout(timer);resolve();
@@ -80,7 +82,7 @@ test('CLEAN-13 P1-A Windows native FileIdInfo proof remains suspended and never 
   await blocked(()=>fs.rename(copy,path.join(dir,'swapped.exe')),'same-owner rename');
   await blocked(()=>fs.unlink(copy),'same-owner delete');
   await blocked(()=>fs.rename(dir,dir+'-swapped'),'same-owner ancestor rename');
-  attacker.stdin.write('release\n');
+  nativeIn.write('release\n');
   const [code]=await once(attacker,'close');
   assert.equal(code,0,stderr);
   assert.match(stdout,/NEXOWIRE_C13_NATIVE_HOLD=UNCHANGED/);
