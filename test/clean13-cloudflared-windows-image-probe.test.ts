@@ -23,15 +23,15 @@ function rejectAt(helper:string,mode:'--probe'|'--race',file:string,sha:string,s
 }
 test('CLEAN-13 native trust flags and suspended-only probe remain fail-closed',async()=>{
   const source=await fs.readFile(new URL('../native/windows-cloudflared-image-probe.c',import.meta.url),'utf8');
-  assert.match(source,/trust\\.fdwRevocationChecks\\s*=\\s*WTD_REVOKE_WHOLECHAIN\\s*;/,
+  assert.match(source,/trust\.fdwRevocationChecks\s*=\s*WTD_REVOKE_WHOLECHAIN\s*;/,
     'WinTrust source handle must request whole-chain revocation');
-  assert.doesNotMatch(source,/trust\\.fdwRevocationChecks\\s*=\\s*WTD_REVOKE_NONE/,
+  assert.doesNotMatch(source,/trust\.fdwRevocationChecks\s*=\s*WTD_REVOKE_NONE/,
     'revocation must never silently degrade to no extra check');
-  assert.match(source,/trust\\.dwProvFlags\\s*=\\s*WTD_CACHE_ONLY_URL_RETRIEVAL\\s*;/,
+  assert.match(source,/trust\.dwProvFlags\s*=\s*WTD_CACHE_ONLY_URL_RETRIEVAL\s*;/,
     'the disposable probe must remain cache-only');
   assert.match(source,/CREATE_SUSPENDED/);
-  assert.match(source,/TerminateProcess\\s*\\(/);
-  assert.doesNotMatch(source,/\\bResumeThread\\s*\\(/,
+  assert.match(source,/TerminateProcess\s*\(/);
+  assert.doesNotMatch(source,/\bResumeThread\s*\(/,
     'a source-identity probe must never execute the inspected image');
 });
 
