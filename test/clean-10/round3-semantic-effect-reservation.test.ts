@@ -50,7 +50,7 @@ test('CLEAN-10 R3: owner/device mismatch never gains admission to an existing sh
   const stateFile=await sandbox(t);
   await new SemanticEffectJournal({stateFile,ownerId:'owner-A',deviceId:'device-A'})
     .reserve(input('first'));
-  for(const [ownerId,deviceId] of [['owner-B','device-A'],['owner-A','device-B']]){
+  for(const [ownerId,deviceId] of [['owner-B','device-A'],['owner-A','device-B']] as const){
     await assert.rejects(
       new SemanticEffectJournal({stateFile,ownerId,deviceId}).reserve(input('foreign')),
       (e:unknown)=>e instanceof SemanticEffectJournalError&&
