@@ -10,6 +10,8 @@ import {
   hubRuntimeIdentity,
   REMOTE_AGENT_STRICT_CONTRACT,
   runHttpServer,
+  bindRemoteAgentMutationReauthorization,
+  type RemoteAgentAuthorityEvidence,
 } from '../src/mcp/http.js';
 import {verifyLocalFirstPublicUpstream} from '../src/mcp/local-first-ingress.js';
 
@@ -90,4 +92,77 @@ test('V2-03 remote auth config is independent of local static tokens',()=>{
   assert.equal(config.remoteAgentAuthOnly,true);
   assert.throws(()=>assertRemoteAgentAuthorizationContract(new AgentBroker(),true),
     /REMOTE_AGENT_STRICT_REAUTHORIZATION_REQUIRED/);
+});
+
+
+test('V2-03 socket-bound callback admits only fresh identical owner+device+authority epoch',async()=>{
+  let now=1_700_000_000_000;
+  let proof={ownerId:'owner-a',deviceId:'device-a',authorizationEpoch:4,
+    leaseExpiresAtMs:now+2_000};
+  const verifier=async()=>proof;
+  const check=bindRemoteAgentMutationReauthorization({
+    grant:proof,authorizationHeader:'Bearer disposable',verify:verifier,clock:()=>now,
+  });
+  assert.equal(await check(),true);
+  now+=1999;
+  assert.equal(await check(),true);
+  now++;
+  assert.equal(await check(),false,'initial socket grant expires even if the verifier might later refresh it');
+});
+
+for(const [name,mutation] of [
+  ['wrong-device',(p:RemoteAgentAuthorityEvidence)=>({...p,deviceId:'other-device'})],
+  ['wrong-owner',(p:RemoteAgentAuthorityEvidence)=>({...p,ownerId:'other-owner'})],
+  ['stale-epoch',(p:RemoteAgentAuthorityEvidence)=>({...p,authorizationEpoch:p.authorizationEpoch+1})],
+  ['expired-grant',(p:RemoteAgentAuthorityEvidence)=>({...p,leaseExpiresAtMs:p.leaseExpiresAtMs-120_000})],
+] as const){
+  test('V2-03 bound verifier denies '+name+' with zero gated mutation frames',async()=>{
+    const now=Date.now();
+    const grant={ownerId:'owner-a',deviceId:'device-a',authorizationEpoch:5,
+      leaseExpiresAtMs:now+60_000};
+    const check=bindRemoteAgentMutationReauthorization({
+      grant,authorizationHeader:'Bearer disposable',
+      verify:async()=>mutation(grant),clock:()=>now,
+    });
+    const frames:string[]=[];
+    if(await check())frames.push('files.write');
+    assert.deepEqual(frames,[],'helper-denied mutation must not invoke downstream send');
+    assert.equal(await check(),false,'revoked/mismatched socket is terminal until new handshake');
+  });
+}
+
+test('V2-03 revoked owner and unavailable callback fail closed without tool frame',async()=>{
+  const now=Date.now();
+  const grant={ownerId:'owner-a',deviceId:'device-a',authorizationEpoch:5,
+    leaseExpiresAtMs:now+60_000};
+  for(const verifier of [
+    async()=>undefined,
+    async()=>{throw Error('authority unavailable');},
+  ]){
+    const check=bindRemoteAgentMutationReauthorization({
+      grant,authorizationHeader:'Bearer disposable',verify:verifier,clock:()=>now,
+    });
+    assert.equal(await check(),false);
+  }
+  assert.throws(()=>bindRemoteAgentMutationReauthorization({
+    grant,authorizationHeader:undefined,verify:undefined as never,
+  }),/REMOTE_REAUTH_VERIFIER_REQUIRED/);
+});
+
+test('V2-03 bound verifier times out unresponsive authority and never retries automatically',async()=>{
+  const now=Date.now();
+  const grant={ownerId:'owner-a',deviceId:'device-a',authorizationEpoch:9,
+    leaseExpiresAtMs:now+60_000};
+  let calls=0;
+  let lateRelease!:(value:unknown)=>void;
+  const check=bindRemoteAgentMutationReauthorization({
+    grant,authorizationHeader:'Bearer disposable',
+    verify:async()=>{calls++;return await new Promise(resolve=>{lateRelease=resolve;});},
+    timeoutMs:250,
+  });
+  const result=await check();
+  assert.equal(result,false);
+  lateRelease(grant);
+  assert.equal(await check(),false);
+  assert.equal(calls,1,'late verifier resolution may not resurrect revoked socket or send mutation');
 });

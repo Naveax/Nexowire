@@ -95,6 +95,63 @@ export function hasTrustedRemoteAgentGrant(
     (p.leaseExpiresAtMs as number) <= now + 300_000;
 }
 
+/** Bound proof for ONE WebSocket incarnation. Consumers must attach this to
+ * strict AgentBroker.register and must NEVER treat it as a global owner grant.
+ * The trusted Hub verifier must obtain fresh authoritative control-plane data.
+ * Checking here does not close the revoke-after-check / send TOCTOU gap. */
+export function bindRemoteAgentMutationReauthorization(input: {
+  grant: RemoteAgentAuthorityEvidence;
+  authorizationHeader: string | undefined;
+  verify: (header: string | undefined, signal: AbortSignal) => Promise<unknown>;
+  timeoutMs?: number;
+  clock?: () => number;
+}): () => Promise<boolean> {
+  const now = input.clock ?? (() => Date.now());
+  const timeout = input.timeoutMs ?? 3_000;
+  if (!Number.isSafeInteger(timeout) || timeout < 250 || timeout > 10_000)
+    throw new Error('REMOTE_REAUTH_TIMEOUT_INVALID');
+  if (typeof input.verify !== 'function')
+    throw new Error('REMOTE_REAUTH_VERIFIER_REQUIRED');
+  if (!hasTrustedRemoteAgentGrant(input.grant,now()))
+    throw new Error('REMOTE_REAUTH_INITIAL_GRANT_INVALID');
+  const bound = {...input.grant};
+  let invalidated=false;
+  return async (): Promise<boolean> => {
+    if (invalidated || !hasTrustedRemoteAgentGrant(bound,now())) {
+      invalidated=true;
+      return false;
+    }
+    const controller=new AbortController();
+    let timer:NodeJS.Timeout|undefined;
+    let abort!:()=>void;
+    const timeoutPromise=new Promise<undefined>(resolve=>{
+      abort=()=>{controller.abort();resolve(undefined);};
+      timer=setTimeout(abort,timeout);
+      timer.unref?.();
+    });
+    try {
+      const refreshed=await Promise.race([
+        Promise.resolve().then(()=>input.verify(input.authorizationHeader,controller.signal))
+          .catch(()=>undefined),
+        timeoutPromise,
+      ]);
+      const valid=hasTrustedRemoteAgentGrant(refreshed,now()) &&
+        hasTrustedRemoteAgentGrant(bound,now()) &&
+        refreshed.ownerId===bound.ownerId &&
+        refreshed.deviceId===bound.deviceId &&
+        refreshed.authorizationEpoch===bound.authorizationEpoch;
+      if (!valid) invalidated=true;
+      return valid;
+    } catch {
+      invalidated=true;
+      return false;
+    } finally {
+      clearTimeout(timer);
+      controller.abort();
+    }
+  };
+}
+
 export function assertRemoteAgentAuthorizationContract(
   broker: AgentBroker,
   remoteOnly: boolean,

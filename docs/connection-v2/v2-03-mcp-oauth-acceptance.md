@@ -209,3 +209,19 @@ until all cross-owner code is integrated.
 The status monitor must not be trusted as the dispatch-authority source.
 A local session's authorization behavior must not change when remote-only
 mode is not enabled. Production/CORE: **NO-GO**.
+
+
+### V2-03 helper, not an integration waiver
+
+\`src/mcp/http.ts::bindRemoteAgentMutationReauthorization\` provides a
+bounded per-socket callback that captures the trusted initial
+\`{ownerId,deviceId,authorizationEpoch,leaseExpiresAtMs}\` tuple and fails
+closed when a fresh authority response has a different owner, device or
+epoch, when the original lease expires, or when the verifier errors,
+times out or returns no authorization. A late verification success
+does not resurrect that callback. Its V2-03-only fixture tests verify
+the predicate and simulated zero sends. **They are not a real Agent
+Broker or public WSS frame-level test** until the Hub owner attaches
+the callback to the strict V2-07 Broker on the actual socket. Even with
+the callback, revocation between its return and socket.send remains
+unresolved without an authority/Agent effect fence.
