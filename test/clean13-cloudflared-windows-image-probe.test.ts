@@ -32,7 +32,7 @@ test('CLEAN-13 P1-A Windows native FileIdInfo proof remains suspended and never 
   const positive=probe(helper,'--probe',binary,official);
   assert.equal(positive.status,0,positive.stderr);
   assert.match(positive.stdout,/NEXOWIRE_C13_NATIVE_PROBE=OK/);
-  for(const marker of ['held_sha256=1','held_file_id=1','process_path_file_id=1',
+  for(const marker of ['held_sha256=1','held_file_id=1','process_path_file_id=1','mapped_mem_image=1',
     'suspended=1','resumed=0'])assert.ok(positive.stdout.includes(marker),marker);
   // Disposable copy only: deliberately attempt overwrite, rename, deletion
   // with same-owner privileges while the native helper holds the trusted file.
