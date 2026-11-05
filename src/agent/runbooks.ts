@@ -210,6 +210,23 @@ function summarize(
   };
 }
 
+/** A nested native graph can return an interrupted result without
+ * throwing. An unknown job is NEVER safe to label FAILED/retryable even if
+ * a malformed outer envelope accidentally claims ok:true. */
+function hasUnknownTaskGraphEffect(value:unknown):boolean {
+  const data=resultData(value);
+  if(!data)return false;
+  const summary=data.summary;
+  if(summary&&typeof summary==='object'&&!Array.isArray(summary)){
+    const unknown=(summary as Record<string,unknown>).unknown;
+    if(typeof unknown==='number'&&Number.isFinite(unknown)&&unknown>0)return true;
+  }
+  const results=data.results;
+  return Array.isArray(results)&&results.some(item=>
+    item!==null&&typeof item==='object'&&!Array.isArray(item)&&
+    (item as Record<string,unknown>).status==='unknown');
+}
+
 function errorCode(error: unknown): string {
   return typeof error === 'object' &&
     error !== null &&
@@ -438,15 +455,18 @@ export async function executeDurableRunbook(
         }
 
         const summarized = summarize(step.kind, raw);
-        step.status = summarized.ok
-          ? 'succeeded'
-          : 'failed';
+        // runTaskGraph() returns data.summary.unknown for a native
+        // operation whose ACK/side effect remains uncertain. Propagate
+        // that uncertainty into the outer durable runbook, even if a
+        // contradictory envelope incorrectly reports ok:true.
+        const nestedUnknown=step.kind==='task_graph'&&hasUnknownTaskGraphEffect(raw);
+        step.status = nestedUnknown ? 'unknown'
+          : summarized.ok ? 'succeeded' : 'failed';
         step.result = summarized.summary;
-        if (!summarized.ok) {
-          step.errorCode =
-            step.kind === 'task_graph'
-              ? 'TASK_GRAPH_NOT_OK'
-              : 'ASSERTIONS_NOT_OK';
+        if(nestedUnknown||!summarized.ok){
+          step.errorCode = nestedUnknown ? 'MUTATION_STATE_UNKNOWN'
+            : step.kind==='task_graph' ? 'TASK_GRAPH_NOT_OK'
+            : 'ASSERTIONS_NOT_OK';
         }
       } catch (error) {
         // No acknowledgement is NOT proof that a native mutation failed.

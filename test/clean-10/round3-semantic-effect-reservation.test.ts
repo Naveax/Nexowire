@@ -133,3 +133,40 @@ test('CLEAN-10 R3: cloned step identity after a lost ACK cannot redispatch on re
   assert.equal(cloned.data.steps[0]?.status,'unknown');
   assert.equal(calls,1);
 });
+
+for(const envelopeOk of [false,true]) {
+  test('CLEAN-10 R3: nested task graph UNKNOWN survives outer ok='+envelopeOk+' and restart clone',async t=>{
+    const stateFile=await sandbox(t);
+    const original=new RunbookStore({stateFile});
+    await original.initialize();
+    let calls=0;
+    const callbacks={
+      runTaskGraph:async()=>{
+        calls++;
+        return {data:{ok:envelopeOk,summary:{
+          total:1,unknown:1,failed:0,succeeded:0,
+        },results:[{id:'lost-ack',status:'unknown'}]}};
+      },
+      runAssertions:async()=>({data:{ok:true}}),
+    };
+    const effect={jobs:[{id:'lost-ack',kind:'TEST_NO_OS_EFFECT'}]};
+    const first=await executeDurableRunbook({
+      runbook_id:'nested-original',
+      steps:[{id:'task',kind:'task_graph',task_graph:effect}],
+    },original,callbacks) as {data:{ok:boolean,steps:Array<{status:string,errorCode:string}>}};
+    assert.equal(first.data.ok,false);
+    assert.equal(first.data.steps[0]?.status,'unknown');
+    assert.equal(first.data.steps[0]?.errorCode,'MUTATION_STATE_UNKNOWN');
+    assert.equal(original.get('nested-original').steps[0]?.status,'unknown');
+
+    const restarted=new RunbookStore({stateFile});
+    await restarted.initialize();
+    const cloned=await executeDurableRunbook({
+      runbook_id:'nested-clone',
+      steps:[{id:'renamed',kind:'task_graph',task_graph:effect}],
+    },restarted,callbacks) as {data:{ok:boolean,steps:Array<{status:string}>}};
+    assert.equal(cloned.data.ok,false);
+    assert.equal(cloned.data.steps[0]?.status,'unknown');
+    assert.equal(calls,1,'a nested UNKNOWN must prevent a cloned mutation callback');
+  });
+}
