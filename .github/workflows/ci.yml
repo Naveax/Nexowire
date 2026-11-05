@@ -473,7 +473,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'V2_WINDOWS_NEGATIVE_ORACLE_RED' }
 
   connection-v2-native-git-dag:
-    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'coord/connection-v2-release-candidate-')
+    if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'coord/connection-v2-release-candidate-') || startsWith(github.head_ref, 'coord/ai05-core-connection-v2-windows-'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -496,7 +496,7 @@ jobs:
           path: ${{ runner.temp }}/connection-v2-native-git-dag.json
           if-no-files-found: error
   connection-v2-clean10-windows:
-    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'coord/connection-v2-release-candidate-')
+    if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'coord/connection-v2-release-candidate-') || startsWith(github.head_ref, 'coord/ai05-core-connection-v2-windows-'))
     runs-on: windows-latest
     timeout-minutes: 25
     strategy:
@@ -521,7 +521,7 @@ jobs:
           node --test --import tsx --test-concurrency=1 test/qa-02-windows-output-ordering.test.ts test/qa-02-error-contract-no-replay.test.ts test/clean-10/idempotency-reservation-negative.test.ts test/clean-10/timeout-reconnect-no-replay.test.ts test/clean-10/runbook-unknown-acceptance-red.test.ts test/clean-10/round3-semantic-effect-reservation.test.ts
           if ($LASTEXITCODE -ne 0) { throw 'CLEAN10_NO_REPLAY_RED' }
   connection-v2-round2-security:
-    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'coord/connection-v2-release-candidate-')
+    if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'coord/connection-v2-release-candidate-') || startsWith(github.head_ref, 'coord/ai05-core-connection-v2-windows-'))
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
