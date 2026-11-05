@@ -60,7 +60,8 @@ test('AI-03 memory: SAFE, wrong owner, revoke, re-pair, owner-wide invalidation'
   assert.equal(await service.authenticateDeviceCredential(first.deviceCredential),null);
   const d=grant(await service.authenticateDeviceCredential(rotated.deviceCredential));
   assert.ok(d>c);
-  assert.equal(await store.revokeRemoteOwnerAuthorizations(owner.accountId),1);
+  await assert.rejects(service.revokeOwnerRemoteAuthorizations({accountId:'svc',role:'service'}),/OWNER_LOGIN_REQUIRED/);
+  assert.equal((await service.revokeOwnerRemoteAuthorizations(owner)).revokedDevices,1);
   assert.equal((await service.authenticateDeviceCredential(rotated.deviceCredential))?.authorizationEpoch,undefined);
   await service.setDeviceAccessMode(owner,id,'safe');
   await service.setDeviceAccessMode(owner,id,'full');

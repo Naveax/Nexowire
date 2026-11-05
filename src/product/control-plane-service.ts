@@ -739,6 +739,17 @@ export class ControlPlaneService {
     };
   }
 
+  /** Invalidate every current remote grant of the verified owner. */
+  async revokeOwnerRemoteAuthorizations(
+    identity: ControlPlaneIdentity,
+  ): Promise<{revokedDevices: number}> {
+    if (identity.role === 'service') throw new Error('OWNER_LOGIN_REQUIRED');
+    const account = await this.requireAccount(identity.accountId);
+    return {
+      revokedDevices: await this.store.revokeRemoteOwnerAuthorizations(account.id),
+    };
+  }
+
   async setDevicePresence(
     deviceIdInput: string,
     online: boolean,
