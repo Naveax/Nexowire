@@ -430,8 +430,15 @@ export async function executeDurableRunbook(
               : 'ASSERTIONS_NOT_OK';
         }
       } catch (error) {
-        step.status = 'failed';
-        step.errorCode = errorCode(error);
+        // No acknowledgement is NOT proof that a native mutation failed.
+        // Preserve durable UNKNOWN; only independent owner-bound journal
+        // reconciliation may clear this state, never a generic retry.
+        const code = errorCode(error);
+        step.status = code === 'MUTATION_STATE_UNKNOWN' ||
+          code === 'RUNBOOK_EFFECT_ALREADY_RESERVED' ||
+          code === 'RUNBOOK_EFFECT_JOURNAL_UNAVAILABLE'
+          ? 'unknown' : 'failed';
+        step.errorCode = code;
         step.result = {
           message:
             error instanceof Error
