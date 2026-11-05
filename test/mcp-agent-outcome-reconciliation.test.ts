@@ -91,7 +91,7 @@ for(const [code,expected] of [
       assert.equal(retryContent.idempotency?.replayed,true);
       assert.equal(retryContent.idempotency?.persistedStatus,expected);
       assert.equal(broker.calls,1,'unknown or failed mutation must never auto-replay');
-      const raw=await fs.readFile(path.join(root,'idempotency-records.json'),'utf8');
+      const raw=await fs.readFile(path.join(root,'idempotency-records.sqlite'),'utf8');
       assert.equal(raw.includes('fake mutation payload'),false);
     }finally{
       await client.close();
