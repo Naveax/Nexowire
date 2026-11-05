@@ -5,6 +5,8 @@ import path from 'node:path';
 import {DatabaseSync, type StatementSync} from 'node:sqlite';
 import {MemoryControlPlaneStore} from '../src/product/memory-control-plane-store.js';
 import {ControlPlaneService} from '../src/product/control-plane-service.js';
+import {createControlPlaneHttpHandler} from '../src/product/control-plane-http.js';
+import {createControlPlaneAgentCredentialVerifier} from '../src/hub/control-plane-agent-auth.js';
 import {
   D1ControlPlaneStore, type D1DatabaseLike,
   type D1PreparedStatementLike, type D1ResultLike,
@@ -157,4 +159,69 @@ test('AI-03 D1: atomic ownership, monotonic epoch, tombstone and reuse',async()=
     assert.ok(reused.epoch>tomb.epoch);
     assert.equal(await store.getRemoteDeviceAuthorization(first.device.id,'wrong',owner.accountId),null);
   }finally{db.close();}
+});
+
+
+test('AI-03 real HTTP verifier rejects forged client scope, expired lease and stale epoch',async()=>{
+  const store=new MemoryControlPlaneStore();
+  let now=new Date();
+  const service=new ControlPlaneService(store,{now:()=>now});
+  await service.ensureAccount({id:owner.accountId});
+  const first=await pair(service,'HTTP fixture');
+  await service.setDeviceAccessMode(owner,first.device.id,'full');
+  const token='disposable-service-token-12345';
+  const handler=createControlPlaneHttpHandler(service,{
+    authenticate:async request=>
+      request.headers.get('authorization') === 'Bearer '+token
+        ? {accountId:'internal',role:'service'} : null,
+  });
+  const endpoint='https://control.example.test/api/v1/internal/device/authenticate';
+  const input=new Request(endpoint,{
+    method:'POST',
+    headers:{authorization:'Bearer '+token,'content-type':'application/json'},
+    body:JSON.stringify({
+      credential:first.deviceCredential,
+      ownerAccountId:'forged-owner',
+      deviceId:'forged-device',
+      authorizationEpoch:999999,
+      leaseExpiresAtMs:Number.MAX_SAFE_INTEGER,
+    }),
+  });
+  const response=await handler(input);
+  assert.equal(response.status,200);
+  const reported=await response.json() as {
+    authenticated:boolean;
+    device:{ownerAccountId:string;deviceId:string;authorizationEpoch:number;leaseExpiresAtMs:number};
+  };
+  assert.equal(reported.authenticated,true);
+  assert.equal(reported.device.ownerAccountId,owner.accountId);
+  assert.equal(reported.device.deviceId,first.device.id);
+  assert.notEqual(reported.device.authorizationEpoch,999999);
+  assert.notEqual(reported.device.leaseExpiresAtMs,Number.MAX_SAFE_INTEGER);
+
+  const verifier=createControlPlaneAgentCredentialVerifier({
+    controlPlaneUrl:'https://control.example.test',
+    serviceToken:token,
+    fetchImpl:(input,init)=>handler(new Request(input,init)),
+  });
+  const initial=await verifier('Bearer '+first.deviceCredential);
+  assert.equal(initial?.deviceId,first.device.id);
+  assert.equal(initial?.ownerId,owner.accountId);
+  assert.ok(Number.isSafeInteger(initial?.authorizationEpoch));
+
+  // Reauthorization must reject server-issued grants that are already expired.
+  now=new Date(Date.now()-120_000);
+  assert.equal(await verifier('Bearer '+first.deviceCredential),undefined);
+  now=new Date();
+  await service.setDeviceAccessMode(owner,first.device.id,'safe');
+  assert.deepEqual(await verifier('Bearer '+first.deviceCredential),{deviceId:first.device.id});
+  await service.setDeviceAccessMode(owner,first.device.id,'full');
+  const latest=await verifier('Bearer '+first.deviceCredential);
+  assert.ok(latest?.authorizationEpoch! > initial!.authorizationEpoch!);
+
+  const other=await pair(service,'another device');
+  await service.setDeviceAccessMode(owner,other.device.id,'full');
+  const otherAuthority=await verifier('Bearer '+other.deviceCredential);
+  assert.notEqual(otherAuthority?.deviceId,first.device.id);
+  assert.equal(await verifier('Bearer nwx_dev_invalid'),undefined);
 });
