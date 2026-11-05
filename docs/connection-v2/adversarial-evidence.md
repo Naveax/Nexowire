@@ -243,3 +243,59 @@ Record SHA, OS, full command, exit code, run/attempt/job IDs and exact failure p
 ## Final release decision
 
 **NO-GO**. Linux targeted security GREEN; selected Windows negative suites GREEN; **Windows real Authenticode/immutable-image positive and credential custody owner-only positive FAIL**, integrated Windows browser-live FAIL, offhost two-PC OAuth/WSS and reboot NOT_RUN. No source/** modifications, production Cloudflare, NAVEAX/Work-PC, CORE, main merge or release.
+
+
+
+# ROUND 3 — Independent Windows native oracle | 2026-11-05
+
+## Exact CI proof, separating fixture errors from security defects
+
+- #1085 integration HEAD **206615686c249a11c10498d1b809d87789ef69ad**, workflow **41855019456**, completed FAILURE.
+- Real disposable Windows Node 22 job **126661202716** and Node 24 job **126661202977** both FAIL five of six native test cases. The SHA-before-launch replacement fixture PASS on both, but does not prove a verified Windows image was executed through a held handle.
+- Round-2 revocation exact AGENT_AUTH_REVOKED / zero mutation frames and duplicate UUID / UNKNOWN tests PASS in both integrated Windows jobs.
+- Both jobs use node --test --import tsx --test-concurrency=1, including test/v206-round2-windows-native-reason.test.ts and test/v206-round2-dispatch-reason.test.ts.
+
+| Native Windows case | Node22 / Node24 actual result | Security acceptance |
+|---|---|---|
+| Official Authenticode | EXIT_NONZERO, child status 1 (~653ms / ~447ms) BEFORE native signature readback | FAIL, signer validity NOT_PROVEN by this helper |
+| Microsoft signed wrong signer vs unsigned | EXIT_NONZERO, child status 1 (~329ms / ~323ms) at first signature query | FAIL, neither negative proof reached |
+| Disposable self-signed code-signing fixture | EXIT_NONZERO, child status 1 (~1960ms / ~1055ms) before certificate classification | FAIL, trust chain NOT_PROVEN |
+| Owner-only credential and inherited foreign ACE | Get-Acl EXIT_NONZERO, child status 1 (~340ms / ~346ms) before positive read | FAIL; inherited ACE negative NOT_RUN |
+| Credential hardlink / junction reparse | first positive read failed with custody unsafe (~41s / ~32.6s) BEFORE link/junction was created | FAIL; the two negative attacks NOT_RUN |
+| Actual image path replacement before verification | PASS: changed SHA256 refused | Limited PASS, NOT a post-verify TOCTOU acceptance |
+
+The old independent test helper swallowed PowerShell stderr. Its EXIT_NONZERO means the command failed, **not** that an actual certificate was invalid. The shell's exact error (syntax, module, execution policy, cert chain or child environment) was unobservable in 41855019456. Do not invent a more specific cause than the evidence. Its positive custody fixture was also unsound: os.tmpdir may have foreign writable ancestors, and icacls grant:r does NOT change the exact NTFS file owner. Therefore a failed positive cannot be counted as successful ACL/hardlink/reparse denial.
+
+## Independent source comparator #1077
+
+- New V2-01 source HEAD **c679655aafaa0aa3a21b1472882f9d074f611612**; own workflow **41904551749**, Windows browser-live job **126835611861**.
+- Native Windows owner-only / inherited ACE / parent replacement tests PASS (about 8.93s).
+- Official Windows signed-image validation to **explicit native immutable-image guard PASS** (about 1.4s).
+- PS7 independent signer baseline PASS: actual pwsh major=7, Status=Valid, signer present and Cloudflare, SHA256 pinned, subprocess exit=0 (~1.35s). This establishes a genuine native signature for that source fixture, not an immutable CreateProcess implementation.
+- #1077 overall CI still FAIL because of an unrelated real Windows scheduled process-tree stop test. Branch-specific successes do NOT inherit as an integrated #1085 GO.
+- New #1077 source uses fixed system-wide PS7 interpreter when available, fixed System32 cwd, bounded categorized child errors and actual owner/DACL rights checks. Windows held-image native launch is intentionally still unimplemented.
+
+## Round-3 independent test-only repair on #1044
+
+Only test/v206-round2-windows-native-reason.test.ts and this evidence document change.
+
+1. Select fixed system-wide PowerShell 7 executable only if a real non-symlink sole-linked file; otherwise the fixed Windows PS5.1 fallback. Never use PATH or caller-selected shell. Child arguments are -NoLogo -NoProfile -NonInteractive -EncodedCommand with **UTF-16LE base64**, and cwd is fixed System32. Add a native runtime preflight checking actual interpreter major/minor, FullLanguage and cwd, recording safe structured evidence.
+2. Keep exact native Get-AuthenticodeSignature and Get-Acl APIs. On failure, distinguish TIMEOUT / PROCESS_ERROR / EXIT_NONZERO, child exit/signal/elapsed, and bounded sanitized stdout/stderr. Real Status=Valid, signer and certificate must be checked *after* successful child execution, not inferred from a generic throws.
+3. Move the positive NTFS fixture from potentially shared TEMP to disposable user home, apply owner SID ACLs and actual icacls /setowner on both file and parent. Independently inspect all ancestor DACLs before accepting a positive.
+4. Fix the independent ancestor-rights oracle to distinguish a harmless inherited InheritOnly ACE and an ordinary parent create/write grant from effective file read/write or ancestor DELETE_CHILD/DELETE/WRITE_DAC/WRITE_OWNER replacement rights. This matches real Windows semantics without weakening the file custody requirement.
+5. Real Microsoft-signed PowerShell binary replaces packaging-dependent Notepad as the wrong signer. Keep unsigned PowerShell script, real disposable CurrentUser self-signed code-signing certificate, actual NTFS hardlink, junction/reparse and SHA-path replacement negative cases. Each requires an actual positive precondition and real OS readback.
+6. **Zero original AI-11 assertions changed, skipped, removed or broadened.** Git blob SHA baselines: f74ee761bfe00ff304b8c6070a26654c7c481e88, d75ab8ddcc8ab887220bea203026f1ed98eb77a9, 963393d00cc3368b9c76a7d8e9bb8cd4e455b706.
+
+## Comparative Windows matrix
+
+| Gate | #1085 206615... | #1077 c679... | New #1044 Round-3 test |
+|---|---|---|---|
+| Actual PS7 signed official image + SHA | FAIL at PS5.1 helper | PASS | NOT_RUN until new SHA CI |
+| Official signer reaches fail-closed native custodian | FAIL | PASS | NOT_RUN |
+| Wrong signer / unsigned / self-signed each separately | FAIL at helper | Partial signed baseline only | NOT_RUN |
+| Owner-only actual SID/DACL positive | FAIL | PASS | NOT_RUN |
+| Inherited untrusted ACE rejection | Did not reach negative | PASS | NOT_RUN |
+| NTFS hardlink and junction negatives after positive | Did not reach negative | NOT_RUN separately | NOT_RUN |
+| Held-image native Windows execution | NOT_IMPLEMENTED | NOT_IMPLEMENTED | NOT_RUN |
+
+**Release decision: NO-GO.** Every above native scenario must be evaluated on a new combined SHA with both #1077 fixes and #1044 repaired tests on Windows Node22 AND Node24, with exact commands, exit codes, CI attempt/job IDs, and proof of the physical preconditions. Linux/macOS security features requiring true Windows APIs remain NOT_RUN there. No source/** edits from V2-06, live Cloudflare account, physical NAVEAX/Work-PC, CORE, release, merge or production credentials touched.

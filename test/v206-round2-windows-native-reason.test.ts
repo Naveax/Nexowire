@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {promises as fs} from 'node:fs';
+import {promises as fs,lstatSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -14,7 +14,16 @@ import path from 'node:path';
  * there. Every rejection has a prerequisite proving the named attack exists.
  */
 if(process.platform==='win32'){
-  const POWERSHELL='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
+  const POWERSHELL_51='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
+  const POWERSHELL_7='C:\\Program Files\\PowerShell\\7\\pwsh.exe';
+  function fixedShell(){
+    try{
+      const s=lstatSync(POWERSHELL_7);
+      if(s.isFile()&&!s.isSymbolicLink()&&s.nlink===1)return {exe:POWERSHELL_7,engine:'PS7'};
+    }catch{/* no system-wide PS7, use installed Windows PowerShell 5.1 */}
+    return {exe:POWERSHELL_51,engine:'PS5.1'};
+  }
+  const SHELL=fixedShell();
   const ICACLS='C:\\Windows\\System32\\icacls.exe';
   const OFFICIAL='4d2490e74082c5d48dbfedaf92576fa5bd1702379ab88eb7faa0cfbe8dc891b6';
 
@@ -23,7 +32,7 @@ if(process.platform==='win32'){
     const started=Date.now();
     const result=spawnSync(executable,args,{
       encoding:'utf8',windowsHide:true,timeout:timeoutMs,maxBuffer:65536,
-      ...(env?{env}:{}),
+      ...(env?{env}:{}),cwd:'C:\\Windows\\System32',
     });
     const classification=(result.error as NodeJS.ErrnoException|undefined)?.code==='ETIMEDOUT'?'TIMEOUT':
       result.error?'PROCESS_ERROR':result.status===0?'OK':'EXIT_NONZERO';
@@ -32,14 +41,18 @@ if(process.platform==='win32'){
       stdout:result.stdout??'',stderr:result.stderr??''};
   }
   function powershell(script:string,env?:NodeJS.ProcessEnv,timeout=35000){
-    return run(POWERSHELL,['-NoLogo','-NoProfile','-NonInteractive',
+    return run(SHELL.exe,['-NoLogo','-NoProfile','-NonInteractive',
       '-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],timeout,env);
   }
   function ensureExecuted(result:ReturnType<typeof run>,purpose:string){
     assert.equal(result.classification,'OK',
       purpose+': '+JSON.stringify({
-        classification:result.classification,exitStatus:result.status,
-        processSignal:result.signal,errorCode:result.errorCode,elapsedMs:result.elapsedMs,
+        engine:SHELL.engine,commandMode:'-EncodedCommand',scriptEncoding:'UTF-16LE',
+        cwd:'System32',classification:result.classification,
+        exitStatus:result.status,processSignal:result.signal,
+        errorCode:result.errorCode??null,elapsedMs:result.elapsedMs,
+        stderrExcerpt:result.stderr.slice(-1800).replace(/(?:[A-Za-z]:\\)[^\s"'<>|]+/g,'[redacted-path]'),
+        stdoutExcerpt:result.stdout.slice(-550).replace(/(?:[A-Za-z]:\\)[^\s"'<>|]+/g,'[redacted-path]'),
       }));
   }
   function captureSignature(file:string,env?:NodeJS.ProcessEnv):Probe{
@@ -73,7 +86,7 @@ if(process.platform==='win32'){
     return value;
   }
   async function fixture(t:import('node:test').TestContext){
-    const root=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-v206-round2-'));
+    const root=await fs.mkdtemp(path.join(os.homedir(),'nexowire-v206-round2-'));
     t.after(()=>fs.rm(root,{recursive:true,force:true,maxRetries:8,retryDelay:150}));
     const credential=path.join(root,'credential.json');
     await fs.writeFile(credential,'{"synthetic":true}');
@@ -82,6 +95,7 @@ if(process.platform==='win32'){
       icacls(file,['/inheritance:r','/grant:r',
         '*'+me+':(F)','*S-1-5-18:(F)','*S-1-5-32-544:(F)']);
     }
+    for(const target of [root,credential])icacls(target,['/setowner','*'+me]);
     return {root,credential,me};
   }
   async function custody(){
@@ -106,9 +120,11 @@ if(process.platform==='win32'){
       ' $acl=Get-Acl -LiteralPath $cur -ErrorAction Stop',
       ' foreach($ace in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){',
       "  if($ace.AccessControlType -ne 'Allow' -or $trusted -contains $ace.IdentityReference.Value){continue}",
+      '  if(($ace.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly) -ne 0){continue}',
       '  $rights=[int64]$ace.FileSystemRights',
-      '  $mutate=[int64]0x2 -bor [int64]0x4 -bor [int64]0x10 -bor [int64]0x40 -bor [int64]0x100 -bor [int64]0x10000 -bor [int64]0x40000 -bor [int64]0x80000 -bor [int64]0x40000000 -bor [int64]0x10000000',
-      '  $danger=if($file){$mutate -bor [int64]0x120089}else{$mutate}',
+      '  $fileMutate=[int64]0x2 -bor [int64]0x4 -bor [int64]0x10 -bor [int64]0x40 -bor [int64]0x100 -bor [int64]0x10000 -bor [int64]0x40000 -bor [int64]0x80000 -bor [int64]0x40000000 -bor [int64]0x10000000',
+      '  $parentReplace=[int64]0x40 -bor [int64]0x10000 -bor [int64]0x40000 -bor [int64]0x80000 -bor [int64]0x40000000 -bor [int64]0x10000000',
+      '  $danger=if($file){$fileMutate -bor [int64]0x120089}else{$parentReplace}',
       '  if(($rights -band $danger) -ne 0){if($file){$badFile++}else{$badParent++}}',
       ' }',
       ' $n++;$up=[IO.Directory]::GetParent($cur)',
@@ -121,6 +137,27 @@ if(process.platform==='win32'){
     ensureExecuted(result,'independent real Get-Acl parent-chain audit');
     return JSON.parse(result.stdout.trim());
   }
+
+  test('V2-06 R3 Windows PowerShell engine, UTF16LE encoded-command and fixed cwd are evidenced',{
+    timeout:25000,
+  },t=>{
+    const script=[
+      "$ErrorActionPreference='Stop'",
+      "$o=@{major=$PSVersionTable.PSVersion.Major;minor=$PSVersionTable.PSVersion.Minor;mode=[string]$ExecutionContext.SessionState.LanguageMode;cwd=(Get-Location).Path}",
+      "[Console]::Out.Write(($o|ConvertTo-Json -Compress))",
+    ].join('\n');
+    const result=powershell(script,process.env,15000);
+    ensureExecuted(result,'actual Windows PowerShell runtime/command-mode preflight');
+    const proof=JSON.parse(result.stdout.trim()) as {major:number;minor:number;mode:string;cwd:string};
+    assert.equal(proof.major,SHELL.engine==='PS7'?7:5);
+    assert.equal(proof.cwd.toLowerCase(),'c:\\windows\\system32');
+    assert.equal(proof.mode,'FullLanguage','real native powershell fixture must have executable language mode');
+    t.diagnostic('V206_R3_POWERSHELL_RUNTIME='+JSON.stringify({
+      engine:SHELL.engine,major:proof.major,minor:proof.minor,mode:proof.mode,
+      cwd:'System32',argv:'-NoLogo -NoProfile -NonInteractive -EncodedCommand',
+      encoding:'UTF-16LE',exitCode:result.status,elapsedMs:result.elapsedMs,
+    }));
+  });
 
   test('V2-06 R2 Windows valid official signer must reach native immutable-image guard, not publisher rejection',{
     timeout:140000,
@@ -145,7 +182,7 @@ if(process.platform==='win32'){
   test('V2-06 R2 Windows actual Microsoft-signed wrong signer and unsigned fixture are distinguishable',{
     timeout:90000,
   },async t=>{
-    const wrong='C:\\Windows\\System32\\notepad.exe';
+    const wrong=POWERSHELL_51;
     const nativeWrong=captureSignature(wrong);
     assert.equal(nativeWrong.status,'Valid','wrong-publisher fixture must be authentically signed');
     assert.equal(nativeWrong.signerPresent,true);
@@ -202,6 +239,9 @@ if(process.platform==='win32'){
       'positive fixture has an independently measured foreign-writable ancestor; this cannot count as owner-only PASS: '+
       JSON.stringify(native));
     const product=await custody();
+    const existing=ancestorAudit(f.credential);
+    assert.equal(existing.unsafeFile,0,'positive credential file must have no untrusted effective ACE');
+    assert.equal(existing.unsafeParents,0,'positive credential must have no ancestor replace grants');
     assert.equal((await product.readCloudflareTunnelCredential(f.credential)).toString('utf8'),
       '{"synthetic":true}','owner-only credential MUST be readable through product custody');
     // Inherit an actual Authenticated Users read ACE from its parent, then
