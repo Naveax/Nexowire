@@ -67,9 +67,10 @@ class FixtureAuthority implements AtomicMutationAuthority {
   async reserveFresh(intent:Readonly<MutationIntent>):Promise<MutationReservation|null>{
     return this.serial(()=>{
       this.reserveCalls++;
-      if(!this.current(intent))return null;
+      // Historical UUID tombstones survive rotation/revoke/reconnect.
       const existing=this.tombstones.get(intent.deviceId+':'+intent.requestId);
       if(existing)return {...existing.permit,created:false};
+      if(!this.current(intent))return null;
       const permit:Object=Object.freeze({
         ...intent,authorityId:AUTHORITY,reservationId:randomUUID(),created:true,
       });
