@@ -88,7 +88,8 @@ const MAX_LEASE_MS = 300_000;
 const MAX_FRAME_BYTES = 4 * 1024 * 1024;
 
 function validLease(value: ServerIssuedDeviceLease | undefined, now: number): value is ServerIssuedDeviceLease {
-  return !!value && SAFE_ID.test(value.ownerId) && SAFE_ID.test(value.deviceId) &&
+  return !!value && typeof value.ownerId === 'string' && typeof value.deviceId === 'string' &&
+    SAFE_ID.test(value.ownerId) && SAFE_ID.test(value.deviceId) &&
     Number.isSafeInteger(value.authorizationEpoch) && value.authorizationEpoch >= 0 &&
     Number.isSafeInteger(value.leaseExpiresAtMs) &&
     value.leaseExpiresAtMs > now &&
@@ -129,6 +130,8 @@ function parseExactMutationWire(request: WireMutation): string {
   if (value.type !== 'request' || value.requestId !== request.requestId ||
       value.capability !== request.capability ||
       !Object.hasOwn(value, 'input') ||
+      Object.keys(value).length !== 5 ||
+      JSON.stringify(value) !== request.frame ||
       (value.accessMode !== 'safe' && value.accessMode !== 'full')) {
     return deny('MUTATION_WIRE_SCOPE_MISMATCH');
   }
@@ -149,6 +152,7 @@ function sameReservation(
     permit.requestId === intent.requestId &&
     permit.capability === intent.capability &&
     permit.fingerprint === intent.fingerprint &&
+    Number.isSafeInteger(permit.leaseExpiresAtMs) &&
     permit.leaseExpiresAtMs > 0 &&
     permit.leaseExpiresAtMs <= intent.leaseExpiresAtMs;
 }
