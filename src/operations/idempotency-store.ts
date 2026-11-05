@@ -90,10 +90,21 @@ export class IdempotencyStore {
   private readonly records = new Map<string, IdempotencyRecord>();
   private readonly cachedResults = new Map<string, unknown>();
 
+  // Temporary, bounded admission headroom for pre-existing 2,000-record
+  // journals. Never delete historical idempotency keys to reclaim slots.
+  // A durable tombstone/archive migration is required before going beyond
+  // the on-disk schema limit. Older Hub builds fail closed on >2,000 entries.
   constructor(
     private readonly rootDir: string,
-    private readonly maxRecords = 2000,
-  ) {}
+    private readonly maxRecords = 5000,
+  ) {
+    if (!Number.isSafeInteger(maxRecords) || maxRecords < 1 || maxRecords > 5000) {
+      throw new IdempotencyStoreError(
+        'IDEMPOTENCY_CAPACITY_INVALID',
+        'Hub idempotency capacity must be a safe integer from 1 to 5000.',
+      );
+    }
+  }
 
   private get file(): string {
     return path.join(this.rootDir, 'idempotency-records.json');
