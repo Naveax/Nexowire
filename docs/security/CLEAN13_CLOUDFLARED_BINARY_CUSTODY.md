@@ -153,3 +153,12 @@ Source SHA 5dae1db7a07414a6497d82df95eac8ca58fdcc91, CI 41988568463, Windows bro
 - P1-A Linux: **CONDITIONAL PASS** for FD-bound pathname swap; same-UID protected memfd not completed.
 - All production release gates: **NO-GO**. No bypass, skip, fake-green CI, new PR, main merge, device reboot, token/Cloudflare/DNS/CORE change.
 
+
+
+### Round 3 native MEM_IMAGE mapped-view readback (2026-11-05)
+
+The disposable probe was tightened after the initial Windows success: while the primary thread is suspended, it uses VirtualQueryEx to find committed MEM_IMAGE regions, GetMappedFileNameW to obtain the operating system's actual mapped-image NT object path, and GetFinalPathNameByHandleW with VOLUME_NAME_NT for the held source. These names must match. Separately, FileIdInfo of the held source and the process-reported reopened image path must match. The native code terminates the child before any ResumeThread, including on failure, with no production launch permission.
+
+**Verified:** exact source SHA bba72a75472423c420d526bf32a93e5ccb2ff97d, CI 41989402691, Windows browser-live job 127118285891: native MSVC build PASS, P1-A native hold/FileIdInfo/real MEM_IMAGE name assertion and independent cross-process same-owner races PASS (2.42 s), P1-B official Cloudflare Authenticode PASS, P1-D SID/DACL/ACE PASS. The Windows browser-live job has exit 1 because the separate V2-04 managed-parent task-stop assertion FAILs. Linux native, macOS lifecycle, WSL2 and security-operational jobs completed SUCCESS; standard Node22/24 checks remain affected by inherited non-CLEAN-13 negatives. Never label aggregate CI green.
+
+This maps an actual MEM_IMAGE view through a public native readback API, **but not a section object HANDLE or direct process creation from the held file HANDLE**. Therefore Windows executable launch stays fail-closed and native immutable-section P1-A remains NO-GO. The probe is not a production custodian, not signed, and not packaged.
