@@ -1,4 +1,4 @@
-import {promises as fs,constants as flags} from 'node:fs';
+import {promises as fs,constants as flags,lstatSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 import path from 'node:path';
 import {windowsDpapiChildEnvironment} from '../security/windows-dpapi.js';
@@ -10,6 +10,7 @@ export class CloudflareCredentialCustodyError extends Error {
     public readonly code:string='CUSTODY_UNSAFE',
     public readonly elapsedMs:number=0,
     public readonly childExitCode:number|null=null,
+    public readonly aclDetail?:{depth:number;rights:number;propagation:number;inheritance:number;inherited:boolean},
   ){
     super(CUSTODY_ERROR);
     this.name='CloudflareCredentialCustodyError';
@@ -35,6 +36,22 @@ async function parents(file:string){
     if(next===current)break;
     current=next;
   }
+}
+/** Windows PowerShell 5.1 has repeatedly stalled in hosted SID/ACL audits
+ * while the independently checked PowerShell 7 executable completes promptly.
+ * Prefer the fixed system-wide PS7 installation, never PATH or an env override.
+ * On machines without a verified location, retain the built-in PS5.1 fallback,
+ * which remains fail-closed on errors/timeouts. This does NOT authorize tunnel
+ * launch on Windows (native image-section custodian is still required).
+ */
+function windowsCredentialAuditInterpreter():string{
+  const pwsh='C:\\Program Files\\PowerShell\\7\\pwsh.exe';
+  try{
+    const info=lstatSync(pwsh);
+    if(info.isFile()&&!info.isSymbolicLink()&&info.nlink===1)
+      return pwsh;
+  }catch{/* no trusted fixed PS7 installation; use built-in fallback */}
+  return 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
 }
 /** Read-only SID and DACL verification. Failure reasons are fixed enums and
  * durations, not paths, SIDs, credentials, or raw PowerShell stderr.
@@ -66,6 +83,10 @@ function windowsCredentialAcl(file:string){
     "    $stage='ACE'",
     "    foreach($ace in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){",
     "      if($ace.AccessControlType -ne 'Allow'){continue}",
+    // An INHERIT_ONLY ACE does not grant permissions on THIS object. The
+    // child object's effective inherited ACE is inspected on its own DACL.
+    // Do not ignore ordinary inherited ACEs without InheritOnly.
+    "      if(($ace.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly) -ne 0){continue}",
     "      $sid=$ace.IdentityReference.Value",
     "      if($trusted -contains $sid){continue}",
     "      $rights=[int64]$ace.FileSystemRights",
@@ -75,7 +96,7 @@ function windowsCredentialAcl(file:string){
     "      $danger=if($file){$read -bor $fileMutate}else{$parentReplace}",
     "      if(($rights -band $danger) -ne 0){",
     "        if($file){[Console]::Error.Write('C13:FILE_UNTRUSTED_ACE');exit 23}",
-    "        [Console]::Error.Write('C13:PARENT_REPLACE_ACE');exit 24",
+    "        [Console]::Error.Write('C13:PARENT_REPLACE_ACE:D'+$depth+':R'+([int64]$ace.FileSystemRights)+':P'+([int]$ace.PropagationFlags)+':I'+([int]$ace.InheritanceFlags)+':H'+([int]$ace.IsInherited));exit 24",
     "      }",
     "    }",
     "    $up=[IO.Directory]::GetParent($cur)",
@@ -92,9 +113,10 @@ function windowsCredentialAcl(file:string){
   const b64=Buffer.from(ps,'utf16le').toString('base64');
   const env={...windowsDpapiChildEnvironment(),NEXOWIRE_CUSTODY_PATH:file};
   const started=Date.now();
-  const child=spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+  const child=spawnSync(windowsCredentialAuditInterpreter(),
     ['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',b64],
-    {env,encoding:'utf8',timeout:45000,maxBuffer:4096,windowsHide:true});
+    {env,encoding:'utf8',timeout:45000,maxBuffer:4096,windowsHide:true,
+      cwd:'C:\\Windows\\System32'});
   if(child.error||child.status!==0||child.stdout.trim()!=='OK'){
     const childCode=(child.error as NodeJS.ErrnoException|undefined)?.code;
     const marker=/C13:(REPARSE|FOREIGN_OWNER|FILE_UNTRUSTED_ACE|PARENT_REPLACE_ACE|PARENT_DEPTH|ERROR_(?:START|ITEM|ACL|OWNER|ACE))/.exec(child.stderr??'');
@@ -102,7 +124,12 @@ function windowsCredentialAcl(file:string){
       childCode==='ENOBUFS'?'POWERSHELL_OUTPUT_BOUND':
       childCode?'POWERSHELL_SPAWN_'+(childCode==='ENOENT'?'MISSING':'FAILED'):
       marker?.[1]??(child.status===0?'INVALID_RESULT':'POWERSHELL_UNCLASSIFIED_EXIT');
-    throw new CloudflareCredentialCustodyError(code,Date.now()-started,child.status);
+    const meta=/C13:PARENT_REPLACE_ACE:D(\d+):R(-?\d+):P(\d+):I(\d+):H([01])/.exec(child.stderr??'');
+    const detail=meta?{
+      depth:Number(meta[1]),rights:Number(meta[2]),
+      propagation:Number(meta[3]),inheritance:Number(meta[4]),inherited:meta[5]==='1',
+    }:undefined;
+    throw new CloudflareCredentialCustodyError(code,Date.now()-started,child.status,detail);
   }
 }
 /** Read-only early filesystem admission. Does NOT read or copy credential

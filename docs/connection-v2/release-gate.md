@@ -1,3 +1,50 @@
+# Connection v2 | Round 4 final source refresh — authoritative checkpoint
+
+**NO-GO.** Sources #1044 `b7c39dbdade38a0a1cf3a69299b1d9677cf0a5e9`, #1077 `b0bdfbced25364ad26473c24bb23f9d5cf249805` and #1083 `2b2a1b7e4199705a78a4a8ca4d19e6aca7d7cca3` are frozen for this coordinator commit.
+
+- Preservation matrix: 78 PR/file rows, 70 distinct source paths, {"MERGED_MAIN_SECURITY_REVIEW_REQUIRED":4,"EXACT_BLOB":64,"EVOLVED_SOURCE_SEMANTIC_REVIEW_REQUIRED":10}. Source owners have not approved 14 non-exact entries. Git and CI must run on the new HEAD.
+- The latest #1077 **native held-handle WinVerifyTrust** probe, MSVC `wintrust.lib` build fix, read-only Windows PowerShell7/5.1+WDAC inventory and mandatory `productionLaunchGO=false` CI gate are integrated as exact source blobs. The test probe always terminates suspended child without resuming; it is **not** a signed native production launcher.
+- Official Cloudflared SHA256 and Authenticode remain required, P1-D SID/DACL/ACE inherited-parent checks remain strict, and public P1-C HTTPS/DNS admission stays unchanged. Full positive Windows credential fixture evidence is pending this exact candidate's `browser-live`.
+- #1044 original native Windows negative assertion names 6/6 preserved plus fixed PowerShell 7/5.1 encoded-command diagnostics. #1083 original 7/7 revocation assertions preserved plus three strict registration negatives. The remote-only Hub Broker construction binds mandatory strict mode; V2-03 source-owner approval is pending.
+- Existing Round3 `MUTATION_STATE_UNKNOWN`, cloned-runbook no-replay O_EXCL journal and 22-case CLEAN-10 Windows acceptance are preserved without code changes.
+- Real staging: off-network OAuth/MCP completion, 2-PC v2 acceptance, actual reboot/rollback, provider egress hard stop, 1GiB/24h soak **NOT_RUN**.
+- Production feature flag OFF, Tailscale fallback preserved, no NAVEAX/Work-PC writes or credential/DNS changes, no billing, main merge or release tags.
+
+## Earlier round ledger (historical source SHA snapshots, not current acceptance)
+
+# Connection v2 | Round 4 security-source integration checkpoint
+
+**Decision: NO-GO**. Only #1085 Draft coordination branch is changed. No main merge, production deploy, live NAVEAX/Work-PC write, DNS, Cloudflare account or credential mutation.
+
+- Prior coordinator HEAD: `ebc8029d15a948a4e3a0003df1301e6b21f47a77`. This Round4 commit integrates source snapshots #1044 `e431f6854e743982475fc513295881ed16a7fe92`, #1077 `8405c44cbc60205f33d47a8525eea7e3fbf9541f`, #1083 `2b2a1b7e4199705a78a4a8ca4d19e6aca7d7cca3`.
+- Preservation matrix: **76 PR-path rows / 68 unique source paths**; `{"MERGED_MAIN_SECURITY_REVIEW_REQUIRED":4,"EXACT_BLOB":62,"EVOLVED_SOURCE_SEMANTIC_REVIEW_REQUIRED":10}`. No source test name was removed (V2-06 6/6, CLEAN-13 3/3, V2-07 7/7 preserved). Security source old commits remain Git ancestors; manual CI merge is explicitly marked, no synthetic PASS.
+- Source #1044 Windows encoded-command PowerShell 7/5.1 runner diagnostics: added exact blob, no changed old assertion lines. Source #1077 native Windows CREATE_SUSPENDED/FileIdInfo probe C code, MSVC build script, new independent held-image negative, strict Cloudflare publisher and credential SID/DACL chain: exact blobs imported. Native probe remains test-only and never authorizes a Windows cloudflared launch.
+- Source #1083 strict `AgentBroker` requires per-socket verifier before AUTHENTICATED_ONLINE when opted in. `src/runtime.ts` opts into strict authorization when `remoteAgentAuthOnly===true`, consistent with existing public Cloudflare publication gate and `src/hub/agent-websocket.ts` session checks. Public strict-mode unit test added to Windows/Linux Node22/24 independent CI. #1003 owner confirmation pending.
+- Existing #1074 `normalizePublicControlPlaneAuthority()`, pre-credential Cloudflare admission, OAuth/MCP ingress, #1075 unchanged CLEAN-10 mandatory oracle and Round3 durable owner/device journal remain intact.
+- Last SHA `ebc8029d15a948a4e3a0003df1301e6b21f47a77`: `41991273960` CI **FAILURE** due Windows V2-06 Node22/24 and browser-live P1-D; CLEAN-10 Node22/24 PASS, native Git DAG 73/73 PASS. Relay `41991273873` 4/4 PASS; Release Readiness `41991273889` SUCCESS (packaging, not security).
+- #1077 source itself had failed CI `41989954395`; integrating new test-only native probe does not grant P1-A/B/D GREEN. Require exact-HEAD full Windows P1-D owner-only positive, foreign inherited ACE denial, hardlink/junction, signer, sealed-image tests before any security acceptance.
+- Source owners #1003, #1044, #1077 and #1083 semantic review: **PENDING**; no approval is inferred from zero reviews.
+- New exact SHA CI/native Git DAG, Windows/Linux Node22/24, browser-live and Relay: **NOT_RUN** until GitHub Actions runs after coordinator commit.
+- External named Cloudflare tunnel, OAuth/MCP read-only completion, 101+ *off-network* WSS, two-PC v2 authentication, reboot/rollback, 1GiB verified transfer, 24h soak, provider egress quota/cost: **NOT_RUN**.
+- Rollback: v2 production feature flag stays OFF and existing Tailscale fallback preserved. In isolated staging only stop candidate processes, revoke only staging tokens, restore pinned config/artifact and preserve UNKNOWN receipts without redispatch.
+
+## Security source-to-candidate semantic decisions
+
+| Candidate file / group | Decision | Owner review |
+|---|---|---|
+| `src/core/agent-broker.ts` | Latest #1083 strict registration, per-mutation authorization and socket epoch; exact source blob | PENDING |
+| `src/runtime.ts` | Coordinator-only strict remote-only mode instantiation; local Agent legacy unchanged | #1003 PENDING |
+| `src/mcp/cloudflare-binary-trust.ts` | Latest #1077 SHA, Authenticode and missing-production-custodian denial | PENDING |
+| `src/mcp/cloudflare-credential-custody.ts` | Latest #1077 Windows SID/DACL/ACE and ancestry, no permission relaxations | PENDING |
+| `test/clean13-cloudflared-windows-custody.test.ts` | Original three assertions retained with diagnostic envelope | PENDING |
+| `native/windows-cloudflared-image-probe.c`, `scripts/build-windows-cloudflared-image-probe.ps1` | Test-only MSVC helper, never release an executable | PENDING |
+| `test/v206-round2-windows-native-reason.test.ts` | Original six assertions retained, adds Windows native prerequisite diagnostic | PENDING |
+| `.github/workflows/ci.yml` | Existing tests kept, native probe built only in disposable browser-live job and new strict broker test in Round2 matrix | PENDING |
+| `src/mcp/local-first-cloudflare.ts` | Existing P1-C strict public canonical HTTPS plus P1-B/D ordering unchanged | PENDING |
+| `src/agent/runbooks.ts`, `src/agent/runbook-effect-journal.ts` | Round3 durable UNKNOWN and no-replay kept byte-identical | CLEAN-10 prior PASS, current SHA pending |
+
+---
+
 # Connection v2 | Round 3 P0 CLEAN-10 checkpoint
 
 **NO-GO.** The following is a candidate-only patch set for #1085 Draft. A passing historical unsafe exploit oracle is not equivalent to a positive security proof.

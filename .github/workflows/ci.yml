@@ -192,7 +192,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - name: Verify Cloudflare-only connector lifecycle and active Agent authorization
-        timeout-minutes: 5
+        timeout-minutes: 12
         shell: pwsh
         run: |
           $binary = Join-Path $env:RUNNER_TEMP 'nexowire-cloudflared-2026.10.1.exe'
@@ -213,7 +213,25 @@ jobs:
             nativeHandleBoundCustodian = $false
           }
           Write-Host ('NEXOWIRE_P1B_WINDOWS_SIGNATURE_DIAGNOSTIC=' + ($summary | ConvertTo-Json -Compress))
-          node --test --import tsx test/clean13-cloudflared-windows-custody.test.ts test/local-first-cloudflare.test.ts test/cloudflare-connection-lifecycle.test.ts test/cloudflare-agent-upgrade.test.ts test/connection-active-authorization.test.ts test/control-plane-agent-auth.test.ts test/agent-broker.e2e.test.ts
+          # Disposable test-only native FileIdInfo / suspended-process oracle.
+          # This helper never resumes the process or authorizes production launch.
+          # Test-only security inspection. Even an approved official signature
+          # cannot permit native Windows Cloudflared process launch.
+          $inspection = @(./scripts/audit-clean13-windows-launch-readiness.ps1 -BinaryPath $binary)
+          $line = [string]($inspection | Select-Object -Last 1)
+          if (-not $line.StartsWith('NEXOWIRE_C13_WINDOWS_READINESS=')) { throw 'CLEAN-13 inspection report missing' }
+          $result = $line.Substring('NEXOWIRE_C13_WINDOWS_READINESS='.Length) | ConvertFrom-Json
+          if ($result.productionLaunchGO -ne $false -or $result.nativeHeldImageSectionCustodianImplemented -ne $false) {
+            throw 'CLEAN-13 immutable-image launch must remain fail-closed'
+          }
+          if ($result.sha256Pinned -ne $true -or $result.directAuthenticodeValid -ne $true -or $result.powershell7.result -ne 'SIGNED_SOURCE_VALID') {
+            throw 'CLEAN-13 official Windows signature verification failed'
+          }
+          Write-Host $line
+          $nativeProbe = Join-Path $env:RUNNER_TEMP 'nw-clean13-native-image-probe.exe'
+          ./scripts/build-windows-cloudflared-image-probe.ps1 -OutputPath $nativeProbe
+          $env:NEXOWIRE_CLOUDFLARED_IMAGE_PROBE = $nativeProbe
+          node --test --import tsx test/clean13-cloudflared-windows-custody.test.ts test/clean13-cloudflared-windows-image-probe.test.ts test/local-first-cloudflare.test.ts test/cloudflare-connection-lifecycle.test.ts test/cloudflare-agent-upgrade.test.ts test/connection-active-authorization.test.ts test/control-plane-agent-auth.test.ts test/agent-broker.e2e.test.ts
           if ($LASTEXITCODE -ne 0) { throw 'Connection Core verification failed' }
       - name: Verify recycled WAL and consecutive journal process restarts
         timeout-minutes: 5
@@ -459,4 +477,4 @@ jobs:
           if ($digest -ne '4d2490e74082c5d48dbfedaf92576fa5bd1702379ab88eb7faa0cfbe8dc891b6') { throw 'Round2 official Cloudflared SHA256 mismatch' }
           "NEXOWIRE_CLOUDFLARED_TEST_BINARY=$binary" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Fail-closed V2 Round 2 security, OAuth, WSS and Windows rollback
-        run: node --test --import tsx --test-concurrency=1 test/v206-round2-dispatch-reason.test.ts test/v206-round2-windows-native-reason.test.ts test/clean14-wss-tls-negative.test.ts test/v2-03-authenticated-mcp-acceptance.test.ts test/v2-07/round2-revocation.test.ts test/v2-07/round2-transport-fixtures.test.ts test/connection-v2-windows-hub-rollback.test.ts
+        run: node --test --import tsx --test-concurrency=1 test/v206-round2-dispatch-reason.test.ts test/v206-round2-windows-native-reason.test.ts test/clean14-wss-tls-negative.test.ts test/v2-03-authenticated-mcp-acceptance.test.ts test/v2-07/round2-revocation.test.ts test/v2-07/round2-transport-fixtures.test.ts test/connection-v2-windows-hub-rollback.test.ts test/connection-v2-release-gate/public-agent-strict-mode.test.ts

@@ -7,19 +7,19 @@
   "main_tree": "46f30e68c3df6984a27c2b65b52a6e6687a8f325",
   "source_heads": {
     "1003": "17b699084ad90cc929db83b5942eed812e80cd83",
-    "1044": "48704c908636383d63e6284082f167f1909124d0",
+    "1044": "b7c39dbdade38a0a1cf3a69299b1d9677cf0a5e9",
     "1074": "6b00db5bb24e537a6d1c494b3459080a8af3f943",
     "1075": "05a99388c377caa0781fb5a2c257ea1f9b92e5df",
-    "1077": "384c05276d2c0116ee13f7b70d6709cdb478f887",
+    "1077": "b0bdfbced25364ad26473c24bb23f9d5cf249805",
     "1081": "a28995c25b5575636c929b09d1f6e7c4d9b33e5c",
-    "1083": "136627e161872f534dfc30242e59223b378dce09",
+    "1083": "2b2a1b7e4199705a78a4a8ca4d19e6aca7d7cca3",
     "1084": "f4f80a76a186e84433ae4be6aed829a21d990a0c"
   },
-  "source_files": 65,
-  "matrix_rows": 73,
+  "source_files": 70,
+  "matrix_rows": 78,
   "matrix_status": {
     "MERGED_MAIN_SECURITY_REVIEW_REQUIRED": 4,
-    "EXACT_BLOB": 59,
+    "EXACT_BLOB": 64,
     "EVOLVED_SOURCE_SEMANTIC_REVIEW_REQUIRED": 10
   },
   "source_candidate_manifest_blob": "b00a6e3ff5d803575b3093c642c9d994c958b2be",
@@ -52,7 +52,7 @@
     }
   ],
   "acceptance": {
-    "candidate_exact_head_ci": "PENDING_NEW_SHA",
+    "candidate_exact_head_ci": "NOT_RUN_NEW_SHA",
     "adversarial_negatives": "NOT_RUN_NEW_SHA",
     "windows_task_reboot": "SOURCE_INCLUDED_DISPOSABLE_VM_NOT_RUN",
     "mcp_offnetwork_oauth_readonly": "NOT_RUN",
@@ -420,7 +420,7 @@
     "cloudflared_windows_security": "FAIL"
   },
   "native_git_dag_evidence": {
-    "status": "PENDING_ROUND3_EXACT_SHA",
+    "status": "NEW_EXACT_SHA_NOT_RUN",
     "workflow_job": "connection-v2-native-git-dag",
     "checkout": "EXACT_HEAD_FULL_HISTORY",
     "commands": [
@@ -431,7 +431,7 @@
       "git rev-parse"
     ],
     "artifact": "connection-v2-native-git-dag.json",
-    "source_matrix_rows": 73,
+    "source_matrix_rows": 78,
     "prior_sha": "e3384c89001f49ca1a525ff04639752b23f35c6a",
     "prior_run": 41835856330,
     "prior_job": 126594742469,
@@ -442,7 +442,7 @@
     "prior_source_blobs": 54,
     "prior_candidate_blobs": 54,
     "clean10_merge_tree": "NOT_RUN",
-    "matrix_rows": 73
+    "matrix_rows": 78
   },
   "last_completed_candidate": {
     "sha": "06a3d58fa0c7b98764b2aaaa9cb5a6d16651dffb",
@@ -802,14 +802,15 @@
       1083,
       1084
     ],
-    "source_rows": 73,
-    "exact_blobs": 59,
+    "source_rows": 78,
+    "exact_blobs": 64,
     "merged_rows": 4,
     "evolved_rows": 10,
-    "owner_approvals": "PENDING",
+    "owner_approvals": "NOT_RECEIVED",
     "true_offnetwork_mcp": "NOT_RUN",
     "provider_cost": "NOT_RUN",
-    "full_ci": "PENDING_NEW_SHA"
+    "full_ci": "NOT_RUN_NEW_SHA",
+    "production_authorized": false
   },
   "integration_round2": {
     "source_heads": {
@@ -910,5 +911,64 @@
     "windows_journal_sid_dacl_acceptance": "NOT_RUN",
     "physical_staging": "NOT_RUN",
     "final_decision": "NO_GO"
+  },
+  "round4_security_sources": {
+    "base_sha": "ebc8029d15a948a4e3a0003df1301e6b21f47a77",
+    "source_heads": {
+      "1044": "b7c39dbdade38a0a1cf3a69299b1d9677cf0a5e9",
+      "1077": "b0bdfbced25364ad26473c24bb23f9d5cf249805",
+      "1083": "2b2a1b7e4199705a78a4a8ca4d19e6aca7d7cca3"
+    },
+    "source_new_paths": [
+      "native/windows-cloudflared-image-probe.c",
+      "scripts/build-windows-cloudflared-image-probe.ps1",
+      "test/clean13-cloudflared-windows-image-probe.test.ts",
+      "docs/security/CLEAN13_WINDOWS_PRODUCTION_LAUNCH_R4.md",
+      "scripts/audit-clean13-windows-launch-readiness.ps1"
+    ],
+    "source_negative_original_names_preserved": {
+      "1044": 6,
+      "1077": 3,
+      "1083": 7
+    },
+    "source_negative_new_cases": {
+      "1044": 1,
+      "1077": 1,
+      "1083": 3
+    },
+    "public_agent_require_strict": true,
+    "native_probe": "DISPOSABLE_CI_ONLY_CREATE_SUSPENDED_NEVER_RESUMED",
+    "official_win32_sha_pinned": "4d2490e74082c5d48dbfedaf92576fa5bd1702379ab88eb7faa0cfbe8dc891b6",
+    "source_pr1077_ci_run": 41989954395,
+    "source_pr1077_ci_conclusion": "FAILURE",
+    "prior_candidate": {
+      "sha": "ebc8029d15a948a4e3a0003df1301e6b21f47a77",
+      "ci": 41991273960,
+      "result": "FAILURE",
+      "browser_live_job": 127123830970,
+      "result_detail": "P1-D credential custody RED",
+      "clean10_node22": "PASS",
+      "clean10_node24": "PASS",
+      "relay_run": 41991273873,
+      "relay_result": "SUCCESS_4_OF_4",
+      "release_readiness": 41991273889,
+      "release_readiness_result": "SUCCESS",
+      "git_dag_job": 127123831304,
+      "source_blobs_pass": 73,
+      "candidate_blobs_pass": 73
+    },
+    "new_exact_sha": "PENDING_CANDIDATE_COMMIT",
+    "new_exact_ci": "NOT_RUN",
+    "p1b_windows_production_launcher": "NOT_APPROVED",
+    "p1d_positive_fixture": "PENDING_EXACT_SHA_WINDOWS_RUN",
+    "semantic_owner_reviews": "PENDING",
+    "off_network": "NOT_RUN",
+    "reboot_rollback": "NOT_RUN",
+    "provider_quota_cost": "NOT_RUN",
+    "final_decision": "NO_GO",
+    "production_launch_architecture": "ARCHITECTURE_ONLY_WDAC_UMCI_AND_SIGNED_LAUNCHER_NOT_IMPLEMENTED",
+    "read_only_inspector": "INTEGRATED_IN_DISPOSABLE_WINDOWS_CI",
+    "native_winverifytrust_held_source": "INTEGRATED_TEST_ONLY",
+    "p1b_windows_launch_authorization": "NO_GO"
   }
 }

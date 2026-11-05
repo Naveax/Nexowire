@@ -50,7 +50,7 @@ const clean10Merge=clean10Base
 if(clean10Merge.status!==0)failures.push('CLEAN-10 source merge-tree conflict or missing full DAG');
 const rows=readFileSync('docs/connection-v2/source-preservation-matrix.csv','utf8').trim().split(/\r?\n/).slice(1)
   .map(line=>[...line.matchAll(/"((?:[^"]|"")*)"/g)].map(x=>x[1].replace(/""/g,'"')));
-if(rows.length!==73)failures.push('matrix row count differs from 73');
+if(rows.length!==78)failures.push('matrix row count differs from 78');
 let sourceBlobPass=0,candidateBlobPass=0;
 for(const r of rows){
   if(r.length!==7){failures.push('invalid CSV row');continue;}

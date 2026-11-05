@@ -1,4 +1,4 @@
-import {promises as fs,constants as flags} from 'node:fs';
+import {promises as fs,constants as flags,lstatSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import os from 'node:os';
@@ -36,6 +36,20 @@ export class CloudflaredPublisherAuditError extends Error{
     this.name='CloudflaredPublisherAuditError';
   }
 }
+/** Select only a fixed, machine-wide Windows PowerShell installation.
+ * PS7 completed independently pinned Authenticode checks on hosted Windows
+ * runners while PS5.1 intermittently exceeded its bounded child deadline.
+ * A missing/untrusted PS7 falls back to the built-in fixed PS5.1, where
+ * failure remains a denial. Neither host may authorize path-based launch.
+ */
+function windowsPublisherAuditInterpreter():string{
+  const pwsh='C:\\Program Files\\PowerShell\\7\\pwsh.exe';
+  try{
+    const info=lstatSync(pwsh);
+    if(info.isFile()&&!info.isSymbolicLink()&&info.nlink===1)return pwsh;
+  }catch{/* fixed PS7 path unavailable; retain fail-closed built-in fallback */}
+  return 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
+}
 /** Windows read-only publisher audit. No certificate or credential is logged.
  * The independent official SHA pin remains mandatory. This is not a native
  * image handle/section identity proof and never authorizes CreateProcess.
@@ -61,9 +75,9 @@ function windowsPublisherSignature(file:string){
     "}",
   ].join('\n');
   const started=Date.now();
-  const result=spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+  const result=spawnSync(windowsPublisherAuditInterpreter(),
     ['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(ps,'utf16le').toString('base64')],
-    {encoding:'utf8',windowsHide:true,timeout:25000,maxBuffer:4096,
+    {encoding:'utf8',windowsHide:true,timeout:25000,maxBuffer:4096,cwd:'C:\\Windows\\System32',
       env:{...windowsDpapiChildEnvironment(),NEXOWIRE_CLOUDFLARED_IMAGE:file}});
   if(result.error||result.status!==0||result.stdout.trim()!=='OK'){
     const childCode=(result.error as NodeJS.ErrnoException|undefined)?.code;

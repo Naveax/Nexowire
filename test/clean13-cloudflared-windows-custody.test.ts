@@ -26,21 +26,30 @@ test('CLEAN-13 P1-D Windows exact SID, inherited ACE and parent replacement righ
   skip:process.platform!=='win32',
   timeout:90000,
 },async t=>{
-  const dir=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-clean13-win-'));
+  // GitHub's runner-wide TEMP ancestry can grant cross-user replacement
+  // rights. A genuinely owner-private positive must live under the disposable
+  // runner account's protected profile, not a shared runner scratch tree.
+  const dir=await fs.mkdtemp(path.join(os.homedir(),'nexowire-clean13-win-'));
   t.after(()=>fs.rm(dir,{recursive:true,force:true,maxRetries:5,retryDelay:200}));
   const file=path.join(dir,'fake-tunnel.json');
   await fs.writeFile(file,'{"fake":true}',{mode:0o600});
   const user=sid();
-  // These ACL changes affect only test-owned temporary fixtures.
-  for(const target of [dir,file])
+  // Windows elevated runner tokens can create new files with the
+  // Administrators GROUP as owner, even when current-user full-control
+  // ACEs are explicit. ACL grants do NOT change ownership. Establish the
+  // real logon user's exact SID on these disposable objects only.
+  for(const target of [dir,file]){
     cmd(ICACLS,[target,'/inheritance:r','/grant:r',
       '*'+user+':(F)','*S-1-5-18:(F)','*S-1-5-32-544:(F)']);
+    cmd(ICACLS,[target,'/setowner','*'+user]);
+  }
   let good:Buffer;
   try{good=await readCloudflareTunnelCredential(file);}
   catch(error){
     if(error instanceof CloudflareCredentialCustodyError){
       console.info('CLEAN13_WINDOWS_ACL_OWNER_ONLY_DIAG='+JSON.stringify({
         reason:error.code,elapsedMs:error.elapsedMs,exitCode:error.childExitCode,
+        aclDetail:error.aclDetail??null,
       }));
     }
     throw error;
@@ -55,6 +64,20 @@ test('CLEAN-13 P1-D Windows exact SID, inherited ACE and parent replacement righ
     return true;
   });
   cmd(ICACLS,[file,'/remove:g','*S-1-5-11']);
+  assert.equal((await readCloudflareTunnelCredential(file)).toString('utf8'),'{"fake":true}');
+
+  // Real inherited ACE negative: the parent grants read-through inheritance,
+  // not an explicit ACE on the credential. Re-enable only this disposable
+  // child's inheritance, then restore its locked DACL afterwards.
+  cmd(ICACLS,[dir,'/grant','*S-1-5-11:(OI)(CI)(R)']);
+  cmd(ICACLS,[file,'/inheritance:e']);
+  await assert.rejects(readCloudflareTunnelCredential(file),(error:unknown)=>{
+    assert.ok(error instanceof CloudflareCredentialCustodyError);
+    assert.equal(error.code,'FILE_UNTRUSTED_ACE');
+    return true;
+  });
+  cmd(ICACLS,[file,'/inheritance:r']);
+  cmd(ICACLS,[dir,'/remove:g','*S-1-5-11']);
   assert.equal((await readCloudflareTunnelCredential(file)).toString('utf8'),'{"fake":true}');
 
   // Real foreign file owner, not just a simulated SID passed to the verifier.

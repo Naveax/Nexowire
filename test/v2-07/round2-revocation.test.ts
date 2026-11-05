@@ -4,7 +4,7 @@ import {randomUUID} from 'node:crypto';
 import {createServer} from 'node:http';
 import type {AddressInfo} from 'node:net';
 import WebSocket, {WebSocketServer} from 'ws';
-import {AgentBroker} from '../../src/core/agent-broker.js';
+import {AgentBroker, type AgentBrokerOptions} from '../../src/core/agent-broker.js';
 import {AgentHelloSchema, AGENT_PROTOCOL_VERSION} from '../../src/protocol/agent.js';
 
 type Authorizer = () => Promise<boolean>;
@@ -21,13 +21,13 @@ async function eventually(check:()=>boolean, timeoutMs=1_500):Promise<void> {
   assert.ok(check(),'fixture condition must be met within its deadline');
 }
 
-async function fixture(t: import('node:test').TestContext) {
+async function fixture(t: import('node:test').TestContext, options: AgentBrokerOptions = {}) {
   // This exercises the V2-07 broker epoch/dispatch callback using real
   // loopback WebSocket frames, NOT the V2-03 ingress trust boundary.
   const server=createServer();
   const wss=new WebSocketServer({server});
-  const broker=new AgentBroker({reconnectGraceMs:300,maxReadOnlyReplays:1});
-  const verifiers:Authorizer[]=[];
+  const broker=new AgentBroker({reconnectGraceMs:300,maxReadOnlyReplays:1,...options});
+  const verifiers:Array<Authorizer|undefined>=[];
   const clients:WebSocket[]=[];
   const accepted:WebSocket[]=[];
   wss.on('connection',socket=>{
@@ -50,7 +50,8 @@ async function fixture(t: import('node:test').TestContext) {
     deviceId:string,
     instanceId:string,
     epoch:number,
-    authorizer:Authorizer,
+    authorizer?:Authorizer,
+    expectRegistered=true,
   ) {
     verifiers.push(authorizer);
     const socket=new WebSocket('ws://127.0.0.1:'+port);
@@ -71,7 +72,7 @@ async function fixture(t: import('node:test').TestContext) {
         platform:'linux',arch:'x64',agentVersion:'test',
         capabilities:['machine.snapshot','files.write']},
     }));
-    await eventually(()=>broker.getConnectionHealth(deviceId)?.epoch===epoch);
+    if (expectRegistered) await eventually(()=>broker.getConnectionHealth(deviceId)?.epoch===epoch);
     return {socket,received,serverSocket:accepted[accepted.length-1]!};
   }
   return {broker,connect};
@@ -210,4 +211,60 @@ test('round2: stale ACK cannot finish a pending read on an incarnated Agent',asy
     type:'response',requestId:req,ok:true,data:{verified:true},
   }));
   assert.deepEqual(await read,{ok:true,value:{verified:true}});
+});
+
+test('round3 strict broker rejects missing verifier before AUTHENTICATED_ONLINE or mutation',async t=>{
+  const f=await fixture(t,{requireMutationReauthorization:true});
+  const deviceId='strict-absent-verifier';
+  const unbound=await f.connect(deviceId,randomUUID(),1,undefined,false);
+  const closeCode=await new Promise<number>((resolve,reject)=>{
+    unbound.socket.once('close',resolve);
+    unbound.socket.once('error',reject);
+  });
+  assert.equal(closeCode,1008);
+  assert.equal(f.broker.has(deviceId),false);
+  assert.equal(f.broker.getConnectionHealth(deviceId),undefined);
+  assert.equal(unbound.received.length,0);
+  const denied=await observed(f.broker.request(deviceId,'files.write',
+    {operation:'must-never-arrive'},300,randomUUID()));
+  assert.deepEqual(denied,{ok:false,code:'AGENT_OFFLINE'});
+  assert.equal(unbound.received.length,0,'missing verifier MUST produce zero mutation frames');
+});
+
+test('round3 strict broker admits bound verifier but denies revoked owner without frame',async t=>{
+  const f=await fixture(t,{requireMutationReauthorization:true});
+  let authorized=true;
+  let checks=0;
+  const a=await f.connect('strict-bound',randomUUID(),1,async()=>{
+    checks++;
+    return authorized;
+  });
+  const firstId=randomUUID();
+  const completed=observed(f.broker.request('strict-bound','files.write',
+    {synthetic:true},800,firstId));
+  await eventually(()=>a.received.length===1);
+  assert.equal(a.received[0]?.requestId,firstId);
+  a.socket.send(JSON.stringify({type:'response',requestId:firstId,ok:true,
+    data:{synthetic:true}}));
+  assert.deepEqual(await completed,{ok:true,value:{synthetic:true}});
+  authorized=false;
+  const denied=await observed(f.broker.request('strict-bound','files.write',
+    {synthetic:true},500,randomUUID()));
+  assert.deepEqual(denied,{ok:false,code:'AGENT_AUTH_REVOKED'});
+  assert.equal(a.received.length,1,'revoked mutation must not produce a second frame');
+  assert.equal(checks,2,'fresh authority check per mutation');
+});
+
+test('round3 missing verifier cannot replace an authenticated Agent epoch',async t=>{
+  const f=await fixture(t,{requireMutationReauthorization:true});
+  const device='strict-epoch';
+  const instanceId=randomUUID();
+  const prior=await f.connect(device,instanceId,1,async()=>true);
+  const rejected=await f.connect(device,randomUUID(),2,undefined,false);
+  const closeCode=await new Promise<number>(resolve=>rejected.socket.once('close',resolve));
+  assert.equal(closeCode,1008);
+  assert.equal(f.broker.getConnectionHealth(device)?.epoch,1);
+  assert.equal(f.broker.has(device),true,'unbound socket cannot replace owner-bound session');
+  assert.equal(prior.received.length,0);
+  assert.equal(rejected.received.length,0);
 });
