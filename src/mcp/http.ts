@@ -62,6 +62,55 @@ export function loadedMcpRouterSha256(): string {
     .digest('hex');
 }
 
+/** A public Agent endpoint may be advertised only by a broker whose own
+ * constructor enabled mandatory per-mutation reauthorization. This is a
+ * capability attestation provided by V2-07, NOT a client HTTP claim.
+ * Older binaries deliberately fail closed. Local-only mode is unchanged. */
+export const REMOTE_AGENT_STRICT_CONTRACT = 'owner-device-epoch-lease-v1' as const;
+
+export interface RemoteAgentAuthorityEvidence {
+  ownerId: string;
+  deviceId: string;
+  authorizationEpoch: number;
+  leaseExpiresAtMs: number;
+}
+
+/** Never promote a legacy deviceId-only admission into an owner-bound grant.
+ * Epoch and expiry are authority-issued; the Hub must compare both on every
+ * mutation, not cache them as permanent authorization. */
+export function hasTrustedRemoteAgentGrant(
+  input: unknown,
+  now = Date.now(),
+): input is RemoteAgentAuthorityEvidence {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return false;
+  const p = input as Record<string, unknown>;
+  return typeof p.ownerId === 'string' &&
+    /^[A-Za-z0-9][A-Za-z0-9._:@-]{1,127}$/.test(p.ownerId) &&
+    typeof p.deviceId === 'string' &&
+    /^[A-Za-z0-9][A-Za-z0-9._:@-]{1,127}$/.test(p.deviceId) &&
+    Number.isSafeInteger(p.authorizationEpoch) &&
+    (p.authorizationEpoch as number) >= 0 &&
+    Number.isSafeInteger(p.leaseExpiresAtMs) &&
+    (p.leaseExpiresAtMs as number) > now &&
+    (p.leaseExpiresAtMs as number) <= now + 300_000;
+}
+
+export function assertRemoteAgentAuthorizationContract(
+  broker: AgentBroker,
+  remoteOnly: boolean,
+): void {
+  if (!remoteOnly) return;
+  const implementation = broker as AgentBroker & {
+    isMandatoryMutationReauthorizationEnabled?: () => boolean;
+  };
+  if (typeof implementation.isMandatoryMutationReauthorizationEnabled !== 'function' ||
+      implementation.isMandatoryMutationReauthorizationEnabled() !== true) {
+    throw new Error(
+      'REMOTE_AGENT_STRICT_REAUTHORIZATION_REQUIRED: remote-only Hub must use a strict Broker with per-socket mutation verifier',
+    );
+  }
+}
+
 /** Metadata only: configured OAuth is not proof of a successful owner acceptance test. */
 export function hubRuntimeIdentity(ownerOauthConfigured: boolean, remoteAgentAdmission=false) {
   return {
@@ -69,7 +118,7 @@ export function hubRuntimeIdentity(ownerOauthConfigured: boolean, remoteAgentAdm
     mcpRouterSha256: loadedMcpRouterSha256(),
     ownerAutoRoutingContract: 'owner-auto-v1',
     ownerOauthConfigured,
-    ...(remoteAgentAdmission?{remoteAgentAdmissionContract:'device-bound-revalidate-v1'}:{}),
+    ...(remoteAgentAdmission?{remoteAgentAdmissionContract:REMOTE_AGENT_STRICT_CONTRACT}:{}),
   };
 }
 
@@ -113,7 +162,13 @@ export async function runHttpServer(
   broker: AgentBroker,
   context: McpContext,
 ): Promise<void> {
-  const remoteAgentCredentialVerifier =
+  // Fail BEFORE listen / HTTP 101 when a remote-only Broker was created
+  // without the mandatory V2-07 mutation authority. Old Broker builds
+  // intentionally cannot publish Agent admission.
+  assertRemoteAgentAuthorizationContract(
+    broker, config.remoteAgentAuthOnly === true,
+  );
+  const untrustedRemoteVerifier =
     config.controlPlaneAgentAuth
       ? createControlPlaneAgentCredentialVerifier({
           controlPlaneUrl:
@@ -128,6 +183,18 @@ export async function runHttpServer(
             : {}),
         })
       : undefined;
+  if(config.remoteAgentAuthOnly === true && !untrustedRemoteVerifier)
+    throw new Error('REMOTE_AGENT_OWNER_DEVICE_VERIFIER_REQUIRED');
+  // Backend v1 returned deviceId only, which is insufficient to bind a
+  // remote owner's authorization/epoch to the socket. Deny, never guess.
+  const remoteAgentCredentialVerifier = untrustedRemoteVerifier
+    ? async (header: string | undefined, signal?: AbortSignal) => {
+        const evidence = await untrustedRemoteVerifier(header, signal);
+        if(config.remoteAgentAuthOnly === true &&
+           !hasTrustedRemoteAgentGrant(evidence))return undefined;
+        return evidence;
+      }
+    : undefined;
 
   const remoteMcpClient =
     config.controlPlaneAgentAuth &&

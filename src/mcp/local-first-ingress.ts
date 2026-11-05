@@ -123,7 +123,7 @@ export async function verifyLocalFirstPublicUpstream(input:{
   const identity=health as Record<string,unknown> | null;
   const runtime=identity?.runtime as Record<string,unknown> | null;
   const protectedResource=metadata as Record<string,unknown> | null;
-  if(input.requireRemoteAgentAdmission&&runtime?.remoteAgentAdmissionContract!=='device-bound-revalidate-v1')
+  if(input.requireRemoteAgentAdmission&&runtime?.remoteAgentAdmissionContract!=='owner-device-epoch-lease-v1')
     throw new Error('Public Agent ingress requires remote-only device-bound revalidation on the actual Hub');
   if(identity?.ok!==true || identity.service!=='nexowire' ||
       runtime?.ownerOauthConfigured!==true ||
