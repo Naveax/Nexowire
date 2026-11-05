@@ -346,6 +346,8 @@ test('unknown task-graph step requires explicit retry_unknown', async () => {
     assert.equal(blocked.data.summary.unknown, 1);
     assert.equal(calls, 0);
 
+    // A caller-set retry_unknown flag is not authenticated evidence that
+    // the earlier native effect did NOT execute. Re-entry stays fail-closed.
     const retried = (await executeDurableRunbook(
       {
         runbook_id: 'task-restart',
@@ -357,20 +359,15 @@ test('unknown task-graph step requires explicit retry_unknown', async () => {
       {
         runTaskGraph: async () => {
           calls++;
-          return {
-            data: {
-              ok: true,
-              graphId: 'rb-' + '1'.repeat(32),
-              summary: { succeeded: 1 },
-            },
-          };
+          return {data:{ok:true}};
         },
         runAssertions: async () => ({ data: { ok: true } }),
       },
-    )) as { data: { ok: boolean } };
+    )) as {data:{ok:boolean,summary:{unknown:number}}};
 
-    assert.equal(retried.data.ok, true);
-    assert.equal(calls, 1);
+    assert.equal(retried.data.ok,false);
+    assert.equal(retried.data.summary.unknown,1);
+    assert.equal(calls,0,'retry_unknown cannot redispatch uncertain native effect');
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }

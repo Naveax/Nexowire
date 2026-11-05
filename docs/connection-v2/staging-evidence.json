@@ -19,8 +19,8 @@
   "matrix_rows": 73,
   "matrix_status": {
     "MERGED_MAIN_SECURITY_REVIEW_REQUIRED": 4,
-    "EXACT_BLOB": 61,
-    "EVOLVED_SOURCE_SEMANTIC_REVIEW_REQUIRED": 8
+    "EXACT_BLOB": 59,
+    "EVOLVED_SOURCE_SEMANTIC_REVIEW_REQUIRED": 10
   },
   "source_candidate_manifest_blob": "b00a6e3ff5d803575b3093c642c9d994c958b2be",
   "candidate_tree_sha": "CREATED_AFTER_EVIDENCE_BLOB",
@@ -52,7 +52,7 @@
     }
   ],
   "acceptance": {
-    "candidate_exact_head_ci": "NOT_RUN_NEW_SHA",
+    "candidate_exact_head_ci": "PENDING_NEW_SHA",
     "adversarial_negatives": "NOT_RUN_NEW_SHA",
     "windows_task_reboot": "SOURCE_INCLUDED_DISPOSABLE_VM_NOT_RUN",
     "mcp_offnetwork_oauth_readonly": "NOT_RUN",
@@ -420,7 +420,7 @@
     "cloudflared_windows_security": "FAIL"
   },
   "native_git_dag_evidence": {
-    "status": "NEW_SHA_NOT_RUN",
+    "status": "PENDING_ROUND3_EXACT_SHA",
     "workflow_job": "connection-v2-native-git-dag",
     "checkout": "EXACT_HEAD_FULL_HISTORY",
     "commands": [
@@ -442,7 +442,7 @@
     "prior_source_blobs": 54,
     "prior_candidate_blobs": 54,
     "clean10_merge_tree": "NOT_RUN",
-    "matrix_rows": 63
+    "matrix_rows": 73
   },
   "last_completed_candidate": {
     "sha": "06a3d58fa0c7b98764b2aaaa9cb5a6d16651dffb",
@@ -803,13 +803,13 @@
       1084
     ],
     "source_rows": 73,
-    "exact_blobs": 61,
+    "exact_blobs": 59,
     "merged_rows": 4,
-    "evolved_rows": 8,
-    "owner_approvals": "NONE",
+    "evolved_rows": 10,
+    "owner_approvals": "PENDING",
     "true_offnetwork_mcp": "NOT_RUN",
     "provider_cost": "NOT_RUN",
-    "full_ci": "NOT_RUN_NEW_SHA"
+    "full_ci": "PENDING_NEW_SHA"
   },
   "integration_round2": {
     "source_heads": {
@@ -872,5 +872,43 @@
     "mandatory_clean10_no_replay": "FAILURE_PREVIOUS_SHA",
     "windows_round2_p1b_p1d": "FAILURE_PREVIOUS_SHA",
     "full_ci": "NOT_RUN_NEW_SHA"
+  },
+  "live_source_heads_round3": {
+    "1003": "17b699084ad90cc929db83b5942eed812e80cd83",
+    "1044": "e431f6854e743982475fc513295881ed16a7fe92",
+    "1074": "6b00db5bb24e537a6d1c494b3459080a8af3f943",
+    "1075": "05a99388c377caa0781fb5a2c257ea1f9b92e5df",
+    "1077": "31fc77e7076ca9be255e71059478b0dec3a6e299",
+    "1081": "a28995c25b5575636c929b09d1f6e7c4d9b33e5c",
+    "1083": "2b2a1b7e4199705a78a4a8ca4d19e6aca7d7cca3",
+    "1084": "f4f80a76a186e84433ae4be6aed829a21d990a0c"
+  },
+  "round3_clean10": {
+    "baseline_head": "206615686c249a11c10498d1b809d87789ef69ad",
+    "pending_exact_head": "NOT_PUSHED_AT_DOC_AUTHORING",
+    "critical_problem": "MUTATION_STATE_UNKNOWN downgraded to FAILED and cloned runbook bypassed per-ID graph",
+    "mitigation": "O_EXCL owner/device-scoped semantic fingerprint reservation before dispatch; durable UNKNOWN; authenticated intent verifier contract",
+    "original_clean10_test_sha": "720565cf8821f9ceea9e5ca6101c0213558a1c09",
+    "same_payload_cloned_id": "PENDING_EXACT_HEAD_CI",
+    "restart_concurrency_corruption": "PENDING_EXACT_HEAD_CI",
+    "windows_qa02": "BUILD_JOB_HELPER_BEFORE_TEST",
+    "windows_job_owner_executable_missing_prior_error": "WINDOWS_JOB_HELPER_UNAVAILABLE",
+    "historical_qa18": "unsafe positive oracle strengthened into safe regression",
+    "source_frozen_heads": {
+      "1003": "17b699084ad90cc929db83b5942eed812e80cd83",
+      "1044": "48704c908636383d63e6284082f167f1909124d0",
+      "1074": "6b00db5bb24e537a6d1c494b3459080a8af3f943",
+      "1075": "05a99388c377caa0781fb5a2c257ea1f9b92e5df",
+      "1077": "384c05276d2c0116ee13f7b70d6709cdb478f887",
+      "1081": "a28995c25b5575636c929b09d1f6e7c4d9b33e5c",
+      "1083": "136627e161872f534dfc30242e59223b378dce09",
+      "1084": "f4f80a76a186e84433ae4be6aed829a21d990a0c"
+    },
+    "source_live_diffs": "1044/1077/1083 HEADS MOVED; not yet integrated; source preservation checks pinned original SHA",
+    "source_owner_signoff": "PENDING",
+    "production_owner_receipt_provider": "NOT_WIRED",
+    "windows_journal_sid_dacl_acceptance": "NOT_RUN",
+    "physical_staging": "NOT_RUN",
+    "final_decision": "NO_GO"
   }
 }

@@ -2,13 +2,10 @@
  * #18 P0 hostile SOURCE-only NEGATIVE against EXISTING executeDurableRunbook,
  * not a claim that #780 P1 coding-loop worker has shipped.
  *
- * A mock callback says "OS effect may have happened, ACK lost" and raises
- * MUTATION_STATE_UNKNOWN. The actual runbook marks that step FAILED, then
- * accepts the same logical task under a different runbook_id after restart.
- * Both dispatched callbacks are synthetic counters; no shell, Broker, Hub,
- * database, network, real native effect or VM is touched.
- *
- * UNSAFE NEGATIVE test PASS != safe implementation. #587 is production NO-GO.
+ * Historical QA-18 attack reproduced FAILED + cloned-runbook redispatch
+ * before CLEAN-10. This is now the same adversarial scenario asserted as a
+ * safe regression: UNKNOWN is durable and the cloned runbook cannot dispatch.
+ * Only in-memory callbacks and temporary JSON are used, never OS mutations.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -18,7 +15,7 @@ import path from 'node:path';
 import {RunbookStore} from '../src/agent/runbook-store.js';
 import {executeDurableRunbook} from '../src/agent/runbooks.js';
 
-test('#18 NEGATIVE: lost native ACK can be misclassified FAILED and cloned runbook_id re-dispatches without owner-epoch readback',async t=>{
+test('#18 CLEAN-10 regression: lost native ACK stays UNKNOWN and cloned runbook never dispatches',async t=>{
  const root=await mkdtemp(path.join(tmpdir(),'nexowire-qa18-loop-unknown-'));
  t.after(async()=>rm(root,{force:true,recursive:true}));
  const stateFile=path.join(root,'disposable-runbooks.json');
@@ -62,19 +59,18 @@ test('#18 NEGATIVE: lost native ACK can be misclassified FAILED and cloned runbo
  }};
  assert.equal(first.data.ok,false);
  assert.equal(syntheticNativeDispatches,1);
- // REAL SOURCE NEGATIVE: errorCode survives but security-critical UNKNOWN
- // is classified FAILED rather than requiring explicit reconciliation.
+ // Regression must classify the unacknowledged effect UNKNOWN, not retryable.
  assert.equal(first.data.steps[0]?.errorCode,'MUTATION_STATE_UNKNOWN');
- assert.equal(first.data.steps[0]?.status,'failed');
- assert.equal(first.data.summary.failed,1);
- assert.equal(first.data.summary.unknown,0);
+ assert.equal(first.data.steps[0]?.status,'unknown');
+ assert.equal(first.data.summary.failed,0);
+ assert.equal(first.data.summary.unknown,1);
 
  // Restart persistence (disposable JSON only), then rotate the external
  // runbook ID to clone the SAME logical operation. Source validation keys
  // checkpoints by runbook_id, not logical-operation identity / requestId.
  const restarted=new RunbookStore({stateFile});
  await restarted.initialize();
- assert.equal(restarted.get('qa18-original-task').steps[0]?.status,'failed');
+ assert.equal(restarted.get('qa18-original-task').steps[0]?.status,'unknown');
  currentOwnerEpoch++; // Would require an independent CAS comparison.
  assert.equal(currentOwnerEpoch,8);
  const cloned=await executeDurableRunbook({
@@ -82,15 +78,13 @@ test('#18 NEGATIVE: lost native ACK can be misclassified FAILED and cloned runbo
   steps, // unchanged semantic mutation / worker plan
   resume:false,retry_unknown:false,retry_failed:false,
  },restarted,callbacks) as {data:{ok:boolean;summary:{succeeded:number}}};
- assert.equal(cloned.data.ok,true,
-  'UNSAFE: cloned ID is a fresh runbook without reconciliation');
- assert.equal(cloned.data.summary.succeeded,1);
- assert.equal(syntheticNativeDispatches,2,
-  'UNSAFE: same logical mutating callback dispatched twice after lost ACK');
+ assert.equal(cloned.data.ok,false,
+  'A new runbook_id cannot authorize the same uncertain native effect');
+ assert.equal(syntheticNativeDispatches,1,
+  'CLEAN-10 permanent reservation must block a cloned runbook');
  assert.equal(authorityReadbacks,0,
-  'No authenticated authority readback interface was invoked');
- assert.notEqual(inputs[0],inputs[1],
-  'Changing runbook_id generates a different task graph ID');
- assert.equal(restarted.get('qa18-original-task').steps[0]?.status,'failed',
-  'Old forensic step is not correlated with new cloned runbook');
+  'No independent authority readback occurred and no second dispatch is allowed');
+ assert.equal(inputs.length,1,'Only the first graph reached its callback');
+ assert.equal(restarted.get('qa18-original-task').steps[0]?.status,'unknown',
+  'Old forensic UNKNOWN must survive a separate clone attempt');
 });

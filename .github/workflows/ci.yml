@@ -423,10 +423,13 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
+      - name: Compile Windows Job Object owner for real QA-02 fast-exit assertion
+        shell: pwsh
+        run: ./scripts/build-windows-job-owner.ps1
       - name: Run QA-02 output ordering and CLEAN-10 no-replay oracle without skip
         shell: pwsh
         run: |
-          node --test --import tsx --test-concurrency=1 test/qa-02-windows-output-ordering.test.ts test/qa-02-error-contract-no-replay.test.ts test/clean-10/idempotency-reservation-negative.test.ts test/clean-10/timeout-reconnect-no-replay.test.ts test/clean-10/runbook-unknown-acceptance-red.test.ts
+          node --test --import tsx --test-concurrency=1 test/qa-02-windows-output-ordering.test.ts test/qa-02-error-contract-no-replay.test.ts test/clean-10/idempotency-reservation-negative.test.ts test/clean-10/timeout-reconnect-no-replay.test.ts test/clean-10/runbook-unknown-acceptance-red.test.ts test/clean-10/round3-semantic-effect-reservation.test.ts
           if ($LASTEXITCODE -ne 0) { throw 'CLEAN10_NO_REPLAY_RED' }
   connection-v2-round2-security:
     if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'coord/connection-v2-release-candidate-')

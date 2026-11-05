@@ -1,3 +1,20 @@
+# Connection v2 | Round 3 P0 CLEAN-10 checkpoint
+
+**NO-GO.** The following is a candidate-only patch set for #1085 Draft. A passing historical unsafe exploit oracle is not equivalent to a positive security proof.
+
+- Baseline coordinator HEAD: `206615686c249a11c10498d1b809d87789ef69ad`. Round 3 consists of separately reviewable (1) durable UNKNOWN classification and (2) semantic effect identity, dispatch-preceding journal reservation and owner/device binding, followed by QA/CI evidence changes.
+- Original #1075 CLEAN-10 mandatory negative remains exact blob `720565cf8821f9ceea9e5ca6101c0213558a1c09`; do not skip or weaken. Historical QA-18 now asserts fail-closed behavior instead of exploiting the old bug, source blob retained in Git ancestry.
+- Cross-runbook cloned semantic mutation never dispatches twice without *independent* authorized fresh intent. Journal is a non-expiring O_EXCL tombstone; corruption/missing reservation state cannot be presumed safe. A raw `retry_unknown` flag or rotated runbook ID cannot supply owner approval.
+- Round3 test matrix: mandatory CLEAN-10 lost ACK, 32-way concurrent O_EXCL, restarts, canonical input, owner/device mismatch, corrupt/unavailable journal, missing owner grant, separately verified fresh user intent and one-time receipt, plus original QA-02 output ordering test **unchanged**.
+- QA-02 prior root cause: Windows native Job owner helper absent `WINDOWS_JOB_HELPER_UNAVAILABLE`, independent of CLEAN-10. New CI builds `scripts/build-windows-job-owner.ps1` before the physical pipe-ordering assertion. No fallback to unmanaged processes.
+- P1 owners advanced since frozen integration: #1044 `e431f6854e743982475fc513295881ed16a7fe92`, #1077 `31fc77e7076ca9be255e71059478b0dec3a6e299`, #1083 `2b2a1b7e4199705a78a4a8ca4d19e6aca7d7cca3`. These source changes require separate semantic review; **no automatic source overlay** during this P0 patch.
+- Original 73 source PR/path records preserved. Candidate changes to `src/agent/native-agent.ts`, QA-18 and CI explicitly classified as evolved/merged; new source files are coordinator-owned and not falsely counted as exact source blobs. Matrix counts: {"MERGED_MAIN_SECURITY_REVIEW_REQUIRED":4,"EXACT_BLOB":59,"EVOLVED_SOURCE_SEMANTIC_REVIEW_REQUIRED":10}.
+- Critical remaining requirements: exact SHA Linux/Windows Node22/24 CI, native Git DAG, source owner approval, Windows journal SID/DACL verification, trusted fresh owner-intent issuance, public P1-B/P1-D, off-network MCP staging, genuine reboot/rollback, provider cost/soak: **NOT_RUN / NO-GO until proven**.
+- Rollback: v2 production remains disabled, prior Tailscale connection untouched; on disposable staging only stop candidate, revoke disposable tokens, restore pinned artifact/config, never auto-replay UNKNOWN.
+
+Full design: `docs/connection-v2/round3-clean10-effect-identity.md`.
+
+---
 # Connection v2 | Round 2 authoritative release gate
 
 **Decision: NO-GO.** #1085 remains Draft. Eight immutable source commits integrated, not approved for production.
