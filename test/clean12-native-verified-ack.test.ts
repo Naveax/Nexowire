@@ -122,10 +122,11 @@ test('CLEAN-12: restart persists verified marker, UNKNOWN stays terminal',()=>{
     create(db);reserve(db);claim(db);mark(db);
     db.close();db=undefined;
     db=new DatabaseSync(file);
+    const reopened = db;
     assert.deepEqual(status(db),{state:'dispatched',native_claim_verified:1});
     assert.equal(complete(db).changes,1);
     assert.equal(claim(db).changes,0);
-    assert.throws(()=>db.exec("UPDATE device_core_console_operations SET state='unknown',native_claim_verified=0"),
+    assert.throws(()=>reopened.exec("UPDATE device_core_console_operations SET state='unknown',native_claim_verified=0"),
       /CORE_NATIVE_CLAIM_DOWNGRADE_DENIED/);
     db.exec("UPDATE device_core_console_operations SET state='unknown'");
     assert.deepEqual(status(db),{state:'unknown',native_claim_verified:1});
