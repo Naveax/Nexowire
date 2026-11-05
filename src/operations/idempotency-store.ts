@@ -406,6 +406,16 @@ export class IdempotencyStore {
             'Idempotency operation record does not exist.', { key },
           );
         }
+        // A terminal status, especially UNKNOWN after restart, is an
+        // anti-replay witness. A stale completion must not rewrite it.
+        // Trusted external reconciliation needs a separate proof-bound API.
+        if (existing.status !== 'in_progress') {
+          throw new IdempotencyStoreError(
+            'IDEMPOTENCY_TERMINAL_REWRITE_DENIED',
+            'A terminal reservation cannot be completed again.',
+            { key, operationId: existing.operationId, status: existing.status },
+          );
+        }
         const updated = RecordSchema.parse({
           ...existing, status, updatedAt: new Date().toISOString(),
         });
