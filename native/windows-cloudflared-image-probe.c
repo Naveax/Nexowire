@@ -93,8 +93,10 @@ done:
  * SHA256/FileIdInfo probe. It still does not attest the kernel image-section
  * used by CreateProcessW, and must not authorize a production launcher.
  *
- * The test is offline/cache-only: if revocation data needed by the trust
- * provider is unavailable, fail closed rather than emitting an approval.
+ * Request whole-chain revocation using only cached trust material. An
+ * offline cache miss can reject a legitimate signed image: do NOT downgrade
+ * this check or turn that rejection into approval. This is a test-only source
+ * signature check, NOT an OS-enforced executed-image provenance receipt.
  */
 static int held_handle_authenticode(HANDLE h,const wchar_t *file){
   WINTRUST_FILE_INFO item={0};
@@ -104,7 +106,7 @@ static int held_handle_authenticode(HANDLE h,const wchar_t *file){
   WINTRUST_DATA trust={0};
   trust.cbStruct=sizeof(trust);
   trust.dwUIChoice=WTD_UI_NONE;
-  trust.fdwRevocationChecks=WTD_REVOKE_NONE;
+  trust.fdwRevocationChecks=WTD_REVOKE_WHOLECHAIN;
   trust.dwUnionChoice=WTD_CHOICE_FILE;
   trust.pFile=&item;
   trust.dwStateAction=WTD_STATEACTION_VERIFY;
