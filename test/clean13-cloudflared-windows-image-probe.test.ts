@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {spawnSync} from 'node:child_process';
+import {spawn,spawnSync} from 'node:child_process';
+import {once} from 'node:events';
 import {promises as fs} from 'node:fs';
 import {createHash} from 'node:crypto';
 import os from 'node:os';
@@ -44,6 +45,46 @@ test('CLEAN-13 P1-A Windows native FileIdInfo proof remains suspended and never 
   assert.match(race.stdout,/write_delete_lock=1/);
   assert.equal(createHash('sha256').update(await fs.readFile(copy)).digest('hex'),official,
     'simulated same-owner swaps must not modify held source');
+
+  // Real independently scheduled Node attacker (same owner SID), not another
+  // call in the guardian process. The native custodian keeps its handles open
+  // until an explicit pipe acknowledgment, avoiding timing-only race tests.
+  const attacker=spawn(helper,['--hold',copy,official],{
+    windowsHide:true,stdio:['pipe','pipe','pipe'],
+  });
+  t.after(()=>{if(attacker.exitCode===null)attacker.kill();});
+  let stdout='',stderr='';
+  attacker.stdout.setEncoding('utf8');
+  attacker.stderr.setEncoding('utf8');
+  attacker.stderr.on('data',(data:string)=>{stderr+=data;});
+  await new Promise<void>((resolve,reject)=>{
+    const timer=setTimeout(()=>reject(Error('Native lock handshake timeout')),15000);
+    attacker.once('error',err=>{clearTimeout(timer);reject(err);});
+    attacker.stdout.on('data',(data:string)=>{
+      stdout+=data;
+      if(stdout.includes('NEXOWIRE_C13_NATIVE_HOLD=READY')){
+        clearTimeout(timer);resolve();
+      }
+    });
+    attacker.once('close',(code)=>{clearTimeout(timer);reject(Error('Native helper exited before lock handshake: '+code));});
+  });
+  const blocked=async (act:()=>Promise<unknown>,label:string)=>{
+    await assert.rejects(act(),(error:unknown)=>{
+      assert.ok(error instanceof Error,label);
+      assert.match(String((error as NodeJS.ErrnoException).code),/^(EACCES|EPERM|EBUSY)$/,
+        label+': the OS must enforce held-handle lock');
+      return true;
+    });
+  };
+  await blocked(()=>fs.writeFile(copy,'malicious replacement'), 'same-owner write');
+  await blocked(()=>fs.rename(copy,path.join(dir,'swapped.exe')),'same-owner rename');
+  await blocked(()=>fs.unlink(copy),'same-owner delete');
+  await blocked(()=>fs.rename(dir,dir+'-swapped'),'same-owner ancestor rename');
+  attacker.stdin.write('release\n');
+  const [code]=await once(attacker,'close');
+  assert.equal(code,0,stderr);
+  assert.match(stdout,/NEXOWIRE_C13_NATIVE_HOLD=UNCHANGED/);
+  assert.equal(createHash('sha256').update(await fs.readFile(copy)).digest('hex'),official);
 
   // An extra hardlink must be detected by actual native link count, not only
   // Node lstat() metadata or an arbitrary error before identity inspection.
