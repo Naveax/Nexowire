@@ -27,6 +27,10 @@ export interface AgentWebSocketServerOptions {
     authorizationHeader: string | undefined,
     signal?: AbortSignal,
   ) => Promise<RemoteAgentAuthorization | undefined>;
+  /** Trusted Hub-only owner/device/epoch/lease binding for one remote socket. */
+  remoteMutationAuthorizationFactory?: (
+    grant: RemoteAgentAuthorization, authorizationHeader: string | undefined,
+  ) => (() => Promise<boolean>) | undefined;
 }
 
 export function attachAgentWebSocketServer(
@@ -35,8 +39,10 @@ export function attachAgentWebSocketServer(
   agentTokens?: string | readonly string[],
   options: AgentWebSocketServerOptions = {},
 ): WebSocketServer {
-  if(options.remoteOnly&&!options.remoteCredentialVerifier)
-    throw new Error('Remote-only Agent admission requires the device credential authority');
+  if(options.remoteOnly && (!options.remoteCredentialVerifier ||
+      !options.remoteMutationAuthorizationFactory ||
+      !broker.isMandatoryMutationReauthorizationEnabled()))
+    throw new Error('Remote-only Agent admission requires strict owner/device authority and bound mutation verifier');
   const wss = new WebSocketServer({ noServer: true });
   const heartbeatMs = Math.max(250, options.heartbeatMs ?? 30_000);
   const helloTimeoutMs = Math.max(250, options.helloTimeoutMs ?? 5_000);
@@ -129,6 +135,21 @@ export function attachAgentWebSocketServer(
         return;
       }
 
+      // Legacy deviceId-only or missing per-socket authority is denied before HTTP 101.
+      let boundMutationVerifier: (() => Promise<boolean>) | undefined;
+      if(options.remoteOnly){
+        try {
+          boundMutationVerifier=remoteAuthorization
+            ? options.remoteMutationAuthorizationFactory?.(remoteAuthorization,request.headers.authorization)
+            : undefined;
+        }catch { /* fail closed */ }
+        if(!boundMutationVerifier){
+          socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
+          socket.destroy();
+          return;
+        }
+      }
+
       wss.handleUpgrade(request, socket, head, (ws) => {
         if (remoteAuthorization) {
           const deviceId=remoteAuthorization.deviceId;
@@ -136,8 +157,8 @@ export function attachAgentWebSocketServer(
             ws,
             deviceId,
           );
-          sessionChecks.set(ws,async()=>
-            (await verifyRemote(request.headers.authorization,lifetime.signal))?.deviceId===deviceId);
+          sessionChecks.set(ws,boundMutationVerifier ?? (async()=>
+            (await verifyRemote(request.headers.authorization,lifetime.signal))?.deviceId===deviceId));
         } else {
           // Preserve the original trust mode; never turn a revoked credential
           // into anonymous loopback admission or another remote identity.

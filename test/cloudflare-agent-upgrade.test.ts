@@ -2,6 +2,7 @@ import test,{type TestContext} from 'node:test';
 // Keep V2-03 boundary regressions on the existing Windows browser-live CI gate.
 import './v2-03-ingress-doctor-bridge.test.js';
 import './v2-03-authenticated-mcp-acceptance.test.js';
+import './v2-03-mandatory-remote-authorization.test.js';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {randomUUID} from 'node:crypto';
@@ -16,11 +17,19 @@ import {AGENT_PROTOCOL_VERSION} from '../src/protocol/agent.js';
 async function until(predicate:()=>boolean){const end=Date.now()+4000;
   while(!predicate()&&Date.now()<end)await new Promise(r=>setTimeout(r,10));assert.ok(predicate());}
 async function fixture(t:TestContext){
-  const hub=createServer(),broker=new AgentBroker({reconnectGraceMs:100});
+  const hub=createServer(),broker=new AgentBroker({reconnectGraceMs:100,requireMutationReauthorization:true});
   const tokens=new Map([['nwx_dev_pc-one','pc-one'],['nwx_dev_pc-two','pc-two']]);
   const wss=attachAgentWebSocketServer(hub,broker,['nwx_dev_legacy-shared'],{
     remoteOnly:true,authorizationCheckMs:250,authorizationTimeoutMs:250,
-    remoteCredentialVerifier:async header=>{const id=tokens.get(header?.replace('Bearer ','')??'');return id?{deviceId:id}:undefined;},
+    remoteCredentialVerifier:async header=>{const id=tokens.get(header?.replace('Bearer ','')??'');return id?{
+      ownerId:'disposable-owner',deviceId:id,authorizationEpoch:1,leaseExpiresAtMs:Date.now()+15000,
+    }:undefined;},
+    remoteMutationAuthorizationFactory:(grant,header)=>{
+      const bound=grant as {ownerId?:string;deviceId:string;authorizationEpoch?:number;leaseExpiresAtMs?:number};
+      if(bound.ownerId!=='disposable-owner'||bound.authorizationEpoch!==1||!bound.leaseExpiresAtMs)return undefined;
+      return async()=>tokens.get(header?.replace('Bearer ','')??'')===bound.deviceId &&
+        Date.now()<bound.leaseExpiresAtMs!;
+    },
   });
   await new Promise<void>(r=>hub.listen(0,'127.0.0.1',r));
   const address=hub.address();assert.ok(address&&typeof address!=='string');

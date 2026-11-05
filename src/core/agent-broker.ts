@@ -142,6 +142,11 @@ export class AgentBroker {
     this.onDeviceState = options.onDeviceState;
   }
 
+  /** Read-only trusted constructor policy: client headers cannot change it. */
+  isMandatoryMutationReauthorizationEnabled(): boolean {
+    return this.requireMutationReauthorization;
+  }
+
   register(socket: WebSocket, hello: AgentHello, reauthorizeMutation?: () => Promise<boolean>): void {
     // A remote session without its bound owner/device verifier is only a
     // socket, never AUTHENTICATED_ONLINE or permission to dispatch a mutation.

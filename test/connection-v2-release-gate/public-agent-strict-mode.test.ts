@@ -10,6 +10,6 @@ test('Round4 public remote-only configuration requires strict owner/device verif
   const broker=new AgentBroker({
     requireMutationReauthorization:requireBoundRemoteMutationAuthorization({remoteAgentAuthOnly:true}),
   });
-  assert.equal((broker as unknown as {requireMutationReauthorization:boolean}).requireMutationReauthorization,
-    true,'production runtime must construct strict broker for public remote Agent admission');
+  assert.equal(broker.isMandatoryMutationReauthorizationEnabled(),true,
+    'production runtime must construct strict broker for public remote Agent admission');
 });

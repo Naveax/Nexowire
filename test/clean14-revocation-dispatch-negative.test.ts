@@ -20,14 +20,21 @@ test('CLEAN-14 P1-C / V2-07 RED: revoked owner/device cannot dispatch mutation b
   const token='nwx_dev_disposable-v2-02-credential';
   let revoked=false;
   const server=createServer();
-  const broker=new AgentBroker({reconnectGraceMs:100});
+  const broker=new AgentBroker({reconnectGraceMs:100,requireMutationReauthorization:true});
   const wss=attachAgentWebSocketServer(server,broker,[],{
     remoteOnly:true,
     heartbeatMs:60000,
     authorizationCheckMs:60000,
     authorizationTimeoutMs:1000,
     remoteCredentialVerifier:async header=>
-      header==='Bearer '+token&&!revoked?{deviceId}:undefined,
+      header==='Bearer '+token&&!revoked?{
+        ownerId:'disposable-owner',deviceId,authorizationEpoch:1,leaseExpiresAtMs:Date.now()+15000,
+      }:undefined,
+    remoteMutationAuthorizationFactory:(grant,header)=>{
+      const bound=grant as {ownerId?:string;deviceId:string;authorizationEpoch?:number;leaseExpiresAtMs?:number};
+      if(bound.ownerId!=='disposable-owner'||bound.deviceId!==deviceId||bound.authorizationEpoch!==1||!bound.leaseExpiresAtMs)return undefined;
+      return async()=>!revoked&&header==='Bearer '+token&&Date.now()<bound.leaseExpiresAtMs!;
+    },
   });
   const agentSockets:WebSocket[]=[];
   t.after(async()=>{
