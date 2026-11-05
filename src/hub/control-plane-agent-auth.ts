@@ -3,6 +3,10 @@ import {normalizeControlPlaneBase,controlPlaneSecretPost} from './control-plane-
 
 export interface RemoteAgentAuthorization {
   deviceId: string;
+  /** Authoritative fields required for strict public Agent admission. */
+  ownerId?: string;
+  authorizationEpoch?: number;
+  leaseExpiresAtMs?: number;
 }
 
 export interface ControlPlaneAgentVerifierOptions {
@@ -93,6 +97,10 @@ export function createControlPlaneAgentCredentialVerifier(
         authenticated?: boolean;
         device?: {
           deviceId?: string;
+          ownerId?: unknown;
+          ownerAccountId?: unknown;
+          authorizationEpoch?: unknown;
+          leaseExpiresAtMs?: unknown;
         };
       };
       const deviceId = body.device?.deviceId;
@@ -107,8 +115,29 @@ export function createControlPlaneAgentCredentialVerifier(
         return undefined;
       }
 
+      // Legacy control planes only attest deviceId (and perhaps owner).
+      // That response remains device-only, and strict remote-only admission
+      // must reject it. Never fabricate an epoch or a revocation lease.
+      const suppliedOwnerId = body.device?.ownerId;
+      const accountId = body.device?.ownerAccountId;
+      if (suppliedOwnerId !== undefined && accountId !== undefined &&
+          suppliedOwnerId !== accountId) return undefined;
+      const ownerId = suppliedOwnerId ?? accountId;
+      const epoch = body.device?.authorizationEpoch;
+      const lease = body.device?.leaseExpiresAtMs;
+      if (epoch === undefined && lease === undefined)
+        return { deviceId: deviceId.trim() };
+      const now = Date.now();
+      if (typeof ownerId !== 'string' ||
+          !/^[A-Za-z0-9][A-Za-z0-9._:@-]{1,127}$/.test(ownerId) ||
+          !Number.isSafeInteger(epoch) || (epoch as number) < 0 ||
+          !Number.isSafeInteger(lease) || (lease as number) <= now ||
+          (lease as number) > now + 300_000) return undefined;
       return {
         deviceId: deviceId.trim(),
+        ownerId,
+        authorizationEpoch: epoch as number,
+        leaseExpiresAtMs: lease as number,
       };
     } catch {
       return undefined;

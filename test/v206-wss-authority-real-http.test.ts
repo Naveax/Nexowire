@@ -9,12 +9,15 @@ import WebSocket from 'ws';
 import {AgentBroker} from '../src/core/agent-broker.js';
 import {attachAgentWebSocketServer} from '../src/hub/agent-websocket.js';
 import {createControlPlaneAgentCredentialVerifier} from '../src/hub/control-plane-agent-auth.js';
+import {
+  bindRemoteAgentMutationReauthorization, hasTrustedRemoteAgentGrant,
+} from '../src/mcp/http.js';
 import {createLocalFirstIngressServer,closeLocalFirstAgentSockets} from '../src/mcp/local-first-ingress.js';
 import {AGENT_PROTOCOL_VERSION} from '../src/protocol/agent.js';
 
 const SERVICE='disposable-service-token-v206-0123456789';
 const CREDENTIAL='nwx_dev_disposable_v206_credential';
-type Grant={deviceId:string;expiresAt:number;revoked:boolean};
+type Grant={deviceId:string;ownerId:string;authorizationEpoch:number;expiresAt:number;revoked:boolean};
 
 async function listen(server:Server){
   await new Promise<void>((resolve,reject)=>{
@@ -30,7 +33,10 @@ async function close(server:Server){
 }
 /** Actual TCP+HTTP credential authority, actual Hub WebSocket, actual origin bridge. */
 async function fixture(t:import('node:test').TestContext){
-  const grants=new Map<string,Grant>([[CREDENTIAL,{deviceId:'device-v206',expiresAt:Date.now()+60000,revoked:false}]]);
+  const grants=new Map<string,Grant>([[CREDENTIAL,{
+    deviceId:'device-v206',ownerId:'owner-v206',
+    authorizationEpoch:7,expiresAt:Date.now()+60000,revoked:false,
+  }]]);
   let authorizationRequests=0;
   const controlPlane=createServer((req,res)=>{
     if(req.method!=='POST'||req.url!=='/api/v1/internal/device/authenticate'||
@@ -46,17 +52,27 @@ async function fixture(t:import('node:test').TestContext){
       const g=grants.get(credential??'');
       const allowed=Boolean(g&&!g.revoked&&g.expiresAt>Date.now());
       res.setHeader('content-type','application/json');
-      res.end(JSON.stringify(allowed?{authenticated:true,device:{deviceId:g!.deviceId}}:
-        {authenticated:false}));
+      res.end(JSON.stringify(allowed?{authenticated:true,device:{
+        deviceId:g!.deviceId,ownerAccountId:g!.ownerId,
+        authorizationEpoch:g!.authorizationEpoch,leaseExpiresAtMs:g!.expiresAt,
+      }}:{authenticated:false}));
     });
   });
   const controlPort=await listen(controlPlane);
   const verifier=createControlPlaneAgentCredentialVerifier({
     controlPlaneUrl:'http://127.0.0.1:'+controlPort,serviceToken:SERVICE,timeoutMs:1500,
   });
-  const hub=createServer(),broker=new AgentBroker({reconnectGraceMs:100});
+  const hub=createServer(),broker=new AgentBroker({
+    reconnectGraceMs:100,requireMutationReauthorization:true,
+  });
   const wss=attachAgentWebSocketServer(hub,broker,[],{
     remoteOnly:true,remoteCredentialVerifier:verifier,
+    remoteMutationAuthorizationFactory:(grant,authorizationHeader)=>
+      hasTrustedRemoteAgentGrant(grant)
+        ? bindRemoteAgentMutationReauthorization({
+            grant,authorizationHeader,verify:verifier,timeoutMs:1500,
+          })
+        : undefined,
     authorizationCheckMs:250,authorizationTimeoutMs:1500,heartbeatMs:5000,
   });
   const hubPort=await listen(hub);
@@ -149,4 +165,23 @@ test('V2-06 real HTTP revocation closes WSS, retains dispatched mutation UNKNOWN
   assert.equal(dispatched,1,'a lost ACK must not trigger automatic mutation replay');
   assert.equal(f.broker.has('device-v206'),false);
   assert.equal(f.wss.clients.size,0,'Hub has no post-revoke WebSocket');
+});
+
+
+test('V2-06 real WSS rejects stale owner authority epoch before any read or mutation frame',
+  {timeout:15000},async t=>{
+  const f=await fixture(t);
+  const socket=await f.connect();
+  await f.brokerReady();
+  let frames=0;
+  socket.on('message',()=>{frames++;});
+  f.grants.get(CREDENTIAL)!.authorizationEpoch++;
+  for(const capability of ['machine.snapshot','files.write']){
+    const outcome=await f.broker.request('device-v206',capability,
+      {path:'disposable-only'},1000).then(
+      ()=> 'unexpected-success',
+      (error:{code?:string})=>error.code);
+    assert.equal(outcome,'AGENT_AUTH_REVOKED');
+  }
+  assert.equal(frames,0,'epoch-revoked read and mutation deliver zero frames');
 });
