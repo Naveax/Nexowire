@@ -45,9 +45,22 @@ export async function verifyWindowsKernelJob(
       throw new Error('WINDOWS_JOB_KERNEL_UNEXPECTED_PROOF');
     }
   } catch(error) {
-    const diagnostic = error && typeof error === 'object' && 'stderr' in error
-      ? String(error.stderr).slice(0,900)
-      : error instanceof Error ? error.message.slice(0,300) : 'unknown';
+    // PowerShell 5.1 may put a CLIXML progress header on stderr, even
+    // when the actual failure is an execFile timeout. Do not let that
+    // header mask the exit/signal/killed evidence needed for Windows QA.
+    const detail = (error && typeof error === 'object' ? error : {}) as {
+      code?: unknown; signal?: unknown; killed?: unknown; stderr?: unknown;
+    };
+    const rawStderr = String(detail.stderr ?? '');
+    const stderr = rawStderr.replace(/^#< CLIXML\\r?\\n?/, '').trim();
+    const diagnostic = [
+      'exit='+String(detail.code ?? 'none'),
+      'signal='+String(detail.signal ?? 'none'),
+      'killed='+String(detail.killed === true),
+      stderr ? 'stderr_tail='+stderr.slice(-900) : 'stderr=empty',
+      ...(!rawStderr && error instanceof Error
+        ? ['reason='+error.message.slice(0,200)] : []),
+    ].join('; ');
     throw new Error('WINDOWS_JOB_KERNEL_ATTESTATION_FAILED: '+diagnostic);
   }
 }

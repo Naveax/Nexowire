@@ -186,8 +186,8 @@ test('Windows Job preserves separate stdin/stdout/stderr pipes', {
   }
 });
 
-test('Windows Job fast-exit stdout and stderr are drained before exited status', {
-  skip:process.platform!=='win32',timeout:28_000,
+test('Windows Job fast-exit stdout/stderr drained across 12 cycles', {
+  skip:process.platform!=='win32',timeout:75_000,
 },async()=>{
   // Multiple isolated, short-lived commands target the race between the
   // guardian assignment marker, guardian exit and stream data delivery.
@@ -335,7 +335,7 @@ test('Windows helper path cannot be replaced by inherited environment', {
 });
 
 
-test('Windows Job fast-exit stdout and stderr are drained before exited status', {
+test('Windows Job fast-exit stdout/stderr drained across 64 cycles', {
   skip:process.platform!=='win32',timeout:140_000,
 },async()=>{
   // Reproduce #565: short-lived synthetic commands must never finalize
