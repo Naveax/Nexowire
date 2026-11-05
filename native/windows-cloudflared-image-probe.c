@@ -71,11 +71,11 @@ static int sha256(HANDLE h,wchar_t out[65]){
   if(status<0)goto done;
   LARGE_INTEGER zero={0};
   if(!SetFilePointerEx(h,zero,NULL,FILE_BEGIN))goto done;
-  while(ReadFile(h,data,(DWORD)sizeof(data),&count,NULL)){
+  for(;;){
+    if(!ReadFile(h,data,(DWORD)sizeof(data),&count,NULL))goto done;
     if(!count)break;
     if(BCryptHashData(hash,data,count,0)<0)goto done;
   }
-  if(GetLastError()!=ERROR_HANDLE_EOF && count!=0)goto done;
   if(BCryptFinishHash(hash,digest,32,0)<0)goto done;
   for(int i=0;i<32;i++)swprintf_s(out+i*2,3,L"%02x",(unsigned)digest[i]);
   out[64]=0;ok=1;
@@ -111,9 +111,10 @@ static int hold_ancestors(const wchar_t *input){
 }
 int wmain(int argc,wchar_t **argv){
   int rc=1;
-  if(argc!=4 || (wcscmp(argv[1],L"--probe") && wcscmp(argv[1],L"--race")))
+  if(argc!=4 || (wcscmp(argv[1],L"--probe") && wcscmp(argv[1],L"--race") && wcscmp(argv[1],L"--hold")))
     return reason("ARGS");
   const int race=wcscmp(argv[1],L"--race")==0;
+  const int hold=wcscmp(argv[1],L"--hold")==0;
   const wchar_t *binary=argv[2], *expected=argv[3];
   if(wcslen(expected)!=64 || !hold_ancestors(binary)){
     rc=reason("ANCESTOR_OR_ARGUMENT");goto done;
@@ -158,6 +159,25 @@ int wmain(int argc,wchar_t **argv){
     if(DeleteFileW(binary)){
       rc=reason("DELETE_ALLOWED");goto done;
     }
+  }
+  if(hold){
+    // A separately running process with the SAME user SID is permitted to
+    // attempt path mutation while these handles remain open. We never
+    // create or resume any executable in this mode.
+    puts("NEXOWIRE_C13_NATIVE_HOLD=READY");
+    fflush(stdout);
+    if(getchar()==EOF){rc=reason("HOLD_ACK");goto done;}
+    FILE_ID_INFO after_id={0};
+    BY_HANDLE_FILE_INFORMATION after_basic={0};
+    wchar_t end_sha[65]={0};
+    if(!file_id(file_handle,&after_id) || !same_id(&held_id,&after_id) ||
+       !GetFileInformationByHandle(file_handle,&after_basic) ||
+       after_basic.nNumberOfLinks!=1 ||
+       !sha256(file_handle,end_sha) || _wcsicmp(end_sha,expected)!=0){
+      rc=reason("HOLD_IDENTITY_CHANGED");goto done;
+    }
+    puts("NEXOWIRE_C13_NATIVE_HOLD=UNCHANGED");
+    rc=0;goto done;
   }
   wchar_t command[32768];
   if(swprintf_s(command,32768,L"\"%ls\" --version",binary)<0){
