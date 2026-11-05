@@ -7,7 +7,7 @@ import path from 'node:path';
 import {
   IdempotencyStore,
   IdempotencyStoreError,
-} from '../src/operations/idempotency-store.js';
+} from '../../src/operations/idempotency-store.js';
 
 type Status = 'succeeded' | 'failed' | 'unknown';
 
