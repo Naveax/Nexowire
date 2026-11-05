@@ -268,3 +268,41 @@ test('round3 missing verifier cannot replace an authenticated Agent epoch',async
   assert.equal(prior.received.length,0);
   assert.equal(rejected.received.length,0);
 });
+
+
+test('round4 strict remote read cannot leak data after owner revocation',async t=>{
+  const f=await fixture(t,{requireMutationReauthorization:true});
+  let authorized=true,checks=0;
+  const a=await f.connect('strict-read',randomUUID(),1,async()=>{
+    checks++;
+    return authorized;
+  });
+  const id=randomUUID();
+  const first=observed(f.broker.request('strict-read','machine.snapshot',{},1_000,id));
+  await eventually(()=>a.received.length===1);
+  a.socket.send(JSON.stringify({type:'response',requestId:id,ok:true,
+    data:{synthetic:true}}));
+  assert.deepEqual(await first,{ok:true,value:{synthetic:true}});
+  authorized=false;
+  const denied=await observed(f.broker.request('strict-read','machine.snapshot',
+    {},500,randomUUID()));
+  assert.deepEqual(denied,{ok:false,code:'AGENT_AUTH_REVOKED'});
+  assert.equal(a.received.length,1,'revoked owner cannot receive another read request');
+  assert.equal(checks,2,'strict mode requires a fresh verifier for every read');
+});
+
+test('round4 strict remote reconnect does not replay unverified pending read',async t=>{
+  const f=await fixture(t,{requireMutationReauthorization:true});
+  const deviceId='strict-read-reconnect';
+  const a=await f.connect(deviceId,randomUUID(),1,async()=>true);
+  const requestId=randomUUID();
+  const pending=observed(f.broker.request(deviceId,'machine.snapshot',
+    {synthetic:true},2_000,requestId));
+  await eventually(()=>a.received.length===1);
+  a.socket.terminate();
+  await eventually(()=>!f.broker.has(deviceId));
+  const next=await f.connect(deviceId,randomUUID(),2,async()=>true);
+  assert.deepEqual(await pending,{ok:false,code:'AGENT_REAUTH_REQUIRED'});
+  await delay(25);
+  assert.equal(next.received.length,0,'new socket must receive zero unverified read frames');
+});
