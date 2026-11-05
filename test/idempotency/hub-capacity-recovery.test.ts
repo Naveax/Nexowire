@@ -126,3 +126,34 @@ test('SQLite: invalid explicit test quotas reject without touching disk', () => 
         error.code === 'IDEMPOTENCY_CAPACITY_INVALID');
   }
 });
+
+
+test('SQLite: terminal outcomes and UNKNOWN tombstones reject stale completion', async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nwx-sqlite-terminal-fence-'));
+  t.after(async () => fs.rm(root, { recursive: true, force: true }));
+  const store = new IdempotencyStore(root);
+  const successful = { key: 'final-success', fingerprint: 'a'.repeat(64),
+    targetId: 'device-a', capability: 'files.write' };
+  const first = await store.begin(successful);
+  assert.equal(first.created, true);
+  await store.complete(successful.key, 'succeeded');
+  const reopened = new IdempotencyStore(root);
+  await assert.rejects(() => reopened.complete(successful.key, 'failed'),
+    { code: 'IDEMPOTENCY_TERMINAL_REWRITE_DENIED' });
+  assert.equal((await reopened.get(successful.key))?.status, 'succeeded');
+  assert.equal((await reopened.begin(successful)).record.operationId,
+    first.record.operationId);
+
+  const uncertain = { key: 'final-unknown', fingerprint: 'b'.repeat(64),
+    targetId: 'device-b', capability: 'files.write' };
+  const second = await store.begin(uncertain);
+  await store.complete(uncertain.key, 'unknown');
+  for (const invalidStatus of ['failed', 'succeeded'] as const) {
+    await assert.rejects(() => reopened.complete(uncertain.key, invalidStatus),
+      { code: 'IDEMPOTENCY_TERMINAL_REWRITE_DENIED' });
+  }
+  assert.equal((await new IdempotencyStore(root).get(uncertain.key))?.status,
+    'unknown');
+  assert.equal((await reopened.begin(uncertain)).record.operationId,
+    second.record.operationId);
+});
