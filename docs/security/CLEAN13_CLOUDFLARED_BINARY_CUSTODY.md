@@ -106,3 +106,50 @@ The P1-C public-origin failures and separate Windows task parent/descendant life
 - Cross-owner regressions P1-C, revocation and Windows lifecycle remain red in the source-stacked PR and must be resolved by their owners or verified in the integration candidate separately.
 
 **Overall release decision: NO-GO** until native Windows image identity, off-network authenticated Cloudflare acceptance, and all integration gates are satisfied. Windows native launch remains fail-closed.
+
+
+## V2-01 Round 3 — Windows native immutable-image investigation (2026-11-05)
+
+**Windows production decision remains NO-GO.** Round 3 introduces an independently compiled **test-only** Win32 helper that measures source handle identity, SHA256, process image pathname identity and same-owner write/rename/delete concurrency. It is **not** a signed production launcher and cannot enable Windows tunnel execution. The disposable child is CREATE_SUSPENDED and is always terminated before ResumeThread; it never runs Cloudflared code or accesses any real tunnel credential.
+
+### Evaluated Windows mechanisms
+
+| Control | Positive property | Missing or excluded property |
+|---|---|---|
+| CREATE_SUSPENDED | Initial thread cannot execute before resume | CreateProcessW accepts a pathname, not a validated hFile/image-section handle |
+| Held CreateFileW handle, GENERIC_READ + FILE_SHARE_READ | Blocks ordinary concurrent writes, deletes and rename on held file, including a same-owner attacker process | Not a privileged/kernel/driver threat-model guarantee |
+| Held lexical ancestor handles, FILE_FLAG_OPEN_REPARSE_POINT, no FILE_SHARE_DELETE | Fail-closed on junction/reparse ancestors and ordinary parent rename attempts | No guarantee for every third-party filesystem filter/privileged namespace modification |
+| FileIdInfo | 128-bit file ID plus volume serial allow opened source and process-reported pathname reopen comparison | QueryFullProcessImageNameW returns a path, NOT the kernel image-section identity |
+| BCrypt SHA256 of held handle | Verified bytes match independently source-pinned official Cloudflare 2026.10.1 | Not, alone, a new-release signer/publisher trust root |
+| GetProcessTimes + held process handle | PID and creation-time proof while suspended | Does not attest machine code execution |
+| Authenticode / WinVerifyTrust | Separately verifies official publisher signed-source trust, with PowerShell 7 hosted baseline | Does not bind a signature to actual kernel process image section |
+| Native SEC_IMAGE held-handle launcher | Possible direction for future signed, reviewed custodian | NOT_IMPLEMENTED; CreateProcessW has no documented section-handle input, and unsupported Nt* process creation cannot be approved casually |
+
+Windows API references:
+- https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew
+- https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_id_info
+- https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-queryfullprocessimagenamew
+- https://learn.microsoft.com/en-us/windows/win32/procthread/process-creation-flags
+
+### Implemented work, owned files and test contract
+
+- native/windows-cloudflared-image-probe.c: strict file- and ancestor-handle custody, direct native SHA256, sole-link/reparse checks, FileIdInfo, process path reopen, creation-time and PID, always-killed suspended child, cross-process same-owner lock handshake.
+- scripts/build-windows-cloudflared-image-probe.ps1: MSVC builds only on disposable Windows runner. No native executable is committed, signed, shipped or used in production.
+- test/clean13-cloudflared-windows-image-probe.test.ts: official-image positive and same-owner write/delete/rename and parent-directory rename negatives; hardlink, symlink, junction and corrupted-image negative fixtures; independent source Authenticode and intentional native-custodian refusal.
+- .github/workflows/ci.yml: Windows browser-live builds this test helper and runs the new test alongside unchanged P1-B, P1-D, credential identity and lifecycle suites.
+- No source file under src/mcp/ or src/hub/ changed in Round 3; there is no permitted path for the test executable to authorize production launch. In particular, the #1085 public control-plane admission semantics and V2-02 control-plane files were not modified.
+
+### Hosted exact-SHA evidence, scoped assertions only
+
+Source SHA eba1dd68b4dcdd6f3cecbf0075df581327fa7b79, automatically generated CI 41987962956, Windows browser-live job 127113646103: MSVC native build PASS, native FileIdInfo and suspended-process path identity test PASS (~1.59 s), official signature PASS, SID/DACL/ACE PASS. Overall Windows browser-live FAIL exit 1 solely from the inherited V2-04 managed-parent process-stop assertion.
+
+Source SHA 5dae1db7a07414a6497d82df95eac8ca58fdcc91, CI 41988568463, Windows browser-live job 127115139830: MSVC build PASS, native FileIdInfo and same-owner external process lock/race test PASS (~1.77 s), P1-B Windows signature PASS, P1-D Windows ACL PASS, overall Windows browser-live FAIL exit 1 due to the unchanged V2-04 managed-parent stop test. Linux-native, macOS lifecycle, WSL2 and security-operational jobs PASS. Full Linux Node checks include unrelated P1-C, public 307 redirect, and revocation negatives and cannot be called green.
+
+### Strict closure decision
+
+- P1-A Windows: **NO-GO**. Native image-section identity cannot be attested by a pathname readback, and no signed handle/section-bound production custodian exists.
+- P1-B Windows: **CONDITIONAL SOURCE PASS** for official SHA256 and Authenticode positive and counterfeit rejection. Actual executed-image signature is **NO-GO**.
+- P1-D Windows: **CONDITIONAL DISPOSABLE PASS** for owner SID, explicit/inherited ACE, parent replacement and fixture mutation; adversarial live credential/section and production operations remain **NOT_RUN/NO-GO**.
+- P1-A Linux: **CONDITIONAL PASS** for FD-bound pathname swap; same-UID protected memfd not completed.
+- All production release gates: **NO-GO**. No bypass, skip, fake-green CI, new PR, main merge, device reboot, token/Cloudflare/DNS/CORE change.
+
