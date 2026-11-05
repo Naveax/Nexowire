@@ -8,6 +8,7 @@ import WebSocket from 'ws';
 import {AgentBroker} from '../src/core/agent-broker.js';
 import {attachAgentWebSocketServer} from '../src/hub/agent-websocket.js';
 import {createControlPlaneAgentCredentialVerifier} from '../src/hub/control-plane-agent-auth.js';
+import {bindRemoteAgentMutationReauthorization,hasTrustedRemoteAgentGrant} from '../src/mcp/http.js';
 import {AGENT_PROTOCOL_VERSION} from '../src/protocol/agent.js';
 
 /** A disposable in-memory TLS CA and leaf. No openssl executable, private
@@ -57,6 +58,9 @@ test('CLEAN-14 P1-C: actual WSS verifies TLS certificate and device before 101, 
   const device='disposable-wss-device';
   const good='nwx_dev_disposable-wss-credential';
   const service='disposable-service-token-wss-123456789';
+  const ownerId='owner-clean14';
+  const authorizationEpoch=5;
+  const leaseExpiresAtMs=Date.now()+60000;
   let valid=true,authorityChecks=0;
   const authority=createHttpServer((req,res)=>{
     if(req.method!=='POST'||req.url!=='/api/v1/internal/device/authenticate'||
@@ -72,7 +76,10 @@ test('CLEAN-14 P1-C: actual WSS verifies TLS certificate and device before 101, 
       catch{}
       res.setHeader('content-type','application/json');
       res.end(JSON.stringify(valid&&candidate===good?
-        {authenticated:true,device:{deviceId:device}}:{authenticated:false}));
+        {authenticated:true,device:{
+          deviceId:device,ownerAccountId:ownerId,
+          authorizationEpoch,leaseExpiresAtMs,
+        }}:{authenticated:false}));
     });
   });
   await new Promise<void>(resolve=>authority.listen(0,'127.0.0.1',resolve));
@@ -82,11 +89,27 @@ test('CLEAN-14 P1-C: actual WSS verifies TLS certificate and device before 101, 
     serviceToken:service,timeoutMs:1500,
   });
   const hub=createHttpsServer({key,cert});
-  const broker=new AgentBroker({reconnectGraceMs:100});
-  const wss=attachAgentWebSocketServer(hub as unknown as HttpServer,broker,[],{
-    remoteOnly:true,remoteCredentialVerifier:verifier,
-    authorizationCheckMs:60000,authorizationTimeoutMs:1500,heartbeatMs:60000,
-  });
+  const broker=new AgentBroker({reconnectGraceMs:100,requireMutationReauthorization:true});
+  // The real remote endpoint always requires a per-socket owner/device grant.
+  // A startup assertion failure must also close this disposable authority,
+  // otherwise its HTTP handle leaves the CI test runner waiting indefinitely.
+  let wss:ReturnType<typeof attachAgentWebSocketServer>;
+  try {
+    wss=attachAgentWebSocketServer(hub as unknown as HttpServer,broker,[],{
+      remoteOnly:true,remoteCredentialVerifier:verifier,
+      remoteMutationAuthorizationFactory:(grant,authorizationHeader)=>
+        hasTrustedRemoteAgentGrant(grant)
+          ? bindRemoteAgentMutationReauthorization({
+              grant,authorizationHeader,verify:verifier,timeoutMs:1500,
+            })
+          : undefined,
+      authorizationCheckMs:60000,authorizationTimeoutMs:1500,heartbeatMs:60000,
+    });
+  } catch (error) {
+    authority.closeAllConnections();
+    await new Promise<void>(resolve=>authority.close(()=>resolve()));
+    throw error;
+  }
   await new Promise<void>(resolve=>hub.listen(0,'127.0.0.1',resolve));
   const hubPort=(hub.address() as {port:number}).port;
   const url='wss://127.0.0.1:'+hubPort+'/agent';
