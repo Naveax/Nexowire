@@ -12,7 +12,7 @@
     "1075": "05a99388c377caa0781fb5a2c257ea1f9b92e5df",
     "1077": "b0bdfbced25364ad26473c24bb23f9d5cf249805",
     "1081": "a28995c25b5575636c929b09d1f6e7c4d9b33e5c",
-    "1083": "2b2a1b7e4199705a78a4a8ca4d19e6aca7d7cca3",
+    "1083": "20d4252eb10223a2c134aa25bba5107ed6a884f9",
     "1084": "f4f80a76a186e84433ae4be6aed829a21d990a0c"
   },
   "source_files": 71,
@@ -936,7 +936,7 @@
     "source_heads": {
       "1044": "b7c39dbdade38a0a1cf3a69299b1d9677cf0a5e9",
       "1077": "b0bdfbced25364ad26473c24bb23f9d5cf249805",
-      "1083": "2b2a1b7e4199705a78a4a8ca4d19e6aca7d7cca3"
+      "1083": "20d4252eb10223a2c134aa25bba5107ed6a884f9"
     },
     "source_new_paths": [
       "native/windows-cloudflared-image-probe.c",
