@@ -299,3 +299,76 @@ Only test/v206-round2-windows-native-reason.test.ts and this evidence document c
 | Held-image native Windows execution | NOT_IMPLEMENTED | NOT_IMPLEMENTED | NOT_RUN |
 
 **Release decision: NO-GO.** Every above native scenario must be evaluated on a new combined SHA with both #1077 fixes and #1044 repaired tests on Windows Node22 AND Node24, with exact commands, exit codes, CI attempt/job IDs, and proof of the physical preconditions. Linux/macOS security features requiring true Windows APIs remain NOT_RUN there. No source/** edits from V2-06, live Cloudflare account, physical NAVEAX/Work-PC, CORE, release, merge or production credentials touched.
+
+
+# ROUND 4 — Independent Windows P1-A/B/D release-acceptance gate (2026-11-05)
+
+## Exact-live snapshots (do not upgrade historical CI)
+
+| PR | Head checked | Branch purpose | CI exact-head |
+|---|---|---|---|
+| #1044 | `e431f6854e743982475fc513295881ed16a7fe92` | Independent test owner, Draft | 41988129845 FAILURE, old vulnerable #1003 base; Windows-only repaired fixtures NOT_RUN |
+| #1077 | `8405c44cbc60205f33d47a8525eea7e3fbf9541f` | Binary/publisher/credential owner, Draft | 41989954395 FAILURE; hosted Windows browser-live owner-only ACL, real official signer and suspended native probe PASS; unrelated task process-tree stop FAIL |
+| #1085 | `ebc8029d15a948a4e3a0003df1301e6b21f47a77` | Release integration candidate, Draft | [41991273960](https://github.com/Naveax/Nexowire/actions/runs/41991273960) FAILURE, Windows Round2 security Node22+24 FAIL; selected Windows negative Node22+24 PASS; Linux Node22+24 SUCCESS |
+
+#1085 Release Readiness run **41991273889 SUCCESS** and Relay QA **41991273873 SUCCESS** do NOT override CI security FAILURE.
+
+## Decisive test and product Git blob comparison
+
+| Invariant | #1044 QA or #1077 product current Git blob | #1085 exact integrated Git blob | Verdict |
+|---|---|---|---|
+| `test/v206-round2-windows-native-reason.test.ts` | #1044: **516f390718271d772c256b73aef9b0d52c2c2707**, repaired PowerShell 7 / SID owner fixture, 315 lines | **9a08bf148a3b8ba2a44278e7381c2c8245b99def**, original PS5.1 helper, 275 lines | **OLD TEST FILE INTEGRATED** |
+| `src/mcp/cloudflare-binary-trust.ts` | #1077: **42dae15a1d787061a6d0df943e7247ac6261d438** | **c33b9b03c57e1a994ada3534ff449871ff5b19c6** | **PRODUCT SHA DIFFERS** |
+| `src/mcp/cloudflare-credential-custody.ts` | #1077: **d7946992fb31c343549b69ed9b83fe7863678851** | **8a54854cdd85fc579c20ff3b0bc7231550fbec19** | **PRODUCT SHA DIFFERS** |
+| `test/clean13-cloudflared-windows-custody.test.ts` | #1077: **0d1306891d587238cb3a29d7aa4643893c945dd3** | **9d41f1316f5fd774904eadcb64be6a64b0c13cb5** | **OLDER OR DISTINCT PRODUCT-OWNER TEST** |
+| `test/clean13-cloudflared-windows-image-probe.test.ts` | #1077: **51e03a010023ddc5428a628801740b356853edfc** | **ABSENT** | Native physical probe NOT_RUN in integrated #1085 |
+
+The three original AI-11 files were re-fetched on BOTH #1044 and #1085 at these exact SHAs and remain **byte-identical**:
+- `test/ai11-cloudflare-address-and-credential-custody.test.ts`: f74ee761bfe00ff304b8c6070a26654c7c481e88
+- `test/ai11-cloudflared-path-race-negative.test.ts`: d75ab8ddcc8ab887220bea203026f1ed98eb77a9
+- `test/ai11-connection-v2-negative.test.ts`: 963393d00cc3368b9c76a7d8e9bb8cd4e455b706
+
+No original negative assertion was removed, disabled, changed or relaxed.
+
+## Windows Node22 and Node24 exact #1085 CI evidence
+
+Run **41991273960**, attempt 1, exact HEAD `ebc8029d15a948a4e3a0003df1301e6b21f47a77`:
+
+| Job | Node / OS | Exact result |
+|---|---|---|
+| 127123831532 | Windows 22, Round2 full security | **FAIL**, five original PS5.1/helper native failures; V2-06 revocation/duplicate UUID assertions PASS |
+| 127123831734 | Windows 24, Round2 full security | **FAIL**, same five native helper failures; V2-06 revocation/duplicate UUID assertions PASS |
+| 127123831608 | Windows 22, selected negative security | **PASS** 44 assertions, including real P1-C redirect/body and WSS pre-101 negatives |
+| 127123831420 | Windows 24, selected negative security | **PASS** for selected P1-C transport/DNS, B profile confusion, WSS |
+| 127123830970 | Windows browser-live | **FAIL**, real P1-D custody test; official PS7 signer and explicit native guard other test PASS |
+| 127123831517 / 127123831362 | Linux 22 / 24 Round2 security | **PASS** (Node22 has 35/35), including revocation before 60-second periodic check, duplicate UUID, stale-ACK/UNKNOWN and authenticated WSS TLS |
+| 127123831465 / 127123831322 | Linux 22 / 24 general suites | **PASS** |
+| 127123831451 / 127123831483 | Windows CLEAN-10 22 / 24 | **PASS** |
+
+**Do not assert that the repaired R3 Windows fixture was executed:** the actual Windows Round2 command did run `test/v206-round2-windows-native-reason.test.ts`, but from blob **9a08bf...** (OLD). Its error lines still show `ensureExecuted` at old line 39, `captureSignature` at old line 54 and 5 failures. The new R3 PS7 preflight from blob **516f390...** is absent. Therefore the R3 **new real Windows result is NOT_RUN** on #1085, not FAIL and not PASS.
+
+## Fixture failure vs product-security vulnerability matrix
+
+| Control | Old test / older integrated source | New #1077 source-only evidence | Required combined exact-SHA result |
+|---|---|---|---|
+| Real official Cloudflare Authenticode | Old PowerShell subprocess `EXIT_NONZERO=1` before actual Status readback | Windows browser-live #1077 **PASS**, actual PowerShell 7 Status `Valid`, signer Cloudflare, SHA pinned | Repaired R3 official signer positive PASS; then correct native held-image custodian denial |
+| Wrong Microsoft signer | Old PS5.1 signature command exited before negative | No full wrong-signer/native-probe production acceptance inferred | Real Microsoft signed binary prerequisite, wrong issuer explicitly rejected at intended trust boundary |
+| Unsigned and self-signed | Old helper or cert fixture exit before signature Status readback | Product owner preserves fail-closed trust rules | Actual disposable unsigned/self-signed certificate readback and named denial, **NOT_RUN** in new test |
+| Owner-only NTFS credential | Positive failed before negative attack; TEMP parent / owner fixture not proven | #1077 real SID/DACL and positive→inherited negative **PASS** | New R3 user-home private ancestor + exact owner SID, **positive PASS** before inherited ACE negative |
+| Hardlink, junction / reparse | Old first positive credential read failed; no genuine attack assertions reached | #1077 native source accepts only tight file identity; full new fixture not proven | Real NTFS nlink=2 and reparse point, named denial *after* valid positive |
+| Path swap pre-checksum | Old real file swap+SHA mismatch PASS | Native FileIdInfo + CREATE_SUSPENDED **no-resume** probe PASS on #1077 | Windows verified-image-to-process immutable executable launch still NOT_IMPLEMENTED; do NOT upgrade proof |
+| P1-C URL, DNS, 301/302/307/308 header+body | Older vulnerable #1044 source RED | Integrated selected jobs GREEN | GREEN for disposable isolated transport, not public Cloudflare deployment |
+| Revocation, wrong device, UNKNOWN/no-replay | Old #1044 RED mutation-after-revoke, but duplicate UUID/UNKNOWN green | Integrated #1085 Windows Node22+24 targeted revocation and UUID GREEN | Real hosted two-PC owner binding NOT_RUN |
+
+Separate **source-only** #1077 CI [41989954395](https://github.com/Naveax/Nexowire/actions/runs/41989954395), browser-live job **127119546864**: exact Windows owner-only SID + inherited ACE PASS, official pinned PS7 Authenticode PASS, FileIdInfo / CREATE_SUSPENDED native **no-resume** probe PASS, and Windows process-tree task stop FAIL. This is strong bounded source-owner evidence but NOT combined Windows R3 acceptance.
+
+## Coordinator handoff and exact test command
+
+- On current #1085, import the **specific R3 QA file blob** `516f390718271d772c256b73aef9b0d52c2c2707` from #1044 HEAD `e431f685...`, rather than cherry-picking its older-base PR wholesale.
+- Reconcile the latest #1077 source SHA and owned tests (especially the two P1-A/B/D source files), preserving test ownership and other sources in #1085. This requires a **NEW combined HEAD SHA**; an old SHA cannot magically contain a different Git blob.
+- Let the normal matching workflow run once for that NEW SHA, or explicitly run only if not already queued/in_progress for the same workflow/inputs. On both disposable Windows Node22 AND Node24 execute:
+`node --test --import tsx --test-concurrency=1 test/v206-round2-dispatch-reason.test.ts test/v206-round2-windows-native-reason.test.ts test/clean13-cloudflared-windows-custody.test.ts`
+- Capture run ID, attempt, job ID, exact SHA, exit code, positive first, then negative real filesystem/API proof. Compare `src` source blob SHAs and the new R3 QA blob before claiming combined acceptance.
+- **Explicit owner communication** posted to #1085 and #1077 PR Conversation with exact blob mismatches, expected fixed fixture, test command and the remaining native no-resume distinction.
+
+**Final gate**: **NO-GO**. Windows P1-A/B/D real R3 acceptance on a single merged SHA is **NOT_RUN**. The existing Windows Round2 failure is from an old fixture+source integration, not evidence that the repaired QA test fails. Full CI on #1085 remains FAILURE and the Windows immutable executable launch guarantee remains unimplemented. No `src/**` edit, owner PR commit, main merge, branch deletion, production deploy, live device or Cloudflare account change from V2-06.
