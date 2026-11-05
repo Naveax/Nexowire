@@ -42,7 +42,8 @@ test('NAVEAX synthetic 80-key legacy profile migrates without loss or replay', a
       .journal_mode, 'wal');
     assert.deepEqual(db.prepare(
       'SELECT status, COUNT(*) AS n FROM idempotency_records GROUP BY status ORDER BY status',
-    ).all(), [{ status: 'failed', n: 1 }, { status: 'succeeded', n: 79 }]);
+    ).all().map((row) => ({ ...row })),
+      [{ status: 'failed', n: 1 }, { status: 'succeeded', n: 79 }]);
   } finally { db.close(); }
   assert.equal(await digest(), oldHash, 'the legacy ledger must remain byte-identical');
 
