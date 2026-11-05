@@ -60,6 +60,19 @@ jobs:
           Invoke-WebRequest -Uri 'https://github.com/cloudflare/cloudflared/releases/download/2026.10.1/cloudflared-windows-amd64.exe' -OutFile $binary
           if ((Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant() -ne '4d2490e74082c5d48dbfedaf92576fa5bd1702379ab88eb7faa0cfbe8dc891b6') { throw 'Official cloudflared checksum mismatch' }
           $env:NEXOWIRE_CLOUDFLARED_TEST_BINARY = $binary
+          # Read-only machine inventory. This can never authorize production
+          # launch; test both PowerShell engines and record WDAC policy presence.
+          $inspection = @(./scripts/audit-clean13-windows-launch-readiness.ps1 -BinaryPath $binary)
+          $line = [string]($inspection | Select-Object -Last 1)
+          if (-not $line.StartsWith('NEXOWIRE_C13_WINDOWS_READINESS=')) { throw 'CLEAN-13 inspection report missing' }
+          $result = $line.Substring('NEXOWIRE_C13_WINDOWS_READINESS='.Length) | ConvertFrom-Json
+          if ($result.productionLaunchGO -ne $false -or $result.nativeHeldImageSectionCustodianImplemented -ne $false) {
+            throw 'CLEAN-13 immutable-image launch must remain fail-closed'
+          }
+          if ($result.sha256Pinned -ne $true -or $result.directAuthenticodeValid -ne $true -or $result.powershell7.result -ne 'SIGNED_SOURCE_VALID') {
+            throw 'CLEAN-13 official Windows signature verification failed'
+          }
+          Write-Host $line
           $nativeProbe = Join-Path $env:RUNNER_TEMP 'nw-clean13-native-image-probe.exe'
           ./scripts/build-windows-cloudflared-image-probe.ps1 -OutputPath $nativeProbe
           $env:NEXOWIRE_CLOUDFLARED_IMAGE_PROBE = $nativeProbe
