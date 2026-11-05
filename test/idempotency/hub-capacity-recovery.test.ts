@@ -157,3 +157,41 @@ test('SQLite: terminal outcomes and UNKNOWN tombstones reject stale completion',
   assert.equal((await reopened.begin(uncertain)).record.operationId,
     second.record.operationId);
 });
+
+
+test('SQLite: active writer and foreign-host journal ownership fail closed', async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nwx-sqlite-writer-'));
+  t.after(async () => fs.rm(root, { recursive: true, force: true }));
+  const store = new IdempotencyStore(root);
+  const input = { key: 'writer-authority', fingerprint: 'd'.repeat(64),
+    targetId: 'device-a', capability: 'files.write' };
+  const reserved = await store.begin(input);
+  const journal = path.join(root, 'idempotency-records.sqlite');
+  function owner(next?: Record<string, unknown>): Record<string, unknown> {
+    const db = new DatabaseSync(journal);
+    try {
+      if (next) db.prepare(
+        "UPDATE idempotency_meta SET value=? WHERE key='hub_writer'",
+      ).run(JSON.stringify(next));
+      const row = db.prepare(
+        "SELECT value FROM idempotency_meta WHERE key='hub_writer'",
+      ).get() as {value:string};
+      return JSON.parse(row.value) as Record<string, unknown>;
+    } finally { db.close(); }
+  }
+  const original = owner();
+  assert.equal(original.pid, process.pid);
+  assert.equal(typeof original.host, 'string');
+  assert.equal(typeof original.incarnation, 'string');
+  owner({...original, incarnation:'other-live-process-incarnation'});
+  await assert.rejects(() => new IdempotencyStore(root).initialize(),
+    {code:'IDEMPOTENCY_HUB_WRITER_ACTIVE'});
+  owner({...original, host:'foreign-shared-journal-host'});
+  await assert.rejects(() => new IdempotencyStore(root).initialize(),
+    {code:'IDEMPOTENCY_CROSS_HOST_JOURNAL_DENIED'});
+  owner(original);
+  const sameProcess = new IdempotencyStore(root);
+  await sameProcess.initialize();
+  assert.equal((await sameProcess.begin(input)).record.operationId,
+    reserved.record.operationId, 'previous operation identity must be preserved');
+});
