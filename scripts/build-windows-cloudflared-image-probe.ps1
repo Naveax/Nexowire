@@ -15,7 +15,7 @@ $vcvars=Join-Path $install 'VC\Auxiliary\Build\vcvars64.bat'
 if(!(Test-Path -LiteralPath $vcvars)){throw 'Missing vcvars64'}
 $obj=Join-Path $env:RUNNER_TEMP 'nw-clean13-native-image-probe.obj'
 # No arbitrary build path, no download, no secrets and no PATH-based compiler.
-$cmd='"'+$vcvars+'" >nul && cl.exe /nologo /W4 /WX /O2 /utf-8 /DUNICODE /D_UNICODE /Fo:"'+$obj+'" /Fe:"'+$OutputPath+'" "'+$source+'" kernel32.lib bcrypt.lib'
+$cmd='"'+$vcvars+'" >nul && cl.exe /nologo /W4 /WX /O2 /utf-8 /DUNICODE /D_UNICODE /Fo:"'+$obj+'" /Fe:"'+$OutputPath+'" "'+$source+'" kernel32.lib bcrypt.lib wintrust.lib'
 & cmd.exe /d /s /c $cmd
 if($LASTEXITCODE -ne 0){throw "Native probe compilation failed: $LASTEXITCODE"}
 if(!(Test-Path -LiteralPath $OutputPath)){throw 'Compiled native probe is missing'}
