@@ -52,7 +52,7 @@ export async function verifyWindowsKernelJob(
       code?: unknown; signal?: unknown; killed?: unknown; stderr?: unknown;
     };
     const rawStderr = String(detail.stderr ?? '');
-    const stderr = rawStderr.replace(/^#< CLIXML\\r?\\n?/, '').trim();
+    const stderr = rawStderr.replace(/^#< CLIXML\r?\n?/, '').trim();
     const diagnostic = [
       'exit='+String(detail.code ?? 'none'),
       'signal='+String(detail.signal ?? 'none'),
