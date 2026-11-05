@@ -1,73 +1,87 @@
-# Hub idempotency capacity incident: non-destructive recovery hotfix
+# Hub IDempotency: SQLite migration, no artificial record limit
 
-**Status:** source hotfix only; live Hub deployment **NOT_RUN**. This is a
-bounded, temporary admission increase, not a completed retention/archiving
-redesign.
+**Observed incident (2026-11-05):** Work-PC Hub v1.0.8 was refusing file-write
+reservations after its JSON idempotency store reached exactly **2,000/2,000**
+records (1,958 succeeded, 38 failed, 4 unknown). A different, stale 80-entry
+journal on NAVEAX was not the active Hub. Source root cause was the hard
+`maxRecords=2000` default in `src/operations/idempotency-store.ts`.
 
-## Root cause and bounded recovery
+## Solution
 
-The Hub's `IdempotencyStore` uses the file
-`<stateDir>/idempotency-records.json`. Previously, the default admission
-ceiling was **2,000**. The schema has a hard **5,000** record ceiling.
-`trim()` deliberately rejects a new reservation with
-`IDEMPOTENCY_STORE_FULL`, without retiring historical keys.
+The default production Hub idempotency store is now **SQLite WAL** with
+`synchronous=FULL`. It has **no app-level count ceiling**. A constructor
+`maxRecords` option remains only for existing bounded fault-injection tests
+and is not passed by `src/runtime.ts`.
 
-A read-only incident check found an active Hub journal exactly at 2,000:
-1,958 `succeeded`, 38 `failed`, 4 `unknown`; 2 device identities.
-The refused new intent's key was not in that snapshot. An unrelated, stale
-80-record journal on another user profile was **not** the active Hub.
+- Existing legacy v1 `idempotency-records.json` records are migrated using
+  a single transaction. Historical key, operation UUID, fingerprint, device
+  and status are preserved. Legacy JSON is kept untouched as an audit/backup.
+- A legacy-file SHA256 marker detects a changed/appearing v1 journal on
+  startup, blocking accidental old/new Hub dual-writer reconciliation.
+- `in_progress` left after restart becomes `unknown`; neither `unknown`
+  nor completed keys are silently pruned. Reused key+different fingerprint is
+  denied; reusing the same key returns its original operation identity.
+- SQLite uses indexed durable lookups; metadata-only results, not request
+  payloads, secrets or tool content, are persisted. A 256-result in-memory
+  cache bounds response memory and does not retire idempotency tombstones.
+- SQLite insertion/disk-full/lock/corruption failure prevents reservation
+  completion. It does not downgrade the execution fence.
+- Native `files.write` remains available. The **artificial Hub count quota**
+  is removed; valid new user operations are permitted as long as durable
+  storage can commit them.
 
-This patch raises **only the default admission limit** to 5,000 and
-validates the configured limit (1–5,000). All existing records and their
-statuses remain in the same v1 JSON schema. An explicit lower limit still
-rejects new admissions. Full-capacity and disk-write failures remain
-fail-closed. There is **no** pruning of `UNKNOWN`, `IN_PROGRESS`,
-`SUCCEEDED`, or `FAILED` tombstones.
+**"Unlimited" means no configured 2,000/5,000 record limit**, not infinite
+physical disk, RAM, file-size or filesystem capacity. Disk exhaustion must
+still fail closed rather than acknowledge an unrecorded mutation.
 
-## Security invariants
+## Exact evidence
 
-- A historical key/fingerprint/operationId always blocks a second mutation
-  with the same key, including after Hub restart.
-- A mismatched fingerprint for the same key is denied.
-- An in-progress record recovered after crash becomes `unknown`.
-- Exhaustion at 5,000 refuses the 5,001st reservation and retains the
-  journal byte-for-byte.
-- This hotfix does not synthesize responses or attempt the originally
-  rejected file write. A missing Hub reservation **alone** is not physical
-  proof of what another subsystem did.
-- No device, credential, scheduled task, running process or production
-  database is changed by the source PR.
+- GitHub PR #1086 source HEAD at initial SQLite migration:
+  `d7b0fb00ceb6703579abbf1c2f892ccee291baf7`.
+- GitHub CI `42030219741`: Linux Node 22/24 PASS, local-app safety
+  and migration unit tests PASS; browser-live tracked independently.
+- Disposable **Work-PC** build environment: TypeScript check, build and
+  **21/21 targeted tests PASS**. It uses an isolated staging directory,
+  never the production journal.
+- A real snapshot of the Work-PC 2,000-entry journal was migrated in a
+  private staging directory, retaining **1,958 succeeded/38 failed/4 unknown**.
+  Original JSON hash remained unchanged. The 2,001st synthetic reservation
+  succeeded; a duplicate returned the same operationId and mismatched
+  fingerprint was rejected.
+- Controlled **Work-PC Hub-only** cutover: existing app and launcher preserved,
+  separate patched app directory activated through the existing Hub scheduled
+  task. Other Nexowire Native Agent and Privileged Broker tasks were not
+  restarted. Loopback port 43110 returned online with the patched Hub PID.
+- Live production SQLite readback immediately after migration: 2,000 entries,
+  historical status distribution retained, original JSON SHA unchanged.
+- A genuine Nexowire `file_write` to NAVEAX using a **separate disposable
+  test file** completed: Work-PC Hub's SQLite ledger advanced to **2,001**
+  and recorded the exact test key as `succeeded`. Repeating the same request
+  key returned the same requestId (no second dispatch). The disposable file
+  was deleted afterward.
+- The user's original `naveax-reply-guard.js` content was not supplied to this
+  hotfix and **was not written**. Its initial key was absent from the live
+  legacy journal prior to this repair.
 
-## Deployment and downgrade warning
+## Operational notes
 
-**Do not deploy without a controlled maintenance/rollback plan.**
+1. Keep the original JSON, its `.pre-sqlite-20261105` snapshot and the
+   original launch script backup. They should remain protected with existing
+   filesystem ACLs; do not print or upload credential-bearing scripts.
+2. The patch is side-by-side under the Hub-only app directory
+   `1.0.8-a19a228dc6f1-idempotency-sqlite-hotfix`. The user Hub task alone
+   points to this app. The Native Agent and Broker stay on the original
+   version path.
+3. **Do not roll back the Hub binary to a JSON-only 2,000-entry reader after
+   new operations are committed.** Such a downgrade would lose visibility
+   of new SQLite tombstones. Recovery requires a compatible SQLite reader
+   and the complete `.sqlite`, `-wal`, `-shm` journal set.
+4. Do not remove SQLite tombstones to reclaim disk; disk is finite and
+   invalid/corrupt records must be treated as a blocking incident.
+5. Follow-up engineering: test interrupted/crashed migration and concurrent
+   old/new Hub ownership under fault injection, plus Windows package/upgrade
+   acceptance. The hotfix should remain in Draft until full CI/review is
+   complete; production field fix and source merge are distinct events.
 
-1. Verify exact deployed Hub version, journal path, file hash, current record
-   count, backup location/ACL, and that active mutations are not interrupted.
-2. Preserve a byte-for-byte, access-controlled backup of the original journal
-   and its identity. Never delete the originals to create free slots.
-3. Validate the patched package and synthetic 2,000→2,001 and 5,000→5,001
-   tests on disposable infrastructure before deployment.
-4. Install the approved patched Hub only during a coordinated safe cutover;
-   restart/swap of a live Hub is **not authorized by this source patch**.
-5. Verify unchanged prior keys/fingerprints/UNKNOWN states after restart and
-   confirm a new synthetic reservation, not the real user file write.
-6. **Downgrade risk:** legacy Hub code with the 2,000-record limit will
-   fail closed on a journal with 2,001+ records. Do not restore old binaries
-   expecting them to serve mutations. Rollback needs a compatible Hub build
-   that recognizes the expanded journal; never truncate the journal.
-7. Run the original, explicitly authorized file-write intent only after
-   the Hub is healthy and its exact prior key/operation evidence is reconciled.
-
-## Permanent solution still required
-
-The JSON journal rewrites the whole file on every reservation/completion;
-5,000 is not scalable and the store can fill again. Replace it with a
-transactional, indexed durable idempotency authority (e.g. SQLite WAL/FULL)
-that retains all key + fingerprint + operationId + status anti-replay
-tombstones. Archive only terminal metadata after independent reconciliation;
-`UNKNOWN` and `IN_PROGRESS` must never be evicted. Implement and test
-crash-safe legacy migration, single-writer ownership, fail-closed disk-full
-and corruption recovery, key reuse across restart, backup/restore, and a
-**downgrade guard** before any production migration. Do not implement simple
-TTL-based replay-key deletion.
+**Outcome:** artificial idempotency capacity blockage fixed on Work-PC,
+and `file_write` verified end-to-end in the actual Hub/Agent path.
