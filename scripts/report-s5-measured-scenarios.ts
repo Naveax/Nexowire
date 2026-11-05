@@ -3,8 +3,56 @@ import {cpus,totalmem,platform,release} from 'node:os';
 import {execFileSync} from 'node:child_process';
 import {mkdirSync,writeFileSync} from 'node:fs';
 import path from 'node:path';
-import {runS5LoopbackLoad} from './bench-s5-loopback-ws-capacity.js';
+import {fileURLToPath} from 'node:url';
+import {runS5LoopbackLoad,type S5LoadResult} from './bench-s5-loopback-ws-capacity.js';
 import {projectS5Matrix} from '../src/ops/scale-s5-cost-envelope.js';
+
+/** Offline presentation only. A synthetic socket count is never a provider capacity estimate. */
+export function summarizeS5ScenarioResults(results:readonly S5LoadResult[]){
+  if(!Array.isArray(results))throw new Error('Scenario results must be an array');
+  const scenarios=results.map(r=>{
+    if(!r||r.kind!=='SYNTHETIC_LOOPBACK_WS_OWNER_SQLITE')
+      throw new Error('Invalid scenario kind');
+    // JSON.stringify converts NaN/Infinity to null. Reject even a nested
+    // counter that is not selected for the console summary before writing JSON.
+    const pending:unknown[]=[r];
+    const visited=new WeakSet<object>();
+    while(pending.length){
+      const value=pending.pop();
+      if(typeof value==='number'&&!Number.isFinite(value))
+        throw new Error('Invalid nonfinite scenario value');
+      if(value&&typeof value==='object'){
+        if(visited.has(value))throw new Error('Invalid repeated scenario reference');
+        visited.add(value);
+        pending.push(...Object.values(value));
+      }
+    }
+    const integer=(n:number)=>Number.isSafeInteger(n)&&n>=0;
+    const finite=(n:number)=>Number.isFinite(n)&&n>=0;
+    const {p50,p95,p99,max}=r.latencyMs;
+    if(!integer(r.clients)||r.clients===0||!integer(r.rpc.attempted)||
+      !integer(r.rpc.reserved)||!integer(r.sockets.peak)||
+      !integer(r.rpc.backpressure)||!finite(r.elapsedMs)||
+      !finite(r.memoryBytes.rssPeak)||!finite(r.fairness.jainIndex)||
+      ![p50,p95,p99,max].every(finite)||
+      p50>p95||p95>p99||p99>max)
+      throw new Error('Invalid or non-monotonic scenario measurement');
+    // The fixture records one latency for every completed attempt; a report
+    // without attempts cannot prove percentiles, even if it contains zeroes.
+    if(r.rpc.attempted===0)throw new Error('Missing latency samples');
+    if(r.rpc.attempted===1&&!(p50===p95&&p95===p99&&p99===max))
+      throw new Error('Invalid single-sample percentiles');
+    return {clients:r.clients,peakSockets:r.sockets.peak,
+      acceptedReservations:r.rpc.reserved,wallMs:r.elapsedMs,
+      p99Ms:p99,rssPeakBytes:r.memoryBytes.rssPeak,
+      backpressure:r.rpc.backpressure,fairnessJain:r.fairness.jainIndex};
+  });
+  scenarios.sort((a,b)=>a.clients-b.clients);
+  if(new Set(scenarios.map(r=>r.clients)).size!==scenarios.length)
+    throw new Error('Duplicate scenario client count');
+  return {measurementClassification:scenarios.length?'LOCAL_SYNTHETIC_ONLY':'UNKNOWN',
+    capacityEstimate:null,providerCapacityProven:false,scenarios};
+}
 const safeSha=()=>{
   try{return execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim()}
   catch{return 'unavailable'}
@@ -20,6 +68,7 @@ async function main(){
     }
     results.push(r);
   }
+  const summary=summarizeS5ScenarioResults(results);
   const report={schema:'nexowire-s5-local-synthetic-v1',
     observedAtUtc:new Date().toISOString(),sourceSha,
     host:{platform:platform(),release:release(),cpu:cpus()[0]?.model,
@@ -28,15 +77,13 @@ async function main(){
     providerCountersMeasured:false,tlsMeasured:false,mcpMeasured:false,
     nativeCompletionMeasured:false,stagingAuthorized:false,
     soak24hElapsed:false,productionAccepted:false,
-    results,costModel:{classification:'ASSUMPTIONS_ONLY_NOT_OBSERVED_BILL',
+    results,summary,costModel:{classification:'ASSUMPTIONS_ONLY_NOT_OBSERVED_BILL',
       matrix:projectS5Matrix()}};
   const out=path.resolve('docs/reports/s5-local-synthetic-20261018.json');
   mkdirSync(path.dirname(out),{recursive:true});
   writeFileSync(out,JSON.stringify(report,null,2)+'\n',{flag:'wx'});
-  process.stdout.write(JSON.stringify({file:out,sourceSha,
-    scenarios:results.map(x=>({clients:x.clients,peakSockets:x.sockets.peak,
-      acceptedReservations:x.rpc.reserved,wallMs:x.elapsedMs,p99Ms:x.latencyMs.p99,
-      rssPeakBytes:x.memoryBytes.rssPeak,backpressure:x.rpc.backpressure,
-      fairnessJain:x.fairness.jainIndex}))},null,2)+'\n');
+  process.stdout.write(JSON.stringify({file:out,sourceSha,...summary},null,2)+'\n');
 }
-void main().catch(error=>{process.stderr.write(String(error)+'\n');process.exitCode=1});
+if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
+  void main().catch(error=>{process.stderr.write(String(error)+'\n');process.exitCode=1});
+}

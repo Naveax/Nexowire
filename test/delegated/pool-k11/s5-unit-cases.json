@@ -1,0 +1,33 @@
+{
+  "schema": "k11-canonical-s5-units-v1",
+  "evidenceKind": "synthetic-offline-not-provider-meter",
+  "cases": [
+    {
+      "id": "binary-kib",
+      "unitLabel": "KiB",
+      "bytesPerCall": 1024,
+      "callsPerUserDaily": 1048576,
+      "days": 1,
+      "expectedDailyRelayGiBApprox": 1,
+      "expectedMonthlyWorkerRequests": "1048576"
+    },
+    {
+      "id": "decimal-kb",
+      "unitLabel": "kB",
+      "bytesPerCall": 1000,
+      "callsPerUserDaily": 1048576,
+      "days": 1,
+      "expectedDailyRelayGiBApprox": 0.9766,
+      "expectedMonthlyWorkerRequests": "1048576"
+    },
+    {
+      "id": "binary-mib-month",
+      "unitLabel": "MiB",
+      "bytesPerCall": 1048576,
+      "callsPerUserDaily": 1024,
+      "days": 30,
+      "expectedDailyRelayGiBApprox": 1,
+      "expectedMonthlyWorkerRequests": "30720"
+    }
+  ]
+}
