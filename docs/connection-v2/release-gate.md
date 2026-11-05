@@ -1,3 +1,9 @@
+# AI-10 current Windows release checkpoint (2026-11-05)
+
+**PRODUCTION NO-GO.** The audited code SHA is `25227d0d3361e95d6cf79679212bd81dc4c2a08f` (main `939b4d6beecf996f2750c736c5d4b4beb7b64488`). Exact-SHA [CI 42087533258](https://github.com/Naveax/Nexowire/actions/runs/42087533258) **16/16 SUCCESS**, [Release Readiness 42087533330](https://github.com/Naveax/Nexowire/actions/runs/42087533330) **SUCCESS**, [Relay QA 42087533518](https://github.com/Naveax/Nexowire/actions/runs/42087533518) **4/4 SUCCESS**. Successful Windows unit/negative fixtures do not authorize production Cloudflared launch, native CORE, SQLite dual-Hub rollout or live two-device v2. Source semantic sign-off, signed launcher/WDAC enforcement, owner/device atomic effect authority, physical reboot/off-network OAuth and two-PC acceptance are missing. **See [authoritative AI-10 Windows audit](./windows-final-release-gate-20261105.md).** The older entries below remain historical snapshots, not current exact-SHA acceptance records. Any docs-only commit after this checkpoint has a *different HEAD* and requires its own exact-head CI readback.
+
+---
+
 # Connection v2 | Round 4 final source refresh — authoritative checkpoint
 
 **NO-GO.** Sources #1044 `b7c39dbdade38a0a1cf3a69299b1d9677cf0a5e9`, #1077 `b0bdfbced25364ad26473c24bb23f9d5cf249805` and #1083 `2b2a1b7e4199705a78a4a8ca4d19e6aca7d7cca3` are frozen for this coordinator commit.
