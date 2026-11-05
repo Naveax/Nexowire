@@ -83,12 +83,12 @@ test('SQLite: saturated 2000-key JSON migrates without deleting UNKNOWN or repla
     { code: 'IDEMPOTENCY_STORE_FULL' });
 });
 
-test('SQLite: 5000 historical keys do not impose an artificial 5000-key ceiling', async (t) => {
+test('SQLite: 5001 legacy JSON keys migrate beyond the former schema limit', async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nwx-sqlite-large-'));
   t.after(async () => fs.rm(root, { recursive: true, force: true }));
   const legacyFile = path.join(root, 'idempotency-records.json');
   const sqliteFile = path.join(root, 'idempotency-records.sqlite');
-  await fs.writeFile(legacyFile, JSON.stringify(legacySnapshot(5000)) + '\n');
+  await fs.writeFile(legacyFile, JSON.stringify(legacySnapshot(5001)) + '\n');
   const store = new IdempotencyStore(root);
   await store.initialize();
   for (let i = 0; i < 2; i++) {
@@ -102,7 +102,7 @@ test('SQLite: 5000 historical keys do not impose an artificial 5000-key ceiling'
     assert.equal(same.created, false);
     assert.equal(same.record.operationId, first.record.operationId);
   }
-  assert.equal(countRows(sqliteFile), 5002);
+  assert.equal(countRows(sqliteFile), 5003);
   assert.equal((await new IdempotencyStore(root).get('post-limit-1'))?.status, 'unknown');
 });
 
