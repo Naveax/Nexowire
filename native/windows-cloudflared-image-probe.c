@@ -19,6 +19,8 @@
 #include <windows.h>
 #include <bcrypt.h>
 #include <psapi.h>
+#include <wintrust.h>
+#include <softpub.h>
 #include <stdio.h>
 #include <wchar.h>
 #include <stdint.h>
@@ -85,6 +87,33 @@ done:
   if(hash)BCryptDestroyHash(hash);
   if(alg)BCryptCloseAlgorithmProvider(alg,0);
   return ok;
+}
+/* Documented WinVerifyTrust accepts an already-held hFile. This checks the
+ * Authenticode source bytes through the SAME read-only handle used by the
+ * SHA256/FileIdInfo probe. It still does not attest the kernel image-section
+ * used by CreateProcessW, and must not authorize a production launcher.
+ *
+ * The test is offline/cache-only: if revocation data needed by the trust
+ * provider is unavailable, fail closed rather than emitting an approval.
+ */
+static int held_handle_authenticode(HANDLE h,const wchar_t *file){
+  WINTRUST_FILE_INFO item={0};
+  item.cbStruct=sizeof(item);
+  item.pcwszFilePath=file;
+  item.hFile=h;
+  WINTRUST_DATA trust={0};
+  trust.cbStruct=sizeof(trust);
+  trust.dwUIChoice=WTD_UI_NONE;
+  trust.fdwRevocationChecks=WTD_REVOKE_NONE;
+  trust.dwUnionChoice=WTD_CHOICE_FILE;
+  trust.pFile=&item;
+  trust.dwStateAction=WTD_STATEACTION_VERIFY;
+  trust.dwProvFlags=WTD_CACHE_ONLY_URL_RETRIEVAL;
+  GUID action=WINTRUST_ACTION_GENERIC_VERIFY_V2;
+  LONG status=WinVerifyTrust(INVALID_HANDLE_VALUE,&action,&trust);
+  trust.dwStateAction=WTD_STATEACTION_CLOSE;
+  WinVerifyTrust(INVALID_HANDLE_VALUE,&action,&trust);
+  return status==ERROR_SUCCESS;
 }
 static int hold_ancestors(const wchar_t *input){
   size_t len=wcslen(input);
@@ -169,6 +198,9 @@ int wmain(int argc,wchar_t **argv){
   if(!sha256(file_handle,observed) || _wcsicmp(observed,expected)!=0){
     rc=reason("SOURCE_SHA");goto done;
   }
+  if(!held_handle_authenticode(file_handle,binary)){
+    rc=reason("HELD_WINVERIFYTRUST");goto done;
+  }
   if(race){
     // RACE is legal ONLY for disposable copies, never the pinned download.
     // All attempts run in this process while source+ancestors are held open.
@@ -245,7 +277,7 @@ int wmain(int argc,wchar_t **argv){
   if(WaitForSingleObject(child.hProcess,0)!=WAIT_TIMEOUT){
     rc=reason("PREMATURE_CHILD_EXIT");goto done;
   }
-  printf("NEXOWIRE_C13_NATIVE_PROBE=OK held_sha256=1 held_file_id=1 process_path_file_id=1 mapped_mem_image=1 suspended=1 resumed=0 write_delete_lock=%d pid=%lu creation_ticks=%llu\n",
+  printf("NEXOWIRE_C13_NATIVE_PROBE=OK held_sha256=1 held_winverifytrust=1 held_file_id=1 process_path_file_id=1 mapped_mem_image=1 suspended=1 resumed=0 write_delete_lock=%d pid=%lu creation_ticks=%llu\n",
     race,child.dwProcessId,((unsigned long long)created.dwHighDateTime<<32)|created.dwLowDateTime);
   rc=0;
 done:
