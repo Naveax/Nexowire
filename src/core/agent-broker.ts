@@ -421,12 +421,14 @@ export class AgentBroker {
     // An authenticated HTTP 101 is not a permanent mutation grant. The
     // credential may be revoked between WebSocket periodic checks; revalidate
     // on *every* mutation, fail closed, and check the socket epoch after await.
-    if (!isReadOnlyCapability(capability)) {
+    // Remote-only strict mode protects confidential reads as well as effects.
+    // Otherwise a revoked owner could still read until the periodic WS check.
+    if (this.requireMutationReauthorization || !isReadOnlyCapability(capability)) {
       const reauthorize = this.dispatchAuthorization.get(connection.socket);
       if (!reauthorize && this.requireMutationReauthorization) {
         throw new NexowireError(
           'AGENT_AUTH_NOT_BOUND',
-          'Agent mutation authorization verifier was not bound to the active socket.',
+          'Agent request authorization verifier was not bound to the active socket.',
           {deviceId, capability, requestId},
         );
       }
@@ -436,7 +438,7 @@ export class AgentBroker {
         if (!allowed) {
           throw new NexowireError(
             'AGENT_AUTH_REVOKED',
-            'Agent device authorization expired or was revoked before mutation dispatch.',
+            'Agent device authorization expired or was revoked before request dispatch.',
             {deviceId, capability, requestId},
           );
         }
@@ -629,6 +631,22 @@ export class AgentBroker {
               capability: pending.capability,
               reason: sameInstance ? 'connection_replaced' : 'instance_changed',
             },
+          ),
+        );
+        rejected++;
+        continue;
+      }
+
+      // Reconnect replay bypasses request(); strict remote sessions therefore
+      // cannot resend even a read-only request without a fresh owner/device
+      // authorization. Reject the old pending request and require a new call.
+      if (this.requireMutationReauthorization) {
+        this.rejectPending(
+          pending.requestId,
+          new NexowireError(
+            'AGENT_REAUTH_REQUIRED',
+            'Remote read-only request must be reauthorized as a fresh request after reconnect.',
+            { deviceId, requestId: pending.requestId, capability: pending.capability },
           ),
         );
         rejected++;
