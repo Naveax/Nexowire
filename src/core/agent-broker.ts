@@ -83,6 +83,8 @@ export interface AgentBrokerOptions {
   maxReadOnlyReplays?: number;
   maxResumesPerEpoch?: number;
   maxGlobalResumesPerSecond?: number;
+  /** Remote-admission hubs MUST set this true; missing per-socket verifier is denied at registration. */
+  requireMutationReauthorization?: boolean;
   metrics?: ScaleTransportMetrics;
   onDeviceState?: (
     event: DeviceStateEvent,
@@ -114,6 +116,7 @@ export class AgentBroker {
   private readonly maxReadOnlyReplays: number;
   private readonly maxResumesPerEpoch: number;
   private readonly maxGlobalResumesPerSecond: number;
+  private readonly requireMutationReauthorization: boolean;
   private readonly recentResumeTimes: number[] = [];
   private readonly metrics?: ScaleTransportMetrics;
   private readonly onDeviceState?: (
@@ -133,12 +136,21 @@ export class AgentBroker {
     this.maxReadOnlyReplays = Math.min(5, Math.max(0, options.maxReadOnlyReplays ?? 2));
     this.maxResumesPerEpoch = Math.min(512, Math.max(1, options.maxResumesPerEpoch ?? 32));
     this.maxGlobalResumesPerSecond = Math.min(512, Math.max(1, options.maxGlobalResumesPerSecond ?? 64));
+    // Existing explicit local/legacy fixtures remain compatible. V2-03 must opt
+    // remote-only admission into this mandatory verifier boundary at creation.
+    this.requireMutationReauthorization = options.requireMutationReauthorization === true;
     this.onDeviceState = options.onDeviceState;
   }
 
   register(socket: WebSocket, hello: AgentHello, reauthorizeMutation?: () => Promise<boolean>): void {
+    // A remote session without its bound owner/device verifier is only a
+    // socket, never AUTHENTICATED_ONLINE or permission to dispatch a mutation.
+    if (this.requireMutationReauthorization && typeof reauthorizeMutation !== 'function') {
+      socket.close(1008, 'Bound device authorization required');
+      return;
+    }
     // Install before connection events can expose the device to callers.
-    if(reauthorizeMutation)this.dispatchAuthorization.set(socket,reauthorizeMutation);
+    if (reauthorizeMutation) this.dispatchAuthorization.set(socket, reauthorizeMutation);
     const deviceId = hello.device.id;
     const existing = this.agents.get(deviceId);
     if (existing && existing.socket !== socket) {
@@ -411,6 +423,13 @@ export class AgentBroker {
     // on *every* mutation, fail closed, and check the socket epoch after await.
     if (!isReadOnlyCapability(capability)) {
       const reauthorize = this.dispatchAuthorization.get(connection.socket);
+      if (!reauthorize && this.requireMutationReauthorization) {
+        throw new NexowireError(
+          'AGENT_AUTH_NOT_BOUND',
+          'Agent mutation authorization verifier was not bound to the active socket.',
+          {deviceId, capability, requestId},
+        );
+      }
       if (reauthorize) {
         let allowed = false;
         try { allowed = await reauthorize(); } catch { /* fail closed */ }
