@@ -182,13 +182,25 @@ if(process.platform==='win32'){
   test('V2-06 R2 Windows actual Microsoft-signed wrong signer and unsigned fixture are distinguishable',{
     timeout:90000,
   },async t=>{
-    const wrong=POWERSHELL_51;
-    const nativeWrong=captureSignature(wrong);
-    assert.equal(nativeWrong.status,'Valid','wrong-publisher fixture must be authentically signed');
-    assert.equal(nativeWrong.signerPresent,true);
-    assert.equal(nativeWrong.cloudflareSigner,false,'Microsoft-signed image is not an official Cloudflare signer');
+    // A system PE may have OS-owned hardlinks. Copy the exact signed image
+    // into a disposable single-link file so the publisher/provenance oracle
+    // reaches that guard without weakening production hardlink rejection.
+    const originalWrong=POWERSHELL_51;
+    const originalSignature=captureSignature(originalWrong);
+    assert.equal(originalSignature.status,'Valid','wrong-publisher fixture must be authentically signed');
+    assert.equal(originalSignature.signerPresent,true);
+    assert.equal(originalSignature.cloudflareSigner,false,'Microsoft-signed image is not an official Cloudflare signer');
     const dir=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-v206-unsigned-'));
     t.after(()=>fs.rm(dir,{recursive:true,force:true,maxRetries:5,retryDelay:100}));
+    const wrong=path.join(dir,'microsoft-signed.exe');
+    await fs.copyFile(originalWrong,wrong);
+    const isolated=await fs.lstat(wrong);
+    assert.ok(isolated.isFile()&&!isolated.isSymbolicLink()&&isolated.nlink===1,
+      'disposable publisher fixture must pass the hardlink/path safety precondition');
+    const nativeWrong=captureSignature(wrong);
+    assert.equal(nativeWrong.status,'Valid','copied real Microsoft-signed executable must retain a valid signature');
+    assert.equal(nativeWrong.signerPresent,true);
+    assert.equal(nativeWrong.cloudflareSigner,false,'copied signed image must not become a Cloudflare publisher');
     const unsigned=path.join(dir,'disposable.ps1');
     await fs.writeFile(unsigned,'Write-Output "disposable-only"\n');
     const nativeUnsigned=captureSignature(unsigned);

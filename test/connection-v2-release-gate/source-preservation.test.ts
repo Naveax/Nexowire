@@ -36,7 +36,14 @@ test('candidate preserves each recorded source path at its expected Git blob',()
     const expected = row[4]!;
     const status = row[5]!;
     assert.ok(!path.startsWith('/')&&!path.includes('..'),'unsafe path');
-    assert.equal(sha(readFileSync(resolve(path))),expected,id+': blob changed '+path);
+    const checkoutBytes=readFileSync(resolve(path));
+    // .gitattributes enforces CRLF for *.ps1 in the working tree. Git stores
+    // normalized LF blobs; compare Git-canonical bytes, not checkout EOL bytes.
+    // Non-newline changes still alter SHA and fail this release gate.
+    const canonical=path.toLowerCase().endsWith('.ps1')
+      ? Buffer.from(checkoutBytes.toString('utf8').replace(/\r\n/g,'\n'),'utf8')
+      : checkoutBytes;
+    assert.equal(sha(canonical),expected,id+': blob changed '+path);
     if(status==='EXACT_BLOB')assert.equal(original,expected,id+': false exact claim '+path);
   }
 });
