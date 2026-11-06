@@ -56,7 +56,7 @@ export interface ControlPlaneServiceOptions {
   infrastructure?: () => InfrastructureSnapshot;
   /** Keep all users on the free plan and reject paid configuration. */
   freeOnly?: boolean;
-  /** Verified GitHub numeric subject eligible for unmetered Free usage. */
+  /** Verified GitHub numeric subject eligible for personal, zero-spend owner features. */
   ownerGithubId?: string;
   /** Additional operator-pinned immutable GitHub IDs, never caller-supplied. */
   unmeteredGithubIds?: readonly string[];
@@ -146,18 +146,22 @@ export class ControlPlaneService {
   private readonly infrastructure: () => InfrastructureSnapshot;
   private readonly freeOnly: boolean;
   private readonly unmeteredGithubIds: readonly string[];
+  private readonly ownerGithubId: string | null;
 
   constructor(
     private readonly store: ControlPlaneStore,
     options: ControlPlaneServiceOptions = {},
   ) {
     this.freeOnly = options.freeOnly ?? false;
+    const configuredOwnerId = options.ownerGithubId?.trim() ?? '';
+    this.ownerGithubId = /^[1-9][0-9]{0,19}$/.test(configuredOwnerId)
+      ? configuredOwnerId : null;
     // Only server-configured immutable GitHub numeric IDs qualify. A username,
     // account display name, role or MCP request argument cannot add an ID.
     // Ignore malformed IDs rather than ever treating them as a wildcard.
     this.unmeteredGithubIds = Object.freeze([
       ...new Set([
-        options.ownerGithubId,
+        this.ownerGithubId,
         ...(options.unmeteredGithubIds ?? []),
       ].filter((id): id is string =>
         typeof id === 'string' && /^[1-9][0-9]{0,19}$/.test(id.trim()),
@@ -270,8 +274,18 @@ export class ControlPlaneService {
     for (const githubId of this.unmeteredGithubIds) {
       const linkedIdentity = await this.store.getExternalIdentity('github', githubId);
       if (linkedIdentity?.accountId === account.id) {
-        // Null means unlimited *hosted tool credits* only. Normal security,
-        // premium features, infrastructure limits and replay checks persist.
+        // The immutable, OAuth-verified repository owner may exercise their
+        // own machines' features with zero paid infrastructure spend.
+        // Ordinary unmetered collaborators retain only unlimited credits.
+        if (githubId === this.ownerGithubId) {
+          return {
+            ...PRODUCT_PLANS.free,
+            monthlyCredits: null,
+            maxDevices: null,
+            maxConcurrentTasks: null,
+            features: PRODUCT_PLANS.pro.features,
+          };
+        }
         return { ...PRODUCT_PLANS.free, monthlyCredits: null };
       }
     }

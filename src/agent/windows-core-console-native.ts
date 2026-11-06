@@ -143,10 +143,10 @@ switch($cap){
  'windows.keyboard.hotkey' {
    $aliases=@{CTRL=17;CONTROL=17;ALT=18;SHIFT=16;WIN=91;META=91;ENTER=13;RETURN=13;ESC=27;ESCAPE=27;SPACE=32;TAB=9;BACKSPACE=8;BACK=8;DELETE=46;DEL=46;PGUP=33;PGDN=34}
    $keys=@();foreach($name in $p.input.keys){$n=([string]$name).ToUpperInvariant();
-     $keys+=if($aliases.ContainsKey($n)){[ushort]$aliases[$n]}elseif($n -match '^[A-Z0-9]$'){[ushort][char]$n}else{[ushort][Enum]::Parse([System.Windows.Forms.Keys],$n,$true)}
+     $keys+=if($aliases.ContainsKey($n)){[uint16]$aliases[$n]}elseif($n -match '^[A-Z0-9]$'){[uint16][char]$n}else{[uint16][Enum]::Parse([System.Windows.Forms.Keys],$n,$true)}
    }
    if($keys -contains 17 -and $keys -contains 18 -and $keys -contains 46){throw 'CORE_SECURE_ATTENTION_DENIED'}
-   [NxCoreConsole]::Chord([ushort[]]$keys)
+   [NxCoreConsole]::Chord([uint16[]]$keys)
  }
  'windows.window.focus' {[NxCoreConsole]::Focus([bool]$p.input.restore_if_minimized)}
  'windows.clipboard.write' {[NxCoreConsole]::MarkEffect();[System.Windows.Forms.Clipboard]::SetText([string]$p.input.text)}
@@ -185,6 +185,23 @@ switch($cap){
 }
 `;
 
+/** Expose only an allowlisted native guard reason. Never forward PowerShell
+ * exception text, paths, target metadata, or user-visible content. */
+export function coreNativeGuardFailureCode(data:unknown):string{
+  if(!data||typeof data!=='object'||!('error' in data))return 'CORE_UNKNOWN';
+  const raw=(data as {error?:unknown}).error;
+  if(typeof raw!=='string'||raw.length>512)return 'CORE_UNKNOWN';
+  const token=raw.match(/CORE_[A-Z0-9_]{3,80}/)?.[0];
+  const allow=new Set([
+    'CORE_DESKTOP_UNKNOWN','CORE_TOKEN_UNKNOWN','CORE_AGENT_NOT_RUNNING',
+    'CORE_TARGET_INVALID','CORE_TARGET_UNAVAILABLE','CORE_TARGET_IDENTITY_UNKNOWN',
+    'CORE_TARGET_SESSION_OR_INTEGRITY_DENIED','CORE_STOPPED_OR_DESKTOP_DENIED',
+    'CORE_TARGET_CHANGED','CORE_TARGET_NOT_FOREGROUND','CORE_AGENT_STOPPED',
+    'CORE_UIA_BUDGET_EXHAUSTED','CORE_UIA_AMBIGUOUS','CORE_UIA_TARGET_CHANGED',
+  ]);
+  return token&&allow.has(token)?token:'CORE_UNKNOWN';
+}
+
 export class CoreNativeDenial extends Error {
   readonly code='CORE_NATIVE_DENIED';readonly effectAttempted=false;
   constructor(message:string){super(message);}
@@ -217,7 +234,8 @@ export async function executeCoreConsoleNative(capability:string,input:unknown,s
   const data=await runCorePowerShell(nativeScript,{capability,input:parsed,stopFile,agentPid:process.pid},signal,
     capability==='probe'?180000:30000);
   if(data&&typeof data==='object'&&'guardVerified' in data&&data.guardVerified===false&&
-    'effectAttempted' in data&&data.effectAttempted===false)throw new CoreNativeDenial('CORE_NATIVE_GUARD_DENIED');
+    'effectAttempted' in data&&data.effectAttempted===false)
+    throw new CoreNativeDenial('CORE_NATIVE_GUARD_DENIED:'+coreNativeGuardFailureCode(data));
   if(!(data&&typeof data==='object'&&('nativeEffectVerified' in data&&data.nativeEffectVerified===true||
     capability==='probe'&&'guardVerified' in data&&data.guardVerified===true)))throw new Error('CORE_NATIVE_EFFECT_UNCONFIRMED');
   return {data};

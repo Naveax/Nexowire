@@ -623,6 +623,8 @@ async function execute(
               idempotency: {
                 key: idempotencyKey,
                 replayed: false,
+                // Recoverable identity must survive the error path too.
+                operationId,
                 ...(idempotencyCreated && !recoveryJournalFailed
                   ? { persistedStatus: recordedStatus }
                   : { outcomeUnconfirmed: providerDispatched }),
@@ -947,7 +949,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'Inspect native Agent operation',
       description:
-        'Inspect one exact Agent mutation request ID on an authorized online device. Operator/admin only. Reports payload-free durable status, not command input/results. A missing record does not prove no side effect. Do not replay unknown mutations.',
+        'Inspect one exact Agent mutation request ID on an authorized online device. Available to the device owner without an operator role. Reports payload-free durable status, not command input/results. A missing record does not prove no side effect. Do not replay unknown mutations.',
       inputSchema: {
         ...targetFields,
         request_id: z.string().uuid(),

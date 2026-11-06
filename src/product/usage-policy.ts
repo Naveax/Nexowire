@@ -62,6 +62,16 @@ const PREMIUM_USAGE_RULES: readonly UsageRule[] = Object.freeze([
   },
 ]);
 
+// Status/metadata does not operate a private desktop or stream its pixels.
+// Keep these diagnostic tools usable when diagnosing a missing entitlement.
+const BASIC_DIAGNOSTIC_TOOLS = new Set([
+  'windows_private_desktop_status',
+  'windows_private_desktop_windows',
+  'windows_private_viewer_status',
+  'windows_virtual_pointer_status',
+  'windows_virtual_pointer_position',
+]);
+
 export interface UsageQuote {
   allowed: boolean;
   credits: number;
@@ -72,6 +82,7 @@ export interface UsageQuote {
 
 export function usageRuleForTool(toolName: string): UsageRule | null {
   const normalized = toolName.trim().toLowerCase();
+  if (BASIC_DIAGNOSTIC_TOOLS.has(normalized)) return null;
   return (
     PREMIUM_USAGE_RULES.find((rule) =>
       normalized.startsWith(rule.prefix),
