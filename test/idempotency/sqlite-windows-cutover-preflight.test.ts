@@ -10,7 +10,9 @@ import path from 'node:path';
 const script = path.join(process.cwd(), 'scripts', 'ai06-hub-sqlite-cutover-preflight.ps1');
 
 function run(root: string, target: 'sqlite' | 'json-only', extra: string[] = []) {
-  return spawnSync('powershell.exe', [
+  const windowsRoot = process.env.SystemRoot || process.env.windir || 'C:\Windows';
+  const ps51 = path.join(windowsRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  return spawnSync(ps51, [
     '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
     '-File', script, '-StateDir', root, '-TargetReader', target, ...extra,
   ], {
@@ -18,9 +20,9 @@ function run(root: string, target: 'sqlite' | 'json-only', extra: string[] = [])
     // Windows runner's pwsh module path can shadow PowerShell 5.1 Security.
     // A clean 5.1 module search path is required for Get-Acl to load.
     env: {...process.env,
-      SystemRoot:'C:\\Windows',windir:'C:\\Windows',
-      PATH:'C:\\Windows\\System32;C:\\Windows',
-      PSModulePath:'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules',
+      SystemRoot: windowsRoot, windir: windowsRoot,
+      PATH: [path.join(windowsRoot, 'System32'), windowsRoot].join(path.delimiter),
+      PSModulePath: path.join(windowsRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'Modules'),
     },
   });
 }
