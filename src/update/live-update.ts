@@ -7,6 +7,7 @@ import * as z from 'zod';
 import { NEXOWIRE_VERSION } from '../version.js';
 import type { PrivilegedBrokerClient } from '../agent/privileged-broker-client.js';
 import {renderWindowsAgentStartupGuard} from './windows-agent-startup.js';
+import {renderWindowsHubSqliteReaderGuard} from './windows-hub-sqlite-guard.js';
 
 const REPOSITORY = 'Naveax/Nexowire';
 const LATEST_RELEASE_URL =
@@ -489,6 +490,8 @@ export function renderWindowsCutoverScript(input: {
     '$StatusFile=' + psLiteral(statusFile),
     '$AgentLauncher=' + psLiteral(agentLauncher),
     '$HubLauncher=' + psLiteral(hubLauncher),
+    '$HubDefaultStateDir=' + psLiteral(path.join(home, '.nexowire', 'hub')),
+    '$HubPreviousRuntime=$null',
     '$AutoLauncher=' + psLiteral(path.join(home, '.nexowire', 'auto-update', 'launch.ps1')),
     '$AgentTask=\'Nexowire Native Agent\'',
     '$HubTask=\'Nexowire Hub\'',
@@ -525,6 +528,14 @@ export function renderWindowsCutoverScript(input: {
     String.raw`    if($replacement -match '\$env:NEXOWIRE_UPDATE_STARTUP_NONCE\s*='){throw 'UPDATE_AGENT_NONCE_CONFIG_UNSUPPORTED'}`,
     String.raw`    $replacement='$env:NEXOWIRE_UPDATE_STARTUP_NONCE='''+$StartupNonce+"'"+[Environment]::NewLine+$replacement`,
     '  }',
+    '  if($file -eq $HubLauncher){',
+    '    if($text.Contains($literalNewRoot)){$script:HubPreviousRuntime=$NewRoot}',
+    '    else {',
+    '      $old=[regex]::Match($text,$pattern,[Text.RegularExpressions.RegexOptions]::IgnoreCase)',
+    '      if(-not $old.Success){throw "UPDATE_HUB_PRIOR_RUNTIME_UNKNOWN"}',
+    '      $script:HubPreviousRuntime=$old.Value',
+    '    }',
+    '  }',
     '  if($replacement -ceq $text){return}',
     '  $backup=$file+\'.update-rollback.\'+$StartupNonce',
     '  Copy-Item -LiteralPath $file -Destination $backup -Force',
@@ -544,6 +555,7 @@ export function renderWindowsCutoverScript(input: {
     'function Task-Enabled([string]$name){$task=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue;return ($null -ne $task) -and ([string]$task.State -ne "Disabled")}',
     'function Wait-Port([int]$port,[int]$seconds){$until=(Get-Date).AddSeconds($seconds);while((Get-Date)-lt $until){if(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue){return $true};Start-Sleep -Milliseconds 500};return $false}',
     ...renderWindowsAgentStartupGuard(),
+    ...renderWindowsHubSqliteReaderGuard(),
     'Start-Sleep -Seconds 2',
     "$HubBootTask='Nexowire Hub Boot'",
     '$hubBootInstalled=Task-Exists $HubBootTask',
@@ -556,6 +568,9 @@ export function renderWindowsCutoverScript(input: {
     '    $AgentStartupDiagnostic=Get-AgentStartupDiagnosticPath',
     '  }',
     '  if($hadHub -and -not (Test-Path -LiteralPath $HubLauncher -PathType Leaf)){throw \'UPDATE_HUB_LAUNCHER_MISSING\'}',
+    // The durable SQLite ledger may already contain effects absent from JSON.
+    // Deny incompatible target BEFORE stopping either running component.
+    '  if($hadHub){Assert-HubSqliteReader $NewRoot}',
     '  $CutoverStarted=$true',
     '  if($hadAgent){Stop-ScheduledTask -TaskName $AgentTask -ErrorAction Stop}',
     '  if($hadHub){Stop-ScheduledTask -TaskName $HubTask -ErrorAction Stop}',
@@ -576,7 +591,10 @@ export function renderWindowsCutoverScript(input: {
     '  if($hadHub){try {Stop-ScheduledTask -TaskName $HubTask -ErrorAction Stop} catch {$rollbackErrors.Add("HUB_STOP: "+$_.Exception.Message)}}',
     '  if($rollbackErrors.Count -eq 0){try {Restore-Launchers} catch {$rollbackErrors.Add("LAUNCHER_RESTORE: "+$_.Exception.Message)}}',
     '  if($rollbackErrors.Count -eq 0){',
-    '    if($hadHub){try {Start-ScheduledTask -TaskName $HubTask -ErrorAction Stop} catch {$rollbackErrors.Add("HUB_RESTART: "+$_.Exception.Message)}}',
+    // A failed new Hub may have CREATED SQLite after the initial preflight.
+    // Never relaunch a restored JSON-only Hub into that new durable journal.
+    '    if($hadHub){try {Assert-HubSqliteReader $HubPreviousRuntime} catch {$rollbackErrors.Add("HUB_SQLITE_ROLLBACK: "+$_.Exception.Message)}}',
+    '    if($hadHub -and $rollbackErrors.Count -eq 0){try {Start-ScheduledTask -TaskName $HubTask -ErrorAction Stop} catch {$rollbackErrors.Add("HUB_RESTART: "+$_.Exception.Message)}}',
     '    if($hadAgent){try {Start-ScheduledTask -TaskName $AgentTask -ErrorAction Stop} catch {$rollbackErrors.Add("AGENT_RESTART: "+$_.Exception.Message)}}',
     '  }',
     '  if($rollbackErrors.Count -gt 0){Write-State \'rollback_failed\' ($message+"; "+($rollbackErrors -join "; ")) $false; exit 2}',

@@ -1,5 +1,5 @@
 source,source_sha,path,source_blob_sha,integrated_blob_sha,classification
-"CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0",".github/workflows/ci.yml","305ba73a1fe84b0cb4eae6914d3dc2c45378e778","f37b52f96e52472f1b8ccd1f11162b5bd35ba127","EVOLVED"
+"CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0",".github/workflows/ci.yml","305ba73a1fe84b0cb4eae6914d3dc2c45378e778","9d31e7700c44520a1a77d339999416cf5805effa","EVOLVED"
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","cloudflare/migrations/0020_core_console_native_logon_binding.sql","48a6f219f79c2f209fcdc26e38301e5d5b5c554c","48a6f219f79c2f209fcdc26e38301e5d5b5c554c","EXACT_SOURCE_BLOB"
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","cloudflare/migrations/0021_core_console_native_claim_verified.sql","db9be69698bf9dd611e276bbb0b59456c9d16252","db9be69698bf9dd611e276bbb0b59456c9d16252","EXACT_SOURCE_BLOB"
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","docs/AGENT_JOURNAL_P0_ANTIROLLBACK_20261019.md","8da7905371f8ab75747f365276706b9c363e6963","8da7905371f8ab75747f365276706b9c363e6963","EXACT_SOURCE_BLOB"
@@ -154,7 +154,7 @@ source,source_sha,path,source_blob_sha,integrated_blob_sha,classification
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","test/windows-job-owner.test.ts","c5e8ce8308212f3cff5c59c6b7a5f4abd5d76bef","c5e8ce8308212f3cff5c59c6b7a5f4abd5d76bef","EXACT_SOURCE_BLOB"
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","test/witness-delegation.test.ts","ccf5671b9de0404c23c014018368980442850f31","ccf5671b9de0404c23c014018368980442850f31","EXACT_SOURCE_BLOB"
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","test/witness-signed-provenance.test.ts","405b083da058b12f61efd2ce10f391fd7585891d","405b083da058b12f61efd2ce10f391fd7585891d","EXACT_SOURCE_BLOB"
-"CONNECTION_1085","44e7b3424c578515b70abdfe68b6a101cc0b2e5a",".github/workflows/ci.yml","ad8bffad5f82814ee06105c47584224677f255b6","f37b52f96e52472f1b8ccd1f11162b5bd35ba127","EVOLVED"
+"CONNECTION_1085","44e7b3424c578515b70abdfe68b6a101cc0b2e5a",".github/workflows/ci.yml","ad8bffad5f82814ee06105c47584224677f255b6","9d31e7700c44520a1a77d339999416cf5805effa","EVOLVED"
 "CONNECTION_1085","44e7b3424c578515b70abdfe68b6a101cc0b2e5a",".github/workflows/connection-v2-relay-qa.yml","5f99e58d0860e468901a9d209ef52afd1dea433c","5f99e58d0860e468901a9d209ef52afd1dea433c","EXACT_SOURCE_BLOB"
 "CONNECTION_1085","44e7b3424c578515b70abdfe68b6a101cc0b2e5a","docs/CONNECTION_CORE_V2_CLOUDFLARE_20261101.md","2981bcd12f25e111ced9e23d86e2c13df2e25832","2981bcd12f25e111ced9e23d86e2c13df2e25832","EXACT_SOURCE_BLOB"
 "CONNECTION_1085","44e7b3424c578515b70abdfe68b6a101cc0b2e5a","docs/CONNECTION_V2_RELAY_RESOURCE_BUDGETS_20261104.md","4a2468e64f67a4463d24e9392ead160e91e8bebf","4a2468e64f67a4463d24e9392ead160e91e8bebf","EXACT_SOURCE_BLOB"
