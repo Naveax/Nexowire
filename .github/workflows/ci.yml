@@ -397,6 +397,27 @@ jobs:
         run: docker restart --time 10 "$POSTGRES_CONTAINER_ID"
         env:
           POSTGRES_CONTAINER_ID: ${{ job.services['dispatch-postgres'].id }}
+      - name: Wait for disposable PostgreSQL SQL readiness after restart
+        timeout-minutes: 2
+        shell: bash
+        env:
+          POSTGRES_CONTAINER_ID: ${{ job.services['dispatch-postgres'].id }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            # Docker restart returns before PostgreSQL finishes recovery.
+            # Require both a healthy listener and an actual SQL round trip.
+            if docker exec "$POSTGRES_CONTAINER_ID" \
+                pg_isready -U nexowire_dispatch_ci -d nexowire_dispatch_ci >/dev/null 2>&1 \
+               && [[ "$(docker exec "$POSTGRES_CONTAINER_ID" \
+                psql -X -A -t -U nexowire_dispatch_ci -d nexowire_dispatch_ci -c 'SELECT 1' 2>/dev/null)" == "1" ]]; then
+              echo "Disposable PostgreSQL accepted SQL after restart (attempt $attempt)."
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Disposable PostgreSQL did not become SQL-ready after 60 attempts." >&2
+          exit 1
       - name: Verify no replay after the real disposable PostgreSQL restart
         timeout-minutes: 2
         run: node --test --test-concurrency=1 --test-name-pattern='real PostgreSQL restart:' --import tsx test/postgres-broker-dispatch-authority.test.ts test/postgres-core-approval-ledger.test.ts
