@@ -61,7 +61,7 @@ export function registerArtifactBridgeTools(
     description: 'Account/device/project-scoped, resumable content-addressed staging; rejects unsafe overwrites.',
     inputSchema: {
       ...common, artifact_path: path, repository: z.string().min(1).max(512),
-      commit_sha: commit, operation_id: id, size: z.number().int().min(0).max(268_435_456),
+      commit_sha: commit, operation_id: id, size: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
       sha256: sha, test_status: z.enum(['unverified', 'passed', 'failed']).default('unverified'),
       acceptance_status: z.enum(['pending', 'accepted', 'rejected']).default('pending'),
       expected_previous_sha256: sha.optional(),
@@ -84,6 +84,7 @@ export function registerArtifactBridgeTools(
       acceptance_status: z.enum(['pending', 'accepted', 'rejected']).default('pending'),
       expected_previous_sha256: sha.optional(),
       max_chunks: z.number().int().min(1).max(32).default(16),
+      expected_source_sha256: sha.optional(),
     },
   }, async (a) => wrap(async () => {
     const scoped = scope(auth, a.device_id, a.project_id);
@@ -96,6 +97,7 @@ export function registerArtifactBridgeTools(
       producerOperationId: a.operation_id,
       testStatus: a.test_status, acceptanceStatus: a.acceptance_status,
       maxChunks: a.max_chunks,
+      ...(a.expected_source_sha256 ? { expectedSourceSha256: a.expected_source_sha256 } : {}),
       ...(a.expected_previous_sha256 ? {
         expectedPreviousSha256: a.expected_previous_sha256,
       } : {}),
@@ -114,6 +116,13 @@ export function registerArtifactBridgeTools(
     description: 'SHA-256 verification plus compare-and-swap manifest publication.',
     inputSchema: { ...common, session_id: sha },
   }, async (a) => wrap(() => bridge.commit(
+    scope(auth, a.device_id, a.project_id), a.session_id,
+  )));
+  server.registerTool('artifact_bridge_cancel', {
+    title: 'Cancel an unfinished scoped artifact transfer',
+    description: 'Cancel verified unfinished staging only; never remove published artifact objects.',
+    inputSchema: { ...common, session_id: sha },
+  }, async (a) => wrap(() => bridge.cancel(
     scope(auth, a.device_id, a.project_id), a.session_id,
   )));
   server.registerTool('artifact_bridge_get', {
