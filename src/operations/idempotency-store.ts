@@ -169,10 +169,26 @@ export class IdempotencyStore {
     }
   }
 
+  // The startup ownership claim must remain valid for *every* mutation.
+  // An out-of-band owner handoff (or an accidental second Hub) must not
+  // leave an already-initialized writer free to append to a foreign ledger.
+  private assertHubWriterOwnership(db: DatabaseSync): void {
+    const row = db.prepare(
+      "SELECT value FROM idempotency_meta WHERE key='hub_writer'",
+    ).get() as { value: string } | undefined;
+    if (row?.value !== JSON.stringify(HUB_WRITER)) {
+      throw new IdempotencyStoreError(
+        'IDEMPOTENCY_HUB_WRITER_LOST',
+        'The Hub SQLite journal is no longer owned by this process incarnation.',
+      );
+    }
+  }
+
   private withTransaction<T>(fn: (db: DatabaseSync) => T): T {
     return this.withDatabase((db) => {
       db.exec('BEGIN IMMEDIATE');
       try {
+        this.assertHubWriterOwnership(db);
         const result = fn(db);
         db.exec('COMMIT');
         return result;
