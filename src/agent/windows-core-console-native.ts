@@ -191,7 +191,7 @@ export function coreNativeGuardFailureCode(data:unknown):string{
   if(!data||typeof data!=='object'||!('error' in data))return 'CORE_UNKNOWN';
   const raw=(data as {error?:unknown}).error;
   if(typeof raw!=='string'||raw.length>512)return 'CORE_UNKNOWN';
-  const token=raw.match(/\\bCORE_[A-Z0-9_]{3,80}\\b/)?.[0];
+  const token=raw.match(/CORE_[A-Z0-9_]{3,80}/)?.[0];
   const allow=new Set([
     'CORE_DESKTOP_UNKNOWN','CORE_TOKEN_UNKNOWN','CORE_AGENT_NOT_RUNNING',
     'CORE_TARGET_INVALID','CORE_TARGET_UNAVAILABLE','CORE_TARGET_IDENTITY_UNKNOWN',
