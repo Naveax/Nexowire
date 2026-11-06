@@ -286,9 +286,22 @@ export function planNextHubAttempt(input: {
   };
 }
 
-function privilegeMode(
+export async function resolveNativeAgentPrivilegeMode(
   env: NodeJS.ProcessEnv,
-): 'direct' | 'broker' {
+  platform: NodeJS.Platform = process.platform,
+  probe: () => Promise<{ready:boolean}> = async () => {
+    const {probePrivilegedBrokerHealth} = await import('./privileged-broker-lifecycle.js');
+    return probePrivilegedBrokerHealth({env});
+  },
+): Promise<'direct' | 'broker'> {
+  // Older installed launchers predate the installer setting Broker mode for
+  // CORE. Discover the already installed/authenticated Broker at startup too;
+  // do not require an Agent reinstall or create a Broker/token during discovery.
+  if (env.NEXOWIRE_PRIVILEGE_MODE === undefined && platform === 'win32' &&
+      env.NEXOWIRE_CORE_AUTHORITY_URL?.trim()) {
+    try { if ((await probe()).ready === true) return 'broker'; }
+    catch { /* Optional CORE discovery must not prevent the Agent connecting. */ }
+  }
   const raw =
     env.NEXOWIRE_PRIVILEGE_MODE?.trim().toLowerCase() ??
     'direct';
@@ -444,7 +457,7 @@ export async function runNativeAgent(
     env.NEXOWIRE_RUNBOOK_STATE_FILE?.trim() ||
     path.join(os.homedir(), '.nexowire', 'runbooks.json');
   const socketHeartbeatMs = heartbeatMs(env);
-  const activePrivilegeMode = privilegeMode(env);
+  const activePrivilegeMode = await resolveNativeAgentPrivilegeMode(env);
   const privilegedBroker = await privilegedBrokerFromEnv(
     env,
     activePrivilegeMode,
