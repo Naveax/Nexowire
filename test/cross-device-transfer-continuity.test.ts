@@ -24,13 +24,15 @@ const destinationDevice = 'synthetic-naveax';
 const file = Buffer.alloc(221 * 1024 + 17, 0x5b);
 const hash = (b: Buffer) => createHash('sha256').update(b).digest('hex');
 const binding: TransferBinding = {
-  jobId, ownerId: owner, sourceDeviceId: sourceDevice,
-  destinationDeviceId: destinationDevice,
+  jobId, ownerId: owner, projectId: 'Nexowire',
+  sourceDeviceId: sourceDevice, destinationDeviceId: destinationDevice,
+  sourcePath: '/source/fixture.bin', targetPath: '/target/fixture.bin',
+  stagePath: '/target/fixture.bin.nexowire-upload-staging',
   sourceSha256: hash(file), totalBytes: file.length,
 };
 const route = (epoch: number): AuthenticatedTransferRoute => ({
-  ownerId: owner, sourceDeviceId: sourceDevice,
-  destinationDeviceId: destinationDevice, epoch,
+  ownerId: owner, projectId: 'Nexowire',
+  sourceDeviceId: sourceDevice, destinationDeviceId: destinationDevice, epoch,
 });
 
 class SQLiteTransferJournal implements TransferCheckpointStore {
@@ -71,7 +73,8 @@ async function fixture(t: import('node:test').TestContext, reader: DestinationRe
     for (const j of journals) j.close();
     await fs.rm(dir, { recursive: true, force: true });
   });
-  return { open, controller: new DurableTransferContinuity(open(), reader) };
+  return { open, controller: new DurableTransferContinuity(open(), reader,
+    undefined, async () => true) };
 }
 const matched = (b: TransferBinding, p: { offset: number; length: number; sha256: string }) => ({
   kind: 'verified' as const, deviceId: b.destinationDeviceId,
@@ -99,7 +102,7 @@ test('durable checkpoint survives opener restart; unknown mutation is never repl
   const reattached = new DurableTransferContinuity(f.open(), async (b, p) => ({
     kind: 'verified', deviceId: b.destinationDeviceId, offset: p.offset,
     length: independentlyStagedPrefix.length, sha256: hash(independentlyStagedPrefix),
-  }));
+  }), undefined, async () => true);
   assert.equal((await reattached.inspect(jobId, route(2))).status, 'unknown');
   await assert.rejects(reattached.reserveWrite({ jobId, route: route(2), offset: 0, length: 65_536, sha256: chunkHash }), {
     code: 'TRANSFER_NOT_DISPATCHABLE',
@@ -195,7 +198,7 @@ test('concurrent writes use durable revision CAS and no overlapping dispatch', a
   await f.controller.create(binding, route(1));
   const [a, b] = await Promise.allSettled([
     f.controller.reserveWrite({ jobId, route: route(1), offset: 0, length: 65_536, sha256: chunkHash }),
-    new DurableTransferContinuity(f.open(), noReadback)
+    new DurableTransferContinuity(f.open(), noReadback, undefined, async () => true)
       .reserveWrite({ jobId, route: route(1), offset: 0, length: 65_536, sha256: chunkHash }),
   ]);
   assert.equal([a, b].filter(x => x.status === 'fulfilled').length, 1);
@@ -212,7 +215,7 @@ test('source digest mismatch cannot finalize or publish an unverified result', a
   let actualPublication = { kind: 'mismatch' as const } as
     | { kind: 'mismatch' } | { kind: 'verified'; deviceId: string; size: number; sha256: string };
   const c = new DurableTransferContinuity(f.open(), async (bind, p) => matched(bind, p),
-    async () => actualPublication);
+    async () => actualPublication, async () => true);
   await c.create(b, route(1));
   await c.reserveWrite({
     jobId: b.jobId, route: route(1), offset: 0, length: 3, sha256: hash(whole),
@@ -269,4 +272,60 @@ test('ephemeral localhost WSS loss between write and ACK makes durable job UNKNO
   await assert.rejects(c.reserveWrite({
     jobId, route: route(2), offset: 0, length: 65_536, sha256: chunkHash,
   }), { code: 'TRANSFER_NOT_DISPATCHABLE' });
+});
+
+
+test('authoritative grant revoke after reservation prevents stale ACK, readback commit and new dispatch', async t => {
+  let allowed = true;
+  const f = await fixture(t, async (b, p) => {
+    // Worker was authorized when it started; revoke may occur while
+    // destination readback is in flight. A second gate before CAS is required.
+    allowed = false;
+    return matched(b, p);
+  });
+  // Create a second controller against the identical journal, but with a
+  // live authorization callback instead of trusting job-creation provenance.
+  const c = new DurableTransferContinuity(f.open(), async (b, p) => {
+    allowed = false;
+    return matched(b, p);
+  }, undefined, async () => allowed);
+  await c.create(binding, route(1));
+  const pending = await c.reserveWrite({
+    jobId, route: route(1), offset: 0, length: 65_536, sha256: chunkHash,
+  });
+  assert.equal(pending.status, 'awaiting_ack');
+  await assert.rejects(c.reconcilePending(jobId, route(1)),
+    { code: 'TRANSFER_ACCESS_REVOKED' });
+  // No byte advances even though the fixture returned a correct hash.
+  allowed = true;
+  assert.equal((await c.inspect(jobId, route(1))).offset, 0);
+  allowed = false;
+  await assert.rejects(c.observeAck({
+    jobId, route: route(1), requestId: pending.pending!.requestId,
+    offset: 0, sha256: chunkHash,
+  }), { code: 'TRANSFER_ACCESS_REVOKED' });
+  await assert.rejects(c.reserveWrite({
+    jobId, route: route(1), offset: 0, length: 65_536, sha256: chunkHash,
+  }), { code: 'TRANSFER_ACCESS_REVOKED' });
+  await assert.rejects(c.onReconnect({
+    jobId, oldRoute: route(1), nextEpoch: 2,
+  }), { code: 'TRANSFER_ACCESS_REVOKED' });
+});
+
+test('missing current authority, wrong project and reused epoch are fail-closed', async t => {
+  const f = await fixture(t, noReadback);
+  const notWired = new DurableTransferContinuity(f.open(), noReadback);
+  await assert.rejects(notWired.create({ ...binding, jobId: randomUUID() }, route(1)),
+    { code: 'TRANSFER_AUTHORITY_UNAVAILABLE' });
+  const c = f.controller;
+  await c.create(binding, route(1));
+  await assert.rejects(c.inspect(jobId, { ...route(1), projectId: 'foreign' }),
+    { code: 'TRANSFER_ROUTE_DENIED' });
+  await assert.rejects(c.onReconnect({
+    jobId, oldRoute: route(1), nextEpoch: 1,
+  }), { code: 'TRANSFER_EPOCH_STALE' });
+  await c.onReconnect({ jobId, oldRoute: route(1), nextEpoch: 2 });
+  await assert.rejects(c.onReconnect({ jobId, oldRoute: route(1), nextEpoch: 3 }),
+    { code: 'TRANSFER_EPOCH_STALE' });
+  assert.equal((await c.inspect(jobId, route(2))).epoch, 2);
 });
