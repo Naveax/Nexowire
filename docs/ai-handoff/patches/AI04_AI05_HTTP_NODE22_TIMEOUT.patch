@@ -1,0 +1,13 @@
+diff --git a/src/mcp/http.ts b/src/mcp/http.ts
+--- a/src/mcp/http.ts
++++ b/src/mcp/http.ts
+@@ -127,8 +127,9 @@ export function bindRemoteAgentMutationReauthorization(input: {
+     const timeoutPromise=new Promise<undefined>(resolve=>{
+       abort=()=>{controller.abort();resolve(undefined);};
+       timer=setTimeout(abort,timeout);
+-      timer.unref?.();
++      // Awaited security decision: keep Node 22 alive until DENIED or resolved.
++      // Do NOT unref this timer. finally already clears it on completion.
+     });
+     try {
+       const refreshed=await Promise.race([

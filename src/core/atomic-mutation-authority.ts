@@ -68,7 +68,8 @@ export interface AtomicMutationAuthority {
   ): Promise<void>;
 }
 
-export type MutationLeaseVerifier = () => Promise<ServerIssuedDeviceLease | undefined>;
+/** The AbortSignal is advisory; the referenced deadline remains authoritative. */
+export type MutationLeaseVerifier = (signal?: AbortSignal) => Promise<ServerIssuedDeviceLease | undefined>;
 
 export class MutationAuthorityDenied extends Error {
   constructor(readonly code: string) {
@@ -84,13 +85,13 @@ function deny(code: string): never {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DIGEST = /^[0-9a-f]{64}$/;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9_.:@-]{1,127}$/;
-const MAX_LEASE_MS = 300_000;
+const MAX_LEASE_MS = 30_000; // AI-03 server-issued lease (not a client-selected duration)
 const MAX_FRAME_BYTES = 4 * 1024 * 1024;
 
 function validLease(value: ServerIssuedDeviceLease | undefined, now: number): value is ServerIssuedDeviceLease {
   return !!value && typeof value.ownerId === 'string' && typeof value.deviceId === 'string' &&
     SAFE_ID.test(value.ownerId) && SAFE_ID.test(value.deviceId) &&
-    Number.isSafeInteger(value.authorizationEpoch) && value.authorizationEpoch >= 0 &&
+    Number.isSafeInteger(value.authorizationEpoch) && value.authorizationEpoch >= 1 &&
     Number.isSafeInteger(value.leaseExpiresAtMs) &&
     value.leaseExpiresAtMs > now &&
     value.leaseExpiresAtMs <= now + MAX_LEASE_MS;
@@ -144,6 +145,7 @@ function sameReservation(
   authorityId: string,
 ): boolean {
   return permit.authorityId === authorityId &&
+    typeof permit.created === 'boolean' &&
     UUID.test(permit.reservationId) &&
     DIGEST.test(permit.fingerprint) &&
     permit.ownerId === intent.ownerId &&
@@ -158,12 +160,19 @@ function sameReservation(
 }
 
 export class AtomicMutationCoordinator {
+  private invalidated = false;
   constructor(
     private readonly binding: Readonly<BoundMutationIdentity>,
     private readonly verifier: MutationLeaseVerifier | undefined,
     private readonly authority: AtomicMutationAuthority | undefined,
     private readonly now: () => number = Date.now,
-  ) {}
+    private readonly verifierTimeoutMs = 3_000,
+  ) {
+    if (!Number.isSafeInteger(verifierTimeoutMs) ||
+        verifierTimeoutMs < 250 || verifierTimeoutMs > 10_000) {
+      throw new MutationAuthorityDenied('MUTATION_VERIFIER_TIMEOUT_INVALID');
+    }
+  }
 
   /**
    * For mutations only. Call from a trusted, already authenticated remote
@@ -174,13 +183,45 @@ export class AtomicMutationCoordinator {
     enqueueFrame: (exactFrame: string) => void,
   ): Promise<MutationReservation> {
     if (!this.verifier || !this.authority) deny('AGENT_AUTH_NOT_BOUND');
-    if (!this.binding.authorityId || !SAFE_ID.test(this.binding.authorityId) ||
-        !validLease(this.binding, this.now())) deny('AGENT_AUTH_REVOKED');
+    if (this.invalidated || typeof this.binding.authorityId !== 'string' ||
+        !SAFE_ID.test(this.binding.authorityId) ||
+        !validLease(this.binding, this.now())) {
+      this.invalidated = true;
+      deny('AGENT_AUTH_REVOKED');
+    }
 
-    const fingerprint = parseExactMutationWire(request);
+    // Capture each wire member exactly once, synchronously before awaits.
+    // The caller cannot swap the frame between hashing and the CAS callback.
+    const snapshot: WireMutation = Object.freeze({
+      requestId: request.requestId,
+      capability: request.capability,
+      frame: request.frame,
+    });
+    const fingerprint = parseExactMutationWire(snapshot);
     let current: ServerIssuedDeviceLease | undefined;
-    try { current = await this.verifier(); } catch { /* authority unavailable: deny */ }
-    if (!validLease(current, this.now()) || !sameScope(current, this.binding)) {
+    const controller = new AbortController();
+    let timer: NodeJS.Timeout | undefined;
+    // Awaited SECURITY deadline: do NOT unref(). Node 22 must stay alive
+    // until a hung authority deterministically resolves to DENIED.
+    const deadline = new Promise<undefined>(resolve => {
+      timer = setTimeout(() => {
+        controller.abort();
+        resolve(undefined);
+      }, this.verifierTimeoutMs);
+    });
+    try {
+      current = await Promise.race([
+        Promise.resolve().then(() => this.verifier!(controller.signal))
+          .catch(() => undefined),
+        deadline,
+      ]);
+    } finally {
+      clearTimeout(timer);
+      controller.abort();
+    }
+    if (this.invalidated || !validLease(current, this.now()) ||
+        !sameScope(current, this.binding)) {
+      this.invalidated = true;
       deny('AGENT_AUTH_REVOKED');
     }
     const intent: MutationIntent = Object.freeze({
@@ -188,8 +229,8 @@ export class AtomicMutationCoordinator {
       deviceId: current.deviceId,
       authorizationEpoch: current.authorizationEpoch,
       leaseExpiresAtMs: Math.min(current.leaseExpiresAtMs, this.binding.leaseExpiresAtMs),
-      requestId: request.requestId,
-      capability: request.capability,
+      requestId: snapshot.requestId,
+      capability: snapshot.capability,
       fingerprint,
     });
     if (intent.leaseExpiresAtMs <= this.now()) deny('AGENT_AUTH_REVOKED');
@@ -206,13 +247,26 @@ export class AtomicMutationCoordinator {
 
     // Reserve is irreversible. Any dispatch failure is UNKNOWN rather than a
     // retry opportunity, even if an exception appears to happen before send.
+    let callbackOpen = true;
+    let enqueued = false;
     try {
       await this.authority.dispatchIfCurrent(permit, () => {
-        if (permit!.leaseExpiresAtMs <= this.now()) deny('AGENT_AUTH_REVOKED');
-        enqueueFrame(request.frame);
+        // No authorization may arrive asynchronously after the authority
+        // already concluded this dispatch attempt (including ambiguous ACK).
+        if (!callbackOpen || enqueued) deny('MUTATION_DISPATCH_CALLBACK_INVALID');
+        enqueued = true;
+        if (this.invalidated || permit!.leaseExpiresAtMs <= this.now()) {
+          deny('AGENT_AUTH_REVOKED');
+        }
+        enqueueFrame(snapshot.frame);
       });
+      // A provider claiming dispatch success without the enqueue callback
+      // has not established the local WS send boundary.
+      if (!enqueued) deny('MUTATION_DISPATCH_NOT_CONFIRMED');
     } catch {
       deny('MUTATION_STATE_UNKNOWN');
+    } finally {
+      callbackOpen = false;
     }
     return Object.freeze({...permit});
   }

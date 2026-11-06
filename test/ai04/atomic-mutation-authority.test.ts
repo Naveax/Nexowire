@@ -125,6 +125,7 @@ function fixture(options?:{
   binding?:BoundMutationIdentity;
   verifier?:()=>Promise<ServerIssuedDeviceLease|undefined>;
   available?:boolean;
+  verifierTimeoutMs?:number;
 }) {
   let now=nowAt;
   const clock=()=>now;
@@ -132,7 +133,8 @@ function fixture(options?:{
   const binding=options?.binding??lease(now);
   const verifier=options && 'verifier' in options ? options.verifier : async()=>lease(now);
   const gateway=new AtomicMutationCoordinator(
-    binding,verifier,options?.available===false?undefined:authority,clock);
+    binding,verifier,options?.available===false?undefined:authority,clock,
+    options?.verifierTimeoutMs ?? 3000);
   const frames:string[]=[];
   const send=(frame:string)=>{frames.push(frame);};
   return {authority, binding, gateway, frames, send,
@@ -290,4 +292,94 @@ test('AI-04 tampered reservation scope never reaches a frame',async()=>{
   await assert.rejects(f.gateway.dispatch(r,f.send),
     e=>errorCode(e)==='MUTATION_CAS_INVALID_RECEIPT');
   assert.equal(f.frames.length,0);
+});
+
+
+test('AI-04 Node 22 idle-loop liveness: hanging verifier is denied by referenced timeout',async()=>{
+  const f=fixture({verifier:async()=>await new Promise<ServerIssuedDeviceLease>(()=>{}),
+    verifierTimeoutMs:250});
+  const request=wire();
+  const started=Date.now();
+  await assert.rejects(f.gateway.dispatch(request,f.send),
+    e=>errorCode(e)==='AGENT_AUTH_REVOKED');
+  assert.ok(Date.now()-started >= 180,'hung verifier must reach the actual deadline');
+  assert.equal(f.frames.length,0);
+  assert.equal(f.authority.reserveCalls,0);
+  await assert.rejects(f.gateway.dispatch(wire(),f.send),
+    e=>errorCode(e)==='AGENT_AUTH_REVOKED');
+});
+
+test('AI-04 late successful verifier resolution never reauthorizes socket after deadline',async()=>{
+  let release!:(lease:ServerIssuedDeviceLease)=>void;
+  const f=fixture({
+    verifier:async()=>await new Promise<ServerIssuedDeviceLease>(resolve=>{release=resolve;}),
+    verifierTimeoutMs:250,
+  });
+  await assert.rejects(f.gateway.dispatch(wire(),f.send),
+    e=>errorCode(e)==='AGENT_AUTH_REVOKED');
+  release(lease(f.clock()));
+  await new Promise<void>(resolve=>setImmediate(resolve));
+  await assert.rejects(f.gateway.dispatch(wire(),f.send),
+    e=>errorCode(e)==='AGENT_AUTH_REVOKED');
+  assert.deepEqual(f.frames,[]);
+});
+
+test('AI-04 exact frame is immutable across asynchronous verifier mutation',async()=>{
+  const request=wire();
+  const exact=request.frame;
+  const f=fixture({verifier:async()=>{
+    request.frame=JSON.stringify({...JSON.parse(exact),input:{path:'C:\\attacker'}});
+    return lease(nowAt);
+  }});
+  await f.gateway.dispatch(request,f.send);
+  assert.deepEqual(f.frames,[exact]);
+});
+
+test('AI-04 dispatch authority cannot report success without synchronous enqueue',async()=>{
+  const f=fixture(),r=wire();
+  let lateCallback:(()=>void)|undefined;
+  f.authority.dispatchIfCurrent=async(_permit,enqueue)=>{
+    lateCallback=enqueue;
+    // Misbehaving or async authority returned without linearized enqueue.
+  };
+  await assert.rejects(f.gateway.dispatch(r,f.send),
+    e=>errorCode(e)==='MUTATION_STATE_UNKNOWN');
+  assert.equal(f.frames.length,0);
+  assert.ok(lateCallback);
+  assert.throws(()=>lateCallback!(),e=>errorCode(e)==='MUTATION_DISPATCH_CALLBACK_INVALID');
+  assert.equal(f.frames.length,0);
+});
+
+test('AI-04 authority cannot send the same frame twice through callback',async()=>{
+  const f=fixture(),r=wire();
+  const original=f.authority.dispatchIfCurrent.bind(f.authority);
+  f.authority.dispatchIfCurrent=async(permit,enqueue)=>original(permit,()=>{
+    enqueue();
+    enqueue(); // bug in external authority must not duplicate a frame
+  });
+  await assert.rejects(f.gateway.dispatch(r,f.send),
+    e=>errorCode(e)==='MUTATION_STATE_UNKNOWN');
+  assert.deepEqual(f.frames,[r.frame]);
+});
+
+test('AI-04 future-dated or zero authority epoch cannot authorize mutation',async()=>{
+  for(const binding of [
+    {...lease(nowAt),leaseExpiresAtMs:nowAt+60_000},
+    {...lease(nowAt),authorizationEpoch:0},
+  ]){
+    const f=fixture({binding});
+    await assert.rejects(f.gateway.dispatch(wire(),f.send),
+      e=>errorCode(e)==='AGENT_AUTH_REVOKED');
+    assert.equal(f.frames.length,0);
+  }
+});
+
+test('AI-04 native effect is rejected after credential rotation even with earlier dispatch',async()=>{
+  const f=fixture(),r=wire();
+  const reservation=await f.gateway.dispatch(r,f.send);
+  await f.authority.rotate();
+  let effects=0;
+  await assert.rejects(executeNativeMutationOnce(f.authority,reservation,async()=>{effects++;}),
+    e=>errorCode(e)==='NATIVE_MUTATION_EFFECT_NOT_ADMITTED');
+  assert.equal(effects,0);
 });
