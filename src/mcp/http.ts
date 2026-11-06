@@ -5,7 +5,7 @@ import { extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
-import { createMcpExpressApp } from '@modelcontextprotocol/sdk/server/express.js';
+import { createNexowireMcpExpressApp } from './http-app.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { NextFunction, Request, Response } from 'express';
 import type { AgentBroker } from '../core/agent-broker.js';
@@ -163,7 +163,7 @@ export async function runHttpServer(
       Boolean(remoteAgentCredentialVerifier),
   });
   const allowedHosts = configuredHttpAllowedHosts();
-  const app = createMcpExpressApp({
+  const app = createNexowireMcpExpressApp({
     host: config.host,
     ...(allowedHosts ? { allowedHosts } : {}),
   });
