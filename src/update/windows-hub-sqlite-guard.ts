@@ -4,9 +4,7 @@ export function renderWindowsHubSqliteReaderGuard():string[]{
   "function Resolve-HubJournalStateDir {",
   "  # Read the persisted Hub launcher. Never use a remote Agent request to select storage.",
   "  $launcherContent=[IO.File]::ReadAllText($HubLauncher)",
-  "  $assignment='(?mi)^\\s*\\$env:NEXOWIRE_STATE_DIR\\s*=\\s*''((?:''''|[^''])*)''\\s*;
-}
-",
+  "  $assignment='(?mi)^\\s*\\$env:NEXOWIRE_STATE_DIR\\s*=\\s*''((?:''''|[^''])*)''\\s*$'",
   "  $anyAssignment='(?mi)^\\s*\\$env:NEXOWIRE_STATE_DIR\\s*='",
   "  $found=[regex]::Matches($launcherContent,$assignment)",
   "  if([regex]::IsMatch($launcherContent,$anyAssignment) -and $found.Count -ne 1){throw \"UPDATE_HUB_STATE_DIR_UNTRUSTED\"}",
