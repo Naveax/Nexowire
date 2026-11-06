@@ -27,6 +27,19 @@ test('Windows SQLite cutover preflight denies JSON downgrade and checks migratio
 
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nwx-ai06-rollback-only-'));
   t.after(async () => fs.rm(root, { recursive: true, force: true }));
+  // Windows TEMP can inherit broad write ACEs. Restrict *only this synthetic*
+  // directory, never a production user profile or Hub journal.
+  const sidResult = spawnSync('powershell.exe', [
+    '-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
+    '[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value',
+  ], { encoding: 'utf8', windowsHide: true });
+  assert.equal(sidResult.status, 0, sidResult.stderr);
+  const ownerSid = sidResult.stdout.trim();
+  assert.match(ownerSid, /^S-1-/);
+  const aclResult = spawnSync('icacls.exe', [
+    root, '/inheritance:r', '/grant:r', '*' + ownerSid + ':(OI)(CI)F',
+  ], { encoding: 'utf8', windowsHide: true });
+  assert.equal(aclResult.status, 0, aclResult.stderr);
   const legacy = path.join(root, 'idempotency-records.json');
   const contents = '{"version":1,"records":[]}\n';
   await fs.writeFile(legacy, contents);
