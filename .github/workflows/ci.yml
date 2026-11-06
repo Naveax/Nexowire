@@ -400,6 +400,9 @@ jobs:
       - run: node --test --import tsx test/linux-native-agent-live.test.ts
         env:
           NEXOWIRE_LIVE_LINUX_AGENT_TEST: "1"
+      - name: Real authorized Agent CAS shell and file-write positive plus CAS outage negative
+        timeout-minutes: 5
+        run: node --test --test-concurrency=1 --import tsx test/agent-native-remote-cas-live.test.ts test/agent-readonly-without-cas.test.ts
       - run: node --test --import tsx test/relay-native-agent-live.test.ts
         env:
           NEXOWIRE_LIVE_RELAY_AGENT_TEST: "1"
