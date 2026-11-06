@@ -1,7 +1,78 @@
 {
   "version": 1,
-  "sha256": "d08a2e88ee20e36cc14b49a0020c7585b62441134f5eaba9e1a7035190745d12",
+  "sha256": "6de6de3ace5eb95371c94ff7be4e90ac2ebcfc07a53f59590716f92b1926b7c9",
   "contracts": {
+    "agent_operation_status": {
+      "tool": "agent_operation_status",
+      "surfaceVersion": 1,
+      "contractVersion": 1,
+      "profile": "native-execution-v1",
+      "structuredContentType": "object",
+      "contentMode": "json-text",
+      "fields": [
+        {
+          "path": "ok",
+          "type": "boolean",
+          "meaning": "Whether native capability execution completed successfully.",
+          "requiredOnSuccess": true
+        },
+        {
+          "path": "data",
+          "type": "any",
+          "meaning": "Capability-specific structured data when the capability returns data.",
+          "requiredOnSuccess": false
+        },
+        {
+          "path": "stdout",
+          "type": "string",
+          "meaning": "Bounded stdout when the capability exposes stdout.",
+          "requiredOnSuccess": false
+        },
+        {
+          "path": "stderr",
+          "type": "string",
+          "meaning": "Bounded stderr when the capability exposes stderr.",
+          "requiredOnSuccess": false
+        },
+        {
+          "path": "exitCode",
+          "type": "any",
+          "meaning": "Process exit code or null when the capability exposes exit state.",
+          "requiredOnSuccess": false
+        },
+        {
+          "path": "truncated",
+          "type": "boolean",
+          "meaning": "Whether bounded textual output was truncated.",
+          "requiredOnSuccess": false
+        },
+        {
+          "path": "meta",
+          "type": "object",
+          "meaning": "Provider/target/capability/timing provenance for normal native execution.",
+          "requiredOnSuccess": false
+        },
+        {
+          "path": "error",
+          "type": "object",
+          "meaning": "Structured execution error with stable code/message semantics on native failures.",
+          "requiredOnSuccess": false
+        },
+        {
+          "path": "idempotency",
+          "type": "object",
+          "meaning": "Replay/idempotency metadata when an explicit idempotency key is used.",
+          "requiredOnSuccess": false
+        }
+      ],
+      "semantics": [
+        "structuredContent is always an object",
+        "ok=false represents execution failure and MCP isError is set",
+        "normal provider execution may include meta provenance",
+        "ambiguous mutation failure is not silently replayed",
+        "tool-specific data remains bounded by the capability contract"
+      ]
+    },
     "audit_query": {
       "tool": "audit_query",
       "surfaceVersion": 1,
