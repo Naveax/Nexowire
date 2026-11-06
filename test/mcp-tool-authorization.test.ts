@@ -9,6 +9,16 @@ import {
 } from '../src/security/tool-authorization.js';
 import type { BearerAuthorization } from '../src/security/auth.js';
 
+test('device-scoped operation status is available to an ordinary authenticated owner', () => {
+  const owner:BearerAuthorization={kind:'control-plane',scope:'mcp',accountId:'owner1234',role:'user'};
+  assert.equal(isMcpToolAuthorized(owner,'agent_operation_status'),true);
+  const limited:BearerAuthorization={kind:'stored',scope:'mcp',credential:{
+    id:'credential1234',scope:'mcp',createdAt:'2026-09-30T12:00:00.000Z',
+    role:'user',allowedTools:['machine_*'],
+  }};
+  assert.equal(isMcpToolAuthorized(limited,'agent_operation_status'),false);
+});
+
 test('tool authorization patterns are normalized and prefix-bounded', () => {
   assert.deepEqual(
     normalizeToolPatterns([
@@ -182,7 +192,6 @@ test('stored credential roles separate user, operator, and admin control-plane a
     'policy_profile_list',
     'policy_device_check',
     'operations_idempotency_list',
-    'agent_operation_status',
     'events_read',
     'audit_recent',
     'audit_query',
