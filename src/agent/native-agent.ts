@@ -32,7 +32,7 @@ import { resolveProtectedSingleSecret } from '../security/protected-secret-files
 import { optionalPlatformSecretSync } from '../security/platform-secret-store.js';
 import { NEXOWIRE_VERSION } from '../version.js';
 import { acquireNativeAgentSingleton } from './native-agent-singleton.js';
-import {createWindowsCoreConsoleAdmission} from './windows-core-console-provider.js';
+import {createWindowsCoreConsoleAdmission, type NativeCoreConsentAuthority} from './windows-core-console-provider.js';
 import {revokePhysicalConsoleGrant} from './windows-console-grant.js';
 import {initializeNativeAgentState} from './native-agent-startup-diagnostic.js';
 
@@ -286,9 +286,22 @@ export function planNextHubAttempt(input: {
   };
 }
 
-function privilegeMode(
+export async function resolveNativeAgentPrivilegeMode(
   env: NodeJS.ProcessEnv,
-): 'direct' | 'broker' {
+  platform: NodeJS.Platform = process.platform,
+  probe: () => Promise<{ready:boolean}> = async () => {
+    const {probePrivilegedBrokerHealth} = await import('./privileged-broker-lifecycle.js');
+    return probePrivilegedBrokerHealth({env});
+  },
+): Promise<'direct' | 'broker'> {
+  // Older installed launchers predate the installer setting Broker mode for
+  // CORE. Discover the already installed/authenticated Broker at startup too;
+  // do not require an Agent reinstall or create a Broker/token during discovery.
+  if (env.NEXOWIRE_PRIVILEGE_MODE === undefined && platform === 'win32' &&
+      env.NEXOWIRE_CORE_AUTHORITY_URL?.trim()) {
+    try { if ((await probe()).ready === true) return 'broker'; }
+    catch { /* Optional CORE discovery must not prevent the Agent connecting. */ }
+  }
   const raw =
     env.NEXOWIRE_PRIVILEGE_MODE?.trim().toLowerCase() ??
     'direct';
@@ -426,6 +439,7 @@ export async function capabilitiesForAgent(
 export async function runNativeAgent(
   env: NodeJS.ProcessEnv = process.env,
   trustedNativeMutationProvider?: TrustedNativeMutationProvider,
+  trustedCoreConsentProvider?: NativeCoreConsentAuthority,
 ): Promise<never> {
   const identity = await loadOrCreateAgentIdentity(env);
   const instanceId = randomUUID();
@@ -443,7 +457,7 @@ export async function runNativeAgent(
     env.NEXOWIRE_RUNBOOK_STATE_FILE?.trim() ||
     path.join(os.homedir(), '.nexowire', 'runbooks.json');
   const socketHeartbeatMs = heartbeatMs(env);
-  const activePrivilegeMode = privilegeMode(env);
+  const activePrivilegeMode = await resolveNativeAgentPrivilegeMode(env);
   const privilegedBroker = await privilegedBrokerFromEnv(
     env,
     activePrivilegeMode,
@@ -537,7 +551,11 @@ export async function runNativeAgent(
       // Optional local authority construction is also part of initialization.
       // A failed constructor must not leave a live singleton and a ready marker.
       return await createWindowsCoreConsoleAdmission({deviceId:identity.id,
-        credential:token,broker:privilegedBroker,env});
+        credential:token,broker:privilegedBroker,env,
+        // A protected native Windows approval service must be injected by the
+        // trusted process composition root, never selected by a tool payload
+        // or self-proclaimed Agent environment flag.
+        trustedNativeConsent:trustedCoreConsentProvider});
     } catch (error) {
       try { operationJournal.close(); } catch { /* Preserve the original failure. */ }
       await singletonLock?.close();

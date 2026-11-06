@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { runNativeAgent } from './agent/native-agent.js';
+import {runLocalOwnerCoreCommand} from './agent/local-owner-core-cli.js';
 import { runConnectCommand } from './connect.js';
 import { runNativeAgentLifecycleCommand } from './agent/native-agent-lifecycle.js';
 import { runNativeAgentEnrollmentCommand } from './agent/native-agent-enrollment.js';
@@ -40,6 +41,8 @@ function printHelp(): void {
 Nexowire ${NEXOWIRE_VERSION}
 
 Usage:
+  nexowire core-console status|enroll|revoke
+                   Manage one-time local-owner physical console consent
   nexowire http    Start the MCP hub and native-agent WebSocket endpoint
   nexowire stdio   Start an MCP server over stdio
   nexowire agent [run|enroll|doctor|status|install|start|stop|restart|uninstall]\n                   Enroll, diagnose, run, or manage the native computer agent\n  nexowire relay   Start a first-party native-agent relay
@@ -67,6 +70,10 @@ Default agent endpoint: ws://127.0.0.1:43110/agent
 
 async function main(): Promise<void> {
   const command = process.argv[2] ?? 'http';
+  if(command==='core-console'){
+    await runLocalOwnerCoreCommand(process.argv.slice(3));
+    return;
+  }
 
   if (command === 'help' || command === '--help' || command === '-h') {
     printHelp();
