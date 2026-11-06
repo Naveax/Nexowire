@@ -461,7 +461,12 @@ function summarize(session: ManagedSession) {
       processCreationFiletime: session.processCreationFiletime,
     } : {}),
     ...(session.job ? { jobGuardianPid: session.job.guardianPid,
-      treeOwnership: 'windows_job' as const } : {}),
+      treeOwnership: session.status === 'orphaned' && session.job.closed()
+        ? 'unconfirmed' as const : 'windows_job' as const,
+      jobMembershipVerified: 'root_at_launch' as const,
+      descendantCoverage: 'job_members_only' as const,
+      outOfJobDescendants: 'unknown' as const,
+    } : {}),
     status: session.status,
     recovered: session.recovered,
     durable: session.durable,
@@ -1045,23 +1050,32 @@ export class ProcessManager {
     }
 
     const shell = resolveShell(parsed.shell, parsed.command);
-    // Adapt the reviewed volatile early-output fix from #743 without changing
-    // the native protocol or accepting pipe output as ownership evidence.
-    const pendingOutput:Array<{stream:'stdout'|'stderr';chunk:Buffer}>=[];
-    let earlyOutputBytes=0,earlyOutputTruncated=false;
-    let outputSink:((stream:'stdout'|'stderr',chunk:Buffer)=>void)|undefined;
-    const receiveOutput=(stream:'stdout'|'stderr',chunk:Buffer):void=>{
-      if(outputSink){outputSink(stream,chunk);return;}
-      const room=Math.max(0,parsed.max_buffer_bytes-earlyOutputBytes);
-      if(chunk.length>room)earlyOutputTruncated=true;
-      if(room){const retained=Buffer.from(chunk.subarray(0,room));
-        pendingOutput.push({stream,chunk:retained});earlyOutputBytes+=retained.length;}
+    // Buffer native pipe data from the instant the guardian is spawned. The
+    // session is not registered until independent kernel proof succeeds; no
+    // marker or output data is ever accepted as proof of Job membership.
+    const pendingOutput: Array<{stream: 'stdout' | 'stderr'; chunk: Buffer}> = [];
+    let earlyOutputBytes = 0;
+    let earlyOutputTruncated = false;
+    let outputSink: ((stream: 'stdout' | 'stderr', chunk: Buffer) => void) | undefined;
+    const receiveOutput = (stream: 'stdout' | 'stderr', chunk: Buffer): void => {
+      if (outputSink) { outputSink(stream, chunk); return; }
+      // Bound pre-registration memory even if output starts before we get a
+      // usable session. Never silently claim early bytes were preserved.
+      const limit = parsed.max_buffer_bytes;
+      if (earlyOutputBytes + chunk.length > limit) {
+        earlyOutputTruncated = true;
+        const room = Math.max(0, limit - earlyOutputBytes);
+        if (room) { pendingOutput.push({stream, chunk: Buffer.from(chunk.subarray(0,room))}); earlyOutputBytes += room; }
+        return;
+      }
+      pendingOutput.push({stream, chunk: Buffer.from(chunk)});
+      earlyOutputBytes += chunk.length;
     };
     // On Windows the native guardian owns the entire Job lifetime. The root
     // starts suspended and only resumes after a verified Job assignment.
     const job = process.platform === 'win32'
       ? await launchWindowsJob(shell.executable, shell.args, { cwd, env: process.env,
-          guardOnParentExit: true,onOutput:receiveOutput })
+          guardOnParentExit: true, onOutput: receiveOutput })
       : undefined;
     const child = job?.child ?? spawn(shell.executable, shell.args, {
       ...(cwd ? { cwd } : {}),
@@ -1146,21 +1160,42 @@ export class ProcessManager {
       }
     };
 
-    if(job){
-      // Switching sinks and flushing is synchronous relative to data events.
-      outputSink=append;
-      for(const event of pendingOutput)append(event.stream,event.chunk);
-      pendingOutput.length=0;
-      if(earlyOutputTruncated)append('stderr',Buffer.from(
-        '[Nexowire] Pre-registration pipe output exceeded session buffer; early output truncated.\n'));
-    }else{
+    if (job) {
+      // JS callbacks execute serially. Switching the sink and flushing the
+      // bounded queue is atomic with respect to subsequent data callbacks.
+      outputSink = append;
+      for (const event of pendingOutput) append(event.stream, event.chunk);
+      pendingOutput.length = 0;
+      if (earlyOutputTruncated) append('stderr',Buffer.from(
+        '[Nexowire] Pre-registration pipe output exceeded session buffer; early output truncated.\n',
+      ));
+    } else {
       child.stdout.on('data', (chunk: Buffer) => append('stdout', chunk));
       child.stderr.on('data', (chunk: Buffer) => append('stderr', chunk));
     }
     child.once('error', (error) => {
       append('stderr', Buffer.from(`Process error: ${error.message}\n`));
     });
-    child.once('close', (code, signal) => {
+    // An externally retained Job handle can keep the root alive after the
+    // guardian exits. Also, 'exit' precedes stdio drain, while 'close' may
+    // never fire if a retained root still owns those pipes.
+    const markUnconfirmed = (): void => {
+      if (session.status === 'exited') return;
+      session.status = 'orphaned';
+      session.exitCode = null;
+      session.signal = null;
+      delete session.exitedAt;
+      void this.persistState().catch(() => undefined);
+    };
+    const markExited = (
+      code: number | null,
+      signal: NodeJS.Signals | null,
+    ): void => {
+      if (session.status === 'exited') return;
+      if (job && session.pid && isPidAlive(session.pid)) {
+        markUnconfirmed();
+        return;
+      }
       session.status = 'exited';
       session.exitCode = code;
       session.signal = signal;
@@ -1176,13 +1211,27 @@ export class ProcessManager {
         },
       });
       void this.persistState().catch(() => undefined);
+    };
+    child.once('exit', () => {
+      if (job && session.pid && isPidAlive(session.pid)) markUnconfirmed();
     });
-    // Native guardian may have completed while its assignment marker was read.
-    if (job?.closed() && session.status === 'running') {
-      session.status = 'exited';
-      session.exitCode = child.exitCode;
-      session.signal = child.signalCode;
-      session.exitedAt = new Date().toISOString();
+    child.once('close', markExited);
+    // The guardian can close while launchWindowsJob is still reading its
+    // attestation marker. Final status requires BOTH output streams drained.
+    const finalizeEarlyClosedGuardian = (): void => {
+      if (!job?.closed() || session.status === 'exited') return;
+      const drained = (stream: typeof child.stdout) =>
+        stream.readableEnded || stream.destroyed;
+      if (drained(child.stdout) && drained(child.stderr)) {
+        markExited(child.exitCode, child.signalCode);
+      }
+    };
+    if (job) {
+      child.stdout.once('end', finalizeEarlyClosedGuardian);
+      child.stderr.once('end', finalizeEarlyClosedGuardian);
+      child.stdout.once('close', finalizeEarlyClosedGuardian);
+      child.stderr.once('close', finalizeEarlyClosedGuardian);
+      finalizeEarlyClosedGuardian();
     }
 
     await this.persistState();
@@ -1348,6 +1397,13 @@ export class ProcessManager {
       };
     }
 
+    if (session.status === 'orphaned' && session.job?.closed()) {
+      throw new ProcessManagerError(
+        'PROCESS_TREE_TERMINATION_UNCONFIRMED',
+        'The Windows Job guardian exited but the managed root may still be alive. ' +
+          'No safe Job handle remains for termination. Refusing unverified PID cleanup.',
+      );
+    }
     if (session.status === 'orphaned' && session.recovered) {
       throw new ProcessManagerError(
         'PROCESS_RECOVERY_VERIFICATION_REQUIRED',
