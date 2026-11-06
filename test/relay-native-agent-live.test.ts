@@ -8,6 +8,7 @@ import { promises as fs } from 'node:fs';
 import { AgentBroker } from '../src/core/agent-broker.js';
 import { attachAgentWebSocketServer } from '../src/hub/agent-websocket.js';
 import { startRelayServer } from '../src/relay/server.js';
+import { isolatedRemoteCas } from './fixtures/agent-remote-cas-fixture.js';
 
 async function waitFor<T>(
   read: () => T | undefined,
@@ -40,6 +41,9 @@ test(
       fs.mkdir(allowed, { recursive: true }),
     ]);
 
+    const cas=await isolatedRemoteCas(root);
+    const identityFile=path.join(root,'agent-identity.json');
+    await fs.writeFile(identityFile,JSON.stringify({id:cas.deviceId}));
     const broker = new AgentBroker();
     const upstreamHttp = createServer();
     const upstreamWss = attachAgentWebSocketServer(
@@ -90,6 +94,7 @@ test(
       await new Promise<void>((resolve) =>
         upstreamHttp.close(() => resolve()),
       );
+      await cas.stop();
       await fs.rm(root, { recursive: true, force: true });
     });
 
@@ -102,6 +107,9 @@ test(
           ...process.env,
           HOME: home,
           USERPROFILE: home,
+          ...cas.env,
+          NEXOWIRE_AGENT_IDENTITY_FILE:identityFile,
+          NEXOWIRE_AGENT_OPERATION_JOURNAL_FILE:path.join(root,'journal','agent.sqlite'),
           // Deliberately dead primary route proves alternate endpoint fallback.
           NEXOWIRE_HUB_WS_URL:
             'ws://127.0.0.1:1/agent',

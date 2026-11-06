@@ -7,6 +7,7 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { AgentBroker } from '../src/core/agent-broker.js';
 import { attachAgentWebSocketServer } from '../src/hub/agent-websocket.js';
+import { isolatedRemoteCas } from './fixtures/agent-remote-cas-fixture.js';
 
 async function waitFor<T>(
   read: () => T | undefined,
@@ -39,6 +40,11 @@ test(
       fs.mkdir(allowed, { recursive: true }),
     ]);
 
+    // Pre-provision a distinct HTTPS CAS with durable SQLite for this test
+    // Agent only; this is not a production trust-root substitute.
+    const cas=await isolatedRemoteCas(root);
+    const identityFile=path.join(root,'agent-identity.json');
+    await fs.writeFile(identityFile,JSON.stringify({id:cas.deviceId}));
     const broker = new AgentBroker();
     const http = createServer();
     const wss = attachAgentWebSocketServer(http, broker);
@@ -68,6 +74,7 @@ test(
       await new Promise<void>((resolve) =>
         http.close(() => resolve()),
       );
+      await cas.stop();
       await fs.rm(root, { recursive: true, force: true });
     });
 
@@ -81,6 +88,9 @@ test(
           ...process.env,
           HOME: home,
           USERPROFILE: home,
+          ...cas.env,
+          NEXOWIRE_AGENT_IDENTITY_FILE:identityFile,
+          NEXOWIRE_AGENT_OPERATION_JOURNAL_FILE:path.join(root,'journal','agent.sqlite'),
           NEXOWIRE_HUB_WS_URL:
             'ws://127.0.0.1:' + address.port + '/agent',
           NEXOWIRE_DEVICE_NAME: 'macOS Native Live',
