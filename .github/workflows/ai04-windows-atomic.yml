@@ -1,0 +1,44 @@
+name: AI-04 Windows Atomic No-Replay
+
+on:
+  pull_request:
+    paths:
+      - 'src/core/atomic-mutation-authority.ts'
+      - 'test/ai04/**'
+      - 'docs/ai-handoff/AI-04_ATOMIC_MUTATION_NO_REPLAY_20261105.md'
+      - '.github/workflows/ai04-windows-atomic.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai04-windows-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  atomic-windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Windows atomic mutation, revocation, LOST ACK, no-replay negative oracle
+        shell: pwsh
+        timeout-minutes: 12
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RUNNER_OS -ne 'Windows') { throw 'AI04_WINDOWS_RUNNER_REQUIRED' }
+          node --test --import tsx --test-concurrency=1 test/ai04/atomic-mutation-authority.test.ts test/v2-07/round2-revocation.test.ts test/clean14-revocation-dispatch-negative.test.ts test/v2-03-mandatory-remote-authorization.test.ts test/clean-10/timeout-reconnect-no-replay.test.ts test/clean-10/round3-semantic-effect-reservation.test.ts
+          if ($LASTEXITCODE -ne 0) { throw 'AI04_WINDOWS_NEGATIVE_ORACLE_RED' }
+      - run: npm run build

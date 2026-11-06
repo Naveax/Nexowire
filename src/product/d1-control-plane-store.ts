@@ -549,6 +549,49 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
       .run();
   }
 
+  async getRemoteDeviceAuthorization(
+    deviceId: string, credentialHash: string, ownerAccountId: string,
+  ): Promise<number | null> {
+    // One atomic D1 query: client state cannot mint an authority epoch.
+    // A missing schema or unavailable D1 throws rather than returning a grant.
+    const row = await this.db.prepare(
+      `SELECT a.authorization_epoch AS epoch
+         FROM device_remote_authorization a
+         JOIN devices d ON d.id = a.device_id
+         JOIN accounts owner ON owner.id = d.owner_account_id
+        WHERE a.device_id = ? AND a.owner_account_id = ?
+          AND d.owner_account_id = ? AND d.credential_hash = ?
+          AND d.access_mode = 'full' AND a.active = 1`,
+    ).bind(deviceId, ownerAccountId, ownerAccountId, credentialHash)
+      .first<{ epoch: number }>();
+    const epoch = row?.epoch;
+    return Number.isSafeInteger(epoch) && (epoch as number) >= 1
+      ? epoch as number : null;
+  }
+
+  async revokeRemoteDeviceAuthorization(deviceId: string, ownerAccountId: string): Promise<boolean> {
+    const result = await this.db.prepare(
+      `UPDATE device_remote_authorization
+          SET authorization_epoch = authorization_epoch + 1, active = 0
+        WHERE device_id = ? AND owner_account_id = ? AND active = 1
+          AND EXISTS (SELECT 1 FROM devices
+                      WHERE id = ? AND owner_account_id = ?)`,
+    ).bind(deviceId, ownerAccountId, deviceId, ownerAccountId).run();
+    return result.meta?.changes === 1;
+  }
+
+  async revokeRemoteOwnerAuthorizations(ownerAccountId: string): Promise<number> {
+    const result = await this.db.prepare(
+      `UPDATE device_remote_authorization
+          SET authorization_epoch = authorization_epoch + 1, active = 0
+        WHERE owner_account_id = ? AND active = 1
+          AND EXISTS (SELECT 1 FROM devices
+                      WHERE devices.id = device_remote_authorization.device_id
+                        AND devices.owner_account_id = ?)`,
+    ).bind(ownerAccountId, ownerAccountId).run();
+    return result.meta?.changes ?? 0;
+  }
+
   async getRootModeLease(deviceId: string): Promise<RootModeLeaseRecord | null> {
     const row = await this.db.prepare(
       'SELECT device_id, owner_account_id, expires_at, updated_at FROM device_root_mode_leases WHERE device_id = ?',

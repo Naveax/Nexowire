@@ -89,3 +89,103 @@ synthetic JSON fixtures and never touch the connected devices.
 
 No CI reruns, PR merge, production service, device, UAC, ACL, or live
 installation modifications are performed by this QA change.
+
+
+## Live exact-SHA GitHub API audit
+
+A separate read-only helper fetches the current PR, the supplied workflow run and its complete job list directly from api.github.com using HTTPS and a bearer token. It binds the run to the PR's current head and base SHAs, the pinned CI workflow ID, run attempt, event, all seven job names and each job conclusion. It refuses redirects, foreign origins, partial job pages, stale SHAs and mismatched PR context.
+
+Usage from a checkout:
+
+    GH_TOKEN=<read-only-token> node --import tsx scripts/qa-core-ci-github-audit.ts Naveax/Nexowire PR_NUMBER RUN_ID
+
+The token needs pull-request-read and Actions-read access. The tool makes GET requests only; it does not dispatch, rerun, cancel or modify workflows. It never prints the token. Tests use an injected synthetic fetcher and therefore always report githubOriginAuthenticated=false. A real CLI run may report authenticated GitHub source evidence, but physicalAcceptance remains NOT_PROVEN and productionCore remains NO_GO.
+
+## Live exact-SHA GitHub API audit
+
+A separate read-only helper fetches the authenticated GitHub user, current PR, exact workflow run, the jobs for that specific run attempt, and a final PR snapshot from fixed \`api.github.com\` HTTPS endpoints. For manually dispatched runs, it also resolves the run's commit to its associated pull request. The helper verifies the current PR head/base did not change during the audit, pins CI workflow ID \`369213208\`, checks exact SHA/run/attempt/PR association, and requires all seven expected jobs to be completed successfully. It rejects redirects, foreign origins, partial job pages, stale SHAs, foreign repositories and mismatched PR context.
+
+Usage from a checkout:
+
+    GH_TOKEN=<read-only-token> node --import tsx scripts/qa-core-ci-github-audit.ts Naveax/Nexowire PR_NUMBER RUN_ID
+
+Provide a GitHub user token accepted by \`GET /user\` with read access to pull requests and Actions. The tool makes GET requests only; it does not dispatch, rerun, cancel or modify workflows. It never prints the token. Tests use an injected synthetic fetcher and therefore always report \`githubOriginAuthenticated=false\`. A live run may report authenticated GitHub source evidence, but \`physicalAcceptance=NOT_PROVEN\` and \`productionCore=NO_GO\` remain unconditional.
+
+The audit reads separate GitHub endpoints and cannot create an atomic cross-endpoint snapshot. It rereads the PR at the end and fails closed if the head, base, state or draft status changed while it was running.
+
+## Checkout and per-case evidence are separate from run metadata
+
+The API audit's `snapshotConsistency` assesses only the PR/run/job metadata
+it fetches. A pull-request run can report the PR head in `head_sha` while
+`actions/checkout` checks out a GitHub-generated merge commit. This helper
+does not fetch job logs or compare Git trees, so it always reports
+`checkoutRevisionEvidence=NOT_COLLECTED` and
+`checkoutTreeMatchesHead=NOT_PROVEN`. Seven successful jobs also do not prove
+that any particular Windows Broker test executed; the helper always reports
+`windowsBrokerFixtureCases=NOT_PROVEN`.
+
+For a concrete example, #932 HEAD
+`be541a10f01c79cb035b78d3525955da6f62d170` had run `40556146804`;
+its Node 24 log checked out merge commit
+`c9f814fadf22d140aa285021e137adcdf6e62320`. Separately fetched Git
+commit metadata shows that merge and the recorded HEAD both have tree
+`4568fe7eedaf7470915c2c113eb66947a524c47f`. That equivalence applies only
+to those exact commits and does not establish Windows case coverage.
+
+In #932's completed Windows job, the two Windows Broker admission cases were
+not scheduled; the Linux jobs reported them SKIP. The separate #933 QA step
+runs them on a disposable Windows runner and rejects skipped cases. Its
+`87f806163d745949655f33e97d63f6bd352345bf` run `40563535611` is RED
+on an existing test-input mismatch. A future source change requires its own
+run and evidence; do not reuse that RED or a prior PASS for another SHA.
+None of these records proves production CAS, installed Broker or physical
+acceptance.
+
+The offline snapshot auditor follows the same boundary: an internally
+consistent saved JSON document is not authenticated GitHub data, does not
+identify the actual checkout tree and does not prove a required test case ran.
+Its matching checkout/case fields remain `NOT_COLLECTED`/`NOT_PROVEN`,
+even if callers insert self-reported green flags into the snapshot.
+
+## #919 Node 22 cancellation: bounded evidence
+
+Run `40513511664` at HEAD
+`b05c08ffe64cd6fcff21f150b71fc51c1f8bf44d` finished `cancelled`.
+Node 22 job `122221488020` reached `npm test`; its last emitted result was
+test 108, a skipped Windows-only case in
+`test/ai-workspace-strict-policy.test.ts`. The runner then canceled the
+operation after roughly six hours and cleaned up a Node worker and esbuild.
+There was no completed TAP summary or stack trace identifying the hanging
+test or handle. GitHub documents a default 360-minute job timeout, so the
+duration is consistent with that limit, but the job log does not establish
+the cancellation trigger.
+
+The next cases in the successful Node 24 output belong to
+`test/all-ingress-transport-meter-staging.test.ts`. Concurrent/buffered test
+output order is not a diagnosis. Both files have the same blob SHA in #919 and
+#933, and the different #933 Node 22 run completed those cases. That result
+neither proves nor rules out a transient #919-specific issue. The old run
+was not canceled or rerun by this QA work.
+
+## Run-attempt recheck after jobs
+
+A workflow rerun or PR base change can happen while a live audit is reading
+the old attempt's jobs. The auditor re-fetches both PR and run metadata after
+the attempt-scoped jobs arrive. A changed or missing PR recheck blocks; so does
+a missing run recheck or a change to run ID, attempt, HEAD, branch, workflow,
+event, status, conclusion or head repository. This narrows the observation
+window; GitHub does not provide an atomic lock, so the report does not
+guarantee that PR or run state cannot change after the final reads. It still
+cannot prove the runner's checkout tree or Windows case coverage.
+
+## PR branch identity is part of CI context
+
+The same base or head commit can be reachable through a different branch.
+Comparing only SHA values can therefore accept a retargeted PR or associate a
+run with the wrong PR branch. The live audit requires a nonempty PR base ref,
+matches the run association's head and base refs against the current PR and
+rechecks both refs and repository names alongside their SHAs. Missing or
+changed context blocks the metadata snapshot.
+
+These checks still cannot prove the runner checkout tree, a particular Windows
+case or physical acceptance; they operate on the bounded GitHub metadata view.
