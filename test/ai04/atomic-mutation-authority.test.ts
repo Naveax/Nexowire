@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
+import {dispatchSocketBoundMutation} from '../../src/core/atomic-agent-broker-dispatch.js';
 import {
   AtomicMutationCoordinator,
   executeNativeMutationOnce,
@@ -382,4 +383,69 @@ test('AI-04 native effect is rejected after credential rotation even with earlie
   await assert.rejects(executeNativeMutationOnce(f.authority,reservation,async()=>{effects++;}),
     e=>errorCode(e)==='NATIVE_MUTATION_EFFECT_NOT_ADMITTED');
   assert.equal(effects,0);
+});
+
+
+test('AI-04 AgentBroker seam sends only exact byte snapshot on live bound socket',async()=>{
+  const f=fixture(),request=wire();
+  const session={device:{id:DEVICE},instanceId:randomUUID(),socket:{
+    readyState:1,
+    send:(text:string)=>f.frames.push(text),
+  }};
+  await dispatchSocketBoundMutation({deviceId:DEVICE,request,connection:session,
+    currentConnection:()=>session,coordinator:f.gateway});
+  assert.deepEqual(f.frames,[request.frame]);
+});
+
+test('AI-04 AgentBroker seam: missing coordinator denies with zero frames',async()=>{
+  const f=fixture(),session={device:{id:DEVICE},instanceId:randomUUID(),socket:{
+    readyState:1,send:(text:string)=>f.frames.push(text),
+  }};
+  await assert.rejects(dispatchSocketBoundMutation({deviceId:DEVICE,
+    request:wire(),connection:session,currentConnection:()=>session,
+    coordinator:undefined}),e=>errorCode(e)==='AGENT_AUTH_NOT_BOUND');
+  assert.equal(f.frames.length,0);
+  assert.equal(f.authority.reserveCalls,0);
+});
+
+test('AI-04 AgentBroker seam: old socket replaced during verifier never transmits',async()=>{
+  let release!:(value:ServerIssuedDeviceLease)=>void;
+  const f=fixture({verifier:async()=>await new Promise<ServerIssuedDeviceLease>(
+    resolve=>{release=resolve;})});
+  const old={device:{id:DEVICE},instanceId:randomUUID(),socket:{
+    readyState:1,send:(text:string)=>f.frames.push(text),
+  }};
+  const next={device:{id:DEVICE},instanceId:randomUUID(),socket:{
+    readyState:1,send:(text:string)=>f.frames.push(text),
+  }};
+  let current=old;
+  const pending=dispatchSocketBoundMutation({deviceId:DEVICE,request:wire(),
+    connection:old,currentConnection:()=>current,coordinator:f.gateway});
+  await new Promise<void>(resolve=>setImmediate(resolve));
+  current=next;
+  release(lease(f.clock()));
+  await assert.rejects(pending,e=>errorCode(e)==='MUTATION_STATE_UNKNOWN');
+  assert.equal(f.frames.length,0);
+});
+
+test('AI-04 AgentBroker seam: disconnected socket after CAS reservation has zero frames',async()=>{
+  const f=fixture(),session={device:{id:DEVICE},instanceId:randomUUID(),socket:{
+    readyState:1,send:(text:string)=>f.frames.push(text),
+  }};
+  f.authority.afterReserve=()=>{session.socket.readyState=3;};
+  await assert.rejects(dispatchSocketBoundMutation({deviceId:DEVICE,request:wire(),
+    connection:session,currentConnection:()=>session,coordinator:f.gateway}),
+    e=>errorCode(e)==='MUTATION_STATE_UNKNOWN');
+  assert.equal(f.frames.length,0);
+});
+
+test('AI-04 AgentBroker seam: wrong device rejects before CAS or WebSocket send',async()=>{
+  const f=fixture(),session={device:{id:DEVICE},instanceId:randomUUID(),socket:{
+    readyState:1,send:(text:string)=>f.frames.push(text),
+  }};
+  await assert.rejects(dispatchSocketBoundMutation({deviceId:'wrong-device',
+    request:wire(),connection:session,currentConnection:()=>session,
+    coordinator:f.gateway}),e=>errorCode(e)==='AGENT_OFFLINE');
+  assert.equal(f.authority.reserveCalls,0);
+  assert.equal(f.frames.length,0);
 });

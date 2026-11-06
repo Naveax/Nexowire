@@ -76,3 +76,20 @@ For elevated/CORE effects keep \`CORE_EXECUTOR_DISPATCH_ENABLED=false\` and requ
 ## Release gate
 
 A standalone in-memory test model proves only the ordering *requirements*, not distributed linearizability. Until the independent authority, signed receipt/native one-shot verifier, AI-03 migrations, unified source and Windows E2E are accepted, **DRAFT / PRODUCTION NO-GO**.
+
+
+## E. Ready-to-wire socket-instance helper
+
+AI-04 also supplies \`src/core/atomic-agent-broker-dispatch.ts\`, a narrow function
+\`dispatchSocketBoundMutation({deviceId,request,connection,currentConnection,coordinator})\`.
+It performs a trusted in-memory socket-instance and OPEN-state check before and
+at the synchronous enqueue callback, rejecting stale sockets with **zero frames**.
+AI-05 should call this function in the strict remote mutation branch of
+\`AgentBroker.request()\` instead of the legacy \`sendPending()\` path, passing
+\`currentConnection: () => this.agents.get(deviceId)\`. AI-05 must still install
+the corresponding authenticated socket-bound coordinator and bind the native
+one-time effect permit; this helper has no external revoke or OS trust by itself.
+
+The new tests validate positive exact-frame send, missing coordinator, wrong
+device, connection replacement during async verifier and disconnect after CAS
+reservation. These tests DO NOT make real Windows native execution safe.
