@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,sign} from 'node:crypto';
+import {DatabaseSync} from 'node:sqlite';
 import {
   ProposedOwnerPublicWssEnrollmentLease,
   ProposedEnrolledOwnerQuotaWsSession,
+  ProposedOwnerWssSqliteReceiptJournal,
 } from '../src/product/owner-public-wss-enrollment-lease-proposal.js';
 import {
   serializeOwnerPublicWssEnrollment,
@@ -109,7 +111,7 @@ test('tampered initial enrollment cannot start public WSS dial',async()=>{
   altered.profile={...altered.profile,trustedSpkiSha256:['b'.repeat(64)]};
   let reads=0;
   await assert.rejects(ProposedEnrolledOwnerQuotaWsSession.connect(
-    altered,async()=>{reads++;return {...trusted}},
+    altered,async()=>{reads++;return {...trusted}}, new ProposedOwnerWssSqliteReceiptJournal(new DatabaseSync(':memory:')),
   ),/signature/);
   assert.equal(reads,1);
 });
