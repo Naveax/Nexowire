@@ -34,6 +34,19 @@ const FileSchema = z.object({
 
 export type IdempotencyRecord = z.infer<typeof RecordSchema>;
 
+/** Payload-free capacity telemetry. Scoped credentials never learn global usage. */
+export interface IdempotencyCapacitySnapshot {
+  scope: 'all' | 'authorized_devices';
+  visibleRecords: number;
+  byStatus: Record<IdempotencyStatus, number>;
+  capacity?: {
+    limit: number;
+    used: number;
+    remaining: number;
+    full: boolean;
+  };
+}
+
 export class IdempotencyStoreError extends Error {
   constructor(
     public readonly code: string,
@@ -296,6 +309,43 @@ export class IdempotencyStore {
         allowedDeviceIds.has(record.targetId))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       .slice(0, safeLimit);
+  }
+
+  /**
+   * Read-only capacity snapshot. Wait for pending reservations and completions,
+   * and filter by authorized device IDs BEFORE aggregating status counts.
+   * The global limit and count are exposed only to unrestricted callers.
+   */
+  async capacitySnapshot(
+    allowedDeviceIds?: ReadonlySet<string>,
+  ): Promise<IdempotencyCapacitySnapshot> {
+    await this.initialize();
+    await this.mutationQueue;
+    const records = [...this.records.values()].filter((record) =>
+      allowedDeviceIds === undefined || allowedDeviceIds.has(record.targetId),
+    );
+    const byStatus: Record<IdempotencyStatus, number> = {
+      in_progress: 0,
+      succeeded: 0,
+      failed: 0,
+      unknown: 0,
+    };
+    for (const record of records) byStatus[record.status]++;
+    return {
+      scope: allowedDeviceIds === undefined ? 'all' : 'authorized_devices',
+      visibleRecords: records.length,
+      byStatus,
+      ...(allowedDeviceIds === undefined
+        ? {
+            capacity: {
+              limit: this.maxRecords,
+              used: this.records.size,
+              remaining: Math.max(0, this.maxRecords - this.records.size),
+              full: this.records.size >= this.maxRecords,
+            },
+          }
+        : {}),
+    };
   }
 
   private trim(): void {
