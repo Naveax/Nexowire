@@ -363,6 +363,21 @@ if($null -ne $userTask){
 }
 `;
 
+/**
+ * Status-only inspection. A legacy interactive Hub task is not proof that a
+ * SYSTEM Boot Hub is installed; report its mismatch without blocking status.
+ * Install/uninstall still use the original strict identity guard directly.
+ */
+export const hubBootStatusIdentityInspection=[
+  '$userTaskIdentityError=$null',
+  'try {',
+  hubBootRegisteredTaskIdentityGuard,
+  '} catch {',
+  "  if($null -ne $bootTask -or [string]$_.Exception.Message -cne 'HUB_USER_TASK_IDENTITY_MISMATCH'){throw}",
+  "  $userTaskIdentityError='HUB_USER_TASK_IDENTITY_MISMATCH'",
+  '}',
+].join('\n');
+
 /** Roll back only an exact task registered by this installer invocation. */
 export const hubBootRollbackTaskOwnershipGuard=String.raw`
 if($bootTask -and [string]$bootTask.Description -cne $marker){
@@ -567,9 +582,13 @@ export async function hubBootLifecycleStatus(
       '$user=$env:NEXOWIRE_HUB_TASK_NAME',
       '$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue',
       '$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
-      hubBootRegisteredTaskIdentityGuard,
+      // Status is read-only. A legacy user Hub task can still run with a
+      // noncanonical executable path when no SYSTEM Boot task exists.
+      // Report the mismatch instead of making boot-status unusable; keep the
+      // strict identity gate unchanged for boot-install and boot-uninstall.
+      hubBootStatusIdentityInspection,
       "$bootState=if($bootTask){([string]$bootTask.State).ToLowerInvariant()}else{'not-installed'}",
-      "$userState=if($userTask){([string]$userTask.State).ToLowerInvariant()}else{'not-installed'}",
+      "$userState=if($userTaskIdentityError){'identity-mismatch'}elseif($userTask){([string]$userTask.State).ToLowerInvariant()}else{'not-installed'}",
       '[pscustomobject]@{installed=($null-ne$bootTask);state=$bootState;userTaskState=$userState}|ConvertTo-Json -Compress',
     ].join('\n'),
     taskEnv(options),

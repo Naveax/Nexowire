@@ -75,10 +75,15 @@ test('Hub Boot status reports installed only for canonical verified Task Schedul
   const canonical=status.indexOf('assertCanonicalHubBootTaskNames(options)');
   const readTask=status.indexOf('Get-ScheduledTask -TaskName $boot -TaskPath');
   const readUser=status.indexOf('Get-ScheduledTask -TaskName $user -TaskPath');
-  const identity=status.indexOf('hubBootRegisteredTaskIdentityGuard');
+  const identity=status.indexOf('hubBootStatusIdentityInspection');
   const report=status.indexOf('installed=($null-ne$bootTask)');
   assert.ok(protectedRoot>=0 && protectedRoot<canonical && canonical<readTask);
   assert.ok(readTask<readUser && readUser<identity && identity<report);
+  // Read-only status may classify a legacy interactive task, but Boot
+  // installation and removal keep the original strict identity gate.
+  const guardDeclaration=src.indexOf('export const hubBootStatusIdentityInspection=[');
+  assert.ok(guardDeclaration>=0);
+  assert.ok(src.indexOf('hubBootRegisteredTaskIdentityGuard',guardDeclaration)>guardDeclaration);
   assert.match(status,/pid: result\.installed && pid && processAlive\(pid\) \? pid : null/);
 });
 
