@@ -8,6 +8,7 @@ import {
   type AgentHello,
 } from '../protocol/agent.js';
 import { NexowireError } from './errors.js';
+import type { AtomicMutationCoordinator } from './atomic-mutation-authority.js';
 import { isReadOnlyCapability } from '../protocol/capabilities.js';
 import { safelyRecordScaleMetric, type ScaleTransportMetrics } from '../ops/scale-transport-metrics.js';
 
@@ -85,6 +86,8 @@ export interface AgentBrokerOptions {
   maxGlobalResumesPerSecond?: number;
   /** Remote-admission hubs MUST set this true; missing per-socket verifier is denied at registration. */
   requireMutationReauthorization?: boolean;
+  /** Independent durable CAS + serialized dispatch is mandatory when enabled. */
+  requireAtomicMutationAuthority?: boolean;
   metrics?: ScaleTransportMetrics;
   onDeviceState?: (
     event: DeviceStateEvent,
@@ -108,6 +111,7 @@ export class AgentBroker {
   // Bound to one authenticated WebSocket: never promote an expired device
   // credential into permission to dispatch a new mutation.
   private readonly dispatchAuthorization = new WeakMap<WebSocket, () => Promise<boolean>>();
+  private readonly atomicMutationCoordinators = new WeakMap<WebSocket, AtomicMutationCoordinator>();
   private readonly events: StoredBrokerEvent[] = [];
   private readonly eventWaiters = new Set<() => void>();
   private readonly maxEvents: number;
@@ -117,6 +121,7 @@ export class AgentBroker {
   private readonly maxResumesPerEpoch: number;
   private readonly maxGlobalResumesPerSecond: number;
   private readonly requireMutationReauthorization: boolean;
+  private readonly requireAtomicMutationAuthority: boolean;
   private readonly recentResumeTimes: number[] = [];
   private readonly metrics?: ScaleTransportMetrics;
   private readonly onDeviceState?: (
@@ -139,6 +144,7 @@ export class AgentBroker {
     // Existing explicit local/legacy fixtures remain compatible. V2-03 must opt
     // remote-only admission into this mandatory verifier boundary at creation.
     this.requireMutationReauthorization = options.requireMutationReauthorization === true;
+    this.requireAtomicMutationAuthority = options.requireAtomicMutationAuthority === true;
     this.onDeviceState = options.onDeviceState;
   }
 
@@ -147,15 +153,29 @@ export class AgentBroker {
     return this.requireMutationReauthorization;
   }
 
-  register(socket: WebSocket, hello: AgentHello, reauthorizeMutation?: () => Promise<boolean>): void {
+  isMandatoryAtomicMutationAuthorityEnabled(): boolean {
+    return this.requireAtomicMutationAuthority;
+  }
+
+  register(
+    socket: WebSocket,
+    hello: AgentHello,
+    reauthorizeMutation?: () => Promise<boolean>,
+    atomicCoordinator?: AtomicMutationCoordinator,
+  ): void {
     // A remote session without its bound owner/device verifier is only a
     // socket, never AUTHENTICATED_ONLINE or permission to dispatch a mutation.
     if (this.requireMutationReauthorization && typeof reauthorizeMutation !== 'function') {
       socket.close(1008, 'Bound device authorization required');
       return;
     }
+    if (this.requireAtomicMutationAuthority && !atomicCoordinator) {
+      socket.close(1008, 'Independent atomic mutation authority required');
+      return;
+    }
     // Install before connection events can expose the device to callers.
     if (reauthorizeMutation) this.dispatchAuthorization.set(socket, reauthorizeMutation);
+    if (atomicCoordinator) this.atomicMutationCoordinators.set(socket, atomicCoordinator);
     const deviceId = hello.device.id;
     const existing = this.agents.get(deviceId);
     if (existing && existing.socket !== socket) {
@@ -456,6 +476,13 @@ export class AgentBroker {
       }
     }
 
+    const mutation = !isReadOnlyCapability(capability);
+    const atomicCoordinator = this.atomicMutationCoordinators.get(connection.socket);
+    if (mutation && this.requireAtomicMutationAuthority && !atomicCoordinator) {
+      throw new NexowireError('MUTATION_CAS_UNAVAILABLE',
+        'Durable revoke-ordered mutation authority is not bound to this socket.');
+    }
+
     // Recheck after asynchronous authorization to prevent duplicate UUID
     // races between concurrent callers; neither request can be dispatched twice.
     if (this.pending.has(requestId)) {
@@ -495,7 +522,30 @@ export class AgentBroker {
       this.pending.set(requestId, pending);
 
       try {
-        this.sendPending(connection, pending);
+        if (mutation && atomicCoordinator) {
+          // The trusted coordinator reserves the immutable exact frame first,
+          // then serializes revoke-vs-send within its independent authority.
+          // The pending Map is only transport state, NEVER a durable CAS.
+          const frame = JSON.stringify({
+            type: 'request', requestId, capability, input, accessMode,
+          });
+          void atomicCoordinator.dispatch({requestId, capability, frame}, (exactFrame) => {
+            if (this.pending.get(requestId) !== pending ||
+                this.agents.get(deviceId) !== connection ||
+                connection.socket.readyState !== WebSocket.OPEN ||
+                !this.has(deviceId)) {
+              throw new NexowireError('MUTATION_STATE_UNKNOWN',
+                'Connection changed before atomic frame delivery.');
+            }
+            connection.socket.send(exactFrame);
+            safelyRecordScaleMetric(this.metrics, 'agent.tx_frames',
+              Buffer.byteLength(exactFrame));
+          }).catch(error => {
+            this.rejectPending(requestId, error);
+          });
+        } else {
+          this.sendPending(connection, pending);
+        }
       } catch (error) {
         this.rejectPending(requestId, error);
       }

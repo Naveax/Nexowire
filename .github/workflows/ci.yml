@@ -40,6 +40,19 @@ jobs:
           NEXOWIRE_CLOUDFLARED_TEST_BINARY="$binary" node --test --import tsx test/clean13-cloudflared-official-launch.test.ts
           echo "NEXOWIRE_CLOUDFLARED_TEST_BINARY=$binary" >> "$GITHUB_ENV"
       - run: npm run check
+      - name: AI-05 exact 0020/0021/0022, D1 authority, atomic no-replay and SQLite migration
+        shell: bash
+        timeout-minutes: 18
+        run: |
+          set -euo pipefail
+          node --test --import tsx --test-concurrency=1 \
+            test/ai03-control-plane-authority.test.ts \
+            test/ai04/atomic-mutation-authority.test.ts \
+            test/ai05/atomic-boundaries.test.ts \
+            test/ai05/migration-chain.test.ts \
+            test/idempotency/hub-capacity-recovery.test.ts \
+            test/idempotency/naveax-local-hub-80-rehearsal.test.ts \
+            test/coord-native-claim-migration.test.ts
       - name: Verify delegated batch-2 offline MJS and TS negative QA
         # npm test discovers .test.ts only. These source MJS checks must execute,
         # rather than counting a green CI that never ran them.
@@ -548,4 +561,4 @@ jobs:
           if ($digest -ne '4d2490e74082c5d48dbfedaf92576fa5bd1702379ab88eb7faa0cfbe8dc891b6') { throw 'Round2 official Cloudflared SHA256 mismatch' }
           "NEXOWIRE_CLOUDFLARED_TEST_BINARY=$binary" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Fail-closed V2 Round 2 security, OAuth, WSS and Windows rollback
-        run: node --test --import tsx --test-concurrency=1 test/v206-round2-dispatch-reason.test.ts test/v206-round2-windows-native-reason.test.ts test/clean14-wss-tls-negative.test.ts test/v2-03-authenticated-mcp-acceptance.test.ts test/v2-07/round2-revocation.test.ts test/v2-07/round2-transport-fixtures.test.ts test/connection-v2-windows-hub-rollback.test.ts test/connection-v2-release-gate/public-agent-strict-mode.test.ts
+        run: node --test --import tsx --test-concurrency=1 test/ai03-control-plane-authority.test.ts test/ai04/atomic-mutation-authority.test.ts test/ai05/atomic-boundaries.test.ts test/ai05/migration-chain.test.ts test/idempotency/naveax-local-hub-80-rehearsal.test.ts test/v206-round2-dispatch-reason.test.ts test/v206-round2-windows-native-reason.test.ts test/clean14-wss-tls-negative.test.ts test/v2-03-authenticated-mcp-acceptance.test.ts test/v2-07/round2-revocation.test.ts test/v2-07/round2-transport-fixtures.test.ts test/connection-v2-windows-hub-rollback.test.ts test/connection-v2-release-gate/public-agent-strict-mode.test.ts

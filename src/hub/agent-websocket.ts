@@ -1,6 +1,7 @@
 import type { Server as HttpServer } from 'node:http';
 import WebSocket, { WebSocketServer } from 'ws';
 import type { AgentBroker } from '../core/agent-broker.js';
+import type { AtomicMutationCoordinator } from '../core/atomic-mutation-authority.js';
 import { AgentHelloSchema } from '../protocol/agent.js';
 import { parseTokenList } from '../security/tokens.js';
 import { authorizeBearer } from '../security/auth.js';
@@ -31,6 +32,10 @@ export interface AgentWebSocketServerOptions {
   remoteMutationAuthorizationFactory?: (
     grant: RemoteAgentAuthorization, authorizationHeader: string | undefined,
   ) => (() => Promise<boolean>) | undefined;
+  /** Trust-injected only. The WebSocket payload cannot supply a CAS provider. */
+  remoteAtomicMutationCoordinatorFactory?: (
+    grant: RemoteAgentAuthorization, authorizationHeader: string | undefined,
+  ) => AtomicMutationCoordinator | undefined;
 }
 
 export function attachAgentWebSocketServer(
@@ -43,6 +48,9 @@ export function attachAgentWebSocketServer(
       !options.remoteMutationAuthorizationFactory ||
       !broker.isMandatoryMutationReauthorizationEnabled()))
     throw new Error('Remote-only Agent admission requires strict owner/device authority and bound mutation verifier');
+  if(options.remoteOnly && broker.isMandatoryAtomicMutationAuthorityEnabled() &&
+      !options.remoteAtomicMutationCoordinatorFactory)
+    throw new Error('Remote-only atomic authority provider unavailable; refusing admission');
   const wss = new WebSocketServer({ noServer: true });
   const heartbeatMs = Math.max(250, options.heartbeatMs ?? 30_000);
   const helloTimeoutMs = Math.max(250, options.helloTimeoutMs ?? 5_000);
@@ -63,6 +71,7 @@ export function attachAgentWebSocketServer(
 
   const remotelyAuthorizedDeviceIds =
     new WeakMap<WebSocket, string>();
+  const atomicBySocket = new WeakMap<WebSocket, AtomicMutationCoordinator>();
   const sessionChecks = new WeakMap<WebSocket, () => Promise<boolean>>();
 
   // Bound even a verifier implementation which ignores cancellation. Late
@@ -150,7 +159,21 @@ export function attachAgentWebSocketServer(
         }
       }
 
+      let boundAtomic: AtomicMutationCoordinator | undefined;
+      if (options.remoteOnly && broker.isMandatoryAtomicMutationAuthorityEnabled()) {
+        try {
+          boundAtomic = remoteAuthorization
+            ? options.remoteAtomicMutationCoordinatorFactory?.(remoteAuthorization,request.headers.authorization)
+            : undefined;
+        } catch { /* fail closed */ }
+        if (!boundAtomic) {
+          socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
+          socket.destroy();
+          return;
+        }
+      }
       wss.handleUpgrade(request, socket, head, (ws) => {
+        if (boundAtomic) atomicBySocket.set(ws,boundAtomic);
         if (remoteAuthorization) {
           const deviceId=remoteAuthorization.deviceId;
           remotelyAuthorizedDeviceIds.set(
@@ -232,7 +255,8 @@ export function attachAgentWebSocketServer(
 
       // The same per-socket verifier used by periodic checks must also gate
       // mutation admission; owner/device revocation must not wait 60 seconds.
-      broker.register(socket, hello.data, sessionChecks.get(socket));
+      broker.register(socket, hello.data, sessionChecks.get(socket),
+        atomicBySocket.get(socket));
     });
   });
 

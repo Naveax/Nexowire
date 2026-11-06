@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { executeTrustedNativeMutation, type TrustedNativeMutationProvider } from './native-atomic-effect-admission.js';
 import {setTimeout as sleep} from 'node:timers/promises';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
@@ -424,6 +425,7 @@ export async function capabilitiesForAgent(
 
 export async function runNativeAgent(
   env: NodeJS.ProcessEnv = process.env,
+  trustedNativeMutationProvider?: TrustedNativeMutationProvider,
 ): Promise<never> {
   const identity = await loadOrCreateAgentIdentity(env);
   const instanceId = randomUUID();
@@ -718,7 +720,7 @@ export async function runNativeAgent(
                 }
                 let outcome: AgentResponse;
                 try {
-                  const data = await executeCapability(
+                  const execute = () => executeCapability(
                     request.data.capability,
                     request.data.input,
                     policy,
@@ -738,6 +740,21 @@ export async function runNativeAgent(
                         : {}),
                     },
                   );
+                  // The local CAS/journal is NOT a substitute for authoritative
+                  // owner/device epoch + native one-time effect admission.
+                  // Opt-in mode refuses effects when the independently trusted
+                  // authority is unavailable; do not infer a grant from the wire.
+                  const data = mutation &&
+                    env.NEXOWIRE_AGENT_REQUIRE_ATOMIC_EFFECT_ADMISSION === '1'
+                    ? await executeTrustedNativeMutation({
+                        provider: trustedNativeMutationProvider,
+                        deviceId: identity.id,
+                        requestId: request.data.requestId,
+                        capability: request.data.capability,
+                        exactFrame: raw.toString(),
+                        signal: requestLifetime.signal,
+                      }, execute)
+                    : await execute();
                   outcome = {
                     type: 'response',
                     requestId: request.data.requestId,

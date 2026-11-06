@@ -127,7 +127,8 @@ export function bindRemoteAgentMutationReauthorization(input: {
     const timeoutPromise=new Promise<undefined>(resolve=>{
       abort=()=>{controller.abort();resolve(undefined);};
       timer=setTimeout(abort,timeout);
-      timer.unref?.();
+      // Keep this timer referenced: Node 22 must not exit with an unresolved
+      // verifier promise before mandatory fail-closed reauthorization fires.
     });
     try {
       const refreshed=await Promise.race([

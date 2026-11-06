@@ -1008,5 +1008,25 @@
     "ai06": "PENDING",
     "production": "NO_GO",
     "physical_devices_touched": false
+  },
+  "ai05_round2": {
+    "frozen_sources": {
+      "PR1088": "2d2b9e7dd946c91f1ff63d50feab953ef47b464e",
+      "PR1087": "7a580104def439e217fe1facb27334c78c29f3e7",
+      "PR1086": "1b85b2c25d1822e10269bd49188bd667fd225408",
+      "PR1067": "bcfe563cc1ea7f884263c113ad269c1e8f6bcd6e",
+      "PR1077": "6f98aa94b5bc1a217576666317039254ee7e1c09"
+    },
+    "previous_head": "37fc9163e2b7ccd93600ee23b63f19d4e44ddb77",
+    "migration_sequence": [
+      "0020",
+      "0021",
+      "0022"
+    ],
+    "production": "NO_GO",
+    "physical_deploy": false,
+    "external_atomic_authority": "MISSING",
+    "signed_json_only_rollback_guard": "MISSING",
+    "new_ci": "NOT_RUN"
   }
 }
