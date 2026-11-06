@@ -31,6 +31,7 @@ already-authorized caller. This is a *classification*, not a security approval.
 <!-- k08:read-only-v1-begin -->
 | Stable MCP v1 tool | Read-only Agent capability |
 | --- | --- |
+| `agent_operation_status` | `agent.operation.status` |
 | `browser_screenshot` | `browser.screenshot` |
 | `browser_session_list` | `browser.session.list` |
 | `browser_snapshot` | `browser.snapshot` |
