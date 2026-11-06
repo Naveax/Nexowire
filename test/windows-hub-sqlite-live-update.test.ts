@@ -63,6 +63,17 @@ test('Windows preflight accepts SQLite-aware reader and denies JSON-only rollbac
     const ready=runGuard(launcher,path.join(root,'ignored-default'),current);
     assert.equal(ready.status,0,ready.stderr);
     assert.match(ready.stdout,/PREFLIGHT_OK/);
+    // Windows 5.1 may normalize a harmless trailing separator differently.
+    // Canonical local paths must still reach the SQLite reader check.
+    writeFileSync(launcher,"$env:NEXOWIRE_STATE_DIR="+q(state+path.sep)+'\r\n');
+    const trailing=runGuard(launcher,path.join(root,'ignored-default'),current);
+    assert.equal(trailing.status,0,trailing.stderr);
+    // Explicit traversal is not just an alternate spelling; reject it.
+    writeFileSync(launcher,"$env:NEXOWIRE_STATE_DIR="+q(state+path.sep+'..'+path.sep+'state')+'\r\n');
+    const traversal=runGuard(launcher,path.join(root,'ignored-default'),current);
+    assert.equal(traversal.status,2,traversal.stderr);
+    assert.match(traversal.stderr,/UPDATE_HUB_STATE_DIR_NOT_CANONICAL/);
+    writeFileSync(launcher,"$env:NEXOWIRE_STATE_DIR="+q(state)+'\r\n');
     writeFileSync(reader,"const file='idempotency-records.json';");
     const denied=runGuard(launcher,path.join(root,'ignored-default'),current);
     assert.equal(denied.status,2,denied.stderr);
