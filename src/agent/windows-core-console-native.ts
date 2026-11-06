@@ -143,10 +143,10 @@ switch($cap){
  'windows.keyboard.hotkey' {
    $aliases=@{CTRL=17;CONTROL=17;ALT=18;SHIFT=16;WIN=91;META=91;ENTER=13;RETURN=13;ESC=27;ESCAPE=27;SPACE=32;TAB=9;BACKSPACE=8;BACK=8;DELETE=46;DEL=46;PGUP=33;PGDN=34}
    $keys=@();foreach($name in $p.input.keys){$n=([string]$name).ToUpperInvariant();
-     $keys+=if($aliases.ContainsKey($n)){[ushort]$aliases[$n]}elseif($n -match '^[A-Z0-9]$'){[ushort][char]$n}else{[ushort][Enum]::Parse([System.Windows.Forms.Keys],$n,$true)}
+     $keys+=if($aliases.ContainsKey($n)){[uint16]$aliases[$n]}elseif($n -match '^[A-Z0-9]$'){[uint16][char]$n}else{[uint16][Enum]::Parse([System.Windows.Forms.Keys],$n,$true)}
    }
    if($keys -contains 17 -and $keys -contains 18 -and $keys -contains 46){throw 'CORE_SECURE_ATTENTION_DENIED'}
-   [NxCoreConsole]::Chord([ushort[]]$keys)
+   [NxCoreConsole]::Chord([uint16[]]$keys)
  }
  'windows.window.focus' {[NxCoreConsole]::Focus([bool]$p.input.restore_if_minimized)}
  'windows.clipboard.write' {[NxCoreConsole]::MarkEffect();[System.Windows.Forms.Clipboard]::SetText([string]$p.input.text)}
