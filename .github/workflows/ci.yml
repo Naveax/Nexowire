@@ -204,6 +204,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - name: Verify real Windows authorized CAS command/write and no-CAS fail-closed behavior
+        timeout-minutes: 5
+        run: node --test --test-concurrency=1 --import tsx test/agent-native-remote-cas-live.test.ts test/agent-readonly-without-cas.test.ts
       - name: Verify Cloudflare-only connector lifecycle and active Agent authorization
         timeout-minutes: 12
         shell: pwsh
