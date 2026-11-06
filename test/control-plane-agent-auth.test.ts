@@ -160,3 +160,40 @@ test('control-plane agent presence reporter fails soft on invalid input and remo
   );
   assert.equal(calls, 1);
 });
+
+
+test('control-plane verifier transports complete owner/device/epoch lease without inventing authority',async()=>{
+  const leaseExpiresAtMs=Date.now()+60_000;
+  const deviceId='device-authority-v206';
+  const verify=createControlPlaneAgentCredentialVerifier({
+    controlPlaneUrl:'https://control.example.test',
+    serviceToken:'service-token-0123456789',
+    fetchImpl:async()=>Response.json({authenticated:true,device:{
+      deviceId,ownerAccountId:'owner-v206',authorizationEpoch:12,leaseExpiresAtMs,
+    }}),
+  });
+  assert.deepEqual(await verify('Bearer nwx_dev_credential-1234567890'),{
+    deviceId,ownerId:'owner-v206',authorizationEpoch:12,leaseExpiresAtMs,
+  });
+});
+
+test('control-plane verifier rejects malformed or conflicting full authority proofs',async()=>{
+  let response:Record<string,unknown>={};
+  const verify=createControlPlaneAgentCredentialVerifier({
+    controlPlaneUrl:'https://control.example.test',
+    serviceToken:'service-token-0123456789',
+    fetchImpl:async()=>Response.json({authenticated:true,device:response}),
+  });
+  const deviceId='device-authority-v206',ownerAccountId='owner-v206';
+  const leaseExpiresAtMs=Date.now()+60_000;
+  for(const bad of [
+    {deviceId,ownerAccountId,authorizationEpoch:'1',leaseExpiresAtMs},
+    {deviceId,ownerAccountId,authorizationEpoch:1,leaseExpiresAtMs:Date.now()-1},
+    {deviceId,ownerAccountId,authorizationEpoch:1,leaseExpiresAtMs:Date.now()+301_000},
+    {deviceId,ownerAccountId,authorizationEpoch:1},
+    {deviceId,ownerAccountId,ownerId:'another-owner',authorizationEpoch:1,leaseExpiresAtMs},
+  ]){
+    response=bad;
+    assert.equal(await verify('Bearer nwx_dev_credential-1234567890'),undefined);
+  }
+});

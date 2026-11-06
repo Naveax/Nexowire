@@ -1,6 +1,10 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import * as z from 'zod';
+import {
+  SemanticEffectJournal,SemanticEffectJournalError,
+  type SemanticEffectReservation,type VerifyNewEffectIntent,
+} from './runbook-effect-journal.js';
 
 const StepStatusSchema = z.enum([
   'pending',
@@ -108,13 +112,23 @@ export class RunbookStore {
   private readonly retentionMs: number;
   private persistChain: Promise<void> = Promise.resolve();
   private readonly maxEntries: number;
+  private readonly effectJournal:SemanticEffectJournal;
+  private legacyUnindexedEffects=false;
 
   constructor(options: {
     stateFile: string;
+    /** Verified local OS owner / agent device scope, not caller-supplied JSON. */
+    ownerId?: string;
+    deviceId?: string;
     retentionMs?: number;
     maxEntries?: number;
   }) {
     this.stateFile = options.stateFile;
+    this.effectJournal=new SemanticEffectJournal({
+      stateFile:options.stateFile,
+      ownerId:options.ownerId??'local-unbound',
+      deviceId:options.deviceId??'local-unbound',
+    });
     this.retentionMs =
       options.retentionMs ?? 14 * 24 * 60 * 60 * 1000;
     const maxEntries=options.maxEntries ?? 4096;
@@ -140,6 +154,20 @@ export class RunbookStore {
     }
 
     const state = StateSchema.parse(JSON.parse(raw));
+    // Migration must not silently drop pre-upgrade effects that were
+    // dispatched without any semantic-effect journal. Refuse new mutation
+    // admission until an independent owner/source reconciliation is done.
+    const legacyEffects=state.runbooks.some(entry=>entry.steps.some(
+      step=>step.kind==='task_graph'&&step.attempts>0));
+    let journalExists=false;
+    try{
+      const stat=await fs.lstat(this.stateFile+'.semantic-effects');
+      journalExists=stat.isDirectory()&&!stat.isSymbolicLink();
+    }catch(error){
+      if(!(typeof error==='object'&&error!==null&&'code' in error&&error.code==='ENOENT'))
+        throw error;
+    }
+    this.legacyUnindexedEffects=legacyEffects&&!journalExists;
     // A corrupted or tampered journal must never silently overwrite an
     // earlier UNKNOWN effect via Map.set on the same durable ID. Validate
     // the complete snapshot BEFORE installing any entry into memory.
@@ -176,6 +204,21 @@ export class RunbookStore {
     // Expiry cannot discard prior UNKNOWN effects. Only independently
     // reconciled tombstones may authorize native journal cleanup (#587).
     if (changed) await this.persist();
+  }
+
+  /** Admission is durable BEFORE task graph dispatch. Every reservation
+   * creates a non-expiring O_EXCL tombstone shared across RunbookStore instances.
+   * Caller-provided runbook IDs never determine semantic-effect uniqueness.
+   */
+  async reserveSemanticEffect(
+    input:SemanticEffectReservation,
+    verifier?:VerifyNewEffectIntent,
+  ):Promise<void>{
+    if(this.legacyUnindexedEffects)
+      throw new SemanticEffectJournalError(
+        'RUNBOOK_EFFECT_LEGACY_RECONCILIATION_REQUIRED',
+        'Unindexed historical native effects need independent owner reconciliation.');
+    await this.effectJournal.reserve(input,verifier);
   }
 
   async prepare(input: {

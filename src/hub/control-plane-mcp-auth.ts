@@ -1,4 +1,5 @@
 import { bearerFromHeader } from '../security/tokens.js';
+import {normalizeControlPlaneBase,controlPlaneSecretPost} from './control-plane-network-policy.js';
 import type { CredentialRole } from '../security/credential-store.js';
 
 export interface RemoteMcpAuthorization {
@@ -26,38 +27,6 @@ export interface ControlPlaneMcpClientOptions {
   serviceToken: string;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
-}
-
-function normalizeControlPlaneBase(input: string): string {
-  const raw = input.trim();
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    throw new Error('Control-plane URL is invalid.');
-  }
-
-  const loopback =
-    url.hostname === '127.0.0.1' ||
-    url.hostname === 'localhost' ||
-    url.hostname === '[::1]' ||
-    url.hostname === '::1';
-
-  if (
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash ||
-    (url.protocol !== 'https:' &&
-      !(loopback && url.protocol === 'http:'))
-  ) {
-    throw new Error(
-      'Control-plane URL must use HTTPS except for loopback development.',
-    );
-  }
-
-  url.pathname = url.pathname.replace(/\/+$/, '');
-  return url.toString().replace(/\/$/, '');
 }
 
 function validateServiceToken(input: string): string {
@@ -98,7 +67,7 @@ export class ControlPlaneMcpVerifierUnavailableError extends Error {
 export class ControlPlaneMcpClient {
   private readonly base: string;
   private readonly serviceToken: string;
-  private readonly fetchImpl: typeof fetch;
+  private readonly fetchImpl?: typeof fetch;
   private readonly timeoutMs: number;
 
   constructor(options: ControlPlaneMcpClientOptions) {
@@ -108,7 +77,7 @@ export class ControlPlaneMcpClient {
     this.serviceToken = validateServiceToken(
       options.serviceToken,
     );
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    this.fetchImpl = options.fetchImpl;
     this.timeoutMs = boundedTimeout(options.timeoutMs);
   }
 
@@ -267,7 +236,7 @@ export class ControlPlaneMcpClient {
     timer.unref?.();
 
     try {
-      const response = await this.fetchImpl(
+      const response = await controlPlaneSecretPost(
         this.base + path,
         {
           method: 'POST',
@@ -279,7 +248,9 @@ export class ControlPlaneMcpClient {
           },
           body: JSON.stringify(payload),
           signal: controller.signal,
+          redirect: 'error',
         },
+      this.fetchImpl,
       );
       if (!response.ok) {
         if (requireVerifier) throw new ControlPlaneMcpVerifierUnavailableError();
