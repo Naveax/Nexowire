@@ -33,9 +33,10 @@ try {
   }
   # Reject unexpected write principals. Read-only inherited ACEs are permitted.
   $trusted=@($identity.User.Value,'S-1-5-18','S-1-5-32-544')
+  # Do NOT OR with FullControl/Modify: their masks contain Read bits and
+  # would incorrectly classify inherited read-only permissions as writers.
   $writeMask=[int][System.Security.AccessControl.FileSystemRights]::Write -bor
-    [int][System.Security.AccessControl.FileSystemRights]::Modify -bor
-    [int][System.Security.AccessControl.FileSystemRights]::FullControl -bor
+    [int][System.Security.AccessControl.FileSystemRights]::Delete -bor
     [int][System.Security.AccessControl.FileSystemRights]::ChangePermissions -bor
     [int][System.Security.AccessControl.FileSystemRights]::TakeOwnership
   $acl=Get-Acl -LiteralPath $full
