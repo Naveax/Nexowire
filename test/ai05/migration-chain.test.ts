@@ -35,9 +35,11 @@ test('AI-05 exact additive 0020 -> 0021 -> 0022 migration chain and fail-closed 
     function remote(){return db.prepare(
       'SELECT authorization_epoch AS epoch,active FROM device_remote_authorization WHERE device_id=?'
     ).get('device') as {epoch:number;active:number};}
-    const first=remote();assert.equal(first.epoch,1);assert.equal(first.active,1);
+    const first=remote();assert.equal(first.epoch,1);assert.equal(first.active,0);
+    // Migration defaults FULL enrollments to disabled; SAFE -> FULL is explicit approval.
     db.prepare('UPDATE devices SET credential_hash=? WHERE id=?').run('credential2','device');
     assert.equal(remote().epoch,2);
+    assert.equal(remote().active,0,'credential rotation must not grant remote access');
     db.prepare("UPDATE devices SET access_mode='safe' WHERE id='device'").run();
     assert.equal(remote().active,0);
     db.prepare("UPDATE devices SET access_mode='full' WHERE id='device'").run();
@@ -53,6 +55,10 @@ test('AI-05 exact additive 0020 -> 0021 -> 0022 migration chain and fail-closed 
     assert.ok(remote().epoch>tomb);assert.equal(remote().active,0);
     db.prepare('INSERT INTO devices VALUES(?,?,?,?)').run('device','owner','credential3','full');
     assert.ok(remote().epoch>tomb+1,'re-pair must never reuse old epoch');
+    assert.equal(remote().active,0,'FULL re-pair must not auto-enable remote authority');
+    db.prepare("UPDATE devices SET access_mode='safe' WHERE id='device'").run();
+    db.prepare("UPDATE devices SET access_mode='full' WHERE id='device'").run();
+    assert.equal(remote().active,1,'explicit SAFE to FULL permits remote authority');
 
     db.prepare(`INSERT INTO device_core_console_operations
       (request_id,device_id,installation_id,enrollment_id,owner_epoch,grant_generation,

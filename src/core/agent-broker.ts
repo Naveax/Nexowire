@@ -443,6 +443,12 @@ export class AgentBroker {
       );
     }
 
+    // Seal immutable request bytes BEFORE the first authorization await.
+    // Mutable input references cannot change the payload after CAS verification.
+    const immutableMutationFrame = !isReadOnlyCapability(capability)
+      ? JSON.stringify({type:'request', requestId, capability, input, accessMode})
+      : undefined;
+
     // An authenticated HTTP 101 is not a permanent mutation grant. The
     // credential may be revoked between WebSocket periodic checks; revalidate
     // on *every* mutation, fail closed, and check the socket epoch after await.
@@ -526,9 +532,7 @@ export class AgentBroker {
           // The trusted coordinator reserves the immutable exact frame first,
           // then serializes revoke-vs-send within its independent authority.
           // The pending Map is only transport state, NEVER a durable CAS.
-          const frame = JSON.stringify({
-            type: 'request', requestId, capability, input, accessMode,
-          });
+          const frame = immutableMutationFrame!;
           void atomicCoordinator.dispatch({requestId, capability, frame}, (exactFrame) => {
             if (this.pending.get(requestId) !== pending ||
                 this.agents.get(deviceId) !== connection ||

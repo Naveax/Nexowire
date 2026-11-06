@@ -640,9 +640,11 @@ export async function runNativeAgent(
         if (!greeted) return;
 
         socket.on('message', async (raw) => {
+          // Seal the exact incoming bytes before any authorization await.
+          const exactRequestFrame = raw.toString();
           let decoded: unknown;
           try {
-            decoded = JSON.parse(raw.toString());
+            decoded = JSON.parse(exactRequestFrame);
           } catch {
             return;
           }
@@ -751,7 +753,7 @@ export async function runNativeAgent(
                         deviceId: identity.id,
                         requestId: request.data.requestId,
                         capability: request.data.capability,
-                        exactFrame: raw.toString(),
+                        exactFrame: exactRequestFrame,
                         signal: requestLifetime.signal,
                       }, execute)
                     : await execute();
