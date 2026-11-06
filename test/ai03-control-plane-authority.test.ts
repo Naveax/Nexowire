@@ -62,6 +62,10 @@ test('AI-03 memory: SAFE, wrong owner, revoke, re-pair, owner-wide invalidation'
   assert.ok(c>b);
   const rotated=await pair(service,'re-paired NAVEAX',id);
   assert.equal(await service.authenticateDeviceCredential(first.deviceCredential),null);
+  assert.equal((await service.authenticateDeviceCredential(rotated.deviceCredential))?.authorizationEpoch,undefined,
+    're-pair must not silently carry remote authority to new credential');
+  await service.setDeviceAccessMode(owner,id,'safe');
+  await service.setDeviceAccessMode(owner,id,'full');
   const d=grant(await service.authenticateDeviceCredential(rotated.deviceCredential));
   assert.ok(d>c);
   await assert.rejects(service.revokeOwnerRemoteAuthorizations({accountId:'svc',role:'service'}),/OWNER_LOGIN_REQUIRED/);
@@ -143,7 +147,7 @@ test('AI-03 D1: atomic ownership, monotonic epoch, tombstone and reuse',async()=
     '0019_core_console_authority.sql','0020_core_console_native_logon_binding.sql',
     '0021_core_console_native_claim_verified.sql','0022_remote_agent_authorization_epoch.sql',
   ];
-  for(const name of names)db.exec(
+  for(const name of names.filter(item=>!item.startsWith('0022_')))db.exec(
     name.startsWith('0020_') || name.startsWith('0021_')
       ? readCoreMigration(name as '0020_core_console_native_logon_binding.sql' | '0021_core_console_native_claim_verified.sql')
       : readFileSync(path.join(process.cwd(),'cloudflare','migrations',name),'utf8'),
@@ -153,6 +157,18 @@ test('AI-03 D1: atomic ownership, monotonic epoch, tombstone and reuse',async()=
     const service=new ControlPlaneService(store);
     await service.ensureAccount({id:owner.accountId});
     await service.ensureAccount({id:wrongOwner.accountId});
+    const legacy=await pair(service,'legacy FULL before 0022');
+    await service.setDeviceAccessMode(owner,legacy.device.id,'full');
+    await assert.rejects(service.authenticateDeviceCredential(legacy.deviceCredential),
+      /no such table: device_remote_authorization/,
+      'missing 0022 cannot silently mint an epoch');
+    db.exec(readFileSync(path.join(process.cwd(),'cloudflare','migrations',
+      '0022_remote_agent_authorization_epoch.sql'),'utf8'));
+    assert.equal((await service.authenticateDeviceCredential(legacy.deviceCredential))?.authorizationEpoch,undefined,
+      'migration cannot silently activate remote access for previously FULL devices');
+    await service.setDeviceAccessMode(owner,legacy.device.id,'safe');
+    await service.setDeviceAccessMode(owner,legacy.device.id,'full');
+    assert.ok(grant(await service.authenticateDeviceCredential(legacy.deviceCredential)) >= 2);
     const first=await pair(service,'D1 device');
     await service.setDeviceAccessMode(owner,first.device.id,'full');
     // CORE 0020/0021 must execute in the SAME schema, not in a mock DB.
@@ -191,6 +207,10 @@ test('AI-03 D1: atomic ownership, monotonic epoch, tombstone and reuse',async()=
     assert.ok(epochB>epochA);
     const next=await pair(service,'D1 re-pair',first.device.id);
     assert.equal(await service.authenticateDeviceCredential(first.deviceCredential),null);
+    assert.equal((await service.authenticateDeviceCredential(next.deviceCredential))?.authorizationEpoch,undefined,
+      'new credential requires fresh owner authorization');
+    await service.setDeviceAccessMode(owner,first.device.id,'safe');
+    await service.setDeviceAccessMode(owner,first.device.id,'full');
     const epochC=grant(await service.authenticateDeviceCredential(next.deviceCredential));
     assert.ok(epochC>epochB);
     db.prepare('DELETE FROM devices WHERE id=?').run(first.device.id);
@@ -205,6 +225,14 @@ test('AI-03 D1: atomic ownership, monotonic epoch, tombstone and reuse',async()=
       .get(first.device.id) as {epoch:number};
     assert.ok(reused.epoch>tomb.epoch);
     assert.equal(await store.getRemoteDeviceAuthorization(first.device.id,'wrong',owner.accountId),null);
+    assert.equal(await store.getRemoteDeviceAuthorization(first.device.id,'1'.repeat(64),owner.accountId),null,
+      'a reused device ID must begin inactive, even if inserted with FULL');
+    db.prepare('DELETE FROM accounts WHERE id=?').run(owner.accountId);
+    const accountDeleted=db.prepare(
+      'SELECT authorization_epoch AS epoch,active FROM device_remote_authorization WHERE device_id=?',
+    ).get(first.device.id) as {epoch:number;active:number};
+    assert.equal(accountDeleted.active,0,'owner delete must tombstone remote grant');
+    assert.ok(accountDeleted.epoch>reused.epoch);
   }finally{db.close();}
 });
 
@@ -229,6 +257,7 @@ test('AI-03 real HTTP verifier rejects forged client scope, expired lease and st
     body:JSON.stringify({
       credential:first.deviceCredential,
       ownerAccountId:'forged-owner',
+      ownerId:'forged-owner-alias',
       deviceId:'forged-device',
       authorizationEpoch:999999,
       leaseExpiresAtMs:Number.MAX_SAFE_INTEGER,
@@ -238,10 +267,11 @@ test('AI-03 real HTTP verifier rejects forged client scope, expired lease and st
   assert.equal(response.status,200);
   const reported=await response.json() as {
     authenticated:boolean;
-    device:{ownerAccountId:string;deviceId:string;authorizationEpoch:number;leaseExpiresAtMs:number};
+    device:{ownerAccountId:string;ownerId:string;deviceId:string;authorizationEpoch:number;leaseExpiresAtMs:number};
   };
   assert.equal(reported.authenticated,true);
   assert.equal(reported.device.ownerAccountId,owner.accountId);
+  assert.equal(reported.device.ownerId,owner.accountId);
   assert.equal(reported.device.deviceId,first.device.id);
   assert.notEqual(reported.device.authorizationEpoch,999999);
   assert.notEqual(reported.device.leaseExpiresAtMs,Number.MAX_SAFE_INTEGER);

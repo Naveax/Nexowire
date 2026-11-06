@@ -260,7 +260,7 @@ export class MemoryControlPlaneStore implements ControlPlaneStore {
     if (!authority) {
       this.remoteAuthorizations.set(record.id, {
         ownerAccountId: record.ownerAccountId, epoch: 1,
-        active: record.accessMode === 'full',
+        active: false,
       });
     } else if (changed) {
       if (authority.epoch >= Number.MAX_SAFE_INTEGER) {
@@ -268,7 +268,10 @@ export class MemoryControlPlaneStore implements ControlPlaneStore {
       }
       this.remoteAuthorizations.set(record.id, {
         ownerAccountId: record.ownerAccountId, epoch: authority.epoch + 1,
-        active: record.accessMode === 'full',
+        active: previous?.accessMode === 'safe' &&
+          record.accessMode === 'full' &&
+          previous.ownerAccountId === record.ownerAccountId &&
+          previous.credentialHash === record.credentialHash,
       });
     }
     this.devices.set(record.id, clone(record));

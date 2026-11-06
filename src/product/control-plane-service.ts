@@ -47,6 +47,8 @@ export interface InfrastructureSnapshot {
 export interface AuthenticatedDeviceIdentity {
   deviceId: string;
   ownerAccountId: string;
+  /** Alias of trusted ownerAccountId, emitted with a live authority grant only. */
+  ownerId?: string;
   deviceName: string;
   platform: string;
   /** Present only while the authoritative Control Plane grant is active. */
@@ -717,6 +719,7 @@ export class ControlPlaneService {
       deviceName: device.name,
       platform: device.platform,
       ...(epoch === null ? {} : {
+        ownerId: device.ownerAccountId,
         authorizationEpoch: epoch,
         leaseExpiresAtMs: nowMs + ControlPlaneService.REMOTE_AUTHORIZATION_LEASE_MS,
       }),

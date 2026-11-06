@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS device_remote_authorization (
 
 INSERT OR IGNORE INTO device_remote_authorization
   (device_id, owner_account_id, authorization_epoch, active)
-SELECT id, owner_account_id, 1, CASE WHEN access_mode = 'full' THEN 1 ELSE 0 END
+SELECT id, owner_account_id, 1, 0
   FROM devices;
 
 CREATE TRIGGER IF NOT EXISTS trg_remote_authority_device_insert
@@ -17,8 +17,7 @@ AFTER INSERT ON devices
 BEGIN
   INSERT INTO device_remote_authorization
     (device_id, owner_account_id, authorization_epoch, active)
-  VALUES (NEW.id, NEW.owner_account_id, 1,
-          CASE WHEN NEW.access_mode = 'full' THEN 1 ELSE 0 END)
+  VALUES (NEW.id, NEW.owner_account_id, 1, 0)
   ON CONFLICT(device_id) DO UPDATE SET
     owner_account_id = excluded.owner_account_id,
     authorization_epoch = device_remote_authorization.authorization_epoch + 1,
@@ -35,7 +34,11 @@ BEGIN
   UPDATE device_remote_authorization
      SET owner_account_id = NEW.owner_account_id,
          authorization_epoch = authorization_epoch + 1,
-         active = CASE WHEN NEW.access_mode = 'full' THEN 1 ELSE 0 END
+         active = CASE
+           WHEN OLD.access_mode = 'safe' AND NEW.access_mode = 'full'
+            AND OLD.owner_account_id = NEW.owner_account_id
+            AND OLD.credential_hash = NEW.credential_hash
+           THEN 1 ELSE 0 END
    WHERE device_id = NEW.id;
 END;
 
