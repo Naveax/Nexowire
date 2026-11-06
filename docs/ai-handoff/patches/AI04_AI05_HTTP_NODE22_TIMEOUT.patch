@@ -1,7 +1,7 @@
 diff --git a/src/mcp/http.ts b/src/mcp/http.ts
 --- a/src/mcp/http.ts
 +++ b/src/mcp/http.ts
-@@ -127,8 +127,9 @@ export function bindRemoteAgentMutationReauthorization(input: {
+@@ -127,7 +127,8 @@ export function bindRemoteAgentMutationReauthorization(input: {
      const timeoutPromise=new Promise<undefined>(resolve=>{
        abort=()=>{controller.abort();resolve(undefined);};
        timer=setTimeout(abort,timeout);
