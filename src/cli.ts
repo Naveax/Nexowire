@@ -9,6 +9,7 @@ import { runHttpServer } from './mcp/http.js';
 import { runLocalFirstIngress, verifyLocalFirstPublicUpstream } from './mcp/local-first-ingress.js';
 import { readOnlyLocalFirstFunnelPlan } from './mcp/local-first-funnel-plan.js';
 import { runCloudflareConnection } from './mcp/local-first-cloudflare.js';
+import { runExternalCloudflareIngress } from './mcp/cloudflare-external-origin.js';
 import { cloudflareConnectionLifecycle } from './mcp/cloudflare-connection-lifecycle.js';
 import { inspectCloudflareConnection } from './mcp/cloudflare-connection-doctor.js';
 import { promises as fs } from 'node:fs';
@@ -51,7 +52,7 @@ Usage:
   nexowire update [status|check|apply]   Check or apply verified official releases
   nexowire update auto [install|run|status|enable|disable|uninstall]
                    Manage the lightweight hourly Windows auto-updater
-  nexowire local-first cloudflare-run <absolute-profile.json>
+  nexowire local-first cloudflare-external-ingress <absolute-profile.json>\n                   Use externally managed cloudflared service; Nexowire runs loopback origin only\n  nexowire local-first cloudflare-run <absolute-profile.json>
                    Run Cloudflare-only MCP ingress (no Tailscale or VPS)
   nexowire local-first cloudflare-install <absolute-profile.json>
   nexowire local-first cloudflare-doctor <absolute-profile.json>
@@ -132,6 +133,11 @@ async function main(): Promise<void> {
     if(cloudflareAction==='status'||cloudflareAction==='start'||cloudflareAction==='stop'||cloudflareAction==='uninstall'){
       if(process.argv.length!==4)throw new Error('Cloudflare task action accepts no arguments');
       process.stdout.write(JSON.stringify(await cloudflareConnectionLifecycle(cloudflareAction))+'\n');return;
+    }
+    if (process.argv[3] === 'cloudflare-external-ingress') {
+      if(process.argv.length!==5)throw new Error('cloudflare-external-ingress requires one absolute profile JSON path');
+      await runExternalCloudflareIngress(process.argv[4]!,loadConfig());
+      return;
     }
     if (process.argv[3] === 'cloudflare-run') {
       if(process.argv.length!==5)throw new Error('cloudflare-run requires one absolute profile JSON path');
