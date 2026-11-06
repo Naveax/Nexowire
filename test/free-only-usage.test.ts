@@ -7,7 +7,7 @@ import { ControlPlaneService } from '../src/product/control-plane-service.js';
 import { enforceHostedMcpMetering } from '../src/mcp/hosted-metering.js';
 import type { ControlPlaneMcpClient } from '../src/hub/control-plane-mcp-auth.js';
 
-test('verified GitHub owner has unlimited Free tool credits without unlocking paid features', async () => {
+test('verified GitHub owner has unlimited Free tool credits and private control while other users remain Free', async () => {
   const store = new MemoryControlPlaneStore();
   const service = new ControlPlaneService(store, {
     freeOnly: true,
@@ -25,7 +25,7 @@ test('verified GitHub owner has unlimited Free tool credits without unlocking pa
   assert.equal(ownerDashboard.planId, 'free');
   assert.equal(ownerDashboard.billingMode, 'free');
   assert.equal(ownerDashboard.usage.monthlyCredits, null);
-  assert.equal(ownerDashboard.privateControlsIncluded, false);
+  assert.equal(ownerDashboard.privateControlsIncluded, true);
 
   const first = await service.chargeUsage({
     accountId: owner.id, eventId: 'owner-over-thousand', toolName: 'machine_health',
@@ -48,11 +48,17 @@ test('verified GitHub owner has unlimited Free tool credits without unlocking pa
   assert.equal(replay.status, 'duplicate');
   assert.equal(replay.chargedCredits, 0);
 
-  const denied = await service.chargeUsage({
+  const ownerPrivate = await service.chargeUsage({
     accountId: owner.id, eventId: 'owner-premium', toolName: 'windows_private_desktop_start',
   });
-  assert.equal(denied.status, 'denied');
-  assert.equal(denied.reason, 'feature-not-in-plan');
+  assert.equal(ownerPrivate.status, 'charged');
+  assert.equal(ownerPrivate.remainingCredits, null);
+
+  const impostorPrivate = await service.chargeUsage({
+    accountId: impersonator.id, eventId: 'impostor-private', toolName: 'windows_private_desktop_start',
+  });
+  assert.equal(impostorPrivate.status, 'denied');
+  assert.equal(impostorPrivate.reason, 'feature-not-in-plan');
 
   const otherDashboard = await service.dashboard({ accountId: impersonator.id, role: 'admin' });
   assert.equal(otherDashboard.usage.monthlyCredits, 1_000);
