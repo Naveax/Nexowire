@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
+import {existsSync} from 'node:fs';
+import {createHash} from 'node:crypto';
 import {DatabaseSync, type StatementSync} from 'node:sqlite';
 import {MemoryControlPlaneStore} from '../src/product/memory-control-plane-store.js';
 import {ControlPlaneService} from '../src/product/control-plane-service.js';
@@ -110,6 +112,24 @@ class SqliteD1 implements D1DatabaseLike {
   }
 }
 
+
+/** Pin true CORE Git blobs, never substitute a hand-written fake migration. */
+function readCoreMigration(name: '0020_core_console_native_logon_binding.sql' | '0021_core_console_native_claim_verified.sql'): string {
+  const pinned = name.startsWith('0020') ? '48a6f219f79c2f209fcdc26e38301e5d5b5c554c' : 'db9be69698bf9dd611e276bbb0b59456c9d16252';
+  const productionPath = path.join(process.cwd(), 'cloudflare', 'migrations', name);
+  const filePath = existsSync(productionPath)
+    ? productionPath
+    : path.join(process.cwd(), 'test', 'ai03', 'fixtures', name);
+  const bytes = readFileSync(filePath);
+  const gitSha = createHash('sha1')
+    .update(Buffer.from('blob ' + bytes.length + '\\0'))
+    .update(bytes)
+    .digest('hex');
+  assert.equal(gitSha, pinned,
+    'CORE migration must match verified #1089 blob: ' + name);
+  return bytes.toString('utf8');
+}
+
 test('AI-03 D1: atomic ownership, monotonic epoch, tombstone and reuse',async()=>{
   const db=new DatabaseSync(':memory:');
   db.exec('PRAGMA foreign_keys=ON');
@@ -120,9 +140,14 @@ test('AI-03 D1: atomic ownership, monotonic epoch, tombstone and reuse',async()=
     '0011_device_root_mode_leases.sql','0012_owner_device_folders.sql',
     '0013_owner_device_selection.sql','0014_device_maintenance_preferences.sql',
     '0015_device_bridge_preferences.sql','0016_device_bridge_commands.sql',
-    '0019_core_console_authority.sql','0022_remote_agent_authorization_epoch.sql',
+    '0019_core_console_authority.sql','0020_core_console_native_logon_binding.sql',
+    '0021_core_console_native_claim_verified.sql','0022_remote_agent_authorization_epoch.sql',
   ];
-  for(const name of names)db.exec(readFileSync(path.join(process.cwd(),'cloudflare','migrations',name),'utf8'));
+  for(const name of names)db.exec(
+    name.startsWith('0020_') || name.startsWith('0021_')
+      ? readCoreMigration(name as '0020_core_console_native_logon_binding.sql' | '0021_core_console_native_claim_verified.sql')
+      : readFileSync(path.join(process.cwd(),'cloudflare','migrations',name),'utf8'),
+  );
   try{
     const store=new D1ControlPlaneStore(new SqliteD1(db));
     const service=new ControlPlaneService(store);
@@ -130,6 +155,28 @@ test('AI-03 D1: atomic ownership, monotonic epoch, tombstone and reuse',async()=
     await service.ensureAccount({id:wrongOwner.accountId});
     const first=await pair(service,'D1 device');
     await service.setDeviceAccessMode(owner,first.device.id,'full');
+    // CORE 0020/0021 must execute in the SAME schema, not in a mock DB.
+    const coreColumns=db.prepare("PRAGMA table_info(device_core_console_authority)").all()
+      .map(x=>String(x.name));
+    assert.ok(coreColumns.includes('windows_user_sid'));
+    const operationColumns=db.prepare("PRAGMA table_info(device_core_console_operations)").all()
+      .map(x=>String(x.name));
+    assert.ok(operationColumns.includes('native_claim_verified'));
+    const operationId='ai03-core-claim-fixture';
+    db.prepare(
+      "INSERT INTO device_core_console_operations (request_id,device_id,installation_id,enrollment_id,owner_epoch,grant_generation,revoke_epoch,fingerprint,state,reserved_at_ms) VALUES (?,?,?, ?,1,1,0,?,'reserved',100)",
+    ).run(operationId,first.device.id,'installation','enrollment','fingerprint');
+    db.prepare("UPDATE device_core_console_operations SET state='dispatched' WHERE request_id=?").run(operationId);
+    assert.throws(
+      ()=>db.prepare("UPDATE device_core_console_operations SET state='succeeded' WHERE request_id=?").run(operationId),
+      /CORE_NATIVE_CLAIM_NOT_VERIFIED/,
+    );
+    db.prepare("UPDATE device_core_console_operations SET native_claim_verified=1 WHERE request_id=?").run(operationId);
+    db.prepare("UPDATE device_core_console_operations SET state='succeeded' WHERE request_id=?").run(operationId);
+    assert.throws(
+      ()=>db.prepare("UPDATE device_core_console_operations SET state='reserved' WHERE request_id=?").run(operationId),
+      /CORE_COMPLETED_OPERATION_TERMINAL/,
+    );
     const epochA=grant(await service.authenticateDeviceCredential(first.deviceCredential));
     const row=await store.getDevice(first.device.id);assert.ok(row);
     await store.putDevice({...row,online:true,updatedAt:new Date().toISOString()});
