@@ -8,6 +8,7 @@ export const MCP_SURFACE_VERSION = 1 as const;
  * and a documented migration path.
  */
 export const MCP_V1_STABLE_TOOLS = [
+  "agent_operation_status",
   "audit_query",
   "audit_recent",
   "browser_click",
