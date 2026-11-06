@@ -252,6 +252,9 @@ jobs:
       - name: Verify update startup acknowledgement and data-preserving rollback
         timeout-minutes: 5
         run: node --test --import tsx --test-concurrency=1 test/live-update-startup-acceptance.test.ts test/windows-launcher-encoding.test.ts
+      - name: Verify SQLite-aware Hub pre-cutover and rollback reader guard on Windows
+        timeout-minutes: 5
+        run: node --test --import tsx --test-concurrency=1 test/windows-hub-sqlite-live-update.test.ts test/idempotency/sqlite-windows-cutover-preflight.test.ts
       - name: Verify Windows rollback fixture and preflight handoff safety
         timeout-minutes: 7
         shell: pwsh
