@@ -1,0 +1,42 @@
+name: AI-03 Windows Control Plane Authority
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai03-windows-authority-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+  cancel-in-progress: false
+
+jobs:
+  ai03-authority-windows:
+    if: startsWith(github.head_ref, 'ai/03-control-plane-authority-') || startsWith(github.head_ref, 'coord/ai05-core-connection-v2-')
+    runs-on: windows-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
+    steps:
+      - name: Exact source SHA checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - name: Install pinned dependencies
+        run: npm ci
+      - name: Control Plane typecheck
+        run: npm run typecheck
+      - name: Real Windows D1 migration chain, revoke, epoch, lease and HTTP negative gate
+        shell: pwsh
+        timeout-minutes: 10
+        run: |
+          node --test --import tsx --test-concurrency=1 test/ai03-control-plane-authority.test.ts
+          if ($LASTEXITCODE -ne 0) { throw 'AI03_WINDOWS_AUTHORITY_NEGATIVE_RED' }
