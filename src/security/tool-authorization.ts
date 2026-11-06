@@ -8,7 +8,6 @@ export const OPERATOR_MCP_TOOLS = new Set<string>([
   'policy_profile_list',
   'policy_device_check',
   'operations_idempotency_list',
-  'agent_operation_status',
   'events_read',
   'audit_recent',
   'audit_query',

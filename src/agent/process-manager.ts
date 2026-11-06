@@ -10,6 +10,7 @@ import {privateShellExecutionEnvironment,assertNoObviousPrivateShellBrokerInvoca
 import {assertNoObviousPrivateShellScriptBrokerInvocation} from './windows-private-shell-broker-guard.js';
 import {resolveAiWorkspaceTarget} from './ai-workspace-default.js';
 import {launchWindowsJob, requestWindowsJobStop, type WindowsJobLaunch} from './windows-job-owner.js';
+import {useWindowsJobForProcess} from './process-launch-mode.js';
 
 const ShellSchema = z.enum(['pwsh', 'powershell', 'cmd', 'bash', 'sh']);
 
@@ -947,7 +948,8 @@ export class ProcessManager {
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
 
-    if (!control || !workerStatus) {
+    if (!control || !workerStatus || workerStatus.status === 'starting' ||
+        (workerStatus.status === 'running' && workerStatus.childPid === null)) {
       try {
         if(workerPid)process.kill(workerPid, 'SIGTERM');
       } catch {
@@ -1073,7 +1075,7 @@ export class ProcessManager {
     };
     // On Windows the native guardian owns the entire Job lifetime. The root
     // starts suspended and only resumes after a verified Job assignment.
-    const job = process.platform === 'win32'
+    const job = useWindowsJobForProcess()
       ? await launchWindowsJob(shell.executable, shell.args, { cwd, env: process.env,
           guardOnParentExit: true, onOutput: receiveOutput })
       : undefined;
