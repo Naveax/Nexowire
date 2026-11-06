@@ -173,7 +173,12 @@ test('Windows Job preserves separate stdin/stdout/stderr pipes', {
         if(evt.stream==='stdout')stdout+=evt.text;
         else stderr+=evt.text;
       }
-      if(status==='exited')break;
+      // An observed process exit is not a guarantee that a concurrent
+      // process.read cursor has already delivered both final pipe events.
+      // Drain with a small bounded delay, but NEVER accept missing output.
+      if(status==='exited' && /WINJOB_STDOUT/.test(stdout) &&
+          /WINJOB_STDERR/.test(stderr)) break;
+      if(status==='exited') await new Promise(resolve=>setTimeout(resolve,50));
     }
     assert.equal(status,'exited');
     assert.match(stdout,/WINJOB_STDOUT/);
