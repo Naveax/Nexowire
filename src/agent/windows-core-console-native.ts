@@ -185,6 +185,23 @@ switch($cap){
 }
 `;
 
+/** Expose only an allowlisted native guard reason. Never forward PowerShell
+ * exception text, paths, target metadata, or user-visible content. */
+export function coreNativeGuardFailureCode(data:unknown):string{
+  if(!data||typeof data!=='object'||!('error' in data))return 'CORE_UNKNOWN';
+  const raw=(data as {error?:unknown}).error;
+  if(typeof raw!=='string'||raw.length>512)return 'CORE_UNKNOWN';
+  const token=raw.match(/\\bCORE_[A-Z0-9_]{3,80}\\b/)?.[0];
+  const allow=new Set([
+    'CORE_DESKTOP_UNKNOWN','CORE_TOKEN_UNKNOWN','CORE_AGENT_NOT_RUNNING',
+    'CORE_TARGET_INVALID','CORE_TARGET_UNAVAILABLE','CORE_TARGET_IDENTITY_UNKNOWN',
+    'CORE_TARGET_SESSION_OR_INTEGRITY_DENIED','CORE_STOPPED_OR_DESKTOP_DENIED',
+    'CORE_TARGET_CHANGED','CORE_TARGET_NOT_FOREGROUND','CORE_AGENT_STOPPED',
+    'CORE_UIA_BUDGET_EXHAUSTED','CORE_UIA_AMBIGUOUS','CORE_UIA_TARGET_CHANGED',
+  ]);
+  return token&&allow.has(token)?token:'CORE_UNKNOWN';
+}
+
 export class CoreNativeDenial extends Error {
   readonly code='CORE_NATIVE_DENIED';readonly effectAttempted=false;
   constructor(message:string){super(message);}
@@ -217,7 +234,8 @@ export async function executeCoreConsoleNative(capability:string,input:unknown,s
   const data=await runCorePowerShell(nativeScript,{capability,input:parsed,stopFile,agentPid:process.pid},signal,
     capability==='probe'?180000:30000);
   if(data&&typeof data==='object'&&'guardVerified' in data&&data.guardVerified===false&&
-    'effectAttempted' in data&&data.effectAttempted===false)throw new CoreNativeDenial('CORE_NATIVE_GUARD_DENIED');
+    'effectAttempted' in data&&data.effectAttempted===false)
+    throw new CoreNativeDenial('CORE_NATIVE_GUARD_DENIED:'+coreNativeGuardFailureCode(data));
   if(!(data&&typeof data==='object'&&('nativeEffectVerified' in data&&data.nativeEffectVerified===true||
     capability==='probe'&&'guardVerified' in data&&data.guardVerified===true)))throw new Error('CORE_NATIVE_EFFECT_UNCONFIRMED');
   return {data};
