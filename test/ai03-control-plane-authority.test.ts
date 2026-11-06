@@ -122,7 +122,7 @@ function readCoreMigration(name: '0020_core_console_native_logon_binding.sql' | 
     : path.join(process.cwd(), 'test', 'ai03', 'fixtures', name);
   const bytes = readFileSync(filePath);
   const gitSha = createHash('sha1')
-    .update(Buffer.from('blob ' + bytes.length + '\\0'))
+    .update(Buffer.from('blob ' + bytes.length + '\0'))
     .update(bytes)
     .digest('hex');
   assert.equal(gitSha, pinned,
