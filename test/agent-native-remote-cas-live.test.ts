@@ -55,6 +55,17 @@ test('real isolated Agent invokes remote TLS CAS before mutation and fails close
   },12000);
   assert.equal((written as {data:{bytesWritten:number}}).data.bytesWritten,11);
   assert.equal(await readFile(output,'utf8'),'secure-test');
+  // Positive command execution is a product requirement, not just a denied
+  // negative test. It must work when the independently authenticated CAS
+  // reservation succeeds, and complete before the CAS outage is simulated.
+  if (process.platform === 'linux' || process.platform === 'darwin') {
+    const shell = await broker.request(cas.deviceId,'shell.exec',{
+      shell:'bash',command:"printf 'cas-shell-success'",cwd:allowed,timeout_ms:10000,
+    },15000) as {stdout:string;stderr:string;exitCode:number|null};
+    assert.equal(shell.exitCode,0);
+    assert.equal(shell.stdout,'cas-shell-success');
+    assert.equal(shell.stderr,'');
+  }
   const db=new DatabaseSync(cas.dbFile,{readOnly:true});
   try{
    const count=db.prepare('SELECT COUNT(*) AS count FROM reservations')
