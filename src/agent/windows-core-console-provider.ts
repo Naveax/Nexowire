@@ -16,6 +16,7 @@ import type {PrivilegedBrokerClient} from './privileged-broker-client.js';
 import {NEXOWIRE_VERSION} from '../version.js';
 import {executeWindowsPrivateViewerCapability} from './windows-private-viewer.js';
 import {revokePhysicalConsoleGrant} from './windows-console-grant.js';
+import {LocalOwnerCoreConsole,WindowsLocalOwnerCoreStore,approveLocalOwnerCore} from './local-owner-core-console.js';
 
 const PURPOSE='core-console-profile-v1';
 const EnvelopeSchema=z.strictObject({version:z.literal(1),purpose:z.literal(PURPOSE),
@@ -629,6 +630,14 @@ export async function createWindowsCoreConsoleAdmission(options:{deviceId:string
   if(!url)return new CoreConsoleAdmission(undefined,undefined,Date.now,'CORE_AUTHORITY_UNCONFIGURED');
   if(!options.credential)return new CoreConsoleAdmission(undefined,undefined,Date.now,'CORE_DEVICE_CREDENTIAL_REQUIRED');
   if(!options.broker)return new CoreConsoleAdmission(undefined,undefined,Date.now,'CORE_BROKER_MODE_REQUIRED');
+  if(options.env.NEXOWIRE_CORE_APPROVAL_MODE==='local-owner'){
+    const authority=new CoreConsoleAuthorityClient(url,options.credential);
+    const broker=options.broker;
+    return new LocalOwnerCoreConsole({deviceId:options.deviceId,
+      store:new WindowsLocalOwnerCoreStore(),probe:()=>broker.probe(),approve:approveLocalOwnerCore,
+      read:(installationId,signal)=>authority.call({version:1,installationId,deviceId:options.deviceId,
+        authorityUrl:url,certificate:null,privateKey:null,pendingRevoke:false},'read',{},signal)});
+  }
   let provider:WindowsCoreConsoleProvider|undefined;
   try{
   provider=new WindowsCoreConsoleProvider({deviceId:options.deviceId,

@@ -11,6 +11,17 @@ import {
   quoteToolUsage,
 } from '../src/product/usage-policy.js';
 
+test('private desktop metadata remains available for ordinary owner diagnosis', () => {
+  for (const tool of ['windows_private_desktop_windows','windows_private_desktop_status',
+    'windows_private_viewer_status','windows_virtual_pointer_status','windows_virtual_pointer_position']) {
+    const quote=quoteToolUsage(PRODUCT_PLANS.free,tool);
+    assert.equal(quote.allowed,true,tool);
+    assert.equal(quote.requiredFeature,null,tool);
+    assert.equal(quote.credits,1,tool);
+  }
+  assert.equal(quoteToolUsage(PRODUCT_PLANS.free,'windows_private_desktop_windows_extra').allowed,false);
+});
+
 test('free plan has a hard monthly quota and no private-control entitlements', () => {
   assert.equal(PRODUCT_PLANS.free.monthlyCredits, 1_000);
   assert.equal(PRODUCT_PLANS.free.maxDevices, 2);
