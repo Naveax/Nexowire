@@ -42,6 +42,10 @@ test('MCP v1 compatibility floor remains present and unique', async () => {
     const listed = await client.listTools();
     const names = listed.tools.map((tool) => tool.name);
     const actual = new Set(names);
+    assert.ok(actual.has('agent_operation_status'),
+      'the owner operation reconciliation tool must remain discoverable');
+    assert.ok(MCP_V1_STABLE_TOOLS.includes('agent_operation_status'),
+      'the operation status tool must be part of the advertised stable contract');
 
     assert.equal(
       new Set(MCP_V1_STABLE_TOOLS).size,
