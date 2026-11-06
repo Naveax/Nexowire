@@ -107,6 +107,11 @@ export class CoreConsoleAdmission {
     private binding?: CoreConsoleBinding,
     private readonly provider?: CoreConsoleNativeProvider,
     private readonly now: () => number = Date.now,
+    private readonly missingProviderState:
+      | 'CORE_CONSOLE_PROVIDER_UNAVAILABLE'
+      | 'CORE_BROKER_MODE_REQUIRED'
+      | 'CORE_DEVICE_CREDENTIAL_REQUIRED'
+      | 'CORE_AUTHORITY_UNCONFIGURED' = 'CORE_CONSOLE_PROVIDER_UNAVAILABLE',
   ) {
     if (binding) this.binding = Object.freeze({...binding});
   }
@@ -121,7 +126,7 @@ export class CoreConsoleAdmission {
   }> {
     if (this.stopped) return {status:this.inactive('REVOKED_LOCALLY')};
     if (!this.provider)
-      return {status:this.inactive('CORE_CONSOLE_PROVIDER_UNAVAILABLE')};
+      return {status:this.inactive(this.missingProviderState)};
     if (accessMode !== 'full') return {status:this.inactive('SAFE_MODE')};
     try {
       const signal = AbortSignal.any([this.abort.signal,

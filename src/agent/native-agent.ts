@@ -32,7 +32,7 @@ import { resolveProtectedSingleSecret } from '../security/protected-secret-files
 import { optionalPlatformSecretSync } from '../security/platform-secret-store.js';
 import { NEXOWIRE_VERSION } from '../version.js';
 import { acquireNativeAgentSingleton } from './native-agent-singleton.js';
-import {createWindowsCoreConsoleAdmission} from './windows-core-console-provider.js';
+import {createWindowsCoreConsoleAdmission, type NativeCoreConsentAuthority} from './windows-core-console-provider.js';
 import {revokePhysicalConsoleGrant} from './windows-console-grant.js';
 import {initializeNativeAgentState} from './native-agent-startup-diagnostic.js';
 
@@ -426,6 +426,7 @@ export async function capabilitiesForAgent(
 export async function runNativeAgent(
   env: NodeJS.ProcessEnv = process.env,
   trustedNativeMutationProvider?: TrustedNativeMutationProvider,
+  trustedCoreConsentProvider?: NativeCoreConsentAuthority,
 ): Promise<never> {
   const identity = await loadOrCreateAgentIdentity(env);
   const instanceId = randomUUID();
@@ -537,7 +538,11 @@ export async function runNativeAgent(
       // Optional local authority construction is also part of initialization.
       // A failed constructor must not leave a live singleton and a ready marker.
       return await createWindowsCoreConsoleAdmission({deviceId:identity.id,
-        credential:token,broker:privilegedBroker,env});
+        credential:token,broker:privilegedBroker,env,
+        // A protected native Windows approval service must be injected by the
+        // trusted process composition root, never selected by a tool payload
+        // or self-proclaimed Agent environment flag.
+        trustedNativeConsent:trustedCoreConsentProvider});
     } catch (error) {
       try { operationJournal.close(); } catch { /* Preserve the original failure. */ }
       await singletonLock?.close();

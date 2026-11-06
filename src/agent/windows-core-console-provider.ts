@@ -617,13 +617,23 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
 }
 
 export async function createWindowsCoreConsoleAdmission(options:{deviceId:string;credential?:string;
-  broker?:PrivilegedBrokerClient;env:NodeJS.ProcessEnv}):Promise<CoreConsoleAdmission>{
+  broker?:PrivilegedBrokerClient;env:NodeJS.ProcessEnv;
+  /** Trust-injected by a protected Windows service composition root, never env. */
+  trustedNativeConsent?:NativeCoreConsentAuthority;
+}):Promise<CoreConsoleAdmission>{
   const url=options.env.NEXOWIRE_CORE_AUTHORITY_URL?.trim();
-  if(process.platform!=='win32'||!url||!options.credential||!options.broker)return new CoreConsoleAdmission();
+  if(process.platform!=='win32')return new CoreConsoleAdmission();
+  // Distinguish missing deployment prerequisites from failed local enrollment.
+  // A running privileged Scheduled Task alone does not switch the Agent from
+  // its default direct mode; the Agent must bind its authenticated Broker.
+  if(!url)return new CoreConsoleAdmission(undefined,undefined,Date.now,'CORE_AUTHORITY_UNCONFIGURED');
+  if(!options.credential)return new CoreConsoleAdmission(undefined,undefined,Date.now,'CORE_DEVICE_CREDENTIAL_REQUIRED');
+  if(!options.broker)return new CoreConsoleAdmission(undefined,undefined,Date.now,'CORE_BROKER_MODE_REQUIRED');
   let provider:WindowsCoreConsoleProvider|undefined;
   try{
   provider=new WindowsCoreConsoleProvider({deviceId:options.deviceId,
-    authority:new CoreConsoleAuthorityClient(url,options.credential),store:new WindowsCoreProfileStore(),broker:options.broker});
+    authority:new CoreConsoleAuthorityClient(url,options.credential),store:new WindowsCoreProfileStore(),
+    broker:options.broker,nativeConsent:options.trustedNativeConsent});
   const controller=new CoreConsoleAdmission(undefined,provider);
   provider.onEnrollmentRequested=async()=>{await controller.enroll(new AbortController().signal);};
   // CORE bootstrap is optional. It must not delay Agent hello, standard tools
