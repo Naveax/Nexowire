@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
@@ -14,7 +14,7 @@ const request = (key: string) => ({
 });
 const sqlFile = (root: string) => path.join(root, 'idempotency-records.sqlite');
 
-async function disposable(t: Parameters<typeof test>[1] extends never ? never : any) {
+async function disposable(t: TestContext) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nwx-ai06-windows-sqlite-'));
   t.after(async () => fs.rm(root, { recursive: true, force: true }));
   return root;
