@@ -66,6 +66,20 @@ export interface UpdateCheckResult {
   release: ReleaseInfo;
 }
 
+/**
+ * Pending before cutover means the machine-side version is NOT yet verified.
+ * A missing Broker is unknown, not proof that installed machine components
+ * already match the staged user runtime. The Windows helper independently
+ * recomputes the final pending flag from installed machine tasks.
+ */
+export function machineComponentsPendingBeforeCutover(
+  targetVersion: string,
+  probe: {reachable:boolean; elevated:boolean; version:string|null} | null,
+): boolean {
+  return !probe || !probe.reachable || !probe.elevated ||
+    probe.version !== targetVersion;
+}
+
 export interface LiveUpdateOptions {
   env?: NodeJS.ProcessEnv;
   fetchImpl?: typeof fetch;
@@ -641,13 +655,19 @@ export async function applyLatestLiveUpdate(
   }
   try {
     const staged = await stageWindowsRelease(check.release, options);
-    let machineComponentsPending = false;
+    // Do not report machine components as current before Broker readback.
+    let machineComponentsPending = machineComponentsPendingBeforeCutover(
+      check.latestVersion, null,
+    );
     const broker = options.privilegedBroker;
     if (!broker && options.requireMachineUpdate) {
       throw new Error('Automatic update deferred: elevated Broker not provided.');
     }
     if (broker) {
       const probe = await broker.probe();
+      machineComponentsPending = machineComponentsPendingBeforeCutover(
+        check.latestVersion, probe,
+      );
       if (
         probe.reachable &&
         probe.elevated &&

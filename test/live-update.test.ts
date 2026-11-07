@@ -6,12 +6,39 @@ import { promises as fs } from 'node:fs';
 import {
   checkLiveUpdate,
   compareReleaseVersions,
+  machineComponentsPendingBeforeCutover,
   parseWindowsChecksumFile,
   parseWindowsSetupMetadata,
   readLiveUpdateState,
   renderWindowsCutoverScript,
   windowsUpdateStagingParent,
 } from '../src/update/live-update.js';
+
+test('machine update remains pending until actual elevated Broker version readback', () => {
+  const targetVersion='1.0.8';
+  assert.equal(machineComponentsPendingBeforeCutover(targetVersion,null),true,
+    'manual user cutover without a Broker must not claim machine version current');
+  assert.equal(machineComponentsPendingBeforeCutover(targetVersion,
+    {reachable:false,elevated:false,version:null}),true);
+  assert.equal(machineComponentsPendingBeforeCutover(targetVersion,
+    {reachable:true,elevated:false,version:targetVersion}),true);
+  assert.equal(machineComponentsPendingBeforeCutover(targetVersion,
+    {reachable:true,elevated:true,version:null}),true);
+  assert.equal(machineComponentsPendingBeforeCutover(targetVersion,
+    {reachable:true,elevated:true,version:'1.0.7'}),true);
+  assert.equal(machineComponentsPendingBeforeCutover(targetVersion,
+    {reachable:true,elevated:true,version:targetVersion}),false);
+  // The generated Windows helper still makes the terminal decision from
+  // actual installed machine tasks; a missing Broker cannot mark a staged
+  // cutover complete before that independent readback.
+  const script=renderWindowsCutoverScript({
+    targetVersion,buildId:'1.0.8-012345abcdef',
+    targetRoot:'C:\\Nexowire\\versions\\1.0.8-012345abcdef',
+    localAppData:'C:\\Users\\test\\AppData\\Local',
+  });
+  assert.match(script,/\$machinePending=\(Task-Exists/);
+  assert.match(script,/Write-State 'succeeded' \$null \$machinePending/);
+});
 
 test('live updater compares stable release versions numerically', () => {
   assert.equal(compareReleaseVersions('1.0.3', '1.0.3'), 0);
