@@ -514,6 +514,12 @@ jobs:
         run: |
           node --test --import tsx --test-concurrency=1 test/ai11-connection-v2-negative.test.ts test/clean14-network-security.test.ts test/clean14-revocation-dispatch-negative.test.ts test/v206-control-plane-redirect-real-http.test.ts test/v206-wss-authority-real-http.test.ts test/v2-03-ingress-doctor-bridge.test.ts test/v2-07/continuity-negative.test.ts
           if ($LASTEXITCODE -ne 0) { throw 'V2_WINDOWS_NEGATIVE_ORACLE_RED' }
+      - name: Verify CORE D1 claim migration, persisted consent and Broker UUID one-time execution
+        timeout-minutes: 10
+        shell: pwsh
+        run: |
+          node --test --import tsx --test-concurrency=1 test/qa-core-claim-readiness-race-p11.test.ts test/ai05/local-owner-core-console.test.ts test/privileged-broker-operation-id-transport.test.ts
+          if ($LASTEXITCODE -ne 0) { throw 'CORE_BROKER_MIGRATION_ACCEPTANCE_RED' }
 
   connection-v2-native-git-dag:
     if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'coord/connection-v2-release-candidate-') || startsWith(github.head_ref, 'coord/ai05-core-connection-v2-windows-'))

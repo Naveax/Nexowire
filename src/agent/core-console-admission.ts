@@ -76,6 +76,13 @@ export interface CoreConsoleStatus {
   readonly duration: 'indefinite-revocable';
   readonly expiresAt: null;
   readonly state: string;
+  /** Bounded diagnostic category. Never includes owner IDs, tokens, URLs or raw errors. */
+  readonly unavailableReason?:
+    | 'AUTHORITY_HTTP_403' | 'AUTHORITY_HTTP_502' | 'AUTHORITY_HTTP_503'
+    | 'AUTHORITY_HTTP_504' | 'AUTHORITY_HTTP_OTHER'
+    | 'AUTHORITY_TIMEOUT' | 'AUTHORITY_NETWORK'
+    | 'OWNER_DEVICE_MISMATCH' | 'LOCAL_GRANT_READ_FAILED'
+    | 'BROKER_PROBE_FAILED' | 'UNKNOWN';
 }
 
 function failure(code: string): Error & {code: string} {

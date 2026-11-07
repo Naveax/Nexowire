@@ -47,7 +47,8 @@ function fixture() {
   db.prepare('INSERT INTO devices VALUES(?,?,?,?,?,?,?,?)').run(device,owner,
     createHash('sha256').update(credential).digest('hex'),'win32','full',1,'broker',1);
   for (const file of ['0014_device_maintenance_preferences.sql','0015_device_bridge_preferences.sql',
-    '0019_core_console_authority.sql','0020_core_console_native_logon_binding.sql'])
+    '0019_core_console_authority.sql','0020_core_console_native_logon_binding.sql',
+    '0021_core_console_native_claim_verified.sql'])
     db.exec(readFileSync(new URL('../cloudflare/migrations/'+file,import.meta.url),'utf8'));
   db.prepare('INSERT INTO device_maintenance_preferences VALUES(?,?,?,?)').run(device,owner,1,'2026-10-28');
   db.prepare('INSERT INTO device_bridge_preferences VALUES(?,?,?,?)').run(device,owner,'auto','2026-10-28');

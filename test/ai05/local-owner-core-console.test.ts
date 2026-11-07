@@ -153,3 +153,45 @@ test('disk request reservation survives a newly constructed store',async()=>{
     await assert.rejects(new WindowsLocalOwnerCoreStore(root).reserve(id),{code:'EEXIST'});
   }finally{await rm(root,{recursive:true,force:true});}
 });
+
+test('CORE unavailable status provides bounded, non-secret source diagnostics',async()=>{
+  const f=fixture();const c=f.make();await c.enroll(signal());
+  const original=f.options.read;
+  for(const [error,expected] of [
+    [Error('CORE_AUTHORITY_DENIED_403'),'AUTHORITY_HTTP_403'],
+    [Error('CORE_AUTHORITY_DENIED_502'),'AUTHORITY_HTTP_502'],
+    [Error('CORE_AUTHORITY_DENIED_503'),'AUTHORITY_HTTP_503'],
+    [Error('CORE_AUTHORITY_DENIED_504'),'AUTHORITY_HTTP_504'],
+    [new TypeError('fetch failed'),'AUTHORITY_NETWORK'],
+    [Object.assign(new Error('The operation was aborted'),{name:'TimeoutError'}),
+      'AUTHORITY_TIMEOUT'],
+    [Error('CORE_AUTHORITY_DENIED_429'),'AUTHORITY_HTTP_OTHER'],
+    [Error('secret:private-account-token-should-not-appear'),'UNKNOWN'],
+  ] as const){
+    f.options.read=async()=>{throw error;};
+    const status=await c.status('full');
+    assert.equal(status.active,false);
+    assert.equal(status.state,'CORE_CURRENT_STATE_UNAVAILABLE');
+    assert.equal(status.unavailableReason,expected);
+    assert.equal(JSON.stringify(status).includes('private-account-token'),false);
+  }
+  f.options.read=async id=>({...await original(id),deviceId:'wrong-device'});
+  assert.equal((await c.status('full')).unavailableReason,'OWNER_DEVICE_MISMATCH');
+  f.options.read=original;
+  f.options.probe=async()=>{throw Error('sensitive local broker configuration');};
+  assert.equal((await c.status('full')).unavailableReason,'BROKER_PROBE_FAILED');
+  assert.equal(f.prompts(),1,'diagnostics must not invoke enrollment again');
+  assert.equal(f.effects(),0);
+});
+
+test('unreadable local DPAPI grant reports local cause and never executes a CORE effect',async()=>{
+  const f=fixture();const c=f.make();await c.enroll(signal());
+  f.options.store.load=async()=>{throw Error('sensitive encrypted grant file contents');};
+  const status=await c.status('full');
+  assert.equal(status.state,'CORE_CURRENT_STATE_UNAVAILABLE');
+  assert.equal(status.unavailableReason,'LOCAL_GRANT_READ_FAILED');
+  assert.equal(status.active,false);
+  assert.equal(JSON.stringify(status).includes('sensitive'),false);
+  await assert.rejects(c.execute('windows.pointer.move',{x:0,y:0},randomUUID(),'full'),/CORE_NOT_ACTIVE/);
+  assert.equal(f.effects(),0);
+});

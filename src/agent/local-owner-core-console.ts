@@ -14,6 +14,23 @@ import {NEXOWIRE_VERSION} from '../version.js';
 
 const PURPOSE='core-local-owner-v1';
 
+/** Only well-known failure categories. Raw error strings can contain secrets. */
+function unavailableReason(error:unknown):CoreConsoleStatus['unavailableReason']{
+  if(!(error instanceof Error))return 'UNKNOWN';
+  if(error.message==='CORE_LOCAL_GRANT_READ_FAILED')return 'LOCAL_GRANT_READ_FAILED';
+  if(error.message==='CORE_BROKER_PROBE_FAILED')return 'BROKER_PROBE_FAILED';
+  if(error.message==='CORE_OWNER_DEVICE_MISMATCH')return 'OWNER_DEVICE_MISMATCH';
+  if(error.message==='CORE_AUTHORITY_DENIED_403')return 'AUTHORITY_HTTP_403';
+  if(error.message==='CORE_AUTHORITY_DENIED_502')return 'AUTHORITY_HTTP_502';
+  if(error.message==='CORE_AUTHORITY_DENIED_503')return 'AUTHORITY_HTTP_503';
+  if(error.message==='CORE_AUTHORITY_DENIED_504')return 'AUTHORITY_HTTP_504';
+  if(/^CORE_AUTHORITY_DENIED_\d{3}$/.test(error.message))return 'AUTHORITY_HTTP_OTHER';
+  if(error.name==='TimeoutError'||error.name==='AbortError')return 'AUTHORITY_TIMEOUT';
+  if(error instanceof TypeError&&/^fetch failed\b/i.test(error.message))
+    return 'AUTHORITY_NETWORK';
+  return 'UNKNOWN';
+}
+
 /** A refusal, invalid owner proof and DPAPI error are never retried. */
 function transientAuthorityReadFailure(error:unknown):boolean {
   if(!(error instanceof Error))return false;
@@ -83,7 +100,9 @@ export class LocalOwnerCoreConsole extends CoreConsoleAdmission {
   }){super();}
   override get installed(){return true;}
   private async current(signal:AbortSignal){
-    const grant=await this.options.store.load();
+    let grant:LocalOwnerCoreGrant|null;
+    try{grant=await this.options.store.load();}
+    catch{throw Error('CORE_LOCAL_GRANT_READ_FAILED')}
     if(grant)this.installationId=grant.installationId;
     let state:CoreAuthorityState;
     try{state=await this.options.read(this.installationId,signal);}
@@ -114,12 +133,15 @@ export class LocalOwnerCoreConsole extends CoreConsoleAdmission {
       if(!state.coreEnabled||state.accessMode!=='full')return {...result,state:'CORE_NOT_EFFECTIVE'};
       if(!grant)return result;
       result={...result,localEnrolled:true};
-      const broker=await this.options.probe();
+      let broker:Awaited<ReturnType<typeof this.options.probe>>;
+      try{broker=await this.options.probe();}
+      catch{throw Error('CORE_BROKER_PROBE_FAILED')}
       if(!broker.reachable||!broker.elevated||broker.version!==NEXOWIRE_VERSION)
         return {...result,state:'CORE_BROKER_VERIFICATION_REQUIRED'};
       if(!state.deviceOnline)return {...result,state:'CORE_DEVICE_OFFLINE'};
       return {...result,active:true,state:'ACTIVE_LOCAL_OWNER'};
-    }catch{return {...result,state:'CORE_CURRENT_STATE_UNAVAILABLE'};}
+    }catch(error){return {...result,state:'CORE_CURRENT_STATE_UNAVAILABLE',
+      unavailableReason:unavailableReason(error)};}
   }
   override async enroll(signal:AbortSignal){
     if(this.prompting)throw Error('CORE_ENROLLMENT_PROMPT_ACTIVE');
