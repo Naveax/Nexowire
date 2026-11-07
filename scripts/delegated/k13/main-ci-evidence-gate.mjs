@@ -26,6 +26,10 @@ export function evaluateMainCI({
       pr.draft ? 'DRAFT_REVIEW_REQUIRED' : 'OPEN_REVIEW_REQUIRED',
   };
   if (!run) return result;
+  // A valid run for the caller's SHA is stale if the PR advanced since it ran.
+  if (pr?.head?.sha && pr.head.sha !== expectedHead) {
+    return { ...result, reason: 'PR_HEAD_MISMATCH' };
+  }
   if (pr?.state === 'closed' && !pr.merged) {
     return { ...result, reason: 'CLOSED_UNMERGED_PR' };
   }
@@ -38,9 +42,13 @@ export function evaluateMainCI({
   if (!jobs.length || totalJobs !== jobs.length) {
     return { ...result, reason: jobs.length ? 'INCOMPLETE_JOB_PAGE' : 'ZERO_JOB_RUN' };
   }
-  if (jobs.some(job => (job.run_id !== undefined && job.run_id !== run.id) ||
+  if (jobs.some(job => job.run_id !== run.id ||
     job.status !== 'completed' || job.conclusion !== 'success')) {
     return { ...result, reason: 'JOB_FAILED_SKIPPED_OR_CROSS_RUN' };
+  }
+  if (!Array.isArray(requiredJobs) || requiredJobs.length === 0 ||
+    requiredJobs.some(name => typeof name !== 'string' || !name.trim())) {
+    return { ...result, reason: 'NO_REQUIRED_JOBS' };
   }
   const names = jobs.map(job => job.name);
   if (!requiredJobs.every(name => names.filter(actual => actual === name).length === 1)) {
