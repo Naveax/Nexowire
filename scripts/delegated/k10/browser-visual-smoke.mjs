@@ -84,24 +84,32 @@ export async function captureLocalStaticViews({ outputDir, playwrightModule = 'p
   let chromium;
   try {
     ({ chromium } = await import(playwrightModule));
-  } catch (error) {
-    return { status: 'NOT_RUN', reason: `Playwright is unavailable: ${error.code ?? error.message}`, scenarios };
+  } catch {
+    // This can include private absolute module resolution paths. Never echo it.
+    return { status: 'NOT_RUN', reason: 'Playwright is unavailable (module import failed)', scenarios };
   }
   let browser;
   try {
     browser = await chromium.launch({ headless: true });
-  } catch (error) {
-    return { status: 'NOT_RUN', reason: `Installed Chromium could not start: ${error.message}`, scenarios };
+  } catch {
+    // Playwright startup diagnostics may include local profiles, binary paths,
+    // environment variables or credentials. Public JSON contains a fixed code.
+    return { status: 'NOT_RUN', reason: 'Installed Chromium could not start (headless launch failed)', scenarios };
   }
   const webDir = resolve(dirname(fileURLToPath(import.meta.url)), '../../../web');
-  mkdirSync(outputDir, { recursive: true });
+  try { mkdirSync(outputDir, { recursive: true }); }
+  catch {
+    await browser.close().catch(() => {});
+    return { status: 'NOT_RUN', reason: 'Screenshot output directory is unavailable', scenarios };
+  }
   try {
     for (const [name, spec] of Object.entries(PAGES)) {
       for (const viewport of VIEWPORTS) {
-        const context = await browser.newContext({ viewport: { width: viewport.width, height: viewport.height }, serviceWorkers: 'block' });
         const candidate = { page: name, viewport: viewport.name, width: viewport.width, height: viewport.height, screenshot: null, overflow: 'NOT_RUN', keyboardFocus: 'NOT_RUN' };
         scenarios.push(candidate);
+        let context;
         try {
+          context = await browser.newContext({ viewport: { width: viewport.width, height: viewport.height }, serviceWorkers: 'block' });
           await context.route('**/*', (route) => {
             const protocol = new URL(route.request().url()).protocol;
             return protocol === 'file:' || protocol === 'data:' ? route.continue() : route.abort();
@@ -118,16 +126,16 @@ export async function captureLocalStaticViews({ outputDir, playwrightModule = 'p
           });
           candidate.layout = candidate.png.status === 'PASS' ? 'CAPTURED_STATIC_FILE' : 'FAIL';
           candidate.note = 'file:// static preview only; API-driven states and focus navigation unverified';
-        } catch (error) {
+        } catch {
           candidate.layout = 'FAIL';
-          candidate.error = error.message;
+          candidate.error = 'Static page capture failed (details redacted)';
         } finally {
-          await context.close();
+          if (context) await context.close().catch(() => {});
         }
       }
     }
   } finally {
-    await browser.close();
+    await browser.close().catch(() => {});
   }
   return {
     status: scenarios.some((item) => item.layout === 'FAIL' || item.overflow === 'FAIL') ? 'FAIL' : 'PARTIAL',

@@ -67,3 +67,21 @@ real login, keyboard tab order, and device behavior remain `NOT_RUN`. Missing
 Playwright/Chromium returns `NOT_RUN` with exit code 2; a detected screenshot
 or overflow failure returns exit code 1. Generated PNG files are deliberately
 not checked into the repository.
+
+### Issue-focused offline evidence checks (#539 / #485 / #812)
+
+```sh
+node test/delegated/k10/issue-browser-negative.test.mjs
+node test/delegated/k10/issue-evidence-contract.test.mjs
+```
+
+The first suite ensures browser launch/page failures do not leak local paths
+or credential-like strings in JSON, and never report screenshots as passing
+when no browser ran. The second checks a three-state pairing screenshot plan
+and validates external PNG bytes, dimensions and hashes without confusing
+artifacts with real authenticated pairing. It also tests the #812 distinction
+between an inactive *local grant* and independently witnessed effective input
+authorization; it does not change native authorization policy. The screenshot
+template is at `test/delegated/k10/connect-three-state-evidence.json` and begins
+with every state `NOT_RUN`. Actual Chromium, Windows and live pairing evidence
+must be obtained separately.
