@@ -1,4 +1,5 @@
 import {randomUUID} from 'node:crypto';
+import {setTimeout as pause} from 'node:timers/promises';
 import {promises as fs} from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -12,6 +13,14 @@ import {requiresPhysicalConsoleGrant} from './windows-console-grant.js';
 import {NEXOWIRE_VERSION} from '../version.js';
 
 const PURPOSE='core-local-owner-v1';
+
+/** A refusal, invalid owner proof and DPAPI error are never retried. */
+function transientAuthorityReadFailure(error:unknown):boolean {
+  if(!(error instanceof Error))return false;
+  return /^CORE_AUTHORITY_DENIED_(502|503|504)$/.test(error.message)||
+    (error instanceof TypeError&&/^fetch failed\b/i.test(error.message))||
+    error.name==='TimeoutError';
+}
 const GrantSchema=z.strictObject({version:z.literal(1),installationId:z.string().uuid(),
   ownerAccountId:z.string().min(8),deviceId:z.string().min(8),
   ownerEpoch:z.number().int().positive(),grantGeneration:z.number().int().positive(),
@@ -76,7 +85,14 @@ export class LocalOwnerCoreConsole extends CoreConsoleAdmission {
   private async current(signal:AbortSignal){
     const grant=await this.options.store.load();
     if(grant)this.installationId=grant.installationId;
-    const state=await this.options.read(this.installationId,signal);
+    let state:CoreAuthorityState;
+    try{state=await this.options.read(this.installationId,signal);}
+    catch(error){
+      if(signal.aborted||this.lifetime.signal.aborted||!transientAuthorityReadFailure(error))throw error;
+      // Only one bounded authoritative read retry. Never reuse a stale grant.
+      await pause(150,undefined,{signal});
+      state=await this.options.read(this.installationId,signal);
+    }
     if(state.deviceId!==this.options.deviceId||state.installationId!==this.installationId)
       throw Error('CORE_OWNER_DEVICE_MISMATCH');
     return {grant,state};

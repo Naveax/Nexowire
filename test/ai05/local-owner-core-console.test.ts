@@ -71,6 +71,51 @@ test('temporary Broker loss does not discard consent or require another approval
   assert.equal((await c.status('full')).active,true);assert.equal(f.prompts(),1);
 });
 
+test('temporary authority 503 is retried once without losing persisted owner consent',async()=>{
+  const f=fixture();const c=f.make();await c.enroll(signal());
+  const original=f.options.read;let calls=0;
+  f.options.read=async installationId=>{
+    calls++;
+    if(calls===1)throw Error('CORE_AUTHORITY_DENIED_503');
+    return original(installationId);
+  };
+  const status=await c.status('full');
+  assert.equal(status.state,'ACTIVE_LOCAL_OWNER');
+  assert.equal(calls,2);
+  assert.equal(f.prompts(),1,'no additional physical approval after retry');
+});
+
+test('hard owner authority denial or repeated failure never activates stale consent',async()=>{
+  const f=fixture();const c=f.make();await c.enroll(signal());
+  let calls=0;
+  f.options.read=async()=>{calls++;throw Error('CORE_AUTHORITY_DENIED_403');};
+  assert.equal((await c.status('full')).state,'CORE_CURRENT_STATE_UNAVAILABLE');
+  assert.equal(calls,1,'explicit denial must not be retried');
+  calls=0;
+  f.options.read=async()=>{calls++;throw Error('CORE_AUTHORITY_DENIED_503');};
+  const unavailable=await c.status('full');
+  assert.equal(unavailable.active,false);
+  assert.equal(unavailable.state,'CORE_CURRENT_STATE_UNAVAILABLE');
+  assert.equal(calls,2,'transient error has one bounded retry, not an unbounded loop');
+  assert.equal(f.prompts(),1);
+});
+
+test('owner change on a retried authority read still invalidates the grant',async()=>{
+  const f=fixture();const c=f.make();await c.enroll(signal());
+  const original=f.options.read;let calls=0;
+  f.options.read=async installationId=>{
+    calls++;
+    if(calls===1)throw new TypeError('fetch failed');
+    return {...(await original(installationId)),ownerAccountId:'different-owner'};
+  };
+  const status=await c.status('full');
+  assert.equal(calls,2);
+  assert.equal(status.active,false);
+  assert.equal(status.state,'CORE_OWNER_OR_GRANT_CHANGED');
+  await assert.rejects(c.execute('windows.pointer.move',{},randomUUID(),'full'),/CORE_NOT_ACTIVE/);
+  assert.equal(f.effects(),0);
+});
+
 test('local revoke survives controller restart and requires a new local approval',async()=>{
   const f=fixture();const c=f.make();await c.enroll(signal());await c.revoke();
   const next=f.make();assert.equal((await next.status('full')).active,false);
