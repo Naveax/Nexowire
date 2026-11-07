@@ -352,8 +352,16 @@ if($null -ne $userTask){
     $registeredSid=(New-Object System.Security.Principal.NTAccount($registeredSid)).Translate([System.Security.Principal.SecurityIdentifier]).Value
   } catch { }
   $currentSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+  # Older Nexowire Hub installers registered the *limited user task* with
+  # Execute='powershell.exe'. Accept that exact historical spelling ONLY
+  # with the first-party description and exact current-owner launcher/SID.
+  # The protected SYSTEM Boot task above still requires its absolute shell.
+  $userExe=([string]$userActions[0].Execute).Trim('"')
+  $canonicalUserExe=$userExe -ieq $expectedExe
+  $legacyUserExe=($userExe -ceq 'powershell.exe') -and
+    ([string]$userTask.Description -ceq 'Nexowire first-party Hub')
   if($userActions.Count -ne 1 -or
-     ([string]$userActions[0].Execute).Trim('"') -ine $expectedExe -or
+     (-not $canonicalUserExe -and -not $legacyUserExe) -or
      [string]$userActions[0].Arguments -cne $expectedUserArgs -or
      $registeredSid -ne $currentSid -or
      [string]$userTask.Principal.LogonType -cne 'Interactive' -or
@@ -364,9 +372,10 @@ if($null -ne $userTask){
 `;
 
 /**
- * Status-only inspection. A legacy interactive Hub task is not proof that a
- * SYSTEM Boot Hub is installed; report its mismatch without blocking status.
- * Install/uninstall still use the original strict identity guard directly.
+ * Status-only inspection. Recognized first-party limited-user Hub tasks use
+ * the same identity guard as install/uninstall, including historical
+ * powershell.exe launchers. Foreign user/Boot task identities remain errors;
+ * only a foreign user task without a Boot installation is reportable.
  */
 export const hubBootStatusIdentityInspection=[
   '$userTaskIdentityError=$null',
