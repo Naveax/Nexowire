@@ -42,6 +42,21 @@ Required running Nexowire Hub configuration:
 - real `NEXOWIRE_CONTROL_PLANE_URL` and protected service token;
 - trusted OAuth and authorization/metering configured on the Hub.
 
+First inspect the **already-running** local Hub without starting an origin, touching a
+Windows task, or requiring a second copy of the protected control-plane token:
+
+```powershell
+nexowire local-first cloudflare-external-check "C:\\ProgramData\\Nexowire\\cloudflare-external-origin.json"
+```
+
+This command checks the exact local Hub OAuth resource and, when the profile
+requests `publishAgentEndpoint=true`, its strict Agent admission contract.
+`READY_LOCAL` (exit 0) establishes **only local preflight**; `BLOCKED` (exit 2)
+includes a bounded reason, for example an older Hub lacking the strict remote
+Agent contract. Both results explicitly keep `realPublicTunnel=NOT_RUN` until
+an off-network OAuth test is independently performed. The check never opens
+port 43111 or installs cloudflared.
+
 After confirming the separate Cloudflare service configuration, run:
 
 ```powershell

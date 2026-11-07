@@ -10,7 +10,7 @@ import { runHttpServer } from './mcp/http.js';
 import { runLocalFirstIngress, verifyLocalFirstPublicUpstream } from './mcp/local-first-ingress.js';
 import { readOnlyLocalFirstFunnelPlan } from './mcp/local-first-funnel-plan.js';
 import { runCloudflareConnection } from './mcp/local-first-cloudflare.js';
-import { runExternalCloudflareIngress } from './mcp/cloudflare-external-origin.js';
+import { inspectExternalCloudflareIngress, runExternalCloudflareIngress } from './mcp/cloudflare-external-origin.js';
 import { cloudflareConnectionLifecycle } from './mcp/cloudflare-connection-lifecycle.js';
 import { inspectCloudflareConnection } from './mcp/cloudflare-connection-doctor.js';
 import { promises as fs } from 'node:fs';
@@ -55,6 +55,8 @@ Usage:
   nexowire update [status|check|apply]   Check or apply verified official releases
   nexowire update auto [install|run|status|enable|disable|uninstall]
                    Manage the lightweight hourly Windows auto-updater
+  nexowire local-first cloudflare-external-check <absolute-profile.json>
+                   Read-only local Hub/OAuth/Agent ingress acceptance; no listener
   nexowire local-first cloudflare-external-ingress <absolute-profile.json>
                    Use an external cloudflared service with a Nexowire loopback origin
   nexowire local-first cloudflare-run <absolute-profile.json>
@@ -142,6 +144,13 @@ async function main(): Promise<void> {
     if(cloudflareAction==='status'||cloudflareAction==='start'||cloudflareAction==='stop'||cloudflareAction==='uninstall'){
       if(process.argv.length!==4)throw new Error('Cloudflare task action accepts no arguments');
       process.stdout.write(JSON.stringify(await cloudflareConnectionLifecycle(cloudflareAction))+'\n');return;
+    }
+    if (process.argv[3] === 'cloudflare-external-check') {
+      if(process.argv.length!==5)throw new Error('cloudflare-external-check requires one absolute profile JSON path');
+      const report=await inspectExternalCloudflareIngress(process.argv[4]!,loadConfig().port);
+      process.stdout.write(JSON.stringify(report,null,2)+'\n');
+      if(report.status==='BLOCKED')process.exitCode=2;
+      return;
     }
     if (process.argv[3] === 'cloudflare-external-ingress') {
       if(process.argv.length!==5)throw new Error('cloudflare-external-ingress requires one absolute profile JSON path');

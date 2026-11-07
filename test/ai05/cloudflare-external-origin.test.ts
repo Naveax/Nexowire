@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {createServer} from 'node:http';
+import {mkdtemp,writeFile,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {loadConfig} from '../../src/config.js';
-import {externalCloudflareIngressPlan} from '../../src/mcp/cloudflare-external-origin.js';
+import {externalCloudflareIngressPlan,inspectExternalCloudflareIngress} from '../../src/mcp/cloudflare-external-origin.js';
 
 const profile=()=>({
   version:1 as const,
@@ -54,4 +58,55 @@ test('external origin rejects transient DNS, wrong OAuth resource and no trusted
   assert.throws(()=>externalCloudflareIngressPlan(profile(),wrong),/matching stable HTTPS/);
   const missing=config();delete missing.controlPlaneAgentAuth;
   assert.throws(()=>externalCloudflareIngressPlan(profile(),missing),/hosted OAuth/);
+});
+
+test('read-only external Cloudflare check verifies the real loopback Hub contract without opening an origin',async t=>{
+  let resource='https://mcp.example.test/mcp';
+  const server=createServer((req,res)=>{
+    res.setHeader('content-type','application/json');
+    if(req.url==='/health'){
+      res.end(JSON.stringify({ok:true,service:'nexowire',
+        runtime:{ownerOauthConfigured:true}}));
+      return;
+    }
+    if(req.url==='/.well-known/oauth-protected-resource/mcp'){
+      res.end(JSON.stringify({resource,authorization_servers:['https://issuer.example.test']}));
+      return;
+    }
+    res.statusCode=404;res.end('{}');
+  });
+  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const address=server.address();
+  assert.ok(address&&typeof address!=='string');
+  const root=await mkdtemp(join(tmpdir(),'nw-cf-local-check-'));
+  t.after(async()=>{
+    server.closeAllConnections();
+    await new Promise<void>(resolve=>server.close(()=>resolve()));
+    await rm(root,{recursive:true,force:true});
+  });
+  const file=join(root,'external-profile.json');
+  await writeFile(file,JSON.stringify(profile()));
+  const allowed=await inspectExternalCloudflareIngress(file,address.port);
+  assert.equal(allowed.status,'READY_LOCAL');
+  assert.equal(allowed.oauthMetadataVerified,true);
+  assert.equal(allowed.publishAgentEndpoint,false);
+  assert.equal(allowed.realPublicTunnel,'NOT_RUN');
+  assert.equal(allowed.strictAgentContractAdvertised,false);
+
+  await writeFile(file,JSON.stringify({...profile(),publishAgentEndpoint:true}));
+  const denied=await inspectExternalCloudflareIngress(file,address.port);
+  assert.equal(denied.status,'BLOCKED');
+  assert.equal(denied.oauthMetadataVerified,true,'missing Agent admission must not erase verified OAuth evidence');
+  assert.match(denied.reason,/remote-only device-bound revalidation/);
+  assert.equal(denied.realPublicTunnel,'NOT_RUN');
+
+  await writeFile(file,JSON.stringify(profile()));
+  resource='https://different.example.test/mcp';
+  const wrongOauth=await inspectExternalCloudflareIngress(file,address.port);
+  assert.equal(wrongOauth.status,'BLOCKED');
+  assert.equal(wrongOauth.oauthMetadataVerified,false);
+  await writeFile(file,JSON.stringify({...profile(),hostname:'unstable.trycloudflare.com'}));
+  const unstable=await inspectExternalCloudflareIngress(file,address.port);
+  assert.equal(unstable.status,'BLOCKED');
+  assert.match(unstable.reason,/stable/);
 });

@@ -52,14 +52,74 @@ export function externalCloudflareIngressPlan(input:unknown,config:NexowireConfi
   }};
 }
 
-export async function runExternalCloudflareIngress(profileFile:string,config:NexowireConfig):Promise<void>{
+async function readExternalProfileFile(profileFile:string){
   if(!path.isAbsolute(profileFile)||/[\r\n\0]/.test(profileFile))
     throw new Error('External Cloudflare profile requires an absolute file path');
   const stat=await fs.lstat(profileFile);
   if(!stat.isFile()||stat.isSymbolicLink()||stat.size>16*1024)
     throw new Error('External Cloudflare profile must be a bounded regular file');
-  const {profile,ingress}=externalCloudflareIngressPlan(
-    JSON.parse(await fs.readFile(profileFile,'utf8')),config);
+  return ExternalProfile.parse(JSON.parse(await fs.readFile(profileFile,'utf8')));
+}
+
+/** Local readiness ONLY. No Cloudflare service, public DNS or credentials are
+ * inspected; the report cannot establish off-network acceptance. It reads
+ * the already-running Hub rather than duplicating protected service-token
+ * configuration in a diagnostic process. */
+export async function inspectExternalCloudflareIngress(
+  profileFile:string,hubPort:number,
+){
+  const profile=await readExternalProfileFile(profileFile);
+  const summary={
+    kind:'NEXOWIRE_EXTERNAL_CLOUDFLARE_LOCAL_PREFLIGHT',
+    publicHostname:profile.hostname,
+    hubPort,listenPort:profile.listenPort,
+    publishAgentEndpoint:profile.publishAgentEndpoint,
+    realPublicTunnel:'NOT_RUN',
+  };
+  let safe:ReturnType<typeof validateLocalFirstIngress>;
+  try{
+    safe=validateLocalFirstIngress({
+      hubPort,listenPort:profile.listenPort,publicHostname:profile.hostname,
+      allowAgentWebSocket:profile.publishAgentEndpoint,
+    });
+    if(safe.publicHostname!.endsWith('.trycloudflare.com')||
+       safe.publicHostname!.endsWith('.ts.net'))
+      throw new Error('External Cloudflare origin requires a stable public hostname');
+  }catch(error){
+    return {...summary,status:'BLOCKED' as const,
+      oauthMetadataVerified:false,strictAgentContractAdvertised:false,
+      reason:(error instanceof Error?error.message:String(error)).slice(0,300)};
+  }
+  const expectedResourceUrl=`https://${safe.publicHostname}/mcp`;
+  try{
+    await verifyLocalFirstPublicUpstream({hubPort,expectedResourceUrl});
+  }catch(error){
+    return {...summary,status:'BLOCKED' as const,
+      oauthMetadataVerified:false,strictAgentContractAdvertised:false,
+      reason:(error instanceof Error?error.message:String(error)).slice(0,300)};
+  }
+  // Distinguish an OAuth-ready Hub from one that cannot yet admit remote
+  // Agent sockets. Reverify the whole upstream boundary with strict Agent
+  // admission instead of assuming the initial OAuth check is enough.
+  if(profile.publishAgentEndpoint){
+    try{
+      await verifyLocalFirstPublicUpstream({
+        hubPort,expectedResourceUrl,requireRemoteAgentAdmission:true,
+      });
+    }catch(error){
+      return {...summary,status:'BLOCKED' as const,
+        oauthMetadataVerified:true,strictAgentContractAdvertised:false,
+        reason:(error instanceof Error?error.message:String(error)).slice(0,300)};
+    }
+  }
+  return {...summary,status:'READY_LOCAL' as const,
+    oauthMetadataVerified:true,
+    strictAgentContractAdvertised:profile.publishAgentEndpoint};
+}
+
+export async function runExternalCloudflareIngress(profileFile:string,config:NexowireConfig):Promise<void>{
+  const profile=await readExternalProfileFile(profileFile);
+  const {ingress}=externalCloudflareIngressPlan(profile,config);
   // Refuse to expose even loopback ingress unless the local Hub already
   // advertises matching OAuth metadata and, if requested, strict Agent auth.
   await verifyLocalFirstPublicUpstream({
