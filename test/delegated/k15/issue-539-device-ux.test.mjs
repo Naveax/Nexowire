@@ -165,6 +165,40 @@ test('T-339/#539: identical device names never collapse stable target IDs', () =
     ['machine-b', 'machine-b']);
 });
 
+test('T-339/T-343/#539: bridge preference and folder actions keep their device ID after reorder', () => {
+  const h = harness();
+  const first = device({id: 'machine-a', name: 'Ortak PC'});
+  const second = device({id: 'machine-b', name: 'Ortak PC'});
+  const folder = {id: 'warehouse', name: 'Depo'};
+  // Keep writes unresolved: the test observes the actual generated POST,
+  // not an imagined successful Broker operation or a later server response.
+  h.setFetch(() => new Promise(() => {}));
+  h.render(snapshot([first, second], {folders: [folder]}));
+  const before = h.cards()[1];
+  before.querySelector('.bridge-quick-toggle').listeners.get('click')();
+  before.querySelector('.folder-assign').value = 'warehouse';
+  before.querySelector('.folder-assign').listeners.get('change')();
+
+  h.render(snapshot([second, first], {folders: [folder]}));
+  const after = h.cards()[0];
+  after.querySelector('.bridge-quick-toggle').listeners.get('click')();
+  after.querySelector('.folder-assign').value = 'warehouse';
+  after.querySelector('.folder-assign').listeners.get('change')();
+
+  assert.deepEqual(h.requests.map(request => request.url), [
+    '/api/v1/me/devices/bridge-preference',
+    '/api/v1/me/device-folders/assign',
+    '/api/v1/me/devices/bridge-preference',
+    '/api/v1/me/device-folders/assign',
+  ]);
+  for (const request of h.requests) {
+    assert.equal(JSON.parse(request.options.body).deviceId, 'machine-b');
+    assert.equal(request.options.credentials, 'include');
+  }
+  assert.equal(JSON.parse(h.requests[1].options.body).folderId, 'warehouse');
+  assert.equal(JSON.parse(h.requests[3].options.body).folderId, 'warehouse');
+});
+
 test('T-339/T-343/#539: same-named cards have distinct screen-reader action names', {
   todo: !hasDeviceLabelFix && '#1068 is unmerged; current main still repeats accessible action names',
 }, () => {
@@ -211,6 +245,25 @@ test('T-341/#539: offline and missing online telemetry never render a false posi
   }
 });
 
+test('T-340/T-341/#812: offline stale Broker flags cannot enable a real device command', () => {
+  const h = harness();
+  h.render(snapshot([
+    device({id: 'offline-broker', online: false, accessMode: 'full',
+      platform: 'win32', privilegeMode: 'broker', adminBridgeReady: true,
+      bridgePreference: {desiredMode: 'on'}}),
+    device({id: 'online-safe', online: true, accessMode: 'safe',
+      platform: 'win32', privilegeMode: 'broker', adminBridgeReady: true}),
+    device({id: 'online-other-os', online: true, accessMode: 'full',
+      platform: 'darwin', privilegeMode: 'broker', adminBridgeReady: true}),
+  ]));
+  for (const card of h.cards()) {
+    const action = card.querySelector('.bridge-apply-toggle');
+    assert.equal(action.disabled, true, card.dataset.deviceId);
+    assert.match(action.title, /Windows, çevrimiçi, FULL ve Broker/);
+  }
+  assert.equal(h.requests.length, 0, 'rendering stale flags never dispatches a command');
+});
+
 test('T-342/#485: no device selected cannot imply automatic MCP target or setup completion', () => {
   const h = harness();
   h.render(snapshot([]));
@@ -252,6 +305,29 @@ test('T-344/#539: owner UI pending/401/error source clears stale counts', {
   assert.match(h.id('device-list-status').textContent, /yüklenemedi/);
   assert.equal(h.id('connection-pill').textContent, 'Bağlantı hatası');
   assert.equal(h.id('devices-count').textContent, '—');
+});
+
+test('T-344/#539: late success cannot resurrect private device cards after a newer 401', {
+  todo: !hasLoadingReset && '#1068 unmerged; main lacks request generation fencing',
+}, async () => {
+  const h = harness();
+  const pending = [];
+  h.render(snapshot([device({id: 'prior-private-device'})]));
+  h.setFetch(() => new Promise(resolve => pending.push(resolve)));
+  const older = h.load();
+  const newer = h.load();
+  assert.equal(pending.length, 2);
+
+  pending[1]({status: 401, ok: false});
+  await newer;
+  pending[0]({status: 200, ok: true,
+    json: async () => snapshot([device({id: 'stale-private-device'})])});
+  await older;
+
+  assert.equal(h.id('devices-count').textContent, '—');
+  assert.equal(h.cards().some(card => card.dataset.deviceId === 'stale-private-device'), false);
+  assert.equal(h.id('login').classList.contains('hidden'), false);
+  assert.match(h.id('device-list-status').textContent, /giriş yap/);
 });
 
 test('T-340/T-342: UI AUTO display never replaces server authorization', () => {
