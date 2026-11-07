@@ -1,0 +1,16 @@
+{
+  "schema": "nexowire-k18-byte-unit-cases-v1",
+  "origin": "SYNTHETIC_ONLY",
+  "storageUnit": "bytes",
+  "columns": {
+    "decimalKB": "bytes / 1000",
+    "binaryKiB": "bytes / 1024",
+    "binaryMiB": "bytes / 1048576"
+  },
+  "cases": [
+    {"label": "one decimal KB", "bytes": 1000, "decimalKB": 1, "binaryKiB": 0.9765625, "binaryMiB": 0.00095367431640625},
+    {"label": "one binary KiB", "bytes": 1024, "decimalKB": 1.024, "binaryKiB": 1, "binaryMiB": 0.0009765625},
+    {"label": "220 KiB", "bytes": 225280, "decimalKB": 225.28, "binaryKiB": 220, "binaryMiB": 0.21484375},
+    {"label": "one binary MiB", "bytes": 1048576, "decimalKB": 1048.576, "binaryKiB": 1024, "binaryMiB": 1}
+  ]
+}
