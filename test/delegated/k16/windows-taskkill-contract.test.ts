@@ -87,3 +87,28 @@ test("#540 T-347: taskkill exit zero is only REQUESTED, not proof descendants ex
   const fixture = makeFixture({ event: "close", exitCode: 0 }, true);
   assert.equal(await fixture.terminate(17296), "requested");
 });
+
+test("#540 T-387: root exited while owned grandchild lives cannot be called a successful tree stop", async () => {
+  // The parent is already gone, yet a grandchild created by that exact owned
+  // process tree is still alive. The private killPidTree API can report only a
+  // request result; it receives no descendant-incarnation postcondition.
+  const ownedTree = {
+    root: { pid: 17297, creationTime: "fixture-root-1", alive: false },
+    grandchild: { pid: 17298, creationTime: "fixture-child-1", alive: true },
+  } as const;
+  const fixture = makeFixture({ event: "close", exitCode: 0 }, ownedTree.root.alive);
+  const result = await fixture.terminate(ownedTree.root.pid);
+  assert.equal(result, "requested", "taskkill exit zero gives request acknowledgement only");
+  assert.equal(ownedTree.root.alive, false);
+  assert.equal(ownedTree.grandchild.alive, true);
+  assert.notEqual(result, "verified", "no descendant-exit postcondition was observed");
+  assert.notEqual(result, "succeeded", "parent exit must not become a terminal-success label");
+});
+
+test("#540 T-387: a gone root with a live grandchild remains UNCONFIRMED on taskkill failure", async () => {
+  const root = { pid: 17299, alive: false };
+  const descendant = { pid: 17300, alive: true };
+  const fixture = makeFixture({ event: "close", exitCode: 128 }, root.alive);
+  assert.equal(await fixture.terminate(root.pid), "unconfirmed");
+  assert.equal(descendant.alive, true, "the mock taskkill never touched the owned descendant");
+});
