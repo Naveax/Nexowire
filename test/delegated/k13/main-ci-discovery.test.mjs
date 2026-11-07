@@ -23,3 +23,9 @@ test('green source workflow text alone never asserts actual test execution', () 
     ['test/delegated/a.test.mjs']);
   assert.equal(report.conclusion, 'SOURCE_PATHS_REFERENCED_NOT_EXECUTION_PROOF');
 });
+
+test('commented CI mention is not direct discovery evidence', () => {
+  const report = inspectDiscovery('  # test/delegated/unused.test.mjs', { scripts: {} },
+    ['test/delegated/unused.test.mjs']);
+  assert.deepEqual(report.not_referenced, ['test/delegated/unused.test.mjs']);
+});

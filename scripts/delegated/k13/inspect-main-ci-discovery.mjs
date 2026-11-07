@@ -19,9 +19,11 @@ export function collectDelegatedTests(root) {
 
 export function inspectDiscovery(ciSource, packageJson, delegatedTests) {
   const npmTest = packageJson.scripts?.test ?? '';
-  const wildcardK20 = ciSource.includes('test/delegated/k20/*.test.mjs');
+  // A commented example is not an executable CI invocation.
+  const activeSource = ciSource.split(/\r?\n/).filter(line => !/^\s*#/.test(line)).join('\n');
+  const wildcardK20 = activeSource.includes('test/delegated/k20/*.test.mjs');
   const items = delegatedTests.map(path => {
-    const inCI = ciSource.includes(path) ||
+    const inCI = activeSource.includes(path) ||
       (wildcardK20 && /^test\/delegated\/k20\/[^/]+\.test\.mjs$/.test(path));
     const npmPatternUnverified = !inCI && path.endsWith('.test.ts') &&
       npmTest.includes('test/**/*.test.ts');

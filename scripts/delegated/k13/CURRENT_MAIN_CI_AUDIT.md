@@ -43,3 +43,24 @@ Read-only snapshot: 2026-11-07. Upstream and fork `main` both
 
 The accompanying `inspect-main-ci-discovery.mjs` is a conservative, read-only
 source audit. `NPM_GLOB_UNVERIFIED` means precisely that, never PASS.
+
+## T-331 — portable fork/upstream CI strategy
+
+- The earlier fork-only [PR #1](https://github.com/SinsiVinci/Nexowire-fork/pull/1)
+  contains a separate harness but is Draft and not on current main. A clean
+  upstream-based PR cannot silently borrow those K13 files or inherit its
+  historical green SHA.
+- This P004 source is intentionally self-contained under K13-owned script/test
+  paths, and starts from current upstream main. It has no production secret or
+  service dependency. The reproducible offline command is:
+
+  ```bash
+  node --test test/delegated/k13/main-ci-discovery.test.mjs test/delegated/k13/main-ci-evidence-gate.test.mjs
+  ```
+
+- Owner PR #1096 owns `.github/workflows/ci.yml`. After review, its owner can
+  add that exact command to the Node 22/24 jobs and record the resulting
+  actual test count. K13 will not edit/override the owner's workflow.
+- Until that integration lands, a green repository CI run may not have
+  executed these new K13 MJS tests. Local PASS is **not** CI discovery PASS;
+  a disposable fork integration branch is at most auxiliary smoke.

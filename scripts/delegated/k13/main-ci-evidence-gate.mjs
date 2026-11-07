@@ -3,12 +3,13 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 export function evaluateMainCI({
-  expectedHead, runs, jobsByRun, totalJobsByRun = {}, requiredJobs = [], pr = null,
+  expectedHead, runs, jobsByRun, totalJobsByRun = {},
+  requiredJobs = ['test (22)', 'test (24)', 'browser-live'], workflowName = 'CI', pr = null,
 }) {
   if (!/^[a-f0-9]{40}$/i.test(expectedHead ?? '')) {
     return { source_ci: 'NOT_PASS', reason: 'INVALID_HEAD' };
   }
-  const candidates = runs.filter(run => run.head_sha === expectedHead)
+  const candidates = runs.filter(run => run.head_sha === expectedHead && run.name === workflowName)
     .sort((a, b) => b.id - a.id);
   const run = candidates[0];
   const result = {
@@ -32,7 +33,8 @@ export function evaluateMainCI({
     return { ...result, reason: 'RUN_NOT_SUCCESS' };
   }
   const jobs = jobsByRun[run.id] ?? [];
-  const totalJobs = totalJobsByRun[run.id] ?? jobs.length;
+  const totalJobs = totalJobsByRun[run.id];
+  if (totalJobs === undefined) return { ...result, reason: 'UNKNOWN_JOB_TOTAL' };
   if (!jobs.length || totalJobs !== jobs.length) {
     return { ...result, reason: jobs.length ? 'INCOMPLETE_JOB_PAGE' : 'ZERO_JOB_RUN' };
   }

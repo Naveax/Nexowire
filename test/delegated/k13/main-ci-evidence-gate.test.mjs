@@ -5,7 +5,7 @@ import { evaluateMainCI } from '../../../scripts/delegated/k13/main-ci-evidence-
 const sha = 'a'.repeat(40);
 const oldSha = 'b'.repeat(40);
 const run = (id, head_sha = sha, conclusion = 'success') => ({
-  id, head_sha, status: 'completed', conclusion,
+  id, head_sha, status: 'completed', conclusion, name: 'CI',
 });
 const jobs = ['test (22)', 'test (24)', 'browser-live'].map(name => ({
   run_id: 9, name, status: 'completed', conclusion: 'success',
@@ -40,9 +40,18 @@ test('old SHA, unfinished page and disjoint matrix never combine into PASS', () 
   const page = input();
   page.totalJobsByRun = { 9: 4 };
   assert.equal(evaluateMainCI(page).reason, 'INCOMPLETE_JOB_PAGE');
+  const unknownCount = input();
+  unknownCount.totalJobsByRun = {};
+  assert.equal(evaluateMainCI(unknownCount).reason, 'UNKNOWN_JOB_TOTAL');
   const mixed = input();
   mixed.jobsByRun = { 9: jobs.map((j, i) => ({ ...j, run_id: i ? 10 : 9 })) };
   assert.equal(evaluateMainCI(mixed).reason, 'JOB_FAILED_SKIPPED_OR_CROSS_RUN');
+});
+
+test('unrelated green workflow cannot masquerade as main CI', () => {
+  const wrongWorkflow = input();
+  wrongWorkflow.runs = [{ ...run(9), name: 'Release Readiness' }];
+  assert.equal(evaluateMainCI(wrongWorkflow).reason, 'NO_EXACT_HEAD_RUN');
 });
 
 test('closed-unmerged PR and skipped Windows check are not accepted', () => {
