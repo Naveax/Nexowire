@@ -41,7 +41,15 @@ async function child(t: TestContext, file: string, mode: string) {
   const {process, exited, stderr} = launch(t,
     [...(source ? ['--import', 'tsx'] : []), worker, mode, file]);
   const report = await new Promise<Report>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Journal worker timed out: ' + stderr())), 30_000);
+    // Building the authentic 1004-frame WAL fixture uses FULL-synchronous
+    // SQLite writes; hosted Windows storage can occasionally exceed 30 s.
+    // Only the fixture gets an extended bound. Corrupt-WAL inspection still
+    // has the original 30 s deadline and must fail closed without repair.
+    const timeoutMs = mode === 'fixture' ? 75_000 : 30_000;
+    const timer = setTimeout(() => {
+      if (process.exitCode === null && process.signalCode === null) process.kill('SIGKILL');
+      reject(new Error('Journal worker ' + mode + ' timed out after ' + timeoutMs + ' ms: ' + stderr()));
+    }, timeoutMs);
     const done = () => clearTimeout(timer);
     process.once('error', error => { done(); reject(error); });
     process.once('exit', code => {
@@ -220,7 +228,7 @@ test('#974: repeated real Agent startup on damaged WAL remains denied, records t
 
 for (const damage of ['checksum', 'torn-frame', 'current-salt', 'index-copy'] as const) {
   test('#974: ' + damage + ' damage still rejects the incident-shaped WAL without automatic repair',
-    {timeout: 60_000}, async t => {
+    {timeout: 150_000}, async t => {
       const {file} = await fixture(t);
       const suffix = damage === 'index-copy' ? '-shm' : '-wal';
       let bytes = Buffer.from(await readFile(file + suffix));
