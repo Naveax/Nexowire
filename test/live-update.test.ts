@@ -558,6 +558,61 @@ test('hourly updater must not claim whole-device ready when Broker is unavailabl
   assert.equal(result.action,'broker_unavailable');
 });
 
+test('hourly updater reclaims a dead-owner lock and still excludes live owners',async()=>{
+  const {withAutomaticUpdateRunLock}=await import('../src/update/auto-update.js');
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-auto-update-lock-'));
+  const lockDir=path.join(root,'.lifecycle.lock');
+  try{
+    await fs.mkdir(lockDir);
+    await fs.writeFile(path.join(lockDir,'owner.json'),JSON.stringify({
+      version:1,pid:2147483647,
+      nonce:'00000000-0000-4000-8000-000000000001',startedAt:0,
+    }));
+    const old=new Date(Date.now()-60_000);
+    await fs.utimes(lockDir,old,old);
+    let calls=0;
+    const recovered=await withAutomaticUpdateRunLock(root,async()=>++calls);
+    assert.equal(recovered,1);
+    assert.equal(calls,1);
+    await assert.rejects(fs.stat(lockDir),{code:'ENOENT'});
+    let entered!:()=>void;
+    const active=new Promise<void>(resolve=>{entered=resolve});
+    let exit!:()=>void;
+    const hold=new Promise<void>(resolve=>{exit=resolve});
+    const first=withAutomaticUpdateRunLock(root,async()=>{
+      entered();
+      await hold;
+      return 'first';
+    });
+    await active;
+    try{
+      await assert.rejects(
+        withAutomaticUpdateRunLock(root,async()=>{calls++;return 'second'}),
+        /already running/i,
+      );
+      assert.equal(calls,1);
+    }finally{
+      exit();
+    }
+    assert.equal(await first,'first');
+    assert.equal(await withAutomaticUpdateRunLock(root,async()=>++calls),2);
+    await assert.rejects(fs.stat(lockDir),{code:'ENOENT'});
+  }finally{
+    await fs.rm(root,{recursive:true,force:true});
+  }
+});
+
+test('hourly updater does not keep permanent wx tombstones after a crash',async()=>{
+  const source=await fs.readFile(new URL('../src/update/auto-update.ts',import.meta.url),'utf8');
+  const start=source.indexOf('async function runAutoUpdateOnce():');
+  const end=source.indexOf('async function installAutoUpdateTask()',start);
+  assert.ok(start>=0&&end>start);
+  const run=source.slice(start,end);
+  assert.doesNotMatch(run,/fs\.open\(lockFile,\s*'wx'/,
+    'run.lock cannot permanently prevent hourly checks after crash');
+  assert.match(run,/withAutomaticUpdateRunLock\(/);
+});
+
 test('hourly update never creates a replacement DPAPI Broker identity when missing', async () => {
   const {readFileSync} = await import('node:fs');
   const source=readFileSync(new URL('../src/update/auto-update.ts',import.meta.url),'utf8');

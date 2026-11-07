@@ -4,6 +4,10 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { PrivilegedBrokerClient } from '../agent/privileged-broker-client.js';
+import {
+  PrivateLifecycleLockError,
+  withPrivateDesktopProcessLock,
+} from '../agent/windows-private-desktop-lock.js';
 import { readExistingPrivilegedBrokerToken } from '../security/privileged-broker-secret.js';
 import {
   applyLatestLiveUpdate,
@@ -264,28 +268,30 @@ async function writeAutoStatus(
   await fs.rename(temporary, file);
 }
 
-async function runAutoUpdateOnce(): Promise<AutomaticUpdateResult> {
-  const directory = updaterDir();
-  await fs.mkdir(directory, { recursive: true });
-  // wx locking prevents overlapping hourly task instances and
-  // explicit 'update auto run' calls for the same Windows user.
-  const lockFile = path.join(directory, 'run.lock');
-  let lock;
+/**
+ * Permit only one hourly update per local Windows user. A crashed updater
+ * must not leave an immortal run.lock and disable future scheduled checks.
+ */
+export async function withAutomaticUpdateRunLock<T>(
+  directory: string,
+  action: () => Promise<T>,
+): Promise<T> {
   try {
-    lock = await fs.open(lockFile, 'wx', 0o600);
+    return await withPrivateDesktopProcessLock(directory, action, {
+      timeoutMs: 600, staleMs: 30_000,
+    });
   } catch (error) {
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      error.code === 'EEXIST'
-    ) {
-      throw new Error(
-        'Updater already running or a stale lock exists. Safe skip; no forced unlock.',
-      );
+    if (error instanceof PrivateLifecycleLockError &&
+        error.code === 'PRIVATE_DESKTOP_LIFECYCLE_LOCK_BUSY') {
+      throw new Error('Updater already running; concurrent invocation skipped.');
     }
     throw error;
   }
+}
+
+async function runAutoUpdateOnce(): Promise<AutomaticUpdateResult> {
+  const directory = updaterDir();
+  return await withAutomaticUpdateRunLock(directory, async () => {
   try {
     const result = await executeAutomaticUpdate({
       check: () => checkLiveUpdate(),
@@ -324,10 +330,8 @@ async function runAutoUpdateOnce(): Promise<AutomaticUpdateResult> {
     };
     await writeAutoStatus(result);
     throw error;
-  } finally {
-    await lock.close();
-    await fs.rm(lockFile, { force: true });
   }
+  });
 }
 
 async function installAutoUpdateTask(): Promise<unknown> {
