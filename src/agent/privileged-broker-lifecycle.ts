@@ -773,6 +773,12 @@ export interface PrivilegedBrokerHealthReport {
   elevated: boolean;
   /** Provider attached to the process, not evidence that a specific effect was authorized. */
   effectAdmissionConfigured?: boolean | null;
+  /** Diagnostic only: configured provider is NOT proof of effect authorization. */
+  effectAdmissionState?:
+    | 'TRANSPORT_NOT_READY'
+    | 'PROVIDER_NOT_CONFIGURED'
+    | 'PROVIDER_CONFIGURED_UNVERIFIED'
+    | 'LEGACY_UNKNOWN';
   ready: boolean;
   status: 'READY' | 'SECRET_UNAVAILABLE' | 'HEALTH_UNAVAILABLE' | 'NOT_ELEVATED' | 'VERSION_MISMATCH';
 }
@@ -793,6 +799,7 @@ export async function probePrivilegedBrokerHealth(options: {
     reachable: false,
     elevated: false,
     effectAdmissionConfigured: null,
+    effectAdmissionState: 'TRANSPORT_NOT_READY' as const,
     ready: false,
   };
   let token: string;
@@ -820,6 +827,10 @@ export async function probePrivilegedBrokerHealth(options: {
     reachable: result.reachable,
     elevated: result.elevated,
     effectAdmissionConfigured: result.effectAdmissionConfigured,
+    effectAdmissionState: status !== 'READY' ? 'TRANSPORT_NOT_READY'
+      : result.effectAdmissionConfigured === true ? 'PROVIDER_CONFIGURED_UNVERIFIED'
+      : result.effectAdmissionConfigured === false ? 'PROVIDER_NOT_CONFIGURED'
+      : 'LEGACY_UNKNOWN',
     ready: status === 'READY',
     status,
   };
