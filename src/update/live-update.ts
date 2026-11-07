@@ -249,17 +249,9 @@ export async function checkLiveUpdate(
   options: LiveUpdateOptions = {},
 ): Promise<UpdateCheckResult> {
   const fetchImpl = options.fetchImpl ?? fetch;
-  await writeState(options, {
-    schemaVersion: 1,
-    state: 'checking',
-    currentVersion: NEXOWIRE_VERSION,
-    targetVersion: null,
-    buildId: null,
-    targetRoot: null,
-    machineComponentsPending: false,
-    updatedAt: isoNow(),
-    error: null,
-  });
+  // A release metadata query is not a runtime cutover. Do not overwrite the
+  // durable update status with "checking" before an awaited HTTP request:
+  // a live Windows helper may be recording a cutover or rollback.
   const response = await fetchChecked(LATEST_RELEASE_URL, fetchImpl);
   const body = await response.json() as {
     tag_name?: unknown;
@@ -285,17 +277,17 @@ export async function checkLiveUpdate(
       compareReleaseVersions(NEXOWIRE_VERSION, version) < 0,
     release,
   };
-  await writeState(options, {
-    schemaVersion: 1,
-    state: 'idle',
-    currentVersion: NEXOWIRE_VERSION,
-    targetVersion: version,
-    buildId: null,
-    targetRoot: null,
-    machineComponentsPending: false,
-    updatedAt: isoNow(),
-    error: null,
-  });
+  // Re-read after network I/O: an update may have started while we fetched.
+  // Only refresh release metadata on an idle status. Keep the cutover marker,
+  // rollback evidence, pending machine work, and errors exactly as recorded.
+  const current = await readLiveUpdateState(options);
+  if (current.state === 'idle') {
+    await writeState(options, {
+      ...current,
+      targetVersion: version,
+      updatedAt: isoNow(),
+    });
+  }
   return result;
 }
 

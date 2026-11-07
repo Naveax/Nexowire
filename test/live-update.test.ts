@@ -133,6 +133,61 @@ test('live updater accepts only version-bound Windows setup metadata', () => {
   );
 });
 
+test('release checks preserve live update and rollback evidence, including in-flight cutover', async () => {
+  const temp=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-check-no-clobber-'));
+  const file=path.join(temp,'Nexowire','update','status.json');
+  const latest={
+    tag_name:'v9.9.9',
+    html_url:'https://github.com/Naveax/Nexowire/releases/tag/v9.9.9',
+    published_at:'2026-11-07T00:00:00Z',
+  };
+  const snapshot=(state:string)=>({
+    schemaVersion:1,state,currentVersion:'1.0.7',targetVersion:'1.0.8',
+    buildId:'1.0.8-012345abcdef',
+    targetRoot:path.join(temp,'Nexowire','versions','1.0.8-012345abcdef'),
+    machineComponentsPending:true,agentStartupVerified:true,
+    activeConnectionVerified:false,updatedAt:'2026-11-07T00:00:00.000Z',
+    error:state==='failed'?'ROLLBACK_TEST_FAILURE':null,
+  });
+  try {
+    await fs.mkdir(path.dirname(file),{recursive:true});
+    for(const state of ['checking','staging','cutover_scheduled','succeeded',
+      'failed','rolled_back','rollback_failed']){
+      const original=JSON.stringify(snapshot(state));
+      await fs.writeFile(file,original);
+      let fetched=0;
+      const result=await checkLiveUpdate({localAppData:temp,
+        fetchImpl:async()=>{fetched++;return Response.json(latest);}});
+      assert.equal(fetched,1,'check still fetches release metadata for '+state);
+      assert.equal(result.latestVersion,'9.9.9');
+      assert.equal(result.updateAvailable,true);
+      assert.equal(await fs.readFile(file,'utf8'),original,
+        'read-only check must not erase '+state+' evidence');
+    }
+    // Simulate a cutover starting while GitHub is responding to a check.
+    await fs.writeFile(file,JSON.stringify({...snapshot('idle'),
+      targetVersion:null,buildId:null,targetRoot:null,
+      machineComponentsPending:false,agentStartupVerified:false}));
+    const during=JSON.stringify(snapshot('cutover_scheduled'));
+    const inFlight=await checkLiveUpdate({localAppData:temp,
+      fetchImpl:async()=>{
+        await fs.writeFile(file,during);
+        return Response.json(latest);
+      }});
+    assert.equal(inFlight.latestVersion,'9.9.9');
+    assert.equal(await fs.readFile(file,'utf8'),during,
+      'late fetch response must not replace active cutover');
+    await fs.writeFile(file,JSON.stringify(snapshot('failed')));
+    const failedEvidence=await fs.readFile(file,'utf8');
+    await assert.rejects(checkLiveUpdate({localAppData:temp,
+      fetchImpl:async()=>{throw new Error('OFFLINE_FIXTURE');}}),/OFFLINE_FIXTURE/);
+    assert.equal(await fs.readFile(file,'utf8'),failedEvidence,
+      'failed metadata fetch must preserve earlier failure evidence');
+  }finally{
+    await fs.rm(temp,{recursive:true,force:true});
+  }
+});
+
 test('live update check persists official release state without applying it', async () => {
   const temp = await fs.mkdtemp(
     path.join(os.tmpdir(), 'nexowire-live-update-test-'),
