@@ -34,6 +34,17 @@ Do not replace a hosted OAuth connector with a localhost URL, and do not paste a
 
 The matrix describes the current source interface, not a tested distribution or a blanket platform-support promise. Node 22+ and the build commands above apply to developer checkouts; they do not make the Windows installer portable.
 
+### Core setup versus optional environment tools
+
+| Path | Required for that path | Optional / separate preflight |
+| --- | --- | --- |
+| Hosted Windows end user | Published Windows installer and account connection from the [normal guide](INSTALL_WINDOWS.md) | No source checkout, Node/npm, Tailscale, WSL, CUDA or Ollama prerequisite |
+| Windows self-host node | Nexowire CLI, same-user Windows Scheduled Tasks and CurrentUser DPAPI | Tailscale **only** if requesting Funnel; no USB/GPU/WSL/Hyper-V dependency for ordinary Hub/Agent bootstrap |
+| Developer source checkout | Node.js 22+, `npm ci`, `npm run build` | Workload-specific Python, WSL, USB, CUDA, Ollama, Hyper-V, Docker or GPU tools are not baseline dependencies |
+| Environment Doctor for #539/R17 | Explicitly selected read-only checks in [Environment Doctor](environment-doctor.md) | Missing optional tools are warnings unless the operator explicitly requires them; an inventory check is not physical acceptance |
+
+These optional tools are **not automatically installed** or enabled by either onboarding flow. A Driver/USB/CUDA/WSL check can report an observation or insufficient evidence; it cannot prove that the original workload or physical device works.
+
 ## One-command Windows bootstrap (changes local state)
 
 ```powershell
@@ -109,3 +120,5 @@ A bootstrap is not considered remotely complete merely because the Scheduled Tas
 - `machine_snapshot` and `machine_health` succeed through MCP.
 
 These checks require an actual Windows host and remote client; source-only tests or a Scheduled Task's `Running` state do not satisfy them.
+
+For evidence, distinguish an offline source check (which may pass), **NOT_RUN** (no eligible Windows host/real connector), and **UNKNOWN** (a relevant observation is missing or inconclusive). Do not translate a synthetic fixture, `action_required` CI, or an unobserved physical check into a passed self-host acceptance result.
