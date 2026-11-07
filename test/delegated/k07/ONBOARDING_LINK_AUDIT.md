@@ -1,4 +1,4 @@
-# Onboarding link integrity — #485 / T-383
+# Onboarding source QA — #485 / T-383 and T-389
 
 Source baseline: upstream `Naveax/Nexowire` main `4e7db16f4233048a956664bef6b607781eb63fb7` (2026-11-07). This is a **source-link audit**, not live Windows installation acceptance.
 
@@ -18,3 +18,9 @@ The test has independent negative fixtures for missing documents, renamed anchor
 ## Evidence boundary
 
 Links to the hosted control panel, ChatGPT product pages, and external docs were **not actively probed**; availability, OAuth readiness and the downloaded file's on-device hash remain **UNKNOWN/NOT_RUN** here. No live Hub/Agent, pairing, install, secrets or remote MCP calls were attempted. An installer hash or a matching release asset is not proof of a signed Nexowire publisher or physical CORE acceptance.
+
+## Pairing recovery guide (T-389)
+
+`node --test test/delegated/k07/pairing-recovery-guide.test.mjs`
+
+The separate fixture checks current `docs/INSTALL_WINDOWS.md` guidance for an initial failed **BAĞLA** attempt (wait while **BAĞLANIYOR**, retry **TEKRAR DENE** once, then open a fresh pairing session), an exhausted device limit and the wrong GitHub account. It verifies guidance against deleting records/reinstalling or sharing OAuth secrets. It separately checks self-host diagnostic-first commands, and rejects unsafe sample advice (forced state reset, revealing credentials, or treating loopback as a remote ChatGPT URL). It does **not** execute pairing, alter account state, or validate OAuth behavior on a live device.
