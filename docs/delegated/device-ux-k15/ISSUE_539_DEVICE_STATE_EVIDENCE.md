@@ -25,12 +25,12 @@ data. It checks:
 
 | P004 task | Issue | Source-level evidence / remaining gap |
 | --- | --- | --- |
-| T-339 | #539/R11 | Two identically named PCs keep distinct stable `device.id` values even after list order reverses; the per-card access-mode request retains the intended ID. **Post-#1068 main integration is blocked until merge.** |
+| T-339 | #539/R11 | Two identically named PCs keep distinct stable `device.id` values even after list order reverses; access-mode, Bridge-preference and folder-assignment POSTs all retain the exact selected ID. **Post-#1068 main integration is blocked until merge.** |
 | T-340 | #812 | FULL, CORE and ROOT display data is not a signed effective local-grant/Windows permission receipt. Untrusted `active` fields cannot promote the release-latched visual CORE/ROOT states. |
-| T-341 | #539/R11 | Online, offline and missing online telemetry do not produce false-positive Broker readiness. The current two-state card text maps missing telemetry to “Çevrimdışı”, not an explicit “Bilinmiyor” category; typed dashboard contract normally supplies a boolean. |
+| T-341 | #539/R11 | Online, offline and missing online telemetry do not produce false-positive Broker readiness. Stale `adminBridgeReady=true` must not enable Bridge APPLY if the machine is offline, in SAFE mode, or on a non-Windows platform. The current two-state card text maps missing telemetry to “Çevrimdışı”, not an explicit “Bilinmiyor” category; typed dashboard contract normally supplies a boolean. |
 | T-342 | #485 | With zero or one registered device and AUTO disabled, the screen continues to require explicit target selection; no rendering event makes an MCP tool grant. The account-level “Bağlı” pill may warrant wording review so users do not mistake it for a paired device. |
 | T-343 | #539/R11 | Unicode/HTML-like names and platform data go to `textContent`, not card HTML. K03 candidate uses distinct within-list ordinal accessible names for duplicate visible names, while main does not yet. Ordinals are display hints and may shift when ordering changes; exact target selection must remain by stable ID. |
-| T-344 | #539/R11 | #1068 candidate clears stale counts during pending load, 401 and 503; current main lacks this presentation reset. This must be checked again once #1068 is truly in main. |
+| T-344 | #539/R11 | #1068 candidate clears stale counts during pending load, 401 and 503. An added deterministic two-request race proves that a **late old 200 response cannot reintroduce private device cards after a newer 401** on #1068; current main still fails that regression. Recheck after #1068 is actually in main. |
 
 Authorization remains in the backend (`src/mcp/create-server.ts` and
 credential scoping), not in visible card labels or AUTO preferences. In
@@ -50,8 +50,9 @@ K15_APP_SOURCE=/path/to/owner1068/web/app.js node test/delegated/k15/issue-539-d
 
 Results:
 
-- Main exact `4e7db16...`: **6 PASS, 2 expected TODO, 0 unexpected FAIL**.
-- #1068 exact `94d38799...`: **8 PASS, 0 TODO, 0 FAIL**.
+- Initial main exact `4e7db16...`: **6 PASS, 2 expected TODO, 0 unexpected FAIL**.
+- Initial #1068 exact `94d38799...`: **8 PASS, 0 TODO, 0 FAIL**.
+- Follow-up on the **same immutable sources** (new K15 tests only): main **8 PASS, 3 expected TODO, 0 unexpected FAIL**; #1068 **11 PASS, 0 TODO, 0 FAIL**. Added exact-target Bridge and folder action checks, ineligible Bridge APPLY checks and a 401-versus-late-200 privacy race. The third TODO is an actual main-only stale-data regression, not a claimed pass.
 
 The TODOs are deliberate indicators of *unmerged* UI work, not test
 successes. Passing the detached candidate does not prove the main branch
@@ -90,6 +91,10 @@ actual pure `resolveOwnerDeviceTarget()` implementation on current main.
 | Exact stable ID matches, even if card order reverses | `selected` candidate | Does not establish device online or Broker ready |
 | Exact ID exists but is offline | `selected` candidate | **Important:** this pure resolver does not enforce online tool admission; MCP has a separate online gate |
 | ID outside selected folder or account list | `DEVICE_NOT_FOUND` | Never treat a visible folder label as a permission grant |
+| Two normalization-equivalent folder names | `ambiguous-folder` | Cannot silently authorize one same-named location |
+| Contradictory ID/name hints for device or folder | `DEVICE_NOT_FOUND` / `FOLDER_NOT_FOUND` | Must not prefer a convenient hint over the exact identity constraint |
+| Single offline device in a folder, AUTO explicitly opted in | `selected` candidate with `one-in-folder` | **Still not** online admission or runtime permission |
+| Known empty folder or unknown folder ID | `empty_folder` / `FOLDER_NOT_FOUND` | No fallback to a device outside the selected folder |
 
 The test also inspects MCP admission source for exact one-owner-device,
 online and credential-scope conditions; that inspection is **not** a live
@@ -102,6 +107,6 @@ Reproduction:
 node test/delegated/k15/target-versus-permission-matrix.test.mjs
 ```
 
-Result on current main `4e7db16...`: **9 PASS, 0 FAIL, 0 TODO**.
+Initial result on current main `4e7db16...`: **9 PASS, 0 FAIL, 0 TODO**. Follow-up on the **same** main: **13 PASS, 0 FAIL, 0 TODO**.
 This narrows #539/R11 and #812 evidence, but leaves live identity,
 permission and physical input-grant acceptance to the appropriate owner.
