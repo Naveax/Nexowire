@@ -132,6 +132,8 @@ export type S5QuotedCostReport = {
   classification:'OFFLINE_SIMULATION_NOT_PROVIDER_BILL';
   currency:string|S5Unknown;
   monthlyUsage:CostEnvelope['monthly']|S5Unknown;
+  capacityEvidence:{measuredCompletedToolCallsPerDay:S5Unknown;
+    measuredSustainedHostedWssSessions:S5Unknown;reason:string};
   freeThresholdSafeguard:{numericThresholdsFit:boolean|S5Unknown;
     zeroExtraInvoiceProven:false};
   componentCosts:Record<S5CostMeter,number|S5Unknown>;
@@ -204,7 +206,11 @@ export function quoteS5Cost(
   }
   const report:S5QuotedCostReport={
     classification:'OFFLINE_SIMULATION_NOT_PROVIDER_BILL',currency,
-    monthlyUsage:'UNKNOWN',freeThresholdSafeguard:{
+    monthlyUsage:'UNKNOWN',capacityEvidence:{
+      measuredCompletedToolCallsPerDay:'UNKNOWN',
+      measuredSustainedHostedWssSessions:'UNKNOWN',
+      reason:'No authenticated hosted WSS or completed-tool observations supplied; request counts are projections',
+    },freeThresholdSafeguard:{
       numericThresholdsFit:'UNKNOWN',zeroExtraInvoiceProven:false},
     componentCosts:empty,knownSubtotal:'UNKNOWN',
     modeledTotal:'UNKNOWN',modeledCostPerUser:'UNKNOWN',
