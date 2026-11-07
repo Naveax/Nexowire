@@ -72,3 +72,36 @@ The actual screen-reader accessibility tree, real browser keyboard focus,
 375px mobile wrapping, live OAuth/pairing and physical Windows Agent/Broker
 behavior were **NOT_RUN** by K15. Exact-head CI/owner review and main merge
 are separate gates. These issue acceptance criteria remain open.
+
+## P004 pool T-394 — target versus authorization negative matrix
+
+After independently checking the 19 other KNN status files, K15 reserved
+T-394 in `ekip/durum/K15.md` **before coding**. The new
+`test/delegated/k15/target-versus-permission-matrix.test.mjs` runs the
+actual pure `resolveOwnerDeviceTarget()` implementation on current main.
+
+| Input | Pure target resolution | What this does **not** prove |
+| --- | --- | --- |
+| No registered devices, AUTO either way | `no_devices` | Neither online device nor authorization |
+| One registered online, AUTO not approved | `selection_required` | No implicit selection merely from count |
+| One registered online with explicit allow-implicit input | `selected` candidate | Must still authenticate the owner and evaluate effective tool scope |
+| Two identically named PCs / normalization-equivalent names | `ambiguous-device` | Name does not establish stable identity |
+| Two PCs, only one online, AUTO allowed | `multiple-devices` | Offline second device cannot authorize a guess |
+| Exact stable ID matches, even if card order reverses | `selected` candidate | Does not establish device online or Broker ready |
+| Exact ID exists but is offline | `selected` candidate | **Important:** this pure resolver does not enforce online tool admission; MCP has a separate online gate |
+| ID outside selected folder or account list | `DEVICE_NOT_FOUND` | Never treat a visible folder label as a permission grant |
+
+The test also inspects MCP admission source for exact one-owner-device,
+online and credential-scope conditions; that inspection is **not** a live
+MCP authorization request. No auth, Broker, CORE or routing source was
+modified.
+
+Reproduction:
+
+```sh
+node test/delegated/k15/target-versus-permission-matrix.test.mjs
+```
+
+Result on current main `4e7db16...`: **9 PASS, 0 FAIL, 0 TODO**.
+This narrows #539/R11 and #812 evidence, but leaves live identity,
+permission and physical input-grant acceptance to the appropriate owner.
