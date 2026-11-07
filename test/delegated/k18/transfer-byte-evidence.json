@@ -1,0 +1,43 @@
+{
+  "schema": "nexowire-k18-synthetic-transfer-bytes-v1",
+  "origin": "SYNTHETIC_ONLY_NO_LIVE_DEVICE_OR_TRANSFER",
+  "unit": "bytes",
+  "cases": [
+    {
+      "name": "221KiB interrupted after partial acknowledgement",
+      "phase": "INTERRUPTED",
+      "totalBytes": 226304,
+      "sentBytes": 226304,
+      "receivedBytes": 225280,
+      "acknowledgedBytes": 184320,
+      "finalReceiptVerified": false
+    },
+    {
+      "name": "1MiB fully verified synthetic receipt",
+      "phase": "COMPLETE",
+      "totalBytes": 1048576,
+      "sentBytes": 1048576,
+      "receivedBytes": 1048576,
+      "acknowledgedBytes": 1048576,
+      "finalReceiptVerified": true
+    },
+    {
+      "name": "256MiB+1 streaming retry before commit",
+      "phase": "PARTIAL",
+      "totalBytes": 268435457,
+      "sentBytes": 314572800,
+      "receivedBytes": 241172480,
+      "acknowledgedBytes": 209715200,
+      "finalReceiptVerified": false
+    },
+    {
+      "name": "1GiB counts reached end but commit missing",
+      "phase": "PARTIAL",
+      "totalBytes": 1073741824,
+      "sentBytes": 1073741824,
+      "receivedBytes": 1073741824,
+      "acknowledgedBytes": 1073741824,
+      "finalReceiptVerified": false
+    }
+  ]
+}

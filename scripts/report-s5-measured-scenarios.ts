@@ -51,7 +51,8 @@ export function summarizeS5ScenarioResults(results:readonly S5LoadResult[]){
   if(new Set(scenarios.map(r=>r.clients)).size!==scenarios.length)
     throw new Error('Duplicate scenario client count');
   return {measurementClassification:scenarios.length?'LOCAL_SYNTHETIC_ONLY':'UNKNOWN',
-    capacityEstimate:null,providerCapacityProven:false,scenarios};
+    capacityEstimate:null,capacityConfidenceInterval:null,
+    providerCapacityProven:false,scenarios};
 }
 const safeSha=()=>{
   try{return execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim()}
