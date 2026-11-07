@@ -111,6 +111,8 @@ export class PrivilegedBrokerClient {
   async execute(
     capability: string,
     input: unknown,
+    /** Existing stable Agent operation UUID. Never manufacture a retry UUID here. */
+    operationId?: string,
   ): Promise<unknown> {
     if (privilegeRequirement(capability, input) !== 'elevated') {
       throw new PrivilegedBrokerError(
@@ -135,7 +137,10 @@ export class PrivilegedBrokerClient {
             authorization: 'Bearer ' + this.token,
             'content-type': 'application/json',
           },
-          body: JSON.stringify({ capability, input }),
+          body: JSON.stringify({
+            capability, input,
+            ...(operationId === undefined ? {} : {operation_id: operationId}),
+          }),
           signal: controller.signal,
         },
       );

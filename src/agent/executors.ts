@@ -2320,7 +2320,8 @@ export async function executeCapability(
     const brokerExecute=broker.execute.bind(broker);
     return await executeCoreWindowsMutation(capability,input,
       context.coreWindowsDispatch,
-      async approvedInput=>await brokerExecute(capability,approvedInput));
+      async approvedInput=>await brokerExecute(capability,approvedInput,
+         context.coreWindowsDispatch?.request.requestId ?? context.requestId));
   }
 
   if (
@@ -2338,6 +2339,7 @@ export async function executeCapability(
     return await context.privilegedBroker.execute(
       capability,
       input,
+      context.requestId,
     );
   }
   switch (capability) {
@@ -2422,6 +2424,7 @@ export async function executeCapability(
                   context.privilegedBroker,
               }
             : {}),
+          ...(context.requestId ? {operationId:context.requestId} : {}),
         },
       );
     case 'machine.health':

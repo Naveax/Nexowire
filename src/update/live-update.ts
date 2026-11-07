@@ -72,6 +72,8 @@ export interface LiveUpdateOptions {
   localAppData?: string;
   tempDir?: string;
   privilegedBroker?: PrivilegedBrokerClient;
+  /** Existing stable request UUID, forwarded to the Broker's independent effect CAS. */
+  operationId?: string;
   /** Automatic mode refuses a partial user-only cutover if the machine Broker is unavailable. */
   requireMachineUpdate?: boolean;
 }
@@ -659,6 +661,7 @@ export async function applyLatestLiveUpdate(
               version: check.latestVersion,
               buildId: staged.buildId,
             },
+            options.operationId,
           );
           if (
             options.requireMachineUpdate &&
