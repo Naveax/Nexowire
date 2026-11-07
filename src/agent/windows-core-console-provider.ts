@@ -209,7 +209,21 @@ export class CoreConsoleAuthorityClient {
     if(!response.ok){await response.body?.cancel();throw new Error('CORE_AUTHORITY_DENIED_'+response.status);}
     const body=await readCoreJson(response) as CoreAuthorityResponse;
     if(body.nonce!==request.nonce||body.state?.deviceId!==profile.deviceId)throw new Error('CORE_AUTHORITY_RESPONSE_UNBOUND');
-    const state=CoreAuthorityStateSchema.parse(body.state);
+    // Older deployed authority read responses predate native logon columns.
+    // Interpret absent proof ONLY as null for a read; never invent identity,
+    // enrollment, or native session evidence. Mutations keep the strict v1
+    // schema, and all native/physical effects still require actual receipts.
+    let stateInput:unknown=body.state;
+    if(action==='read' && stateInput && typeof stateInput==='object' &&
+        !Array.isArray(stateInput)) {
+      const legacy={...stateInput} as Record<string,unknown>;
+      for(const key of ['nativeConsentReceiptId','windowsUserSid',
+        'windowsSessionId','windowsLogonLuid','windowsLogonSessionEpoch']) {
+        if(!Object.hasOwn(legacy,key))legacy[key]=null;
+      }
+      stateInput=legacy;
+    }
+    const state=CoreAuthorityStateSchema.parse(stateInput);
     if(request.issuedAtMs<state.authorityTimeMs-30000||request.issuedAtMs>state.authorityTimeMs+5000)
       throw new Error('CORE_AUTHORITY_CLOCK_UNVERIFIED');
     return state;

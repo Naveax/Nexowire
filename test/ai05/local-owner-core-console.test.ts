@@ -32,6 +32,43 @@ function fixture(){
 }
 const signal=()=>new AbortController().signal;
 
+
+test('older authority read lacking native logon columns stays read-only compatible',async()=>{
+  const {CoreConsoleAuthorityClient}=await import('../../src/agent/windows-core-console-provider.js');
+  const installationId=randomUUID();
+  const deviceId='device-core-legacy-01';
+  const sparse={
+    ownerAccountId:'owner-core-legacy-01',deviceId,installationId,
+    ownerEpoch:1,grantGeneration:1,revokeEpoch:0,
+    authorityTimeMs:Date.now(),coreEnabled:true,accessMode:'full',
+    deviceOnline:true,bridgeVerified:true,enrollmentRequested:false,
+    enrollmentId:null,publicKeySpki:null,physicalActive:false,
+    statusObservedAtMs:null,devicePlatform:'win32',deviceReady:true,
+  };
+  let remoteState:Record<string,unknown>=sparse;
+  const authority=new CoreConsoleAuthorityClient('https://core.example.test',
+    'nwx_dev_legacycredential123',async(_url,init)=>{
+      const request=JSON.parse(String(init?.body)) as {nonce:string};
+      return Response.json({nonce:request.nonce,state:remoteState});
+    });
+  const profile={version:1 as const,deviceId,installationId,
+    authorityUrl:authority.url,certificate:null,privateKey:'',pendingRevoke:false};
+  const state=await authority.call(profile,'read');
+  assert.equal(state.ownerEpoch,1);
+  for(const field of ['nativeConsentReceiptId','windowsUserSid','windowsSessionId',
+    'windowsLogonLuid','windowsLogonSessionEpoch'] as const){
+    assert.equal(state[field],null,field+' requires a real native receipt');
+  }
+  // Explicitly invalid remote identity and readiness are not normalized.
+  remoteState={...sparse,windowsUserSid:'not-a-windows-sid'};
+  await assert.rejects(authority.call(profile,'read'),/windowsUserSid|invalid_format/);
+  remoteState={...sparse,coreEnabled:'true'};
+  await assert.rejects(authority.call(profile,'read'),/coreEnabled|invalid_type/);
+  remoteState=sparse;
+  await assert.rejects(authority.call(profile,'claim'),/nativeConsentReceiptId|invalid_type|ZodError/,
+    'legacy response cannot authorize mutation as a native consent readback');
+});
+
 test('local owner approves once and a fresh controller reuses indefinite persisted consent',async()=>{
   const f=fixture();const first=f.make();
   assert.equal((await first.status('full')).active,false);
