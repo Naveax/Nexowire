@@ -25,6 +25,18 @@ The onboarding command creates a safe deployment starting point without writing 
 
 Do not run a state-changing, secret-revealing or exposure-changing command to collect a routine support report. See [self-host diagnostic-first recovery](SELF_HOST.md#after-a-disconnection-diagnostic-first-recovery); no `node connector` output is needed for that sequence.
 
+## Operator confirmation before side effects
+
+Status commands are for diagnosis; they do not repair a broken enrollment. `onboard plan` and `doctor --remote` evaluate readiness, but may initialize local credential-state files on first use. For the following steps, the operator should make a deliberate, informed decision **before running the command**:
+
+- `node bootstrap`: creates protected credentials and per-user Scheduled Tasks; `--tailscale-funnel` can additionally request public ingress. Confirm the target Windows account, roots, exposure and interruption impact first.
+- `onboard bootstrap`: issues one-time bearer credentials. Confirm the intended scope and an approved secret-storage destination **before** allowing token values to reach terminal output.
+- `node connector`: reveals the current MCP bearer token. Run only when the self-host client actually needs that secret; never as a routine health or support check.
+- `tailscale funnel`: changes intended network exposure. Confirm the public-ingress decision and authentication prerequisites; do not use it to bypass a failed local health check.
+- `onboard bootstrap --force`: rotates/overlaps an otherwise usable credential pair. This needs an explicit owner rotation decision, not an automatic retry.
+
+The written instructions do **not** grant admin/CORE approval, automate elevation or authorize deployment. If the environment or intended user decision is unavailable, keep the operation **NOT_RUN**.
+
 ## Plan
 
 ```text
@@ -78,3 +90,14 @@ If a first-run attempt is interrupted, inspect readiness and existing credential
 For remote deployments, `nexowire doctor --remote` remains the readiness gate. Onboarding does not pretend a loopback/plaintext/missing-TLS deployment is production-ready merely because credentials now exist. Linux/manual hosting requires its own supported, separately verified Agent secret source and lifecycle; the Windows Scheduled Task/DPAPI recipe does not transfer automatically.
 
 Remote readiness still does **not** prove ChatGPT can authenticate, discover the intended device, or call `machine_snapshot` and `machine_health`. Verify those paths with the real client before declaring the connection complete.
+
+## Reporting incomplete evidence
+
+| Report state | Meaning |
+| --- | --- |
+| Source-only PASS | A local/static assertion ran on the specified commit; not proof of a deployed device or connected ChatGPT client |
+| NOT_RUN | A command, Windows host/connector or actual physical scenario was not exercised |
+| UNKNOWN | A check ran but the response was absent, inconclusive or lacked a trustworthy measurement |
+| Remote acceptance | Requires passing readiness **and** real authenticated client/device health evidence; never inferred from plan/bootstrap output alone |
+
+Treat `action_required`, pending, skipped or an empty CI job list as **not a test PASS**. For #485, clean-user installation, pairing and remote MCP checks still require a real Windows acceptance run. For #539/R17, optional environment-tool inventory cannot substitute for USB, WSL, CUDA or virtual-machine workload execution.
