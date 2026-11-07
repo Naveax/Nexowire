@@ -81,6 +81,49 @@ test('folder limits the candidates and does not authorize a foreign ID', () => {
   assert.equal(correct.status, 'selection_required');
 });
 
+test('two identically named folders cannot silently scope a selection', () => {
+  const sameNamedFolders = [
+    {id: 'floor-1', name: 'Ofis'},
+    {id: 'floor-2', name: 'Ｏｆｉｓ'},
+  ];
+  const result = resolveOwnerDeviceTarget([
+    {...A, folderId: 'floor-1'},
+    {...B, folderId: 'floor-2'},
+  ], sameNamedFolders, {folderName: 'ofis'}, true);
+  assert.equal(result.status, 'selection_required');
+  assert.equal(result.reason, 'ambiguous-folder');
+  assert.equal(result.folders.length, 2);
+});
+
+test('contradictory device ID/name and folder ID/name are rejected explicitly', () => {
+  assert.throws(() => resolveOwnerDeviceTarget([A, C], folders,
+    {deviceId: A.id, deviceName: C.name}), /DEVICE_NOT_FOUND/);
+  assert.throws(() => resolveOwnerDeviceTarget([A, C], folders,
+    {folderId: 'office', folderName: 'Depo'}), /FOLDER_NOT_FOUND/);
+});
+
+test('single scoped device requires opt-in before implicit folder selection', () => {
+  const query = {folderId: 'warehouse'};
+  const blocked = resolveOwnerDeviceTarget([A, C], folders, query, false);
+  assert.equal(blocked.status, 'selection_required');
+  assert.equal(blocked.reason, 'explicit-selection-required');
+  assert.deepEqual(blocked.devices.map(d => d.id), [C.id]);
+  const optIn = resolveOwnerDeviceTarget([A, C], folders, query, true);
+  assert.equal(optIn.status, 'selected');
+  assert.equal(optIn.reason, 'one-in-folder');
+  assert.equal(optIn.device.id, C.id);
+  assert.equal(optIn.device.online, false, 'routing selection is not online admission');
+});
+
+test('unknown folder and empty known folder cannot become a default target', () => {
+  assert.throws(() => resolveOwnerDeviceTarget([A], folders,
+    {folderId: 'missing'}, true), /FOLDER_NOT_FOUND/);
+  const empty = resolveOwnerDeviceTarget([A], folders,
+    {folderId: 'warehouse'}, true);
+  assert.equal(empty.status, 'empty_folder');
+  assert.deepEqual(empty.devices, []);
+});
+
 test('MCP tool admission separately requires online owner uniqueness and credential scope', () => {
   // Read-only source invariant: do not equate the pure resolver's candidate
   // with a tool authorization result or bypass owner checks in the UI.
