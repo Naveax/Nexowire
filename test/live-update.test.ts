@@ -137,6 +137,40 @@ test('Broker probe racing a new cutover cannot replace the new status file',asyn
   }
 });
 
+test('pending Windows cutover cannot be scheduled twice or lose its status', async () => {
+  const {applyLatestLiveUpdate}=await import('../src/update/live-update.js');
+  const temp=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-apply-duplicate-'));
+  const statusFile=path.join(temp,'Nexowire','update','status.json');
+  try {
+    await fs.mkdir(path.dirname(statusFile),{recursive:true});
+    for(const state of ['staging','cutover_scheduled'] as const){
+      const durable=JSON.stringify({
+        schemaVersion:1,state,currentVersion:'1.0.8',
+        targetVersion:'1.0.9',buildId:'1.0.9-012345abcdef',
+        targetRoot:path.join(temp,'versions','1.0.9-012345abcdef'),
+        machineComponentsPending:true,agentStartupVerified:false,
+        activeConnectionVerified:false,
+        updatedAt:'2026-11-07T00:00:00.000Z',error:null,
+      });
+      await fs.writeFile(statusFile,durable);
+      let requests=0;
+      await assert.rejects(
+        applyLatestLiveUpdate({localAppData:temp,
+          fetchImpl:async()=>{
+            requests++;
+            return Response.json({tag_name:'v1.0.9'});
+          }}),
+        /already in progress/i, state+' must not start a second update',
+      );
+      assert.equal(requests,0,state+' must reject before release/staging requests');
+      assert.equal(await fs.readFile(statusFile,'utf8'),durable,
+        state+' must not rewrite an existing cutover operation');
+    }
+  }finally{
+    await fs.rm(temp,{recursive:true,force:true});
+  }
+});
+
 test('live updater compares stable release versions numerically', () => {
   assert.equal(compareReleaseVersions('1.0.3', '1.0.3'), 0);
   assert.equal(compareReleaseVersions('1.0.3', '1.0.4'), -1);

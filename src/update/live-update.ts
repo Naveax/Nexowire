@@ -736,6 +736,13 @@ export async function applyLatestLiveUpdate(
   buildId?: string;
   targetRoot?: string;
 }> {
+  // An already staged operation may be running in a detached PowerShell
+  // helper. Do not schedule another cutover into the same durable status
+  // file, even when the current agent still reports its previous version.
+  const existing = await readPersistedLiveUpdateState(options);
+  if (existing.state === 'staging' || existing.state === 'cutover_scheduled') {
+    throw new Error('Windows update already in progress: ' + existing.state);
+  }
   const check = await checkLiveUpdate(options);
   if (!check.updateAvailable) {
     return {
