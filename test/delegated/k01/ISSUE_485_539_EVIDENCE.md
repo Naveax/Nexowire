@@ -48,6 +48,37 @@ K01_CONNECT_REF=FETCH_HEAD node --test test/delegated/k01/issue485-state-truth.t
 Result: **7/7 PASS**. `git rev-parse FETCH_HEAD` was verified equal to
 `94d38799e9e4b50fe84f7924e6fc84f90aeba090` in this run.
 
+## T-257 owner gates and T-259 new negative (adım 4)
+
+Added three opt-in tests with visible `skip` markers in the default suite.
+This keeps known-unfixed source behavior from becoming a false green while
+providing an executable red test for a future owner fix.
+
+1. On owner #1068, `K01_EXPECT_OWNER_VERSION=1 K01_CONNECT_REF=FETCH_HEAD
+   node --test test/delegated/k01/issue485-state-truth.test.mjs` yielded
+   **9 PASS / 1 SKIP / 0 FAIL**. The two extra owner-only gates checked
+   quota `403` disables retry and terminal account errors focus the alert.
+2. **Confirmed source gap**, in current main **and** owner #1068:
+   `web/connect.js` validates only that `body.pairingId` and `body.token`
+   have JavaScript type `string`. Empty `pairingId`, empty `token`, and
+   both empty, and whitespace-only values still trigger a loopback callback
+   navigation after HTTP 200.
+   That is a false accepted-response boundary, *not* evidence that server
+   issues empty credentials or that an attacker exploited it.
+3. Run the opt-in negative with
+   `K01_RUN_OPEN_NEGATIVES=1 node --test
+   test/delegated/k01/issue485-state-truth.test.mjs`.
+   Against **main** and **#1068**, result **7 PASS / 2 SKIP / 1 FAIL**;
+   the failing assertion enumerates all five blank-field variants. This
+   result is **FAIL, not PASS**. The normal suite reports
+   **7 PASS / 3 SKIP / 0 FAIL**.
+
+Smallest proposed owner-side fix: reject blank or whitespace-only
+`pairingId`/`token` strings before callback navigation, with HTTP 200
+negative test coverage. K01 does not patch `web/connect.js` while owner
+#1068 controls that path. Existing validation of callback origin, state
+and device identity must remain intact.
+
 **Limits:** Tests are independent source contracts, not actual disconnected
 device health/reconnect/UNKNOWN lifecycle acceptance. T-256 and T-257 remain
 partial for physical/UI semantics; T-258 and narrow T-259 are offline-covered.
