@@ -107,6 +107,27 @@ The internal backend/provider interface remains as an architectural seam for Nex
 - **Hub-local:** a tool whose handler can operate on Hub state without mapping
   to a remote Agent capability. Hub-local does not necessarily mean read-only.
 
+### Local status versus effective authorization (#812)
+
+`windows.console_control.status` is a **reported observation**, while the
+permission applied to an exact physical input action is determined by current
+Agent/CORE gates and locally approved grants. A historical Agent 1.0.5
+observation in [issue #812](https://github.com/Naveax/Nexowire/issues/812)
+reported `status.active:false` alongside accepted input in an owner-FULL
+context. This is a **source-versus-installed-build discrepancy to investigate**,
+not permission to remove the local consent gate or a claim that the current
+installed Agent has been verified.
+
+The current source in
+[`src/agent/windows-console-grant.ts`](../src/agent/windows-console-grant.ts)
+combines temporary and CORE status when reporting active authority, while
+[`AI_PHYSICAL_CONSOLE_FULL_ACCESS_GATE.md`](AI_PHYSICAL_CONSOLE_FULL_ACCESS_GATE.md)
+states that remote FULL scope alone does not silently authorize physical
+cursor, keyboard or foreground changes. Separate the reported grant status,
+the authoritative effective policy, the particular operation result, and the
+actual installed binary provenance. A read-only status value is neither a
+grant of new authority nor proof of a later action's success.
+
 For compatibility and tool name details, see
 [`MCP_SURFACE.md`](MCP_SURFACE.md). For the versioned structured error
 classification, see

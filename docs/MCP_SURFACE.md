@@ -17,8 +17,9 @@ tool-to-capability mappings in
 [`src/mcp/tool-capabilities.ts`](../src/mcp/tool-capabilities.ts), and the
 Agent's read-only capability classification in
 [`src/protocol/capabilities.ts`](../src/protocol/capabilities.ts).
-The matrix below is the intersection of those three sources at upstream `main`
-`93b6df33ef58610dcfdf3584bfe774e5afa7df4d`. It is checked by
+The matrix below is the intersection of those three sources. Rechecked on
+2026-11-07 at upstream `main` `4e7db16f4233048a956664bef6b607781eb63fb7`
+after the source integration in [PR #1066](https://github.com/Naveax/Nexowire/pull/1066). It is checked by
 [`test/delegated/k08/mcp-doc-contract.test.mjs`](../test/delegated/k08/mcp-doc-contract.test.mjs).
 
 **Read-only here means that the mapped Agent capability is in
@@ -132,6 +133,43 @@ An illustrative *failure shape* (not a live Agent capture):
 The example deliberately makes no claim that the mutation failed or that a
 retry is safe. Tool-specific response details remain governed by their actual
 input/output contracts.
+
+## Diagnosing an error without confusing its origin (#539 R01/R13/R18)
+
+Use the evidence fields in
+[`src/protocol/error-contract-v2.ts`](../src/protocol/error-contract-v2.ts):
+`observedAt` is the place **actually observed**, `causeLayer` is an
+evidence-supported attribution (or `undetermined`), `certainty` qualifies that
+attribution, `dispatchState` describes whether delivery is established, and
+`retrySafety` is separate from all of them. A familiar error *string* alone
+does not prove the component that emitted it.
+
+| Observation / example code | What can be said | What must not be inferred |
+| --- | --- | --- |
+| Trusted client observes `UPSTREAM_TOOL_REFUSAL_OBSERVED` before the Hub call | `upstream_client` observed a refusal; review the provider-visible response | MCP/Agent permission was granted, or the provider's private policy reason is known |
+| Hub reports `MCP_TARGET_NOT_AUTHORIZED` | The selected target is outside the caller's authorized MCP scope | Retrying through a different tool or credential is an acceptable bypass |
+| Agent connection reports `AGENT_OFFLINE` | Connectivity was lost or unavailable at the observed connection layer | Any previously dispatched mutation definitely did not run |
+| Native Agent reports `SHELL_EXIT_NONZERO` | A command returned a nonzero exit code | The entire requested user task succeeded because MCP transport completed |
+| Independent `task_verification` reports `TASK_VERIFICATION_FAILED` | A postcondition failed independently of transport and process status | A running PID or accepted command proves business-task completion |
+
+For an unconfirmed mutation, first use the original operation ID and an
+authorized read-only status/readback path such as `agent_operation_status` when
+available; a missing operation record is **not** proof of no effect. This v1
+tool's input requires a `request_id` UUID, not a guessed command name. Do not
+invent an operation ID or auto-replay after a timeout. The `agent_operation_status`
+schema and output profile are frozen in the v1 JSON contracts linked above.
+
+**User-facing status wording:**
+
+- **Running / queued:** an observed process or queue state, **not** completed work.
+- **Outcome unknown:** evidence is missing or delivery/side effects are uncertain;
+  reconcile before a new mutation.
+- **Completed:** use only for an independently verified requested postcondition;
+  transport success or a zero process exit code alone may be insufficient.
+
+These are conservative support-language examples, not new runtime states or
+permission grants. End-to-end provider refusal, live Agent and original-device
+acceptance remain separate evidence gates for [#539](https://github.com/Naveax/Nexowire/issues/539).
 
 ## v1 compatibility rule
 
