@@ -169,11 +169,46 @@ function releaseCheckPath(options: LiveUpdateOptions): string {
   return path.join(updateRoot(options), 'latest-release.json');
 }
 
+function machineReconciliationPath(options: LiveUpdateOptions): string {
+  return path.join(updateRoot(options), 'machine-reconciled.json');
+}
+
 const ReleaseCheckCacheSchema = z.object({
   schemaVersion: z.literal(1),
   latestVersion: z.string().regex(/^\d+\.\d+\.\d+$/),
   checkedAt: z.string(),
 });
+
+const MachineReconciliationSchema = z.object({
+  schemaVersion: z.literal(1),
+  buildId: z.string(),
+  targetVersion: z.string(),
+  targetRoot: z.string(),
+  succeededUpdatedAt: z.string(),
+});
+
+function sameSuccessfulCutover(
+  state: LiveUpdateState,
+  marker: z.infer<typeof MachineReconciliationSchema>,
+): boolean {
+  return state.state === 'succeeded' && state.machineComponentsPending &&
+    state.buildId === marker.buildId &&
+    state.targetVersion === marker.targetVersion &&
+    state.targetRoot === marker.targetRoot &&
+    state.updatedAt === marker.succeededUpdatedAt;
+}
+
+async function cachedMachineReconciliation(options: LiveUpdateOptions):
+  Promise<z.infer<typeof MachineReconciliationSchema> | null> {
+  try {
+    const raw = await fs.readFile(machineReconciliationPath(options), 'utf8');
+    const result = MachineReconciliationSchema.safeParse(JSON.parse(raw.replace(/^\uFEFF/, '')));
+    return result.success ? result.data : null;
+  } catch {
+    // Supplemental reconciliation is not a source of executable authority.
+    return null;
+  }
+}
 
 async function cachedLatestVersion(options: LiveUpdateOptions): Promise<string | null> {
   try {
@@ -183,6 +218,28 @@ async function cachedLatestVersion(options: LiveUpdateOptions): Promise<string |
   } catch {
     // Optional display metadata must never make durable cutover state unreadable.
     return null;
+  }
+}
+
+async function writeMachineReconciliation(
+  options: LiveUpdateOptions,
+  state: LiveUpdateState,
+): Promise<void> {
+  if (state.state !== 'succeeded' || !state.machineComponentsPending ||
+      !state.buildId || !state.targetVersion || !state.targetRoot) return;
+  const file = machineReconciliationPath(options);
+  const temporary = file + '.tmp-' + randomUUID();
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  try {
+    await fs.writeFile(temporary, JSON.stringify({
+      schemaVersion: 1, buildId: state.buildId,
+      targetVersion: state.targetVersion, targetRoot: state.targetRoot,
+      succeededUpdatedAt: state.updatedAt,
+    }, null, 2) + '\n', 'utf8');
+    await fs.rename(temporary, file);
+  } catch (error) {
+    await fs.rm(temporary, { force: true }).catch(() => {});
+    throw error;
   }
 }
 
@@ -260,9 +317,17 @@ export async function readLiveUpdateState(
   options: LiveUpdateOptions = {},
 ): Promise<LiveUpdateState> {
   const state = await readPersistedLiveUpdateState(options);
-  if (state.state !== 'idle') return state;
-  const latestVersion = await cachedLatestVersion(options);
-  return latestVersion ? { ...state, targetVersion: latestVersion } : state;
+  if (state.state === 'idle') {
+    const latestVersion = await cachedLatestVersion(options);
+    return latestVersion ? { ...state, targetVersion: latestVersion } : state;
+  }
+  if (state.state === 'succeeded' && state.machineComponentsPending) {
+    const marker = await cachedMachineReconciliation(options);
+    if (marker && sameSuccessfulCutover(state, marker)) {
+      return { ...state, machineComponentsPending: false };
+    }
+  }
+  return state;
 }
 
 async function fetchChecked(
@@ -841,12 +906,11 @@ export async function executeLiveUpdateCapability(
           probe.elevated &&
           probe.version === state.targetVersion
         ) {
-          state = {
-            ...state,
-            machineComponentsPending: false,
-            updatedAt: isoNow(),
-          };
-          await writeState(options, state);
+          // A read-only status query cannot replace a concurrent Windows
+          // cutover with its earlier snapshot. Cache the exact verified
+          // success identity separately, then reread the current state.
+          await writeMachineReconciliation(options, state);
+          state = await readLiveUpdateState(options);
         }
       }
       return { data: state };

@@ -75,13 +75,63 @@ test('status does not erase machine pending for unfinished or failed cutovers', 
         state+' status inspection must not rewrite an incomplete or failed cutover');
     }
     const succeeded={...baseline,state:'succeeded' as const,currentVersion:'1.0.8'};
-    await fs.writeFile(file,JSON.stringify(succeeded));
+    const succeededBytes=JSON.stringify(succeeded);
+    await fs.writeFile(file,succeededBytes);
     const accepted=await executeLiveUpdateCapability('nexowire.update.status',{},options) as
       {data:{state:string;machineComponentsPending:boolean}};
     assert.equal(accepted.data.state,'succeeded');
     assert.equal(accepted.data.machineComponentsPending,false);
     assert.equal((await readLiveUpdateState({localAppData:temp})).machineComponentsPending,false);
+    assert.equal(await fs.readFile(file,'utf8'),succeededBytes,
+      'status reconciliation must not rewrite successful cutover evidence');
     assert.equal(probes,1,'unfinished or failed status must not probe or rewrite');
+  }finally{
+    await fs.rm(temp,{recursive:true,force:true});
+  }
+});
+
+test('Broker probe racing a new cutover cannot replace the new status file',async()=>{
+  const {executeLiveUpdateCapability}=await import('../src/update/live-update.js');
+  const temp=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-reconcile-race-'));
+  const file=path.join(temp,'Nexowire','update','status.json');
+  try {
+    await fs.mkdir(path.dirname(file),{recursive:true});
+    const completed={
+      schemaVersion:1,state:'succeeded',currentVersion:'1.0.8',
+      targetVersion:'1.0.8',buildId:'1.0.8-aaaaaaaaaaaa',
+      targetRoot:path.join(temp,'versions','1.0.8-aaaaaaaaaaaa'),
+      machineComponentsPending:true,agentStartupVerified:true,
+      activeConnectionVerified:false,updatedAt:'2026-11-07T00:00:00.000Z',error:null,
+    };
+    const started={
+      ...completed,state:'cutover_scheduled',targetVersion:'1.0.9',
+      buildId:'1.0.9-bbbbbbbbbbbb',
+      targetRoot:path.join(temp,'versions','1.0.9-bbbbbbbbbbbb'),
+      updatedAt:'2026-11-07T00:00:01.000Z',
+    };
+    const startedBytes=JSON.stringify(started);
+    await fs.writeFile(file,JSON.stringify(completed));
+    const result=await executeLiveUpdateCapability('nexowire.update.status',{},{
+      localAppData:temp,
+      privilegedBroker:{probe:async()=>{
+        // Another process commits its next durable operation during the await.
+        await fs.writeFile(file,startedBytes);
+        return {reachable:true,elevated:true,version:'1.0.8'};
+      }} as never,
+    }) as {data:{state:string;machineComponentsPending:boolean}};
+    assert.equal(result.data.state,'cutover_scheduled');
+    assert.equal(result.data.machineComponentsPending,true);
+    assert.equal(await fs.readFile(file,'utf8'),startedBytes);
+    // A marker for the prior completed build must never green a newer build.
+    await fs.writeFile(file,JSON.stringify({
+      ...completed,state:'succeeded',targetVersion:'1.0.9',
+      buildId:'1.0.9-bbbbbbbbbbbb',
+      targetRoot:started.targetRoot,updatedAt:'2026-11-07T00:00:02.000Z',
+    }));
+    assert.equal((await readLiveUpdateState({localAppData:temp})).machineComponentsPending,true);
+    // The old completed snapshot is eligible for its *own* cached readback.
+    await fs.writeFile(file,JSON.stringify(completed));
+    assert.equal((await readLiveUpdateState({localAppData:temp})).machineComponentsPending,false);
   }finally{
     await fs.rm(temp,{recursive:true,force:true});
   }
