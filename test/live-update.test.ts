@@ -188,6 +188,45 @@ test('release checks preserve live update and rollback evidence, including in-fl
   }
 });
 
+test('idle release check never writes the cutover status file',async()=>{
+  const temp=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-idle-check-isolated-'));
+  const status=path.join(temp,'Nexowire','update','status.json');
+  try {
+    await fs.mkdir(path.dirname(status),{recursive:true});
+    const original=JSON.stringify({
+      schemaVersion:1,state:'idle',currentVersion:'1.0.8',
+      targetVersion:null,buildId:null,targetRoot:null,
+      machineComponentsPending:false,agentStartupVerified:false,
+      activeConnectionVerified:false,updatedAt:'2026-11-07T00:00:00.000Z',
+      error:null,
+    });
+    await fs.writeFile(status,original);
+    const result=await checkLiveUpdate({localAppData:temp,
+      fetchImpl:async()=>Response.json({
+        tag_name:'v9.9.9',
+        html_url:'https://github.com/Naveax/Nexowire/releases/tag/v9.9.9',
+        published_at:'2026-11-07T00:00:00Z',
+      }),
+    });
+    assert.equal(result.latestVersion,'9.9.9');
+    assert.equal(await fs.readFile(status,'utf8'),original,
+      'release metadata check must never replace update status, even when idle');
+    const displayed=await readLiveUpdateState({localAppData:temp});
+    assert.equal(displayed.state,'idle');
+    assert.equal(displayed.targetVersion,'9.9.9',
+      'idle status continues to expose cached release metadata');
+    const cache=path.join(temp,'Nexowire','update','latest-release.json');
+    assert.equal(JSON.parse(await fs.readFile(cache,'utf8')).latestVersion,'9.9.9');
+    await fs.writeFile(cache,'{broken-cache');
+    const recovered=await readLiveUpdateState({localAppData:temp});
+    assert.equal(recovered.targetVersion,null,
+      'corrupt optional discovery cache must not invalidate durable idle status');
+    assert.equal(await fs.readFile(status,'utf8'),original);
+  }finally{
+    await fs.rm(temp,{recursive:true,force:true});
+  }
+});
+
 test('live update check persists official release state without applying it', async () => {
   const temp = await fs.mkdtemp(
     path.join(os.tmpdir(), 'nexowire-live-update-test-'),
@@ -217,6 +256,11 @@ test('live update check persists official release state without applying it', as
     assert.equal(state.state, 'idle');
     assert.equal(state.targetVersion, '9.9.9');
     assert.equal(state.error, null);
+    await assert.rejects(
+      fs.stat(path.join(temp, 'Nexowire', 'update', 'status.json')),
+      { code: 'ENOENT' },
+      'a metadata-only release check must not create durable cutover status',
+    );
   } finally {
     await fs.rm(temp, { recursive: true, force: true });
   }

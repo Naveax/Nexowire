@@ -163,6 +163,44 @@ function statePath(options: LiveUpdateOptions): string {
   return path.join(updateRoot(options), 'status.json');
 }
 
+// Release discovery is observational. Never share a writable file with the
+// cutover/rollback state machine, including when that state is idle.
+function releaseCheckPath(options: LiveUpdateOptions): string {
+  return path.join(updateRoot(options), 'latest-release.json');
+}
+
+const ReleaseCheckCacheSchema = z.object({
+  schemaVersion: z.literal(1),
+  latestVersion: z.string().regex(/^\d+\.\d+\.\d+$/),
+  checkedAt: z.string(),
+});
+
+async function cachedLatestVersion(options: LiveUpdateOptions): Promise<string | null> {
+  try {
+    const raw = await fs.readFile(releaseCheckPath(options), 'utf8');
+    const cached = ReleaseCheckCacheSchema.safeParse(JSON.parse(raw.replace(/^\uFEFF/, '')));
+    return cached.success ? cached.data.latestVersion : null;
+  } catch {
+    // Optional display metadata must never make durable cutover state unreadable.
+    return null;
+  }
+}
+
+async function writeReleaseCheckCache(options: LiveUpdateOptions, version: string): Promise<void> {
+  const file = releaseCheckPath(options);
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  const temporary = file + '.tmp-' + randomUUID();
+  try {
+    await fs.writeFile(temporary, JSON.stringify({
+      schemaVersion: 1, latestVersion: safeVersion(version), checkedAt: isoNow(),
+    }, null, 2) + '\n', 'utf8');
+    await fs.rename(temporary, file);
+  } catch (error) {
+    await fs.rm(temporary, { force: true }).catch(() => {});
+    throw error;
+  }
+}
+
 function versionsRoot(options: LiveUpdateOptions): string {
   return path.join(localAppData(options), 'Nexowire', 'versions');
 }
@@ -186,8 +224,8 @@ async function writeState(
   await fs.rename(temporary, file);
 }
 
-export async function readLiveUpdateState(
-  options: LiveUpdateOptions = {},
+async function readPersistedLiveUpdateState(
+  options: LiveUpdateOptions,
 ): Promise<LiveUpdateState> {
   try {
     return UpdateStateSchema.parse(
@@ -216,6 +254,15 @@ export async function readLiveUpdateState(
     }
     throw error;
   }
+}
+
+export async function readLiveUpdateState(
+  options: LiveUpdateOptions = {},
+): Promise<LiveUpdateState> {
+  const state = await readPersistedLiveUpdateState(options);
+  if (state.state !== 'idle') return state;
+  const latestVersion = await cachedLatestVersion(options);
+  return latestVersion ? { ...state, targetVersion: latestVersion } : state;
 }
 
 async function fetchChecked(
@@ -277,17 +324,9 @@ export async function checkLiveUpdate(
       compareReleaseVersions(NEXOWIRE_VERSION, version) < 0,
     release,
   };
-  // Re-read after network I/O: an update may have started while we fetched.
-  // Only refresh release metadata on an idle status. Keep the cutover marker,
-  // rollback evidence, pending machine work, and errors exactly as recorded.
-  const current = await readLiveUpdateState(options);
-  if (current.state === 'idle') {
-    await writeState(options, {
-      ...current,
-      targetVersion: version,
-      updatedAt: isoNow(),
-    });
-  }
+  // Independent cache write: no release check can replace a cutover or
+  // rollback status even if another process updates it between awaits.
+  await writeReleaseCheckCache(options, version);
   return result;
 }
 
