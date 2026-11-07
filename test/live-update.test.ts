@@ -40,6 +40,53 @@ test('machine update remains pending until actual elevated Broker version readba
   assert.match(script,/Write-State 'succeeded' \$null \$machinePending/);
 });
 
+test('status does not erase machine pending for unfinished or failed cutovers', async () => {
+  const {executeLiveUpdateCapability} = await import('../src/update/live-update.js');
+  const temp=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-status-pending-'));
+  const file=path.join(temp,'Nexowire','update','status.json');
+  let probes=0;
+  const options={
+    localAppData:temp,
+    privilegedBroker:{probe:async()=>{
+      probes++;
+      return {reachable:true,elevated:true,version:'1.0.8'};
+    }} as never,
+  };
+  try {
+    await fs.mkdir(path.dirname(file),{recursive:true});
+    const baseline={
+      schemaVersion:1 as const,currentVersion:'1.0.7',
+      targetVersion:'1.0.8',buildId:'1.0.8-012345abcdef',
+      targetRoot:path.join(temp,'Nexowire','versions','1.0.8-012345abcdef'),
+      machineComponentsPending:true,
+      agentStartupVerified:false,activeConnectionVerified:false,
+      updatedAt:'2026-11-07T00:00:00.000Z',error:null,
+    };
+    for(const state of ['cutover_scheduled','failed','rolled_back','rollback_failed'] as const){
+      const pending={...baseline,state};
+      const original=JSON.stringify(pending);
+      await fs.writeFile(file,original);
+      const result=await executeLiveUpdateCapability('nexowire.update.status',{},options) as
+        {data:{state:string;machineComponentsPending:boolean}};
+      assert.equal(result.data.state,state);
+      assert.equal(result.data.machineComponentsPending,true,
+        state+' must not claim machine update completed');
+      assert.equal(await fs.readFile(file,'utf8'),original,
+        state+' status inspection must not rewrite an incomplete or failed cutover');
+    }
+    const succeeded={...baseline,state:'succeeded' as const,currentVersion:'1.0.8'};
+    await fs.writeFile(file,JSON.stringify(succeeded));
+    const accepted=await executeLiveUpdateCapability('nexowire.update.status',{},options) as
+      {data:{state:string;machineComponentsPending:boolean}};
+    assert.equal(accepted.data.state,'succeeded');
+    assert.equal(accepted.data.machineComponentsPending,false);
+    assert.equal((await readLiveUpdateState({localAppData:temp})).machineComponentsPending,false);
+    assert.equal(probes,1,'unfinished or failed status must not probe or rewrite');
+  }finally{
+    await fs.rm(temp,{recursive:true,force:true});
+  }
+});
+
 test('live updater compares stable release versions numerically', () => {
   assert.equal(compareReleaseVersions('1.0.3', '1.0.3'), 0);
   assert.equal(compareReleaseVersions('1.0.3', '1.0.4'), -1);

@@ -794,7 +794,11 @@ export async function executeLiveUpdateCapability(
   switch (capability) {
     case 'nexowire.update.status': {
       let state = await readLiveUpdateState(options);
+      // A Broker version match cannot complete an unfinished user cutover.
+      // Only the cutover helper can make a terminal success claim; status may
+      // reconcile the machine-component flag after that success is persisted.
       if (
+        state.state === 'succeeded' &&
         state.machineComponentsPending &&
         state.targetVersion &&
         options.privilegedBroker
