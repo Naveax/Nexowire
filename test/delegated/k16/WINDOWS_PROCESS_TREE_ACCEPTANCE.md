@@ -14,6 +14,8 @@ source-level outcomes:
 | `taskkill` spawn error | Root still alive | `PROCESS_TREE_TERMINATION_UNCONFIRMED` error |
 | `taskkill` exit nonzero | Root already gone | `treeCleanup=unconfirmed` (never success) |
 | `taskkill` exit zero | Root appears alive | `treeCleanup=requested` only; descendants not verified |
+| `taskkill` exit zero | Root exited, *owned grandchild remains alive* | `treeCleanup=requested` **cannot mean succeeded**; grandchild postcondition missing (#540 T-387) |
+| `taskkill` exit nonzero | Root exited, *owned grandchild remains alive* | `treeCleanup=unconfirmed`; parent exit cannot prove tree exit (#540 T-387) |
 
 ## Real Work-PC acceptance required by #540
 
