@@ -63,3 +63,24 @@ test('closed-unmerged PR and skipped Windows check are not accepted', () => {
     ? { ...j, conclusion: 'skipped' } : j) };
   assert.equal(evaluateMainCI(skipped).source_ci, 'NOT_PASS');
 });
+
+test('an old exact run cannot prove a PR whose current head changed', () => {
+  const stale = input();
+  stale.pr = { state: 'open', merged: false, draft: true, head: { sha: oldSha } };
+  assert.equal(evaluateMainCI(stale).source_ci, 'NOT_PASS');
+  assert.equal(evaluateMainCI(stale).reason, 'PR_HEAD_MISMATCH');
+});
+
+test('unbound job records cannot be borrowed from another workflow', () => {
+  const unbound = input();
+  unbound.jobsByRun = { 9: jobs.map(({ run_id, ...other }) => other) };
+  assert.equal(evaluateMainCI(unbound).source_ci, 'NOT_PASS');
+  assert.equal(evaluateMainCI(unbound).reason, 'JOB_FAILED_SKIPPED_OR_CROSS_RUN');
+});
+
+test('empty required-job policy cannot produce a green CI verdict', () => {
+  const noGate = input();
+  noGate.requiredJobs = [];
+  assert.equal(evaluateMainCI(noGate).source_ci, 'NOT_PASS');
+  assert.equal(evaluateMainCI(noGate).reason, 'NO_REQUIRED_JOBS');
+});
