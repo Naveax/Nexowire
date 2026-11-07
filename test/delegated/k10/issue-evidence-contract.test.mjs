@@ -35,7 +35,7 @@ function chunk(type, bytes) {
   return Buffer.concat([length, payload, crc]);
 }
 
-function tinySyntheticPng() {
+function tinySyntheticPng(pixel = 0) {
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(1);
   ihdr.writeUInt32BE(1, 4);
@@ -44,7 +44,7 @@ function tinySyntheticPng() {
   return Buffer.concat([
     Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
     chunk('IHDR', ihdr),
-    chunk('IDAT', deflateSync(Buffer.alloc(5))),
+    chunk('IDAT', deflateSync(Buffer.from([0, pixel, 0, 0, 255]))),
     chunk('IEND', Buffer.alloc(0)),
   ]);
 }
@@ -101,9 +101,9 @@ test('#485: corrupt PNG never verifies even with a matching SHA-256 hash', (t) =
 
 test('#485: valid synthetic PNG bytes verify as artifacts but never as live pairing', (t) => {
   const dir = fixture(t);
-  const bytes = tinySyntheticPng();
-  const hash = createHash('sha256').update(bytes).digest('hex');
-  const screenshots = ['loading', 'error', 'success'].map((state) => {
+  const screenshots = ['loading', 'error', 'success'].map((state, index) => {
+    const bytes = tinySyntheticPng(index);
+    const hash = createHash('sha256').update(bytes).digest('hex');
     writeFileSync(join(dir, `${state}.png`), bytes);
     return { state, file: `${state}.png`, width: 1, height: 1, sha256: hash };
   });
@@ -113,6 +113,19 @@ test('#485: valid synthetic PNG bytes verify as artifacts but never as live pair
   assert.equal(report.realBrowserProvenance, 'NOT_VERIFIED');
   assert.equal(report.realUserPairing, 'NOT_RUN');
   assert.equal(report.windowsAcceptance, 'NOT_RUN');
+});
+
+test('#485: identical screenshot bytes cannot substantiate three distinct UI states', (t) => {
+  const dir = fixture(t);
+  const bytes = tinySyntheticPng();
+  const hash = createHash('sha256').update(bytes).digest('hex');
+  const screenshots = ['loading', 'error', 'success'].map((state) => {
+    writeFileSync(join(dir, `${state}.png`), bytes);
+    return { state, file: `${state}.png`, width: 1, height: 1, sha256: hash };
+  });
+  const report = evaluateConnectEvidence({ sourceSha: sha, screenshots }, dir);
+  assert.equal(report.artifactStatus, 'FAIL');
+  assert.ok(report.cases.some((c) => c.reason === 'duplicate screenshot content'));
 });
 
 test('#812: local grant false with separately witnessed input may not be labeled globally disabled', () => {

@@ -18,9 +18,10 @@ function crc32(buffer, start, end) {
   return (value ^ 0xffffffff) >>> 0;
 }
 
-export function inspectPng(path, width, height) {
+export function inspectPng(pathOrBytes, width, height) {
   let data;
-  try { data = readFileSync(path); } catch { return { status: 'FAIL', reason: 'PNG file not readable' }; }
+  try { data = Buffer.isBuffer(pathOrBytes) ? pathOrBytes : readFileSync(pathOrBytes); }
+  catch { return { status: 'FAIL', reason: 'PNG file not readable' }; }
   if (data.length > 24 * 1024 * 1024) return { status: 'FAIL', reason: 'PNG exceeds 24 MiB inspection limit' };
   const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
   if (data.length < 33 || !data.subarray(0, 8).equals(signature)) {

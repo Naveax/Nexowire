@@ -13,15 +13,18 @@ function safeArtifact(dir, name) {
   if (typeof name !== 'string' || name !== basename(name) || !/^[a-z\d][a-z\d_.-]*\.png$/i.test(name)) return null;
   const path = join(dir, name);
   if (!existsSync(path)) return null;
-  const actual = relative(realpathSync(dir), realpathSync(path));
-  if (isAbsolute(actual) || actual === '..' || actual.startsWith(`..${sep}`)) return null;
-  return path;
+  try {
+    const actual = relative(realpathSync(dir), realpathSync(path));
+    if (isAbsolute(actual) || actual === '..' || actual.startsWith(`..${sep}`)) return null;
+    return path;
+  } catch { return null; }
 }
 
 export function evaluateConnectEvidence(manifest, artifactDir) {
   const candidateSha = manifest?.sourceSha;
   const sourceProvenance = typeof candidateSha === 'string' && /^[a-f0-9]{40}$/.test(candidateSha) ? 'RECORDED' : 'MISSING';
   const seen = new Set();
+  const seenContents = new Set();
   const cases = [];
   const rows = Array.isArray(manifest?.screenshots) ? manifest.screenshots : [];
   for (const state of CONNECT_STATES) {
@@ -45,9 +48,22 @@ export function evaluateConnectEvidence(manifest, artifactDir) {
       cases.push({ state, status: 'NOT_RUN', reason: 'missing or unsafe screenshot file' });
       continue;
     }
-    const png = inspectPng(path, row.width, row.height);
-    const digest = createHash('sha256').update(readFileSync(path)).digest('hex');
+    // Validate exactly the bytes that are hashed; a replaced artifact between
+    // two separate reads must never validate against a different file version.
+    let bytes;
+    try { bytes = readFileSync(path); }
+    catch {
+      cases.push({ state, status: 'NOT_RUN', reason: 'screenshot unreadable at inspection time' });
+      continue;
+    }
+    const png = inspectPng(bytes, row.width, row.height);
+    const digest = createHash('sha256').update(bytes).digest('hex');
     const hashMatches = typeof row.sha256 === 'string' && /^[a-f0-9]{64}$/.test(row.sha256) && digest === row.sha256;
+    if (png.status === 'PASS' && hashMatches && seenContents.has(digest)) {
+      cases.push({ state, status: 'FAIL', reason: 'duplicate screenshot content' });
+      continue;
+    }
+    if (png.status === 'PASS' && hashMatches) seenContents.add(digest);
     cases.push({ state, status: png.status === 'PASS' && hashMatches ? 'ARTIFACT_VALID' : 'FAIL',
       reason: png.status !== 'PASS' ? 'PNG pixels/dimensions invalid' : hashMatches ? 'PNG and digest match' : 'digest missing or mismatched' });
   }

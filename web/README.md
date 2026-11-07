@@ -79,7 +79,9 @@ The first suite ensures browser launch/page failures do not leak local paths
 or credential-like strings in JSON, and never report screenshots as passing
 when no browser ran. The second checks a three-state pairing screenshot plan
 and validates external PNG bytes, dimensions and hashes without confusing
-artifacts with real authenticated pairing. It also tests the #812 distinction
+artifacts with real authenticated pairing. Three claimed UI states require
+different screenshot contents (not renamed copies), and each file is inspected
+and hashed from one read to prevent cross-version evidence. It also tests the #812 distinction
 between an inactive *local grant* and independently witnessed effective input
 authorization; it does not change native authorization policy. The screenshot
 template is at `test/delegated/k10/connect-three-state-evidence.json` and begins
