@@ -216,3 +216,44 @@ test('T-259 #539/R11: malformed 200 pairing payload is UNKNOWN/error, never succ
     assertNoConnectedClaim(f);
   }
 });
+
+// These gates are opt-in because the owner integration has not landed on main.
+// A skipped gate is never counted as PASS; the exact source ref is part of proof.
+test('T-257 owner candidate: quota denial blocks ineffective retry', {
+  skip: process.env.K01_EXPECT_OWNER_VERSION !== '1' && 'requires #1068 owner candidate',
+}, async () => {
+  const f = await boot({ query: search(), pairing: async () =>
+    Response.json({ error: 'DEVICE_LIMIT_REACHED' }, { status: 403 }) });
+  await f.get('approve').dispatch('click');
+  assert.equal(f.get('approve').disabled, true);
+  assert.equal(f.get('connect-pill').textContent, 'Hata');
+  assert.equal(f.navigations.length, 0);
+});
+
+test('T-257 owner candidate: terminal account error receives focus', {
+  skip: process.env.K01_EXPECT_OWNER_VERSION !== '1' && 'requires #1068 owner candidate',
+}, async () => {
+  const f = await boot({ query: search(), dashboard: async () => Response.json({}, { status: 503 }) });
+  assert.equal(f.get('error-panel').focusCount, 1);
+  assert.equal(f.get('approve').disabled, true);
+});
+
+test('T-259 OPEN NEGATIVE: empty success pairing fields must never navigate', {
+  skip: process.env.K01_RUN_OPEN_NEGATIVES !== '1' && 'unfixed on main and owner #1068',
+}, async () => {
+  const violations = [];
+  for (const body of [
+    { pairingId: '', token: 'fixture-value' },
+    { pairingId: 'fixture-pair', token: '' },
+    { pairingId: '', token: '' },
+    { pairingId: '   ', token: 'fixture-value' },
+    { pairingId: 'fixture-pair', token: '   ' },
+  ]) {
+    const f = await boot({ query: search(), pairing: async () => Response.json(body) });
+    await f.get('approve').dispatch('click');
+    if (f.navigations.length !== 0 || f.get('connect-pill').textContent !== 'Hata') {
+      violations.push({ blankPairingId: !body.pairingId.trim(), blankToken: !body.token.trim() });
+    }
+  }
+  assert.deepEqual(violations, [], 'empty success fields must never navigate or present a non-error state');
+});
