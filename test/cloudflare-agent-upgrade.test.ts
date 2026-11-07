@@ -3,6 +3,7 @@ import test,{type TestContext} from 'node:test';
 import './v2-03-ingress-doctor-bridge.test.js';
 import './v2-03-authenticated-mcp-acceptance.test.js';
 import './v2-03-mandatory-remote-authorization.test.js';
+import './v2-03-remote-agent-socket-live.test.js';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {randomUUID} from 'node:crypto';
