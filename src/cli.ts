@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { runNativeAgent } from './agent/native-agent.js';
+import {runLocalOwnerCoreCommand} from './agent/local-owner-core-cli.js';
 import { runConnectCommand } from './connect.js';
 import { runNativeAgentLifecycleCommand } from './agent/native-agent-lifecycle.js';
 import { runNativeAgentEnrollmentCommand } from './agent/native-agent-enrollment.js';
@@ -8,6 +9,12 @@ import { loadConfig } from './config.js';
 import { runHttpServer } from './mcp/http.js';
 import { runLocalFirstIngress, verifyLocalFirstPublicUpstream } from './mcp/local-first-ingress.js';
 import { readOnlyLocalFirstFunnelPlan } from './mcp/local-first-funnel-plan.js';
+import { runCloudflareConnection } from './mcp/local-first-cloudflare.js';
+import { inspectExternalCloudflareIngress, runExternalCloudflareIngress } from './mcp/cloudflare-external-origin.js';
+import { cloudflareConnectionLifecycle } from './mcp/cloudflare-connection-lifecycle.js';
+import { inspectCloudflareConnection } from './mcp/cloudflare-connection-doctor.js';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import { runStdioServer } from './mcp/stdio.js';
 import { createRuntime } from './runtime.js';
 import { loadRelayConfig } from './relay/config.js';
@@ -35,6 +42,8 @@ function printHelp(): void {
 Nexowire ${NEXOWIRE_VERSION}
 
 Usage:
+  nexowire core-console status|enroll|revoke
+                   Manage one-time local-owner physical console consent
   nexowire http    Start the MCP hub and native-agent WebSocket endpoint
   nexowire stdio   Start an MCP server over stdio
   nexowire agent [run|enroll|doctor|status|install|start|stop|restart|uninstall]\n                   Enroll, diagnose, run, or manage the native computer agent\n  nexowire relay   Start a first-party native-agent relay
@@ -46,6 +55,16 @@ Usage:
   nexowire update [status|check|apply]   Check or apply verified official releases
   nexowire update auto [install|run|status|enable|disable|uninstall]
                    Manage the lightweight hourly Windows auto-updater
+  nexowire local-first cloudflare-external-check <absolute-profile.json>
+                   Read-only local Hub/OAuth/Agent ingress acceptance; no listener
+  nexowire local-first cloudflare-external-ingress <absolute-profile.json>
+                   Use an external cloudflared service with a Nexowire loopback origin
+  nexowire local-first cloudflare-run <absolute-profile.json>
+                   Run Cloudflare-only MCP ingress (no Tailscale or VPS)
+  nexowire local-first cloudflare-install <absolute-profile.json>
+  nexowire local-first cloudflare-doctor <absolute-profile.json>
+  nexowire local-first cloudflare-status|cloudflare-start|cloudflare-stop|cloudflare-uninstall
+                   Manage the Windows user-logon connection task
   nexowire version Show the installed Nexowire version
   nexowire help    Show this help
 
@@ -56,6 +75,10 @@ Default agent endpoint: ws://127.0.0.1:43110/agent
 
 async function main(): Promise<void> {
   const command = process.argv[2] ?? 'http';
+  if(command==='core-console'){
+    await runLocalOwnerCoreCommand(process.argv.slice(3));
+    return;
+  }
 
   if (command === 'help' || command === '--help' || command === '-h') {
     printHelp();
@@ -106,6 +129,39 @@ async function main(): Promise<void> {
   }
 
   if (command === 'local-first') {
+    if(process.argv[3]==='cloudflare-doctor'){
+      const file=process.argv[4];
+      if(process.argv.length!==5||!file||!path.isAbsolute(file))throw new Error('cloudflare-doctor requires one absolute profile JSON path');
+      const stat=await fs.lstat(file);
+      if(!stat.isFile()||stat.isSymbolicLink()||stat.size>16384)throw new Error('Invalid Cloudflare profile');
+      process.stdout.write(JSON.stringify(await inspectCloudflareConnection(JSON.parse(await fs.readFile(file,'utf8')),loadConfig()))+'\n');return;
+    }
+    const cloudflareAction=process.argv[3]?.startsWith('cloudflare-')?process.argv[3].slice('cloudflare-'.length):undefined;
+    if(cloudflareAction==='install'){
+      if(process.argv.length!==5)throw new Error('cloudflare-install requires an absolute profile JSON path');
+      process.stdout.write(JSON.stringify(await cloudflareConnectionLifecycle('install',process.argv[4]))+'\n');return;
+    }
+    if(cloudflareAction==='status'||cloudflareAction==='start'||cloudflareAction==='stop'||cloudflareAction==='uninstall'){
+      if(process.argv.length!==4)throw new Error('Cloudflare task action accepts no arguments');
+      process.stdout.write(JSON.stringify(await cloudflareConnectionLifecycle(cloudflareAction))+'\n');return;
+    }
+    if (process.argv[3] === 'cloudflare-external-check') {
+      if(process.argv.length!==5)throw new Error('cloudflare-external-check requires one absolute profile JSON path');
+      const report=await inspectExternalCloudflareIngress(process.argv[4]!,loadConfig().port);
+      process.stdout.write(JSON.stringify(report,null,2)+'\n');
+      if(report.status==='BLOCKED')process.exitCode=2;
+      return;
+    }
+    if (process.argv[3] === 'cloudflare-external-ingress') {
+      if(process.argv.length!==5)throw new Error('cloudflare-external-ingress requires one absolute profile JSON path');
+      await runExternalCloudflareIngress(process.argv[4]!,loadConfig());
+      return;
+    }
+    if (process.argv[3] === 'cloudflare-run') {
+      if(process.argv.length!==5)throw new Error('cloudflare-run requires one absolute profile JSON path');
+      await runCloudflareConnection(process.argv[4]!,loadConfig());
+      return;
+    }
     if (process.argv[3] === 'funnel-plan') {
       if (process.argv.length !== 4) throw new Error('funnel-plan accepts no options');
       process.stdout.write(JSON.stringify(await readOnlyLocalFirstFunnelPlan(),null,2)+'\n');

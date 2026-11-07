@@ -26,7 +26,33 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
+      - name: Verify CLEAN-13 official Linux descriptor-bound binary
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          binary="$RUNNER_TEMP/nexowire-clean13-cloudflared-2026.10.1"
+          curl --fail --location --silent --show-error --retry 2 \
+            https://github.com/cloudflare/cloudflared/releases/download/2026.10.1/cloudflared-linux-amd64 \
+            --output "$binary"
+          echo "3bfc539f45d2620c71debb7a86be0efa737ed5ccbad9eb85c787116900e5c586  $binary" | sha256sum --check --status
+          chmod 0500 "$binary"
+          NEXOWIRE_CLOUDFLARED_TEST_BINARY="$binary" node --test --import tsx test/clean13-cloudflared-official-launch.test.ts
+          echo "NEXOWIRE_CLOUDFLARED_TEST_BINARY=$binary" >> "$GITHUB_ENV"
       - run: npm run check
+      - name: AI-05 exact 0020/0021/0022, D1 authority, atomic no-replay and SQLite migration
+        shell: bash
+        timeout-minutes: 18
+        run: |
+          set -euo pipefail
+          node --test --import tsx --test-concurrency=1 \
+            test/ai03-control-plane-authority.test.ts \
+            test/ai04/atomic-mutation-authority.test.ts \
+            test/ai05/atomic-boundaries.test.ts \
+            test/ai05/migration-chain.test.ts \
+            test/idempotency/hub-capacity-recovery.test.ts \
+            test/idempotency/naveax-local-hub-80-rehearsal.test.ts \
+            test/coord-native-claim-migration.test.ts
       - name: Verify delegated batch-2 offline MJS and TS negative QA
         # npm test discovers .test.ts only. These source MJS checks must execute,
         # rather than counting a green CI that never ran them.
@@ -100,6 +126,7 @@ jobs:
           grep -qx '# fail 0' "$RUNNER_TEMP/nw-k10-qa24.tap"
           grep -qx '# skipped 0' "$RUNNER_TEMP/nw-k10-qa24.tap"
           grep -qx '# todo 0' "$RUNNER_TEMP/nw-k10-qa24.tap"
+      - run: npm run build
       - name: Verify isolated S5 transport, quota, and offline cost reports
         # 57 real TS assertions, including negative bounds, stale metrics and UNKNOWN handling.
         # Local loopback/SQLite + synthetic price fixtures, NOT provider capacity or billing acceptance.
@@ -146,7 +173,23 @@ jobs:
           grep -qx '# todo 0' "$RUNNER_TEMP/nw-k060708-docs.tap"
       - name: Verify coordinator PR dependency and exact-head CI gates
         run: node --test --import tsx test/qa-v108-integration-gates.test.ts
-      - run: npm run build
+      - name: Connection v2 security negative oracle (fail-closed)
+        shell: bash
+        timeout-minutes: 15
+        run: |
+          set -euo pipefail
+          node --test --test-reporter=tap --import tsx --test-concurrency=1 \
+            test/ai11-cloudflare-address-and-credential-custody.test.ts \
+            test/ai11-cloudflared-path-race-negative.test.ts \
+            test/ai11-connection-v2-negative.test.ts \
+            test/clean13-cloudflared-custody.test.ts \
+            test/clean14-network-security.test.ts \
+            test/clean14-revocation-dispatch-negative.test.ts \
+            test/v206-control-plane-redirect-real-http.test.ts \
+            test/v206-linux-file-identity-negative.test.ts \
+            test/v206-wss-authority-real-http.test.ts \
+            test/v2-03-ingress-doctor-bridge.test.ts \
+            test/v2-07/continuity-negative.test.ts
 
   browser-live:
     runs-on: windows-latest
@@ -161,12 +204,60 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - name: Verify real Windows authorized CAS command/write and no-CAS fail-closed behavior
+        timeout-minutes: 5
+        run: node --test --test-concurrency=1 --import tsx test/agent-native-remote-cas-live.test.ts test/agent-readonly-without-cas.test.ts
+      - name: Verify Cloudflare-only connector lifecycle and active Agent authorization
+        timeout-minutes: 12
+        shell: pwsh
+        run: |
+          $binary = Join-Path $env:RUNNER_TEMP 'nexowire-cloudflared-2026.10.1.exe'
+          Invoke-WebRequest -Uri 'https://github.com/cloudflare/cloudflared/releases/download/2026.10.1/cloudflared-windows-amd64.exe' -OutFile $binary
+          if ((Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant() -ne '4d2490e74082c5d48dbfedaf92576fa5bd1702379ab88eb7faa0cfbe8dc891b6') { throw 'Official cloudflared checksum mismatch' }
+          $env:NEXOWIRE_CLOUDFLARED_TEST_BINARY = $binary
+          # Observation only. The existing immutable-image/publisher negative
+          # assertions still decide PASS/FAIL. Never treat a profile SHA as
+          # publisher proof or print certificate private material.
+          $signature = Get-AuthenticodeSignature -LiteralPath $binary -ErrorAction Stop
+          $signerPresent = ($null -ne $signature.SignerCertificate)
+          $subjectMatchesCloudflare = ($signerPresent -and ($signature.SignerCertificate.Subject -match 'Cloudflare'))
+          $summary = [ordered]@{
+            status = [string]$signature.Status
+            signerPresent = [bool]$signerPresent
+            signerSubjectMatchesCloudflare = [bool]$subjectMatchesCloudflare
+            independentlyPinnedSha256 = $true
+            nativeHandleBoundCustodian = $false
+          }
+          Write-Host ('NEXOWIRE_P1B_WINDOWS_SIGNATURE_DIAGNOSTIC=' + ($summary | ConvertTo-Json -Compress))
+          # Disposable test-only native FileIdInfo / suspended-process oracle.
+          # This helper never resumes the process or authorizes production launch.
+          # Test-only security inspection. Even an approved official signature
+          # cannot permit native Windows Cloudflared process launch.
+          $inspection = @(./scripts/audit-clean13-windows-launch-readiness.ps1 -BinaryPath $binary)
+          $line = [string]($inspection | Select-Object -Last 1)
+          if (-not $line.StartsWith('NEXOWIRE_C13_WINDOWS_READINESS=')) { throw 'CLEAN-13 inspection report missing' }
+          $result = $line.Substring('NEXOWIRE_C13_WINDOWS_READINESS='.Length) | ConvertFrom-Json
+          if ($result.productionLaunchGO -ne $false -or $result.nativeHeldImageSectionCustodianImplemented -ne $false) {
+            throw 'CLEAN-13 immutable-image launch must remain fail-closed'
+          }
+          if ($result.sha256Pinned -ne $true -or $result.directAuthenticodeValid -ne $true -or $result.powershell7.result -ne 'SIGNED_SOURCE_VALID') {
+            throw 'CLEAN-13 official Windows signature verification failed'
+          }
+          Write-Host $line
+          $nativeProbe = Join-Path $env:RUNNER_TEMP 'nw-clean13-native-image-probe.exe'
+          ./scripts/build-windows-cloudflared-image-probe.ps1 -OutputPath $nativeProbe
+          $env:NEXOWIRE_CLOUDFLARED_IMAGE_PROBE = $nativeProbe
+          node --test --import tsx test/clean13-cloudflared-windows-custody.test.ts test/clean13-cloudflared-windows-image-probe.test.ts test/local-first-cloudflare.test.ts test/cloudflare-connection-lifecycle.test.ts test/cloudflare-agent-upgrade.test.ts test/connection-active-authorization.test.ts test/control-plane-agent-auth.test.ts test/agent-broker.e2e.test.ts
+          if ($LASTEXITCODE -ne 0) { throw 'Connection Core verification failed' }
       - name: Verify recycled WAL and consecutive journal process restarts
         timeout-minutes: 5
         run: node --test --import tsx --test-concurrency=1 test/qa-journal-wal-recycle-p11.test.ts test/agent-operation-wal-integrity.test.ts test/agent-journal-restart-regression.test.ts test/agent-journal-owner-incarnation.test.ts test/native-agent-startup-diagnostic.test.ts
       - name: Verify update startup acknowledgement and data-preserving rollback
         timeout-minutes: 5
         run: node --test --import tsx --test-concurrency=1 test/live-update-startup-acceptance.test.ts test/windows-launcher-encoding.test.ts
+      - name: Verify SQLite-aware Hub pre-cutover and rollback reader guard on Windows
+        timeout-minutes: 5
+        run: node --test --import tsx --test-concurrency=1 test/windows-hub-sqlite-live-update.test.ts test/idempotency/sqlite-windows-cutover-preflight.test.ts
       - name: Verify Windows rollback fixture and preflight handoff safety
         timeout-minutes: 7
         shell: pwsh
@@ -193,16 +284,50 @@ jobs:
           Write-Host "Windows focused Node 24: $version24"
           & node --test --import tsx --test-concurrency=1 @tests
           if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_NODE24_FOCUSED_RED' }
+      - name: Build read-only CORE session witness
+        timeout-minutes: 5
+        shell: pwsh
+        run: ./scripts/build-windows-core-session-readback.ps1
+      - name: Verify CORE kernel session readback without granting authority
+        timeout-minutes: 2
+        run: node --test --import tsx test/core-native-session-readback.test.ts
+      - name: Build native CORE WebAuthn owner-verification component
+        timeout-minutes: 5
+        shell: pwsh
+        run: ./scripts/build-windows-core-webauthn.ps1
+      - name: Verify WebAuthn signatures and API presence without opening approval UI
+        timeout-minutes: 2
+        run: node --test --import tsx test/core-webauthn-approval.test.ts
+      - name: Build disposable AppContainer kernel diagnostic
+        timeout-minutes: 5
+        shell: pwsh
+        run: ./scripts/build-windows-appcontainer-probe-p07.ps1
+      - name: Verify fixed AppContainer payload boundaries on disposable Windows runner
+        timeout-minutes: 2
+        run: node --test --import tsx test/task-os-sandbox-windows-native-p07.test.ts
+        env:
+          NEXOWIRE_RUN_WINDOWS_APPCONTAINER_DIAGNOSTIC: "1"
+      - name: Verify signed runtime manifest and rollback candidate boundaries
+        timeout-minutes: 2
+        run: node --test --import tsx test/core-runtime-package-manifest.test.ts
       - name: Verify CORE console admission and local consent cancellation
         run: node --test --import tsx --test-concurrency=1 test/core-console-enrollment-policy.test.ts test/core-console-admission.test.ts test/core-console-provider.integration.test.ts test/windows-core-console-native.test.ts test/windows-console-grant.test.ts test/privileged-broker-lifecycle.test.ts
+      # These suites use a disposable loopback fixture with injected callbacks;
+      # they do not attest an installed elevated Broker or a production CAS.
+      - name: Verify Windows Broker admission fixtures
+        timeout-minutes: 5
+        run: node --import tsx scripts/qa-windows-broker-admission.ts
       - name: Compile native Windows Job guardian
         shell: pwsh
         run: ./scripts/build-windows-job-owner.ps1
+      - name: Verify isolated Windows Job guardian QA
+        shell: pwsh
+        run: ./scripts/qa-windows-job-build-p11.ps1
       - name: Verify disposable Windows WAL namespace kernel identity
         shell: pwsh
         run: ./scripts/coord-build-wal-namespace-probe.ps1
       - name: Physical Windows Job Object regressions
-        run: node --test --import tsx --test-concurrency=1 test/windows-job-owner.test.ts test/windows-job-capacity-128.test.ts test/process-manager-tree-cleanup.test.ts test/process-manager.test.ts
+        run: node --test --import tsx --test-concurrency=1 test/windows-job-owner.test.ts test/windows-job-helper-trust.test.ts test/windows-job-helper-acl-publisher.test.ts test/windows-job-attestation-spoof.test.ts test/windows-job-duplicate-handle-risk.test.ts test/windows-job-breakaway.test.ts test/windows-job-hostile-nested.test.ts test/windows-job-named-handle-caveat.test.ts test/windows-job-capacity-128.test.ts test/process-manager-tree-cleanup.test.ts test/process-manager.test.ts
       - name: Verify AI-09 Windows Agent guardian receipt retention
         # Exercises the Win32-only mocked OS readback cases; no real Task or process mutation.
         timeout-minutes: 7
@@ -233,6 +358,21 @@ jobs:
 
   linux-native-live:
     runs-on: ubuntu-latest
+    services:
+      # Disposable CI storage, NOT the independently hosted production CAS.
+      dispatch-postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: nexowire_dispatch_ci
+          POSTGRES_USER: nexowire_dispatch_ci
+          POSTGRES_PASSWORD: ci-only-not-a-production-credential
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nexowire_dispatch_ci -d nexowire_dispatch_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -241,9 +381,55 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - name: Verify dispatch transactions on disposable real PostgreSQL
+        timeout-minutes: 5
+        run: node --test --test-concurrency=1 --import tsx test/postgres-broker-dispatch-authority.test.ts test/postgres-core-approval-ledger.test.ts
+        env:
+          NEXOWIRE_PG_DISPATCH_INTEGRATION: "1"
+      - name: Seed a durable dispatch tombstone before disposable database restart
+        timeout-minutes: 2
+        run: node --test --test-concurrency=1 --test-name-pattern='real PostgreSQL restart:' --import tsx test/postgres-broker-dispatch-authority.test.ts test/postgres-core-approval-ledger.test.ts
+        env:
+          NEXOWIRE_PG_DISPATCH_INTEGRATION: "1"
+          NEXOWIRE_PG_DISPATCH_RESTART_PHASE: seed
+      - name: Restart only this job's disposable PostgreSQL container
+        timeout-minutes: 2
+        run: docker restart --time 10 "$POSTGRES_CONTAINER_ID"
+        env:
+          POSTGRES_CONTAINER_ID: ${{ job.services['dispatch-postgres'].id }}
+      - name: Wait for disposable PostgreSQL SQL readiness after restart
+        timeout-minutes: 2
+        shell: bash
+        env:
+          POSTGRES_CONTAINER_ID: ${{ job.services['dispatch-postgres'].id }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            # Docker restart returns before PostgreSQL finishes recovery.
+            # Require both a healthy listener and an actual SQL round trip.
+            if docker exec "$POSTGRES_CONTAINER_ID" \
+                pg_isready -U nexowire_dispatch_ci -d nexowire_dispatch_ci >/dev/null 2>&1 \
+               && [[ "$(docker exec "$POSTGRES_CONTAINER_ID" \
+                psql -X -A -t -U nexowire_dispatch_ci -d nexowire_dispatch_ci -c 'SELECT 1' 2>/dev/null)" == "1" ]]; then
+              echo "Disposable PostgreSQL accepted SQL after restart (attempt $attempt)."
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Disposable PostgreSQL did not become SQL-ready after 60 attempts." >&2
+          exit 1
+      - name: Verify no replay after the real disposable PostgreSQL restart
+        timeout-minutes: 2
+        run: node --test --test-concurrency=1 --test-name-pattern='real PostgreSQL restart:' --import tsx test/postgres-broker-dispatch-authority.test.ts test/postgres-core-approval-ledger.test.ts
+        env:
+          NEXOWIRE_PG_DISPATCH_INTEGRATION: "1"
+          NEXOWIRE_PG_DISPATCH_RESTART_PHASE: verify
       - run: node --test --import tsx test/linux-native-agent-live.test.ts
         env:
           NEXOWIRE_LIVE_LINUX_AGENT_TEST: "1"
+      - name: Real authorized Agent CAS shell and file-write positive plus CAS outage negative
+        timeout-minutes: 5
+        run: node --test --test-concurrency=1 --import tsx test/agent-native-remote-cas-live.test.ts test/agent-readonly-without-cas.test.ts
       - run: node --test --import tsx test/relay-native-agent-live.test.ts
         env:
           NEXOWIRE_LIVE_RELAY_AGENT_TEST: "1"
@@ -307,3 +493,108 @@ jobs:
         run: node --test --import tsx test/platform-secret-store.test.ts test/macos-keychain-live.test.ts
         env:
           NEXOWIRE_LIVE_MACOS_KEYCHAIN_TEST: "1"
+
+  connection-v2-negative-windows:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - name: Connection v2 Windows negative oracle (fail-closed)
+        timeout-minutes: 15
+        shell: pwsh
+        run: |
+          node --test --import tsx --test-concurrency=1 test/ai11-connection-v2-negative.test.ts test/clean14-network-security.test.ts test/clean14-revocation-dispatch-negative.test.ts test/v206-control-plane-redirect-real-http.test.ts test/v206-wss-authority-real-http.test.ts test/v2-03-ingress-doctor-bridge.test.ts test/v2-07/continuity-negative.test.ts
+          if ($LASTEXITCODE -ne 0) { throw 'V2_WINDOWS_NEGATIVE_ORACLE_RED' }
+      - name: Verify CORE D1 migration, Broker UUID once and honest Broker effect readiness
+        timeout-minutes: 10
+        shell: pwsh
+        run: |
+          node --test --import tsx --test-concurrency=1 test/qa-core-claim-readiness-race-p11.test.ts test/ai05/local-owner-core-console.test.ts test/privileged-broker-operation-id-transport.test.ts test/privileged-broker-auth-probe.test.ts test/privileged-broker-effect-health.test.ts test/privileged-broker-mode-evidence.test.ts
+          if ($LASTEXITCODE -ne 0) { throw 'CORE_BROKER_MIGRATION_ACCEPTANCE_RED' }
+
+  connection-v2-native-git-dag:
+    if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'coord/connection-v2-release-candidate-') || startsWith(github.head_ref, 'coord/ai05-core-connection-v2-windows-'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify exact-head native merge-base, cherry, stable patch-id, merge-tree and blob preservation
+        env:
+          NEXOWIRE_EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: node test/connection-v2-release-gate/git-native-dag.mjs
+      - name: Retain native Git DAG evidence even on failing gate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: connection-v2-native-git-dag
+          path: ${{ runner.temp }}/connection-v2-native-git-dag.json
+          if-no-files-found: error
+  connection-v2-clean10-windows:
+    if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'coord/connection-v2-release-candidate-') || startsWith(github.head_ref, 'coord/ai05-core-connection-v2-windows-'))
+    runs-on: windows-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - name: Compile Windows Job Object owner for real QA-02 fast-exit assertion
+        shell: pwsh
+        run: ./scripts/build-windows-job-owner.ps1
+      - name: Run QA-02 output ordering and CLEAN-10 no-replay oracle without skip
+        shell: pwsh
+        run: |
+          node --test --import tsx --test-concurrency=1 test/qa-02-windows-output-ordering.test.ts test/qa-02-error-contract-no-replay.test.ts test/clean-10/idempotency-reservation-negative.test.ts test/clean-10/timeout-reconnect-no-replay.test.ts test/clean-10/runbook-unknown-acceptance-red.test.ts test/clean-10/round3-semantic-effect-reservation.test.ts
+          if ($LASTEXITCODE -ne 0) { throw 'CLEAN10_NO_REPLAY_RED' }
+  connection-v2-round2-security:
+    if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'coord/connection-v2-release-candidate-') || startsWith(github.head_ref, 'coord/ai05-core-connection-v2-windows-'))
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - name: Provision independently pinned official cloudflared Windows test image
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $binary = Join-Path $env:RUNNER_TEMP 'nexowire-v2-round2-cloudflared-2026.10.1.exe'
+          Invoke-WebRequest -Uri 'https://github.com/cloudflare/cloudflared/releases/download/2026.10.1/cloudflared-windows-amd64.exe' -OutFile $binary
+          $digest = (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($digest -ne '4d2490e74082c5d48dbfedaf92576fa5bd1702379ab88eb7faa0cfbe8dc891b6') { throw 'Round2 official Cloudflared SHA256 mismatch' }
+          "NEXOWIRE_CLOUDFLARED_TEST_BINARY=$binary" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Fail-closed V2 Round 2 security, OAuth, WSS and Windows rollback
+        run: node --test --import tsx --test-concurrency=1 test/ai03-control-plane-authority.test.ts test/ai04/atomic-mutation-authority.test.ts test/ai05/atomic-boundaries.test.ts test/ai05/migration-chain.test.ts test/idempotency/naveax-local-hub-80-rehearsal.test.ts test/v206-round2-dispatch-reason.test.ts test/v206-round2-windows-native-reason.test.ts test/clean14-wss-tls-negative.test.ts test/v2-03-authenticated-mcp-acceptance.test.ts test/v2-07/round2-revocation.test.ts test/v2-07/round2-transport-fixtures.test.ts test/connection-v2-windows-hub-rollback.test.ts test/connection-v2-release-gate/public-agent-strict-mode.test.ts

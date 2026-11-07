@@ -55,6 +55,7 @@ const PERSISTED_ENV_NAMES = [
   'NEXOWIRE_AGENT_HEARTBEAT_MS',
   'NEXOWIRE_AGENT_TOKEN_FILE',
   'NEXOWIRE_CORE_AUTHORITY_URL',
+  'NEXOWIRE_CORE_APPROVAL_MODE',
   'NEXOWIRE_AGENT_TOKEN_DPAPI_FILE',
   'NEXOWIRE_AGENT_TOKEN_PLATFORM_NAME',
   'NEXOWIRE_PRIVILEGE_MODE',
@@ -1410,12 +1411,39 @@ export async function nativeAgentLifecycleStatus(
   return await macStatus(options);
 }
 
+/**
+ * When an owner deliberately configures physical CORE on Windows, never
+ * silently install a direct-mode Agent that cannot even attach its already
+ * installed elevated Broker. A ready, independently authenticated Broker can
+ * supply the default broker *mode*, not a CORE grant or physical consent.
+ * No local/remote tool payload or untrusted environment can supply approval.
+ */
+export async function prepareWindowsCoreAgentInstallEnvironment(
+  env: NodeJS.ProcessEnv,
+  brokerHealth: () => Promise<{ready:boolean;status:string}> = async()=>{
+    const {probePrivilegedBrokerHealth}=await import('./privileged-broker-lifecycle.js');
+    return probePrivilegedBrokerHealth({env});
+  },
+): Promise<NodeJS.ProcessEnv> {
+  if(!env.NEXOWIRE_CORE_AUTHORITY_URL?.trim())return env;
+  const requested=env.NEXOWIRE_PRIVILEGE_MODE?.trim().toLowerCase();
+  if(requested==='direct')throw new Error('CORE_BROKER_MODE_REQUIRED');
+  if(requested && requested!=='broker')throw new Error('CORE_BROKER_MODE_INVALID');
+  const report=await brokerHealth();
+  if(report.ready!==true)throw new Error('CORE_BROKER_NOT_READY_'+
+    report.status.replace(/[^A-Z_]/g,'').slice(0,40));
+  return requested==='broker'?env:{...env,NEXOWIRE_PRIVILEGE_MODE:'broker'};
+}
+
 export async function installNativeAgentLifecycle(
   options: NativeAgentLifecycleOptions = {},
 ): Promise<NativeAgentLifecycleStatus> {
   persistedNativeAgentEnvironment(options.env ?? process.env);
   const platform = platformOf(options);
-  if (platform === 'win32') return await installWindows(options);
+  if (platform === 'win32') {
+    const prepared=await prepareWindowsCoreAgentInstallEnvironment(options.env ?? process.env);
+    return await installWindows({...options,env:prepared});
+  }
   if (platform === 'linux') return await installLinux(options);
   return await installMac(options);
 }

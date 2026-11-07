@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import {useWindowsJobForProcess} from './process-launch-mode.js';
 import { promises as fs } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
@@ -442,7 +443,7 @@ export async function runProcessWorker(
   // Only ordinary headless durable workers can inherit this guardian's
   // stdout/stderr/console. Private-desktop launch is a distinct Win32 boundary
   // and is intentionally not represented as Job-contained here.
-  if (process.platform === 'win32' && !fileInput) {
+  if (useWindowsJobForProcess() && !fileInput) {
     // Durable means independent of the Agent, not independent of the
     // owning sidecar: worker crash must close this Job and reap its shell.
     job = await launchWindowsJob(shell.executable, shell.args,

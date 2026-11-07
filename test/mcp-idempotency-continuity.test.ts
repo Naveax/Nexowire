@@ -95,7 +95,7 @@ test('lost mutation acknowledgement remains queryable when its device disconnect
     assert.equal(found[0]?.status, 'unknown');
     assert.equal(found[0]?.targetId, 'continuity-device');
 
-    const persisted = await fs.readFile(path.join(root, 'idempotency-records.json'), 'utf8');
+    const persisted = await fs.readFile(path.join(root, 'idempotency-records.sqlite'), 'utf8');
     assert.equal(persisted.includes('sensitive-test-payload'), false);
     assert.equal(JSON.stringify(offlineStatus).includes('sensitive-test-payload'), false);
     const restored = new IdempotencyStore(root);

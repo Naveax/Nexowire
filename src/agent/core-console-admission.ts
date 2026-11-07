@@ -15,12 +15,19 @@ export interface CoreConsoleBinding {
 export interface CoreConsoleEvidence {
   readonly certificate: SignedCoreConsoleEnrollmentV1 | null;
   readonly pinnedLocalSpkiDer: Uint8Array | null;
+  // Kept OUTSIDE the strict ten-field CoreConsoleCurrentReadback contract.
+  // The real Windows provider must source these from a fresh D1 read; missing
+  // values fail closed at its own native admission boundary.
   readonly current: CoreConsoleCurrentReadback | null;
+  readonly devicePlatform?: string;
+  readonly deviceReady?: boolean;
   readonly observedAtMs: number;
   readonly desktop: 'default' | 'private' | 'secure' | 'locked' | 'unknown';
   readonly nativeAdmission: 'verified' | 'unavailable';
   /** Verified from the on-device, authenticated elevated Broker health probe. */
   readonly brokerVersionVerified?: boolean;
+  /** Only the locally composed native consent verifier can set true. */
+  readonly nativeConsentProviderPresent?: boolean;
 }
 
 export interface CoreConsoleDispatch {
@@ -69,6 +76,13 @@ export interface CoreConsoleStatus {
   readonly duration: 'indefinite-revocable';
   readonly expiresAt: null;
   readonly state: string;
+  /** Bounded diagnostic category. Never includes owner IDs, tokens, URLs or raw errors. */
+  readonly unavailableReason?:
+    | 'AUTHORITY_HTTP_403' | 'AUTHORITY_HTTP_502' | 'AUTHORITY_HTTP_503'
+    | 'AUTHORITY_HTTP_504' | 'AUTHORITY_HTTP_OTHER'
+    | 'AUTHORITY_TIMEOUT' | 'AUTHORITY_NETWORK'
+    | 'OWNER_DEVICE_MISMATCH' | 'LOCAL_GRANT_READ_FAILED'
+    | 'BROKER_PROBE_FAILED' | 'UNKNOWN';
 }
 
 function failure(code: string): Error & {code: string} {
@@ -100,6 +114,11 @@ export class CoreConsoleAdmission {
     private binding?: CoreConsoleBinding,
     private readonly provider?: CoreConsoleNativeProvider,
     private readonly now: () => number = Date.now,
+    private readonly missingProviderState:
+      | 'CORE_CONSOLE_PROVIDER_UNAVAILABLE'
+      | 'CORE_BROKER_MODE_REQUIRED'
+      | 'CORE_DEVICE_CREDENTIAL_REQUIRED'
+      | 'CORE_AUTHORITY_UNCONFIGURED' = 'CORE_CONSOLE_PROVIDER_UNAVAILABLE',
   ) {
     if (binding) this.binding = Object.freeze({...binding});
   }
@@ -114,7 +133,7 @@ export class CoreConsoleAdmission {
   }> {
     if (this.stopped) return {status:this.inactive('REVOKED_LOCALLY')};
     if (!this.provider)
-      return {status:this.inactive('CORE_CONSOLE_PROVIDER_UNAVAILABLE')};
+      return {status:this.inactive(this.missingProviderState)};
     if (accessMode !== 'full') return {status:this.inactive('SAFE_MODE')};
     try {
       const signal = AbortSignal.any([this.abort.signal,
@@ -142,13 +161,16 @@ export class CoreConsoleAdmission {
       const evaluation=evaluateCoreConsoleEnrollment({...evaluationInput,desktop:evidence.desktop});
       const enrollment=evidence.desktop==='default'?evaluation:
         evaluateCoreConsoleEnrollment({...evaluationInput,desktop:'default'});
-      const active = evaluation.policyEligible && evidence.nativeAdmission === 'verified';
+      const nativeProviderPresent=evidence.nativeConsentProviderPresent===true;
+      const localEnrolled=nativeProviderPresent&&enrollment.policyEligible;
+      const active = nativeProviderPresent&&evaluation.policyEligible&&evidence.nativeAdmission === 'verified';
       return {evidence,status:{
         preferenceEnabled: typeof evidence.current?.coreEnabled === 'boolean'
           ? evidence.current.coreEnabled : null,
-        localEnrolled:enrollment.policyEligible,
+        localEnrolled,
         active,duration:'indefinite-revocable',expiresAt:null,
         state:active ? 'ACTIVE'
+          : evidence.nativeConsentProviderPresent !== true ? 'LOCAL_ENROLLMENT_REQUIRED'
           : evidence.current?.coreEnabled === false ? 'CORE_NOT_EFFECTIVE'
           : evidence.brokerVersionVerified === false &&
             evidence.current?.coreEnabled === true &&

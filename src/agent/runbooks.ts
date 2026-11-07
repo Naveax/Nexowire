@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
 import * as z from 'zod';
 import {resolveAiWorkspaceTarget} from './ai-workspace-default.js';
+import {
+  semanticEffectFingerprint,semanticEffectGraphId,
+  type VerifyNewEffectIntent,
+} from './runbook-effect-journal.js';
 import type {
   RunbookCheckpoint,
   RunbookCheckpointStep,
@@ -21,6 +25,14 @@ const BaseStepSchema = z.object({
 const TaskGraphStepSchema = BaseStepSchema.extend({
   kind: z.literal('task_graph'),
   task_graph: z.record(z.string(), z.unknown()),
+  // A fresh identical effect is only authorized by a trusted owner/device
+  // receipt verifier. An arbitrary new runbook ID or nonce is not proof.
+  semantic_intent:z.object({
+    id:z.string().uuid(),
+    owner_id:RunbookIdSchema,
+    device_id:RunbookIdSchema,
+    authorization_receipt:z.string().min(24).max(4096),
+  }).strict().optional(),
 });
 
 const AssertionStepSchema = BaseStepSchema.extend({
@@ -53,6 +65,8 @@ const RunInputSchema = z.object({
 export interface RunbookExecutionCallbacks {
   runTaskGraph(input: unknown): Promise<unknown>;
   runAssertions(input: unknown): Promise<unknown>;
+  /** Never populated by raw MCP input. Trusted owner admission only. */
+  authorizeFreshEffect?:VerifyNewEffectIntent;
 }
 
 interface RuntimeStep {
@@ -128,16 +142,6 @@ function validateDependencies(
   }
 }
 
-function taskGraphId(runbookId: string, stepId: string): string {
-  return (
-    'rb-' +
-    createHash('sha256')
-      .update(runbookId + '\0' + stepId, 'utf8')
-      .digest('hex')
-      .slice(0, 32)
-  );
-}
-
 function resultData(value: unknown): Record<string, unknown> | undefined {
   if (
     typeof value !== 'object' ||
@@ -206,6 +210,23 @@ function summarize(
   };
 }
 
+/** A nested native graph can return an interrupted result without
+ * throwing. An unknown job is NEVER safe to label FAILED/retryable even if
+ * a malformed outer envelope accidentally claims ok:true. */
+function hasUnknownTaskGraphEffect(value:unknown):boolean {
+  const data=resultData(value);
+  if(!data)return false;
+  const summary=data.summary;
+  if(summary&&typeof summary==='object'&&!Array.isArray(summary)){
+    const unknown=(summary as Record<string,unknown>).unknown;
+    if(typeof unknown==='number'&&Number.isFinite(unknown)&&unknown>0)return true;
+  }
+  const results=data.results;
+  return Array.isArray(results)&&results.some(item=>
+    item!==null&&typeof item==='object'&&!Array.isArray(item)&&
+    (item as Record<string,unknown>).status==='unknown');
+}
+
 function errorCode(error: unknown): string {
   return typeof error === 'object' &&
     error !== null &&
@@ -252,9 +273,9 @@ export async function executeDurableRunbook(
       dependsOn: [...step.depends_on],
       ...(step.kind === 'task_graph'
         ? {
-            taskGraphId: taskGraphId(
-              parsed.runbook_id,
-              step.id,
+            taskGraphId: semanticEffectGraphId(
+              semanticEffectFingerprint(step.task_graph,uiTarget),
+              step.semantic_intent?.id,
             ),
           }
         : {}),
@@ -411,6 +432,21 @@ export async function executeDurableRunbook(
                 : remainingMs,
             ),
           };
+          // O_EXCL reservation is committed before any native task graph is
+          // dispatched. A cloned runbook with a different caller ID cannot
+          // acquire the same semantic effect or re-run an uncertain mutation.
+          await store.reserveSemanticEffect({
+            fingerprint:semanticEffectFingerprint(spec.task_graph,uiTarget),
+            runbookId:parsed.runbook_id,
+            stepId:spec.id,
+            graphId:step.taskGraphId!,
+            ...(spec.semantic_intent?{newIntent:{
+              id:spec.semantic_intent.id,
+              ownerId:spec.semantic_intent.owner_id,
+              deviceId:spec.semantic_intent.device_id,
+              authorizationReceipt:spec.semantic_intent.authorization_receipt,
+            }}:{}),
+          },callbacks.authorizeFreshEffect);
           raw = await callbacks.runTaskGraph(innerInput);
         } else {
           raw = await callbacks.runAssertions(
@@ -419,19 +455,27 @@ export async function executeDurableRunbook(
         }
 
         const summarized = summarize(step.kind, raw);
-        step.status = summarized.ok
-          ? 'succeeded'
-          : 'failed';
+        // runTaskGraph() returns data.summary.unknown for a native
+        // operation whose ACK/side effect remains uncertain. Propagate
+        // that uncertainty into the outer durable runbook, even if a
+        // contradictory envelope incorrectly reports ok:true.
+        const nestedUnknown=step.kind==='task_graph'&&hasUnknownTaskGraphEffect(raw);
+        step.status = nestedUnknown ? 'unknown'
+          : summarized.ok ? 'succeeded' : 'failed';
         step.result = summarized.summary;
-        if (!summarized.ok) {
-          step.errorCode =
-            step.kind === 'task_graph'
-              ? 'TASK_GRAPH_NOT_OK'
-              : 'ASSERTIONS_NOT_OK';
+        if(nestedUnknown||!summarized.ok){
+          step.errorCode = nestedUnknown ? 'MUTATION_STATE_UNKNOWN'
+            : step.kind==='task_graph' ? 'TASK_GRAPH_NOT_OK'
+            : 'ASSERTIONS_NOT_OK';
         }
       } catch (error) {
-        step.status = 'failed';
-        step.errorCode = errorCode(error);
+        // No acknowledgement is NOT proof that a native mutation failed.
+        // Preserve durable UNKNOWN; only independent owner-bound journal
+        // reconciliation may clear this state, never a generic retry.
+        const code = errorCode(error);
+        step.status = code === 'MUTATION_STATE_UNKNOWN' ||
+          code.startsWith('RUNBOOK_EFFECT_') ? 'unknown' : 'failed';
+        step.errorCode = code;
         step.result = {
           message:
             error instanceof Error
