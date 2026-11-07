@@ -187,7 +187,7 @@ source,source_sha,path,source_blob_sha,integrated_blob_sha,classification
 "CONNECTION_1085","44e7b3424c578515b70abdfe68b6a101cc0b2e5a","src/hub/hub-lifecycle.ts","7f04eb5e7872e2448a9d7b4a6dc8b071160af697","7f04eb5e7872e2448a9d7b4a6dc8b071160af697","EXACT_SOURCE_BLOB"
 "CONNECTION_1085","44e7b3424c578515b70abdfe68b6a101cc0b2e5a","src/mcp/cloudflare-binary-trust.ts","42dae15a1d787061a6d0df943e7247ac6261d438","42dae15a1d787061a6d0df943e7247ac6261d438","EXACT_SOURCE_BLOB"
 "CONNECTION_1085","44e7b3424c578515b70abdfe68b6a101cc0b2e5a","src/mcp/cloudflare-connection-doctor.ts","98bb9fccf1115aa95e0a7624b314e28d7336acc5","98bb9fccf1115aa95e0a7624b314e28d7336acc5","EXACT_SOURCE_BLOB"
-"CONNECTION_1085","44e7b3424c578515b70abdfe68b6a101cc0b2e5a","src/mcp/cloudflare-connection-lifecycle.ts","a89174b3d30c70f896616cab0f539476c210944a","a89174b3d30c70f896616cab0f539476c210944a","EXACT_SOURCE_BLOB"
+"CONNECTION_1085","44e7b3424c578515b70abdfe68b6a101cc0b2e5a","src/mcp/cloudflare-connection-lifecycle.ts","a89174b3d30c70f896616cab0f539476c210944a","9d5ee4351d30992e1393c73fdc7b3cb47fad0a8a","EVOLVED"
 "CONNECTION_1085","44e7b3424c578515b70abdfe68b6a101cc0b2e5a","src/mcp/cloudflare-credential-custody.ts","d7946992fb31c343549b69ed9b83fe7863678851","d7946992fb31c343549b69ed9b83fe7863678851","EXACT_SOURCE_BLOB"
 "CONNECTION_1085","44e7b3424c578515b70abdfe68b6a101cc0b2e5a","src/mcp/create-server.ts","d402d97db8d0e9ca8d90894a528c0b85d70b7014","9e8cbe6d59910f7b05adc7da7776eae60edd776b","EVOLVED"
 "CONNECTION_1085","44e7b3424c578515b70abdfe68b6a101cc0b2e5a","src/mcp/http.ts","a7c2c18f38f2e1c2c8b8b2796d8d304df1abea6b","662b994b0a55db368e03d2c8f03f0f0553f897a1","EVOLVED"

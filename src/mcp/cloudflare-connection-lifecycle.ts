@@ -252,6 +252,36 @@ switch($env:NEXOWIRE_CONNECTION_ACTION){
     $stage='CONNECTION_STAGE_PROTECT_ACL_PREPARE'
     try{
       $acl=Get-Acl -LiteralPath $p -ErrorAction Stop
+      # A prior install may leave the parent directory already protected.
+      # Check the complete exact ACL before attempting a redundant Set-Acl:
+      # Windows can reject re-committing its unchanged protected descriptor.
+      # New files, foreign owners and any non-exact ACL still use the normal
+      # strict ACL-write path below.
+      if($item.PSIsContainer -and $acl.AreAccessRulesProtected){
+        $existingOwnerSid=$null
+        try{$existingOwnerSid=([Security.Principal.NTAccount]::new([string]$acl.Owner)).Translate([Security.Principal.SecurityIdentifier]).Value}catch{}
+        if($existingOwnerSid -eq $ownerSid.Value){
+          $expectedSids=@($ownerSid.Value,'S-1-5-18','S-1-5-32-544')
+          $expectedInheritance=[Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [Security.AccessControl.InheritanceFlags]::ObjectInherit
+          $seen=@{}
+          $rules=@($acl.Access)
+          $exact=($rules.Count -eq 3)
+          foreach($ace in $rules){
+            $sid=$null
+            try{$sid=$ace.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value}catch{}
+            if($null -eq $sid -or $sid -notin $expectedSids -or $seen.ContainsKey([string]$sid) -or
+              $ace.IsInherited -or [string]$ace.AccessControlType -ne 'Allow' -or
+              $ace.FileSystemRights -ne [Security.AccessControl.FileSystemRights]::FullControl -or
+              $ace.InheritanceFlags -ne $expectedInheritance -or
+              $ace.PropagationFlags -ne [Security.AccessControl.PropagationFlags]::None){
+              $exact=$false
+              break
+            }
+            $seen[[string]$sid]=$true
+          }
+          if($exact -and $seen.Count -eq 3){continue}
+        }
+      }
       $acl.SetAccessRuleProtection($true,$false)
       foreach($oldAce in @($acl.Access)){[void]$acl.RemoveAccessRuleAll($oldAce)}
     }catch{throw 'CONNECTION_PROTECT_ACL_PREPARE'}
