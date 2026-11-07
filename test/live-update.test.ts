@@ -137,6 +137,54 @@ test('Broker probe racing a new cutover cannot replace the new status file',asyn
   }
 });
 
+test('concurrent Windows update apply attempts reserve a single process owner',async()=>{
+  const {applyLatestLiveUpdate}=await import('../src/update/live-update.js');
+  const temp=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-apply-race-'));
+  let firstEntered!:()=>void;
+  const entered=new Promise<void>(resolve=>{firstEntered=resolve;});
+  let rejectFirst!: (error:Error)=>void;
+  let concurrentFetches=0;
+  try{
+    const first=applyLatestLiveUpdate({localAppData:temp,
+      fetchImpl:async()=>{
+        firstEntered();
+        return await new Promise<Response>((_resolve,reject)=>{
+          rejectFirst=reject;
+        });
+      },
+    }).then(()=>null,(error:unknown)=>error);
+    await entered;
+    const active=path.join(temp,'Nexowire','update','status.json');
+    await assert.rejects(fs.stat(active),{code:'ENOENT'});
+    try{
+      await assert.rejects(applyLatestLiveUpdate({localAppData:temp,
+        fetchImpl:async()=>{
+          concurrentFetches++;
+          throw new Error('CONCURRENT_FETCH_STARTED');
+        },
+      }),/already in progress/i);
+      assert.equal(concurrentFetches,0,
+        'a second process must not issue a request while the first owns the lock');
+    }finally{
+      rejectFirst(new Error('FIRST_FETCH_ABORT'));
+    }
+    assert.match(String(await first),/FIRST_FETCH_ABORT/);
+    const recovered=await applyLatestLiveUpdate({localAppData:temp,
+      fetchImpl:async()=>Response.json({
+        tag_name:'v1.0.8',
+        html_url:'https://github.com/Naveax/Nexowire/releases/tag/v1.0.8',
+      }),
+    });
+    assert.equal(recovered.scheduled,false,
+      'the lock must be released after a failed first request');
+    await assert.rejects(
+      fs.stat(path.join(temp,'Nexowire','update','.lifecycle.lock')),
+      {code:'ENOENT'});
+  }finally{
+    await fs.rm(temp,{recursive:true,force:true});
+  }
+});
+
 test('pending Windows cutover cannot be scheduled twice or lose its status', async () => {
   const {applyLatestLiveUpdate}=await import('../src/update/live-update.js');
   const temp=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-apply-duplicate-'));

@@ -6,6 +6,10 @@ import path from 'node:path';
 import * as z from 'zod';
 import { NEXOWIRE_VERSION } from '../version.js';
 import type { PrivilegedBrokerClient } from '../agent/privileged-broker-client.js';
+import {
+  PrivateLifecycleLockError,
+  withPrivateDesktopProcessLock,
+} from '../agent/windows-private-desktop-lock.js';
 import {renderWindowsAgentStartupGuard} from './windows-agent-startup.js';
 import {renderWindowsHubSqliteReaderGuard} from './windows-hub-sqlite-guard.js';
 
@@ -727,8 +731,8 @@ export async function writeWindowsCutoverScript(
   await fs.writeFile(file, '\uFEFF' + renderWindowsCutoverScript(input), 'utf8');
 }
 
-export async function applyLatestLiveUpdate(
-  options: LiveUpdateOptions = {},
+async function applyLatestLiveUpdateUnlocked(
+  options: LiveUpdateOptions,
 ): Promise<{
   scheduled: boolean;
   currentVersion: string;
@@ -878,6 +882,29 @@ export async function applyLatestLiveUpdate(
       updatedAt: isoNow(),
       error: error instanceof Error ? error.message : String(error),
     });
+    throw error;
+  }
+}
+
+/** Serialize manual and automatic update application across Node processes. */
+export async function applyLatestLiveUpdate(
+  options: LiveUpdateOptions = {},
+): ReturnType<typeof applyLatestLiveUpdateUnlocked> {
+  try {
+    // Reuse the proven atomic directory/owner lock with dead-PID recovery.
+    // The update-specific root isolates it from desktop lifecycle operations.
+    // The lock is held through the detached helper's successful scheduling;
+    // the durable cutover_scheduled marker then prevents later admission.
+    return await withPrivateDesktopProcessLock(
+      updateRoot(options),
+      () => applyLatestLiveUpdateUnlocked(options),
+      { timeoutMs: 600, staleMs: 30_000 },
+    );
+  } catch (error) {
+    if (error instanceof PrivateLifecycleLockError &&
+        error.code === 'PRIVATE_DESKTOP_LIFECYCLE_LOCK_BUSY') {
+      throw new Error('Windows update already in progress: concurrent apply owner.');
+    }
     throw error;
   }
 }
