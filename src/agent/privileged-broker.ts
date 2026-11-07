@@ -214,6 +214,9 @@ export async function startPrivilegedBroker(
         version: NEXOWIRE_VERSION,
         // Test fixtures may skip startup elevation; health never invents HIGH.
         elevated: brokerHealthElevationClaim(),
+        // Transport/elevation readiness does not establish executable effect
+        // admission. The default Broker process has no external CAS provider.
+        effectAdmissionConfigured: options.effectAdmission !== undefined,
       }));
       return;
     }

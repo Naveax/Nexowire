@@ -65,7 +65,7 @@ source,source_sha,path,source_blob_sha,integrated_blob_sha,classification
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","src/agent/postgres-broker-dispatch-authority.ts","ff74fe72ceb312849642c8dba2d6f4afc68621c8","ff74fe72ceb312849642c8dba2d6f4afc68621c8","EXACT_SOURCE_BLOB"
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","src/agent/postgres-monotonic-witness.ts","914c9f8584b668b88044bf6108f46bbf8dc36834","914c9f8584b668b88044bf6108f46bbf8dc36834","EXACT_SOURCE_BLOB"
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","src/agent/privileged-broker-effect-admission.ts","c38b91b732608f62381b2262829d13144ff1427e","c38b91b732608f62381b2262829d13144ff1427e","EXACT_SOURCE_BLOB"
-"CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","src/agent/privileged-broker.ts","a689ada4164ed2ca0406eb0d3abedb24c2a43565","a689ada4164ed2ca0406eb0d3abedb24c2a43565","EXACT_SOURCE_BLOB"
+"CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","src/agent/privileged-broker.ts","a689ada4164ed2ca0406eb0d3abedb24c2a43565","065ccd50f54c3f03fcb2086f3af0a09abf97f374","EVOLVED"
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","src/agent/process-manager.ts","d79c18ae6e34de966bdea8338442d49044976863","6b64e7ee814f69c0c77010cbe01d73a2d541ae33","EVOLVED"
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","src/agent/protected-postgres-dispatch-pool.ts","65d65241171c71b436a5e7606a77aeb9d0fcb0cc","65d65241171c71b436a5e7606a77aeb9d0fcb0cc","EXACT_SOURCE_BLOB"
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","src/agent/remote-mutation-cas.ts","aaf39646fd125962c1ef4928643e362f32ad934f","aaf39646fd125962c1ef4928643e362f32ad934f","EXACT_SOURCE_BLOB"

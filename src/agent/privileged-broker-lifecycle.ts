@@ -771,6 +771,8 @@ export interface PrivilegedBrokerHealthReport {
   version: string | null;
   reachable: boolean;
   elevated: boolean;
+  /** Provider attached to the process, not evidence that a specific effect was authorized. */
+  effectAdmissionConfigured?: boolean | null;
   ready: boolean;
   status: 'READY' | 'SECRET_UNAVAILABLE' | 'HEALTH_UNAVAILABLE' | 'NOT_ELEVATED' | 'VERSION_MISMATCH';
 }
@@ -790,6 +792,7 @@ export async function probePrivilegedBrokerHealth(options: {
     version: null,
     reachable: false,
     elevated: false,
+    effectAdmissionConfigured: null,
     ready: false,
   };
   let token: string;
@@ -816,6 +819,7 @@ export async function probePrivilegedBrokerHealth(options: {
     version: result.version,
     reachable: result.reachable,
     elevated: result.elevated,
+    effectAdmissionConfigured: result.effectAdmissionConfigured,
     ready: status === 'READY',
     status,
   };
