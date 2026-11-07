@@ -23,6 +23,12 @@ denetlenebilir tarihsel arşivdir; **yeni kurulum için kullanma**.
 Resmî v1.0.8 setup SHA-256:
 `8f39a1954eb22131ed516d32acfad1fe17e3ccb9766eda3883b90595a9135694`.
 Bu checksum, yayıncı imzası veya CORE fiziksel yetki kanıtı değildir.
+Bu `.cmd` yayınının hash doğrulaması, **Nexowire tarafından imzalanmış native
+tek tık kurucu** kabulü anlamına gelmez. Böyle bir imza/yardımcı uygulama
+kanıtı ayrıca [#269'un kabul koşullarında](https://github.com/Naveax/Nexowire/issues/269)
+aranır. Paketteki Node çalıştırıcısının imzası da Nexowire kurucusunun
+imzası yerine geçmez. İmza ve temiz Windows kurulumu bağımsız
+doğrulanmadan "imzalı Nexowire yükleyicisi hazır" sonucu çıkarma.
 
 GitHub **Code → Download ZIP** kaynak kodu indirir ve bu kurulumun yerine geçmez.
 `nexowire-*.tgz` geliştirici paketidir. Ayrı Broker yardımcı ZIP’i ilk kurulum
@@ -67,6 +73,13 @@ değildir. Uyarı metnini gizli bilgi içermeyecek biçimde kaydet.
 Uygulama `%LOCALAPPDATA%\Nexowire\versions\...` altına kurulur ve Başlat menüsüne
 **Nexowire** kısayolu eklenir. Normal akış kullanıcıya Hub adresi, cihaz anahtarı,
 komut satırı veya Tailscale kurulumu sormaz.
+
+Bu adım **otomatik onarım, eksiksiz yedekleme veya hatasız geri alma garantisi**
+vermez. Var olan Agent/veritabanı kayıtlarını veya `.nexowire` dosyalarını
+silme; kesintiye uğramış güncelleme/onarımı kendi kendine başarılı sayma.
+Yeniden yükleme, eski sürüme dönüş ve veri taşıma için önce mevcut kurulumun
+durumunu kaydet, ardından ilgili sürümün resmî destek/geri dönüş talimatını
+doğrula. Gerçek Windows yükseltme ve geri dönüş kabulü bu kılavuzda **NOT_RUN**.
 
 ## 3. Cihazı kendi hesabına bağla
 
@@ -178,6 +191,28 @@ yöneticisi düzeltebilir; yetkiyi atlatmaya çalışma. URL belgesi erişilemez
 veya OAuth akışı hata verirse Nexowire hizmeti tarafında destek gerekir.
 **No authentication** seçmek, rastgele `/mcp` eklemek veya Windows kurucusunu
 tekrar çalıştırmak bu sorunları güvenli biçimde çözmez.
+
+### Oluştur / BAĞLA başarısızsa: hızlı karar ağacı
+
+1. **Yalnız indir/kur ekranı mı var, cihaz adı yok mu?** Bu ekran eşleme
+   onayı değildir. Önce kurucunun tamamlandığını kontrol et; Başlat → Nexowire
+   ile bağlantı ekranını aç. BAĞLA'yı olmayan ekranda arama.
+2. **Cihaz adı ve BAĞLA var mı?** Kendi GitHub hesabını kontrol et; bir kez
+   onayla. `BAĞLANIYOR…` görünüyorsa bekle, ikinci kez basma.
+3. **`TEKRAR DENE` veya süre aşımı mı var?** Görünen hata metnini not et.
+   Aynı ekranda yalnız sunulan yeniden denemeyi kullan; süre dolmuşsa
+   Başlat → Nexowire ile *yeni* eşleme oturumu aç. Cihaz kayıtlarını silme.
+4. **Cihaz panelde çevrimiçi ama ChatGPT'de Oluştur başarısız mı?** Bu artık
+   Windows kurulumundan ayrı MCP bağlantı adımıdır. Çalışma alanı eklenti
+   iznini, OAuth seçimini ve canlı belgedeki `resource` adresini denetle;
+   hata sürerse ekran metnini gizli değerleri kapatarak destekle paylaş.
+5. **Eklenti bağlı ama `devices_list` boş mu?** Cihazı BAĞLA ile eklediğin
+   GitHub hesabıyla OAuth hesabının aynı olduğunu kontrol et. Aynı hesap
+   doğrulanmadan cihazı yeniden kurma veya başka hesaptaki cihazları silme.
+
+Her adımın sonucu yalnız ilgili ekranda veya araç çağrısında doğrulanır;
+görünmeyen başarıyı tahmin etme. Hesap/URL/cihaz anahtarı, cookie, token,
+OAuth kodu ya da tam oturum bağlantısını yardım mesajına ekleme.
 
 ## 5. Gerçek bağlantıyı dene
 

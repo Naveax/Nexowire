@@ -47,6 +47,10 @@ Yapılacak sıra:
    Eklenti ile cihaz eşlemesinde aynı GitHub hesabını kullanmalıyım.
    Cihaz listesi boşsa ve hesaplar farklıysa yeni kurulum veya cihaz silme
    önermeden önce hangi GitHub hesabıyla iki adımın yapıldığını sor.
+   Oluştur veya BAĞLA başarısızlığında Windows kılavuzundaki hızlı karar
+   ağacına bak; önce tam hata durumunu belirle, kurulumun kendiliğinden
+   düzeldiğini, yedeklendiğini veya imzalı bir Nexowire native kurucusu
+   tarafından doğrulandığını varsayma.
 7. Yeni sohbette eklenti seçildikten sonra devices_list ile doğru PC’yi doğrula.
    Gerekli cihaz seçimi tamamlandıktan sonra yalnız machine_snapshot ve
    machine_health kontrollerini yap. Bunlar gerçekten başarılı olmadan
@@ -66,3 +70,5 @@ kontrol et. Gizli bilgileri, token'ları veya tam tanı klasörlerini isteme.
 
 ChatGPT bağlantısının resmî kılavuzu:
 https://developers.openai.com/api/docs/guides/custom-mcp-server
+
+Kurulum veya bağlantı başarısızsa [Windows kılavuzundaki hızlı karar ağacına](INSTALL_WINDOWS.md#oluştur--bağla-başarısızsa-hızlı-karar-ağacı) bak.
