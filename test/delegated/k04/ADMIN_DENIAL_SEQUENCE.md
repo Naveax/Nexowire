@@ -12,6 +12,13 @@ verify two credentialed, read-only `GET /api/v1/admin/overview` calls. The
 no request to a real Nexowire server; it neither changes authentication nor
 reproduces a live account failure.
 
+Optional second argument checks the current HTML-to-JS live-region bindings:
+`role=status` with polite atomic updates on `admin-pill`, `role=alert` with
+valid label/description IDs, and the `aria-busy` metric region. Duplicate IDs
+and missing alert semantics are negative cases. This T-415 cross-check is a
+source-level companion to the K05 accessibility audit; it **does not** claim
+NVDA announced any text on Windows.
+
 Run harness unit/negative tests:
 
 ```sh
@@ -22,7 +29,7 @@ Run the actual source acceptance probe against a **pinned checkout** of either
 upstream main or the owner coordination PR #1068:
 
 ```sh
-node test/delegated/k04/admin-denial-sequence.mjs /absolute/path/to/checkout/web/admin.js
+node test/delegated/k04/admin-denial-sequence.mjs /absolute/path/to/checkout/web/admin.js /absolute/path/to/checkout/web/admin.html
 ```
 
 Exit 0 means this narrow three-case source-level audit passed. Exit 1 means
