@@ -96,10 +96,34 @@ menüsünden **Nexowire**’ı çalıştır; kaynak koddan ikinci bir Agent baş
 eşleme onay ekranı farklıdır. BAĞLA yalnız kurucunun oluşturduğu eşleme
 oturumunda cihaz adıyla görünür. `BAĞLANIYOR…` sırasında yeniden basma;
 `TEKRAR DENE` görünürse yalnız o düğmeyi bir kez kullan. Hata devam ederse
-metni not et, Başlat → Nexowire ile **yeni** eşleme oturumu aç ve yeni
-tarayıcı ekranını kullan. Eski eşleme sekmesini, yerel uygulama klasörünü
-veya cihaz kayıtlarını silme. `Bu hesap için cihaz limiti dolu` hatasında
+gizli değerleri kapatılmış hata metnini not et, Başlat → Nexowire ile **yeni**
+eşleme oturumu aç ve yeni tarayıcı ekranını kullan. Eski eşleme sekmesini,
+yerel uygulama klasörünü veya cihaz kayıtlarını silme.
+`Bu hesap için cihaz limiti dolu` hatasında
 tekrar tekrar denemek limiti kaldırmaz; hesap/cihaz limitini kontrol et.
+
+### BAĞLA hata metni ve güvenli yeniden deneme
+
+Bağlantı ekranının güncel kaynak kodu (`web/connect.js`) her hatada aynı
+metni göstermez. Ekran ve kurtarma adımını birlikte değerlendir:
+
+| Ekrandaki mesaj/durum | Ne yapılır? |
+| --- | --- |
+| `Bu hesap için cihaz limiti dolu.` | Hesabın cihaz limitini kontrol et; tekrar BAĞLA sınırı kaldırmaz. |
+| `Bu cihaz bu hesaba bağlanamadı.` | Cihaz adı ve giriş yapılan hesabı kontrol et; ekranda `TEKRAR DENE` varsa bir kez dene. 403 yanıtının ayrıntısı ekranda verilmez. |
+| `Bağlantı hazırlanamadı.` | Sunucu eşlemeyi hazırlayamadı. `TEKRAR DENE` varsa bir kez kullan; devam ederse yeni oturum aç ve maskelenmiş hata durumunu kaydet. |
+| `Bağlantı cevabı geçersiz.` | Geçerli eşleme onayı oluşmadı; oturum URL'sini elle değiştirme veya tekrar kullanma, Başlat → Nexowire ile yeni oturum aç. |
+| `Hesap doğrulanamadı. Lütfen tekrar dene.` | Hesap kontrolü tamamlanmadı ve `BAĞLA` etkinleşmez. GitHub girişini ve yeni oturumu kontrol et; cihazı bağlı sayma. |
+| `BAĞLANIYOR…` | İşlem sürerken ikinci kez tıklama; yalnız sonuç veya ekrandaki hata gelince ilerle. |
+
+**Beklenmeyen hata:** Bugünkü bağlantı sayfası bazı ağ/JavaScript istisnalarının
+ham hata metnini gösterebiliyor; bu, metindeki sır veya URL'lerin otomatik
+gizlendiği anlamına gelmez ([#485](https://github.com/Naveax/Nexowire/issues/485),
+izole test [#1129](https://github.com/Naveax/Nexowire/pull/1129)). Destek veya
+ChatGPT'ye göndermeden önce **tam URL'yi, `token`, `state`, `pairing_id`,
+OAuth kodu, cookie ve benzeri parametreleri sil**. Yalnız hata türünü, hangi
+düğmeden sonra oluştuğunu ve varsa HTTP durum kodunu paylaş. Hata düzeltmesi
+ve gerçek Windows/ChatGPT kabulü tamamlanmadan ekranı güvenli sayma.
 
 ### Cihaz başka GitHub hesabında görünüyorsa
 
@@ -200,7 +224,9 @@ tekrar çalıştırmak bu sorunları güvenli biçimde çözmez.
 2. **Cihaz adı ve BAĞLA var mı?** Kendi GitHub hesabını kontrol et; bir kez
    onayla. `BAĞLANIYOR…` görünüyorsa bekle, ikinci kez basma.
 3. **`TEKRAR DENE` veya süre aşımı mı var?** Görünen hata metnini not et.
-   Aynı ekranda yalnız sunulan yeniden denemeyi kullan; süre dolmuşsa
+   [BAĞLA hata ayrımını](#bağla-hata-metni-ve-güvenli-yeniden-deneme) oku;
+   sır veya URL içeren ham metni paylaşma. Aynı ekranda yalnız sunulan
+   yeniden denemeyi kullan; süre dolmuşsa
    Başlat → Nexowire ile *yeni* eşleme oturumu aç. Cihaz kayıtlarını silme.
 4. **Cihaz panelde çevrimiçi ama ChatGPT'de Oluştur başarısız mı?** Bu artık
    Windows kurulumundan ayrı MCP bağlantı adımıdır. Çalışma alanı eklenti

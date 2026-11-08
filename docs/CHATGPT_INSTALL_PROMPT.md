@@ -33,7 +33,11 @@ Yapılacak sıra:
    cihaz adını doğruladıktan sonra BAĞLA’ya basmamı sağla. Genel indirme
    ekranını eşleme onay ekranı sanma. BAĞLA tepki vermiyorsa ekranda hata,
    BAĞLANIYOR… veya TEKRAR DENE durumunu sor; aynı kurulumdan Başlat →
-   Nexowire ile yeni bağlantı ekranı açtır. Şifre veya kod isteme.
+   Nexowire ile yeni bağlantı ekranı açtır. Görünür hata metninin ham URL,
+   token, state veya eşleme parametresini otomatik gizlediğini varsayma;
+   [BAĞLA hata tablosundaki](INSTALL_WINDOWS.md#bağla-hata-metni-ve-güvenli-yeniden-deneme)
+   sabit mesajı veya kişisel değerleri kapatılmış hata türünü kullan.
+   Şifre, oturum bağlantısı veya kod isteme.
 5. Kontrol panelinde bu PC çevrimiçi görünmeden bağlantı tamamlandı deme.
 6. ChatGPT’de Nexowire eklentisi yoksa resmî OpenAI kılavuzuna göre özel MCP
    bağlantısı eklememe yol göster. Kontrol panelinin URL'si bir MCP sunucu
