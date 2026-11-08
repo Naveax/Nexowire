@@ -31,7 +31,10 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Verify discovery and negative QA contract
-        run: node --test test/delegated/k13/p005-main-ci-inventory.test.mjs
+        run: >-
+          node --test
+          test/delegated/k13/p005-main-ci-inventory.test.mjs
+          test/delegated/k13/p005-pr-ci-coverage.test.mjs
       - name: Inventory delegated tests absent from current main CI source
         run: node scripts/delegated/k13/p005-main-ci-inventory.mjs .
       - name: Explicitly run omitted roadmap and nested doctor regression tests

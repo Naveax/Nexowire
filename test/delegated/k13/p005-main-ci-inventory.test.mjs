@@ -75,5 +75,6 @@ test('branch-scoped discovery workflow is read-only and pins two Node versions a
   assert.match(workflow, /git rev-parse HEAD.*GITHUB_SHA/);
   assert.match(workflow, /test\/delegated\/k09\/roadmap-evidence\.test\.mjs/);
   assert.match(workflow, /test\/delegated\/k16\/environment-doctor-contract\.test\.ts/);
+  assert.match(workflow, /test\/delegated\/k13\/p005-pr-ci-coverage\.test\.mjs/);
   assert.doesNotMatch(workflow, /pull_request_target|secrets\.|contents: write|id-token: write/);
 });
