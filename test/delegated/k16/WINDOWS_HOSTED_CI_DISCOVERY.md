@@ -64,3 +64,31 @@ No CI workflow, CORE source, live PID or service was changed in this task.
 Require explicit test filename plus exact source SHA and runner OS/Node version
 to upgrade the missing scope from NOT_RUN. A general 7/7 or auxiliary 4/4
 status cannot substitute for that evidence.
+
+## P007 D-093/D-094 — existing PR closeout audit (2026-11-08)
+
+- [#1105 exact `06620d5a84f87bf6c06e7146c2dd052d95304c93`](https://github.com/Naveax/Nexowire/pull/1105)
+  [CI #42485362697](https://github.com/Naveax/Nexowire/actions/runs/42485362697):
+  **7/7 jobs completed/success**. Decoded full job logs for Windows
+  `browser-live` job `128745939157` and Ubuntu Node22/24 jobs
+  `128745939004` / `128745939041` contain **none** of the strings
+  `test/delegated/k16`, `windows-taskkill-contract`, `T-625`.
+  Therefore K16 Windows nested cases remain **HOSTED NOT_RUN** at this exact
+  PR head, irrespective of the green general workflow.
+- [#1121 exact `1b97d6341c036e1eadde491be1abfe743c716b7c`](https://github.com/Naveax/Nexowire/pull/1121):
+  [CI #42411781654](https://github.com/Naveax/Nexowire/actions/runs/42411781654)
+  7/7 jobs success, but its nested K16 `platform-status-evidence.test.ts`
+  has no known explicit invocation. Source-only QA; K02 holds the single
+  P004 T-385 credit. Current PR title/body were searched for GitHub
+  `close(s)/fix(es)/resolve(s) #N` auto-closing verbs: **zero matches**.
+- [Issue #540](https://github.com/Naveax/Nexowire/issues/540) fetched
+  live via GitHub API: `state=open`, `closed_at=null`; source tests do not
+  satisfy the physical Work-PC acceptance described in the issue.
+- K13 [#1149](https://github.com/Naveax/Nexowire/pull/1149) separately
+  demonstrates seven missing **main-tree** delegated tests on an auxiliary
+  Ubuntu Node22/24 runner (2/2 jobs, 33/33 selected assertions). Neither
+  that workflow nor upstream required CI proves the unpublished K16
+  process-tree branch's Windows tests ran.
+
+The above is a read-only result; no CI reruns, issue state change, PR merge,
+or owner workflow edit was performed.
