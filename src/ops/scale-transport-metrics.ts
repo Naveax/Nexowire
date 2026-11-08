@@ -91,3 +91,36 @@ export function compareScaleMetricReports(
     return [name,b.events<a.events||b.bytes<a.bytes?'DECREASED':'NON_DECREASING'];
   })) as Record<ScaleMetricName,ScaleMetricProgress>;
 }
+
+/**
+ * Offline-only transfer evidence. Wire bytes may include retries and are not
+ * a substitute for distinct acknowledged bytes plus a verified final receipt.
+ * This never changes artifact transfer, access grants, hashes or live state.
+ */
+export function summarizeOfflineTransferProgress(input:unknown){
+  const unknown=()=>({classification:'UNKNOWN' as const,
+    phase:'UNKNOWN' as const,totalBytes:null,sentBytes:null,
+    receivedBytes:null,acknowledgedBytes:null,progressPercent:null,
+    complete:false});
+  if(!input||typeof input!=='object'||Array.isArray(input))return unknown();
+  const row=input as Record<string,unknown>;
+  const valid=(value:unknown)=>typeof value==='number'&&
+    Number.isSafeInteger(value)&&value>=0;
+  const phases=['PARTIAL','COMPLETE','ALREADY_PRESENT','INTERRUPTED','FAILED'];
+  if(!valid(row.totalBytes)||!valid(row.sentBytes)||
+    !valid(row.receivedBytes)||!valid(row.acknowledgedBytes)||
+    typeof row.phase!=='string'||!phases.includes(row.phase)||
+    typeof row.finalReceiptVerified!=='boolean'||
+    (row.acknowledgedBytes as number)>(row.totalBytes as number))return unknown();
+  const total=row.totalBytes as number;
+  const acknowledged=row.acknowledgedBytes as number;
+  // Reported COMPLETE alone is not proof; an acknowledged byte count alone
+  // is not a verified final digest/commit receipt either.
+  const complete=(row.phase==='COMPLETE'||row.phase==='ALREADY_PRESENT')&&
+    row.finalReceiptVerified===true&&acknowledged===total;
+  const rawPercent=total===0?0:Number((BigInt(acknowledged)*100n)/BigInt(total));
+  return {classification:'SYNTHETIC_EVIDENCE_ONLY' as const,
+    phase:row.phase,totalBytes:total,sentBytes:row.sentBytes as number,
+    receivedBytes:row.receivedBytes as number,acknowledgedBytes:acknowledged,
+    progressPercent:complete?100:Math.min(99,rawPercent),complete};
+}

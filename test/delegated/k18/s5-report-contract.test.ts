@@ -22,7 +22,7 @@ test('T-107 empty sample set has no measured percentile or capacity estimate',()
   const summary=summarizeS5ScenarioResults([]);
   assert.deepEqual(summary,{
     measurementClassification:'UNKNOWN',capacityEstimate:null,
-    providerCapacityProven:false,scenarios:[],
+    capacityConfidenceInterval:null,providerCapacityProven:false,scenarios:[],
   });
 });
 
