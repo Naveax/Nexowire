@@ -20,9 +20,23 @@ Boş bir PC’ye önce Node/npm kurman gerekmez.
 Önceki `../installers/Nexowire-Setup.cmd` dosyası v1.0.7'ye sabitlenmiş,
 denetlenebilir tarihsel arşivdir; **yeni kurulum için kullanma**.
 [Arşiv kaynağı ve hash bilgisi](../installers/README.md).
+**Bağlantı sayfası sürüm farkı:** `/connect.html` üzerindeki **Windows
+kurucusunu aç** düğmesi, güncel kaynakta hâlâ eski `v1.0.7` arşiv dosyasına
+giden sabitlenmiş bağlantıyı kullanıyor. Yeni kurulumda o düğmeyi takip
+etme; **bu sayfanın başındaki resmî v1.0.8 GitHub Releases indirmesini** ve
+aşağıdaki checksum kontrolünü esas al. Web düğmesinin düzeltilmesi ayrı
+arayüz sahibi incelemesini bekliyor; düzelmiş gibi varsayma.
 Resmî v1.0.8 setup SHA-256:
 `8f39a1954eb22131ed516d32acfad1fe17e3ccb9766eda3883b90595a9135694`.
 Bu checksum, yayıncı imzası veya CORE fiziksel yetki kanıtı değildir.
+Bu `.cmd` yayınının hash doğrulaması, **Nexowire tarafından imzalanmış native
+tek tık kurucu** kabulü anlamına gelmez. Böyle bir imza/yardımcı uygulama
+kanıtı ayrıca [#269'un kabul koşullarında](https://github.com/Naveax/Nexowire/issues/269)
+aranır. Paketteki Node çalıştırıcısının imzası da Nexowire kurucusunun
+imzası yerine geçmez. İmza ve temiz Windows kurulumu bağımsız
+doğrulanmadan "imzalı Nexowire yükleyicisi hazır" sonucu çıkarma.
+Native yardımcı kurucunun Nexowire yayıncı imzası doğrulanmadıysa
+SmartScreen uyarısını geçerek kurucuyu güvenli veya kabul edilmiş sayma.
 
 GitHub **Code → Download ZIP** kaynak kodu indirir ve bu kurulumun yerine geçmez.
 `nexowire-*.tgz` geliştirici paketidir. Ayrı Broker yardımcı ZIP’i ilk kurulum
@@ -37,7 +51,8 @@ indirildiyse Windows `(1)` ekleyebilir; dosya adını değiştirerek kaynağın�
 doğrulamış olmazsın. Kaynak/uzantı şüpheliyse resmî yayın bağlantısından tekrar
 indir; başka bir kaynaktan gelen `.cmd` dosyasını çalıştırma.
 
-İstersen indirdiğin kurucunun bütünlüğünü Windows PowerShell'de
+Normal indirme ve dosyaya çift tıklama için CMD, terminal veya yeni PowerShell
+kurulumu gerekmez. İstersen indirdiğin kurucunun bütünlüğünü Windows PowerShell'de
 `Get-FileHash` ile kontrol et. Dosya normal **İndirilenler** konumundaysa
 şu salt-okunur komutu kullanabilirsin:
 
@@ -68,6 +83,13 @@ Uygulama `%LOCALAPPDATA%\Nexowire\versions\...` altına kurulur ve Başlat menü
 **Nexowire** kısayolu eklenir. Normal akış kullanıcıya Hub adresi, cihaz anahtarı,
 komut satırı veya Tailscale kurulumu sormaz.
 
+Bu adım **otomatik onarım, eksiksiz yedekleme veya hatasız geri alma garantisi**
+vermez. Var olan Agent/veritabanı kayıtlarını veya `.nexowire` dosyalarını
+silme; kesintiye uğramış güncelleme/onarımı kendi kendine başarılı sayma.
+Yeniden yükleme, eski sürüme dönüş ve veri taşıma için önce mevcut kurulumun
+durumunu kaydet, ardından ilgili sürümün resmî destek/geri dönüş talimatını
+doğrula. Gerçek Windows yükseltme ve geri dönüş kabulü bu kılavuzda **NOT_RUN**.
+
 ## 3. Cihazı kendi hesabına bağla
 
 Tarayıcı giriş isterse kendi GitHub hesabınla giriş yap. GitHub hesabın yoksa
@@ -83,10 +105,34 @@ menüsünden **Nexowire**’ı çalıştır; kaynak koddan ikinci bir Agent baş
 eşleme onay ekranı farklıdır. BAĞLA yalnız kurucunun oluşturduğu eşleme
 oturumunda cihaz adıyla görünür. `BAĞLANIYOR…` sırasında yeniden basma;
 `TEKRAR DENE` görünürse yalnız o düğmeyi bir kez kullan. Hata devam ederse
-metni not et, Başlat → Nexowire ile **yeni** eşleme oturumu aç ve yeni
-tarayıcı ekranını kullan. Eski eşleme sekmesini, yerel uygulama klasörünü
-veya cihaz kayıtlarını silme. `Bu hesap için cihaz limiti dolu` hatasında
+gizli değerleri kapatılmış hata metnini not et, Başlat → Nexowire ile **yeni**
+eşleme oturumu aç ve yeni tarayıcı ekranını kullan. Eski eşleme sekmesini,
+yerel uygulama klasörünü veya cihaz kayıtlarını silme.
+`Bu hesap için cihaz limiti dolu` hatasında
 tekrar tekrar denemek limiti kaldırmaz; hesap/cihaz limitini kontrol et.
+
+### BAĞLA hata metni ve güvenli yeniden deneme
+
+Bağlantı ekranının güncel kaynak kodu (`web/connect.js`) her hatada aynı
+metni göstermez. Ekran ve kurtarma adımını birlikte değerlendir:
+
+| Ekrandaki mesaj/durum | Ne yapılır? |
+| --- | --- |
+| `Bu hesap için cihaz limiti dolu.` | Hesabın cihaz limitini kontrol et; tekrar BAĞLA sınırı kaldırmaz. |
+| `Bu cihaz bu hesaba bağlanamadı.` | Cihaz adı ve giriş yapılan hesabı kontrol et; ekranda `TEKRAR DENE` varsa bir kez dene. 403 yanıtının ayrıntısı ekranda verilmez. |
+| `Bağlantı hazırlanamadı.` | Sunucu eşlemeyi hazırlayamadı. `TEKRAR DENE` varsa bir kez kullan; devam ederse yeni oturum aç ve maskelenmiş hata durumunu kaydet. |
+| `Bağlantı cevabı geçersiz.` | Geçerli eşleme onayı oluşmadı; oturum URL'sini elle değiştirme veya tekrar kullanma, Başlat → Nexowire ile yeni oturum aç. |
+| `Hesap doğrulanamadı. Lütfen tekrar dene.` | Hesap kontrolü tamamlanmadı ve `BAĞLA` etkinleşmez. GitHub girişini ve yeni oturumu kontrol et; cihazı bağlı sayma. |
+| `BAĞLANIYOR…` | İşlem sürerken ikinci kez tıklama; yalnız sonuç veya ekrandaki hata gelince ilerle. |
+
+**Beklenmeyen hata:** Bugünkü bağlantı sayfası bazı ağ/JavaScript istisnalarının
+ham hata metnini gösterebiliyor; bu, metindeki sır veya URL'lerin otomatik
+gizlendiği anlamına gelmez ([#485](https://github.com/Naveax/Nexowire/issues/485),
+izole test [#1129](https://github.com/Naveax/Nexowire/pull/1129)). Destek veya
+ChatGPT'ye göndermeden önce **tam URL'yi, `token`, `state`, `pairing_id`,
+OAuth kodu, cookie ve benzeri parametreleri sil**. Yalnız hata türünü, hangi
+düğmeden sonra oluştuğunu ve varsa HTTP durum kodunu paylaş. Hata düzeltmesi
+ve gerçek Windows/ChatGPT kabulü tamamlanmadan ekranı güvenli sayma.
 
 ### Cihaz başka GitHub hesabında görünüyorsa
 
@@ -178,6 +224,34 @@ yöneticisi düzeltebilir; yetkiyi atlatmaya çalışma. URL belgesi erişilemez
 veya OAuth akışı hata verirse Nexowire hizmeti tarafında destek gerekir.
 **No authentication** seçmek, rastgele `/mcp` eklemek veya Windows kurucusunu
 tekrar çalıştırmak bu sorunları güvenli biçimde çözmez.
+
+### Oluştur / BAĞLA başarısızsa: hızlı karar ağacı
+
+Önce **hangi ekranın** hata verdiğini seç: indirme/kurulum → cihaz BAĞLA →
+TEKRAR DENE → ChatGPT Oluştur → `devices_list`. Bir aşamanın başarılı
+görünmesi sonraki aşamanın tamamlandığını kanıtlamaz.
+
+1. **Yalnız indir/kur ekranı mı var, cihaz adı yok mu?** Bu ekran eşleme
+   onayı değildir. Önce kurucunun tamamlandığını kontrol et; Başlat → Nexowire
+   ile bağlantı ekranını aç. BAĞLA'yı olmayan ekranda arama.
+2. **Cihaz adı ve BAĞLA var mı?** Kendi GitHub hesabını kontrol et; bir kez
+   onayla. `BAĞLANIYOR…` görünüyorsa bekle, ikinci kez basma.
+3. **`TEKRAR DENE` veya süre aşımı mı var?** Görünen hata metnini not et.
+   [BAĞLA hata ayrımını](#bağla-hata-metni-ve-güvenli-yeniden-deneme) oku;
+   sır veya URL içeren ham metni paylaşma. Aynı ekranda yalnız sunulan
+   yeniden denemeyi kullan; süre dolmuşsa
+   Başlat → Nexowire ile *yeni* eşleme oturumu aç. Cihaz kayıtlarını silme.
+4. **Cihaz panelde çevrimiçi ama ChatGPT'de Oluştur başarısız mı?** Bu artık
+   Windows kurulumundan ayrı MCP bağlantı adımıdır. Çalışma alanı eklenti
+   iznini, OAuth seçimini ve canlı belgedeki `resource` adresini denetle;
+   hata sürerse ekran metnini gizli değerleri kapatarak destekle paylaş.
+5. **Eklenti bağlı ama `devices_list` boş mu?** Cihazı BAĞLA ile eklediğin
+   GitHub hesabıyla OAuth hesabının aynı olduğunu kontrol et. Aynı hesap
+   doğrulanmadan cihazı yeniden kurma veya başka hesaptaki cihazları silme.
+
+Her adımın sonucu yalnız ilgili ekranda veya araç çağrısında doğrulanır;
+görünmeyen başarıyı tahmin etme. Hesap/URL/cihaz anahtarı, cookie, token,
+OAuth kodu ya da tam oturum bağlantısını yardım mesajına ekleme.
 
 ## 5. Gerçek bağlantıyı dene
 

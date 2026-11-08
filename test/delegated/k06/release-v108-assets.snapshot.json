@@ -1,0 +1,18 @@
+{
+  "evidence_kind": "GITHUB_RELEASE_API_SNAPSHOT_NOT_LIVE_CI",
+  "observed_date": "2026-11-07",
+  "source": "https://api.github.com/repos/Naveax/Nexowire/releases/tags/v1.0.8",
+  "latest_source": "https://api.github.com/repos/Naveax/Nexowire/releases/latest",
+  "latest_tag_at_observation": "v1.0.8",
+  "tag": "v1.0.8",
+  "published_at": "2026-10-30T15:55:53Z",
+  "assets": [
+    "nexowire-1.0.8.tgz",
+    "nexowire-sbom.cdx.json",
+    "Nexowire-Setup.cmd",
+    "Nexowire-Windows-x64.zip",
+    "release-manifest.json",
+    "SHA256SUMS",
+    "SHA256SUMS-Windows"
+  ]
+}
