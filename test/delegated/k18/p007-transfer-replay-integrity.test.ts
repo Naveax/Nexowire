@@ -71,6 +71,50 @@ test('D-104/D-105 #588 1MiB resumable local ingest tracks per-call and cumulativ
     assert.equal(receiver.digest('hex'),digest); // independent receiver recomputation
     assert.equal((await store.get(scope,artifactPath))?.sha256,digest);
     assert.equal((await store.get(scope,artifactPath))?.acceptanceStatus,'pending');
+    // A lost success response after publication must be idempotent. Retrying
+    // the same transfer reports an existing manifest and copies no bytes.
+    let replayReads=0;
+    const replaySource:ArtifactSourceOps={...source(bytes),read:async()=>{
+      replayReads++;
+      throw Error('MUST_NOT_READ_ALREADY_PRESENT');
+    }};
+    const replay=await ingestDeviceArtifact(store,replaySource,opts);
+    assert.equal(replay.state,'ALREADY_PRESENT');
+    assert.equal(replay.transferredBytes,0);
+    assert.equal(replay.offset,bytes.length);
+    assert.equal(replayReads,0);
+  }));
+
+test('D-105 #588 source offset drift on resume fails closed, then stable retry completes',()=>
+  fixture(async store=>{
+    const bytes=Buffer.alloc(225_281,0x41);
+    const artifactPath='k18/offset-drift-225281.bin';
+    const opts=input(artifactPath,1);
+    const first=await ingestDeviceArtifact(store,source(bytes),opts);
+    assert.equal(first.state,'PARTIAL');
+    assert.equal(first.offset,65_536);
+    let driftReads=0;
+    const drifted:ArtifactSourceOps={...source(bytes),read:async(_,offset,count)=>{
+      driftReads++;
+      const chunk=bytes.subarray(offset,offset+count);
+      return {sourceBytes:bytes.length,offsetBytes:offset-1,
+        bytesRead:chunk.length,contentBase64:chunk.toString('base64')};
+    }};
+    await assert.rejects(ingestDeviceArtifact(store,drifted,opts),
+      (error:unknown)=>error instanceof ArtifactBridgeError&&
+        error.code==='INGEST_SOURCE_CHANGED');
+    assert.equal(driftReads,1);
+    assert.equal(await store.get(scope,artifactPath),null);
+    let result=first;
+    for(let call=0;call<3;call++){
+      result=await ingestDeviceArtifact(store,source(bytes),{
+        ...opts,maxChunks:2});
+      if(result.state==='COMPLETE')break;
+    }
+    assert.equal(result.state,'COMPLETE');
+    assert.equal(result.sha256,sha(bytes));
+    assert.equal((await store.get(scope,artifactPath))?.sha256,sha(bytes));
+    assert.equal((await store.get(scope,artifactPath))?.acceptanceStatus,'pending');
   }));
 
 test('D-105 #588 a lying sender SHA cannot defeat receiver recomputation',()=>
@@ -102,5 +146,25 @@ test('D-106 #588 >256MiB virtual source fails bounded ingest before allocation/r
         error.code==='INGEST_SOURCE_INVALID',
     );
     assert.equal(hashes,0);
+    assert.equal(reads,0);
+  }));
+
+test('D-106 #588 exactly 256MiB passes size gate but not SHA gate, without allocation',()=>
+  fixture(async store=>{
+    // Only virtual metadata is used: exact boundary has no in-memory payload.
+    const cap=268_435_456;
+    let hashLimit:number|undefined;
+    let reads=0;
+    const virtual:ArtifactSourceOps={
+      stat:async()=>({type:'file',size:cap}),
+      sha256:async(_,maxBytes)=>{hashLimit=maxBytes;return 'invalid-sha';},
+      read:async()=>{reads++;throw Error('MUST_NOT_READ_UNVERIFIED_SOURCE')},
+    };
+    await assert.rejects(
+      ingestDeviceArtifact(store,virtual,input('k18/virtual-exact-256mib.bin',1)),
+      (error:unknown)=>error instanceof ArtifactBridgeError&&
+        error.code==='INGEST_HASH_INVALID',
+    );
+    assert.equal(hashLimit,cap);
     assert.equal(reads,0);
   }));
