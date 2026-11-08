@@ -10,7 +10,11 @@ const PNG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
 const result = (status, reason) => ({ status, reason });
 
-export function auditBrowserScreenshot({ evidence, expectedSha, evidenceDir, targetCssWidth }) {
+export function auditBrowserScreenshot(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return result('UNKNOWN', 'missing screenshot audit input');
+  }
+  const { evidence, expectedSha, evidenceDir, targetCssWidth } = input;
   if (!SHA.test(expectedSha ?? '') || !evidence || typeof evidence !== 'object') {
     return result('UNKNOWN', 'missing exact SHA or evidence record');
   }
@@ -84,11 +88,19 @@ export function auditBrowserScreenshot({ evidence, expectedSha, evidenceDir, tar
 // *independent* viewport / retry captures without external attestation.
 // This is an evidence-uniqueness audit, not a proof that different hashes came
 // from a real browser. The result list intentionally has no aggregate PASS.
-export function auditIndependentScreenshotCaptures({ captures, expectedSha, evidenceDir }) {
+export function auditIndependentScreenshotCaptures(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return [result('UNKNOWN', 'capture list missing')];
+  }
+  const { captures, expectedSha, evidenceDir } = input;
   if (!Array.isArray(captures)) return [result('UNKNOWN', 'capture list missing')];
   const seenDigest = new Map();
   const seenId = new Set();
-  return captures.map(({ evidence, targetCssWidth } = {}) => {
+  return captures.map((capture) => {
+    if (!capture || typeof capture !== 'object' || Array.isArray(capture)) {
+      return result('UNKNOWN', 'invalid capture entry');
+    }
+    const { evidence, targetCssWidth } = capture;
     const individual = auditBrowserScreenshot({ evidence, expectedSha, evidenceDir, targetCssWidth });
     if (individual.status !== 'REVIEW_REQUIRED') return individual;
     if (typeof evidence.captureId !== 'string' || !evidence.captureId.trim()) {
