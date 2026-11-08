@@ -12,6 +12,8 @@ import {inspectProtectedSecretFile,readProtectedSecretFile,writeProtectedSecretF
 import {
   WINDOWS_PRELOGIN_AGENT_ROOT,WINDOWS_PRELOGIN_AGENT_STATE_ROOT,
   WINDOWS_PRELOGIN_AGENT_PATHS,assertWindowsPreloginStartupConfiguration,
+  createWindowsPreloginAgentIdentity,parseWindowsPreloginAgentIdentity,
+  preloginHandoffTaskObservation,
 } from './windows-prelogin-bootstrap.js';
 
 const TASK='Nexowire Prelogin Agent';
@@ -32,7 +34,11 @@ export interface SystemAgentPreloginPlan {
 export interface SystemAgentPreloginStatus {
   staged:boolean;installed:boolean;taskState:string;
   taskIdentityVerified:boolean;hubBootInstalled:boolean;
-  markerPresent:boolean;readyForPhysicalReboot:false;
+  markerPresent:boolean;machineIdentityFormatValid:boolean;
+  ownerAgentTaskState:string;
+  /** Task observation only; does NOT assert that either socket reached the Hub. */
+  handoffTaskObservation:ReturnType<typeof preloginHandoffTaskObservation>;
+  readyForPhysicalReboot:false;
 }
 
 export function planSystemAgentPrelogin(
@@ -100,12 +106,13 @@ function taskShell(script:string):unknown{
   catch{throw new Error('PRELOGIN_AGENT_TASK_RESULT_INVALID')}
 }
 
-interface TaskProbe {installed:boolean;state:string;identityVerified:boolean;hubBoot:boolean;description:string}
+interface TaskProbe {installed:boolean;state:string;identityVerified:boolean;hubBoot:boolean;description:string;ownerAgentTaskState:string}
 function queryTaskState():TaskProbe{
   const data=taskShell([
     "$ErrorActionPreference='Stop'",
     "$t=Get-ScheduledTask -TaskPath '\\' -TaskName "+ps(TASK)+" -ErrorAction SilentlyContinue",
     "$h=Get-ScheduledTask -TaskPath '\\' -TaskName "+ps(HUB_TASK)+" -ErrorAction SilentlyContinue",
+    "$owner=Get-ScheduledTask -TaskPath '\\' -TaskName 'Nexowire Native Agent' -ErrorAction SilentlyContinue",
     "$verified=$false",
     "if($t){",
     "  $principal=[string]$t.Principal.UserId",
@@ -116,15 +123,15 @@ function queryTaskState():TaskProbe{
     "  $desc=([string]$t.Description).StartsWith("+ps(MARKER_PREFIX)+")",
     "  $verified=($system -and $boot -and $action -and $desc -and ([string]$t.Principal.LogonType -eq 'ServiceAccount') -and ([string]$t.Principal.RunLevel -eq 'Highest'))",
     "}",
-    "[pscustomobject]@{installed=($null-ne$t);state=$(if($t){[string]$t.State}else{'not-installed'});identityVerified=$verified;hubBoot=($null-ne$h);description=$(if($t){[string]$t.Description}else{''})} | ConvertTo-Json -Compress",
+    "[pscustomobject]@{installed=($null-ne$t);state=$(if($t){[string]$t.State}else{'not-installed'});identityVerified=$verified;hubBoot=($null-ne$h);description=$(if($t){[string]$t.Description}else{''});ownerAgentTaskState=$(if($owner){[string]$owner.State}else{'not-installed'})} | ConvertTo-Json -Compress",
   ].join('\n')) as Partial<TaskProbe>;
   if(typeof data.installed!=='boolean'||typeof data.state!=='string'||
       typeof data.identityVerified!=='boolean'||typeof data.hubBoot!=='boolean'||
-      typeof data.description!=='string')
+      typeof data.description!=='string'||typeof data.ownerAgentTaskState!=='string')
     throw new Error('PRELOGIN_AGENT_TASK_READBACK_INVALID');
   return {installed:data.installed,state:data.state,
     identityVerified:data.identityVerified,hubBoot:data.hubBoot,
-    description:data.description};
+    description:data.description,ownerAgentTaskState:data.ownerAgentTaskState};
 }
 
 interface StagedManifest {
@@ -156,6 +163,13 @@ export async function systemAgentPreloginStatus():Promise<SystemAgentPreloginSta
   try{staged=(await fs.lstat(plan.root)).isDirectory()}
   catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error}
   const markerPresent=staged?(await readManifest(plan))!==null:false;
+  let machineIdentityFormatValid=false;
+  if(staged){
+    try{
+      parseWindowsPreloginAgentIdentity(JSON.parse(await fs.readFile(plan.identityFile,'utf8')));
+      machineIdentityFormatValid=true;
+    }catch{ /* Never mistake an unreadable or damaged identity for a staged transport. */ }
+  }
   let trustedHub=false;
   try{
     const hub=await hubBootLifecycleStatus();
@@ -163,7 +177,10 @@ export async function systemAgentPreloginStatus():Promise<SystemAgentPreloginSta
   }catch{ /* Foreign or unreadable SYSTEM Hub is never a trusted boot task. */ }
   return {staged,installed:task.installed,taskState:task.state,
     taskIdentityVerified:task.identityVerified,hubBootInstalled:trustedHub,
-    markerPresent,readyForPhysicalReboot:false};
+    markerPresent,machineIdentityFormatValid,
+    ownerAgentTaskState:task.ownerAgentTaskState,
+    handoffTaskObservation:preloginHandoffTaskObservation(task.state,task.ownerAgentTaskState,machineIdentityFormatValid),
+    readyForPhysicalReboot:false};
 }
 
 function ensureRuntime(plan:SystemAgentPreloginPlan):void {
@@ -196,6 +213,9 @@ async function assertOwnedStage(plan:SystemAgentPreloginPlan):Promise<StagedMani
     verifyWindowsPrivateAcl(p);
   const manifest=await readManifest(plan);
   if(!manifest)throw new Error('PRELOGIN_AGENT_STAGE_NOT_PRESENT');
+  try{
+    parseWindowsPreloginAgentIdentity(JSON.parse(await fs.readFile(plan.identityFile,'utf8')));
+  }catch{throw new Error('PRELOGIN_AGENT_MACHINE_IDENTITY_INVALID')}
   const entries=await fs.readdir(plan.root,{withFileTypes:true});
   if(entries.some(x=>!FILES.has(x.name)||x.isSymbolicLink()||
     (x.name==='state'?!x.isDirectory():!x.isFile())))
@@ -228,7 +248,7 @@ export async function stageSystemAgentPrelogin():Promise<SystemAgentPreloginStat
   try{
     await fs.mkdir(plan.root,{mode:0o700});created=true;
     hardenWindowsProgramDataAcl(plan.root);
-    await fs.writeFile(plan.identityFile,JSON.stringify({id:randomUUID()})+'\n',{flag:'wx',mode:0o600});
+    await fs.writeFile(plan.identityFile,JSON.stringify(createWindowsPreloginAgentIdentity())+'\n',{flag:'wx',mode:0o600});
     await writeProtectedSecretFile(plan.tokenFile,'agent-bearer-token',secret,{scope:'local-machine'});
     const launcher=renderSystemAgentPreloginLauncher(plan);
     await fs.writeFile(plan.launcher,launcher,{flag:'wx',encoding:'utf8',mode:0o600});
