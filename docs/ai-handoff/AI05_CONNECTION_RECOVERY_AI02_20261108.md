@@ -11,7 +11,7 @@
 2. `src/agent/windows-prelogin-bootstrap.ts` explicitly requires the SYSTEM pre-login Agent to use **only** `NEXOWIRE_HUB_WS_URL=ws://127.0.0.1:43110/agent`. It rejects `NEXOWIRE_HUB_WS_URLS` and reads a LocalMachine-DPAPI token from `C:\ProgramData\Nexowire\system-agent`. AI-05 does not change this boot policy.
 3. Remote/public Agent ingress is opt-in and must be admitted by the Hub's strict bound owner/device/epoch/lease authorization, never by the public bridge alone. A WebSocket HTTP 101, process `Running`, or OAuth metadata `200` does **not** imply an authenticated tool session.
 4. `AgentBroker` has one active connection per device ID and fences stale socket responses. Remote read-only requests require fresh authorization after reconnect. Pending mutating requests become `MUTATION_STATE_UNKNOWN` (or the existing instance-change rejection), never automatic re-dispatch. Read-only local retries remain bounded by the existing broker policy.
-5. Transport failures (TCP/DNS/5xx and 1006/1011) use capped backoff and endpoint rotation. Credentials rejected by 401/403, disallowed 4xx, policy close 1008, and invalid certificates are fatal until authorization/configuration is repaired.
+5. Transport failures (TCP/DNS/5xx and 1006/1011) use capped backoff and endpoint rotation. An accepted TCP connection which never produces WebSocket HTTP 101 now has an explicit 10-second handshake deadline; a timed-out peer cannot block trying the next configured endpoint forever. Credentials rejected by 401/403, disallowed 4xx, policy close 1008, and invalid certificates are fatal until authorization/configuration is repaired.
 
 ## AI-05 change
 
@@ -34,6 +34,7 @@ This is not a public availability or DNS assertion. The scheduler has only three
 - No installed task matching the Cloudflare/Connection task filter was found. **Live Cloudflare cutover and public WSS acceptance not exercised**.
 - Existing Windows local connection/restart regression: 32 PASS, 0 FAIL, 4 SKIP.
 - New Cloudflare reconnection supervisor and adjacent Cloudflare suite: 25 PASS, 0 FAIL, 4 SKIP (includes 7 new deterministic tests; suites overlap with the prior group).
+- Agent silent-handshake deadline, endpoint priority, v2-07 no-replay and Cloudflare supervisor focused suite: 25/25 PASS (includes 2 new deadline tests and an actual local TCP peer withholding HTTP 101).
 - Remote authorization, Cloudflare external origin, DNS/TLS/redirect, and fault-proxy tests: 88 PASS, 0 FAIL.
 - `npm run typecheck` and `npm run build`: PASS.
 - NOT RUN: reboot/power loss, actual WAN interruption, live named tunnel, real external origin cutover, official signed rollout, multi-hour soak, or pre-login user handoff.
