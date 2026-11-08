@@ -4,7 +4,10 @@ import { randomUUID } from 'node:crypto';
 import { executeCapability } from '../../src/agent/executors.js';
 import { PathPolicy } from '../../src/agent/path-policy.js';
 import { NEXOWIRE_VERSION } from '../../src/version.js';
-import type { PrivilegedBrokerClient } from '../../src/agent/privileged-broker-client.js';
+import { PrivilegedBrokerClient } from '../../src/agent/privileged-broker-client.js';
+import { startPrivilegedBroker } from '../../src/agent/privileged-broker.js';
+import { createLocalOwnerBrokerAdmission } from '../../src/agent/privileged-broker-local-owner.js';
+import { assertCoreWindowsMutationAdmission } from '../../src/agent/core-windows-mutation-dispatch.js';
 import type { CoreConsoleAdmission } from '../../src/agent/core-console-admission.js';
 
 const policy=new PathPolicy(['*']);
@@ -77,4 +80,50 @@ test('AI-03 cancelled remote request cannot reach the local owner Broker callbac
     ...request,requestSignal:controller.signal,
   }),/aborted/i);
   assert.equal(calls.length,0);
+});
+
+
+test('AI-03 Windows Agent to authenticated Broker HTTP callback composes correctly (non-elevated fixture)',{
+  skip:process.platform!=='win32',
+},async()=>{
+  const token='ai03-agent-composition-fixture-token';
+  const reserved=new Set<string>();
+  const admission=createLocalOwnerBrokerAdmission({
+    readStatus:async()=>active,
+    reserve:async id=>{if(reserved.has(id))throw Object.assign(Error('EEXIST'),{code:'EEXIST'});reserved.add(id);},
+  });
+  let callbacks=0;
+  const server=await startPrivilegedBroker({port:0,tokens:[token],requireElevation:false,
+    localOwnerAdmission:admission,
+    execute:async(cap,raw)=>{
+      assert.equal(cap,capability);
+      assertCoreWindowsMutationAdmission(cap,raw);
+      callbacks++;
+      return {fixtureOnly:true};
+    },
+  });
+  const realClient=new PrivilegedBrokerClient({url:server.url,token});
+  // This disposable test server is NOT elevated; override only its test
+  // health evidence to exercise the Agent forwarding branch. Never use this
+  // object in production or claim it proves a physical HIGH token.
+  const composedClient={
+    probe:async()=>({...(await realClient.probe()),elevated:true,
+      version:NEXOWIRE_VERSION,localOwnerAdmissionConfigured:true}),
+    execute:realClient.execute.bind(realClient),
+  } as unknown as PrivilegedBrokerClient;
+  const coreConsole={status:async()=>active} as unknown as CoreConsoleAdmission;
+  const requestId=randomUUID();
+  try{
+    const result=await executeCapability(capability,input,policy,{
+      privilegeMode:'broker',accessMode:'full',requestId,
+      coreConsole,privilegedBroker:composedClient,
+    });
+    assert.deepEqual(result,{fixtureOnly:true});
+    assert.equal(callbacks,1);
+    await assert.rejects(executeCapability(capability,input,policy,{
+      privilegeMode:'broker',accessMode:'full',requestId,
+      coreConsole,privilegedBroker:composedClient,
+    }),/BROKER_LOCAL_OWNER_OPERATION_ALREADY_RECORDED/);
+    assert.equal(callbacks,1);
+  }finally{admission.close();await server.close();}
 });
