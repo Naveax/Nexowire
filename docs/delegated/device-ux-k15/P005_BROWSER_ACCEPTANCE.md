@@ -37,6 +37,8 @@ K10/browser owner and K03/UI owner. It does not claim to have run a browser.
 | Dashboard 503 or pending after successful loaded list | Old counts/cards must not be mistaken for fresh | Visible loading/error semantic status, `aria-busy`, focus and 375px/768px/desktop screenshot |
 | Account authenticated, device list empty after pairing attempt | Global `Bağlı` pill must not be mistaken for successful device pairing; `connect-device` remains available | Distinguish account session from device registration and provide recovery instructions; #1068 owner wording review |
 | Two same-named devices in different folders; delayed older 200 after newer 200 | Older response must not swap warehouse card from ID `machine-b` to `machine-a` | Preserve selected folder, stable target ID and accessible label across the controlled network race |
+| Previously visible private card; dashboard subsequently returns 403 | Unauthorized account must not see stale cards or a generic network-only diagnosis | Distinct authorization-denied message, cleared device cards/counters, keyboard-accessible recovery route; #1068 currently lacks a dedicated 403 status |
+| 403, then retry with authenticated 200 and zero devices | Prior unauthorized/stale status must disappear without implying device pairing succeeded | Real browser verifies error clearance, empty list feedback and connect action; owner #1068 VM passes recovery but still says global `Bağlı` |
 
 Use K10's separate, real three-state pairing screenshot route for `loading`,
 `error`, and `success` only after a browser run actually produced three
