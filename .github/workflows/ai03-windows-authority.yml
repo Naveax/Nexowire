@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   ai03-authority-windows:
-    if: startsWith(github.head_ref, 'ai/03-control-plane-authority-') || startsWith(github.head_ref, 'coord/ai05-core-connection-v2-') || github.head_ref == 'agent/ai03-core-broker-repair'
+    if: startsWith(github.head_ref, 'ai/03-control-plane-authority-') || startsWith(github.head_ref, 'coord/ai05-core-connection-v2-') || github.head_ref == 'agent/ai03-core-broker-repair' || startsWith(github.head_ref, 'integration/workpc-windows-recovery-') || startsWith(github.head_ref, 'integration/ai01-ai06-candidate-')
     runs-on: windows-latest
     timeout-minutes: 20
     strategy:
