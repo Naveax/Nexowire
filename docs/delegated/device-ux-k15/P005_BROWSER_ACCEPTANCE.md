@@ -35,6 +35,8 @@ K10/browser owner and K03/UI owner. It does not claim to have run a browser.
 | First setup, zero devices; then two same-named devices and AUTO preference | No implicit paired/success target from AUTO | UI zero-device state + selected device ID proof; only an authenticated live pairing can pass setup acceptance |
 | Dashboard request A slow; newer request B returns 401; A later returns 200 | Old private device count/cards must not reappear | Browser network sequence and DOM state after both responses; check login remains visible |
 | Dashboard 503 or pending after successful loaded list | Old counts/cards must not be mistaken for fresh | Visible loading/error semantic status, `aria-busy`, focus and 375px/768px/desktop screenshot |
+| Account authenticated, device list empty after pairing attempt | Global `Bağlı` pill must not be mistaken for successful device pairing; `connect-device` remains available | Distinguish account session from device registration and provide recovery instructions; #1068 owner wording review |
+| Two same-named devices in different folders; delayed older 200 after newer 200 | Older response must not swap warehouse card from ID `machine-b` to `machine-a` | Preserve selected folder, stable target ID and accessible label across the controlled network race |
 
 Use K10's separate, real three-state pairing screenshot route for `loading`,
 `error`, and `success` only after a browser run actually produced three
