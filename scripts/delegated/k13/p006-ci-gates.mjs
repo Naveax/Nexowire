@@ -64,7 +64,7 @@ export function assessTap(tap, hardcodedCount = null) {
 // source. Pinned auxiliary checkouts never become required PR checks by proxy.
 export function classifyHostedEvidence({
   prHead, runHead, runEvent, runId, workflowName, runStatus, runConclusion,
-  checkoutHead, required, selectedFiles, observedFiles, jobs, totalJobs,
+  checkoutHead, required, selectedFiles, observedFiles, observedFileProofs, jobs, totalJobs,
 }) {
   const knownSha = value => /^[0-9a-f]{40}$/i.test(value ?? '');
   const base = { required_pr_ci: 'NOT_PROVEN', selected_test_execution: 'NOT_PROVEN', physical_device: 'NOT_RUN' };
@@ -78,13 +78,30 @@ export function classifyHostedEvidence({
     return { ...base, reason: 'JOB_NOT_SUCCESS' };
   }
   if (!Array.isArray(selectedFiles) || !selectedFiles.length || !Array.isArray(observedFiles) ||
-    !selectedFiles.every(path => observedFiles.includes(path))) {
+    !selectedFiles.every(path => observedFiles.includes(path)) || !Array.isArray(observedFileProofs)) {
+    return { ...base, reason: 'SELECTED_TEST_EXECUTION_UNVERIFIED' };
+  }
+  // File-name mentions alone are not run evidence. A filename copied from a
+  // different auxiliary job can otherwise convert unrelated green required
+  // jobs into a false HOSTED_EXECUTED verdict.
+  const observedInJob = (path, job) => Number.isSafeInteger(job.id) && job.id > 0 &&
+    observedFileProofs.some(proof => proof?.path === path && proof.run_id === runId &&
+      proof.job_id === job.id && proof.checkout_sha === checkoutHead && proof.result === 'PASS');
+  if (!selectedFiles.every(path => jobs.some(job => observedInJob(path, job)))) {
     return { ...base, reason: 'SELECTED_TEST_EXECUTION_UNVERIFIED' };
   }
   if (runHead !== prHead || runEvent !== 'pull_request' || workflowName !== 'CI' || !required ||
     !['test (22)', 'test (24)', 'browser-live'].every(name =>
       jobs.filter(job => job.name === name).length === 1)) {
     return { ...base, selected_test_execution: 'AUXILIARY_ONLY', reason: 'DIFFERENT_RUN_HEAD_OR_EVENT' };
+  }
+  // Required Node 22 and Node 24 acceptance needs its own bound execution of
+  // each selected file. One Node job (or a fork auxiliary log) is insufficient.
+  if (!['test (22)', 'test (24)'].every(name => {
+    const job = jobs.find(entry => entry.name === name);
+    return selectedFiles.every(path => observedInJob(path, job));
+  })) {
+    return { ...base, reason: 'SELECTED_TEST_EXECUTION_UNVERIFIED' };
   }
   return { ...base, required_pr_ci: 'PASS', selected_test_execution: 'HOSTED_EXECUTED', reason: 'PR_HEAD_AND_TEST_SELECTION_PROVEN' };
 }

@@ -54,11 +54,39 @@ test('cancelled or missing cancelled TAP summaries are never mistaken for PASS',
 const proof = () => ({
   prHead: sha, runHead: sha, checkoutHead: sha, runEvent: 'pull_request',
   required: true, runId: 17, workflowName: 'CI', runStatus: 'completed', runConclusion: 'success',
-  totalJobs: 3, jobs: ['test (22)', 'test (24)', 'browser-live'].map(name => ({
-    name, run_id: 17, status: 'completed', conclusion: 'success',
+  totalJobs: 3, jobs: ['test (22)', 'test (24)', 'browser-live'].map((name, idx) => ({
+    id: idx + 101, name, run_id: 17, status: 'completed', conclusion: 'success',
   })),
   selectedFiles: ['test/delegated/k11/p005-s5-evidence.test.ts'],
   observedFiles: ['test/delegated/k11/p005-s5-evidence.test.ts'],
+  observedFileProofs: [101, 102].map(jobId => ({
+    path: 'test/delegated/k11/p005-s5-evidence.test.ts', job_id: jobId,
+    run_id: 17, checkout_sha: sha, result: 'PASS',
+  })),
+});
+
+test('file names borrowed from a different auxiliary run cannot prove required CI execution', () => {
+  const contaminated = proof();
+  contaminated.observedFileProofs = contaminated.observedFileProofs.map(item => ({
+    ...item, run_id: 16,
+  }));
+  // The source file name was seen in auxiliary evidence, but not in this run.
+  assert.equal(classifyHostedEvidence(contaminated).selected_test_execution, 'NOT_PROVEN');
+  const oneNodeMissing = proof();
+  oneNodeMissing.observedFileProofs = oneNodeMissing.observedFileProofs.slice(0, 1);
+  assert.equal(classifyHostedEvidence(oneNodeMissing).selected_test_execution, 'NOT_PROVEN');
+});
+
+test('selected-file proof must bind to real job, checkout SHA and passing result', () => {
+  for (const mutation of [
+    item => ({ ...item, job_id: 9000 }),
+    item => ({ ...item, checkout_sha: otherSha }),
+    item => ({ ...item, result: 'SKIPPED' }),
+  ]) {
+    const candidate = proof();
+    candidate.observedFileProofs[1] = mutation(candidate.observedFileProofs[1]);
+    assert.equal(classifyHostedEvidence(candidate).selected_test_execution, 'NOT_PROVEN');
+  }
 });
 
 test('actual selected test path plus matching PR run HEAD supports hosted execution, not physical', () => {
