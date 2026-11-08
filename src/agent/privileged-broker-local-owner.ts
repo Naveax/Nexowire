@@ -52,7 +52,15 @@ export function createLocalOwnerBrokerAdmission(options: {
       await requireActive();
       // No retry if the operation was previously RESERVED or its result is
       // UNKNOWN. WindowsLocalOwnerCoreStore uses exclusive create ('wx').
-      await options.reserve(operationId);
+      try {
+        await options.reserve(operationId);
+      } catch (error) {
+        if (error instanceof Error &&
+            ('code' in error ? error.code === 'EEXIST' : error.message === 'EEXIST'))
+          throw Object.assign(new Error('BROKER_LOCAL_OWNER_OPERATION_ALREADY_RECORDED'),
+            { code: 'BROKER_LOCAL_OWNER_OPERATION_ALREADY_RECORDED' });
+        throw error;
+      }
       await requireActive();
     },
     close() { closed = true; options.close?.(); },
