@@ -52,3 +52,44 @@ Source history includes #1093 through #1094 and #1089 through #1092. No source P
 - Hosted final release CI, cross-version upgrade and rollback and disposable Windows VM reboot / power interruption are **NOT_RUN** until independently executed.
 - The Work-PC installed automatic updater remains temporarily disabled to preserve the live SQLite hotfix. Verify guarded updater before re-enabling; do not overwrite live WAL.
 - Check Work-PC C: free disk before making Windows release artifacts. Never reboot the NAVEAX physical computer during testing without explicit separate owner approval.
+
+## 2026-11-08 unattended Windows reboot readiness (later source check)
+
+The `nexowire hub reboot-readiness` CLI now inspects the canonical
+`Nexowire Hub Boot` task and the `Nexowire Native Agent` task
+**without modifying Windows tasks, UAC, Winlogon or user credentials**.
+
+Observed source-client result on Work-PC:
+
+```json
+{
+  "systemHubInstalled": false,
+  "agent": {
+    "installed": true,
+    "systemIdentity": false,
+    "bootTrigger": false,
+    "interactiveOnly": true
+  },
+  "autoAdminLogon": false,
+  "startupTopologyReady": false,
+  "remoteRebootAccepted": false,
+  "blockers": [
+    "SYSTEM_HUB_BOOT_NOT_INSTALLED",
+    "NATIVE_AGENT_LOGON_ONLY",
+    "PRELOGIN_REMOTE_RECOVERY_NOT_VERIFIED"
+  ]
+}
+```
+
+A SYSTEM Hub Boot task *alone* does not solve an interactive-only
+Native Agent. A safe remote unattended reboot requires a separately
+implemented, tested pre-login Agent path, machine-scope credentials,
+controlled actual reboot, and externally observed recovery. This
+source-level command is intentionally a **diagnostic, not an
+implementation or simulation of a SYSTEM Agent**.
+
+A separate controlled Work-PC **Hub task process restart** already
+recovered HTTP 200 and preserved all 2,398 existing SQLite records
+(`quick_check=ok`); that does not establish whole-computer reboot or
+pre-user-login reachability. Do not enable auto-logon merely to hide this
+acceptance gap. Production release remains NO-GO.

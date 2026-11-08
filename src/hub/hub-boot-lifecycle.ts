@@ -896,6 +896,92 @@ export async function uninstallHubBootLifecycle(
   };
 }
 
+export interface WindowsRebootAgentTaskEvidence {
+  installed: boolean;
+  systemIdentity: boolean;
+  bootTrigger: boolean;
+  interactiveOnly: boolean;
+}
+
+export interface WindowsUnattendedRebootEvidence {
+  systemHubInstalled: boolean;
+  agent: WindowsRebootAgentTaskEvidence;
+  autoAdminLogon: boolean;
+}
+
+export type WindowsRebootBlocker =
+  | 'SYSTEM_HUB_BOOT_NOT_INSTALLED'
+  | 'NATIVE_AGENT_NOT_INSTALLED'
+  | 'NATIVE_AGENT_LOGON_ONLY'
+  | 'NATIVE_AGENT_PRELOGIN_IDENTITY_UNVERIFIED'
+  | 'PRELOGIN_REMOTE_RECOVERY_NOT_VERIFIED';
+
+/**
+ * Task Scheduler configuration is NOT remote recovery evidence. In particular
+ * an interactive logon task cannot bring the Agent online at the sign-in
+ * screen. Never certify an unattended reboot solely from task metadata.
+ */
+export function assessWindowsUnattendedRebootReadiness(
+  evidence: WindowsUnattendedRebootEvidence,
+): WindowsUnattendedRebootEvidence & {
+  startupTopologyReady: boolean;
+  remoteRebootAccepted: false;
+  blockers: WindowsRebootBlocker[];
+} {
+  const blockers:WindowsRebootBlocker[]=[];
+  if(!evidence.systemHubInstalled)
+    blockers.push('SYSTEM_HUB_BOOT_NOT_INSTALLED');
+  if(!evidence.agent.installed) {
+    blockers.push('NATIVE_AGENT_NOT_INSTALLED');
+  } else if(evidence.agent.interactiveOnly || !evidence.agent.bootTrigger) {
+    blockers.push('NATIVE_AGENT_LOGON_ONLY');
+  } else if(!evidence.agent.systemIdentity) {
+    blockers.push('NATIVE_AGENT_PRELOGIN_IDENTITY_UNVERIFIED');
+  }
+  const startupTopologyReady=blockers.length===0;
+  // Physical pre-login/off-network reconnect, credential availability and
+  // rollback must be observed after the first controlled boot. A scheduler
+  // declaration and AutoAdminLogon alone cannot establish that fact.
+  blockers.push('PRELOGIN_REMOTE_RECOVERY_NOT_VERIFIED');
+  return {...evidence,startupTopologyReady,remoteRebootAccepted:false,blockers};
+}
+
+/**
+ * Strictly read-only Windows reboot preflight. No services, tasks, credentials,
+ * Winlogon settings, UAC or desktop state are modified.
+ */
+export async function inspectWindowsUnattendedRebootReadiness(
+  options:HubBootLifecycleOptions={},
+):Promise<ReturnType<typeof assessWindowsUnattendedRebootReadiness>> {
+  const boot=await hubBootLifecycleStatus(options);
+  const probe=await runPowerShellJson<{
+    agent:WindowsRebootAgentTaskEvidence;
+    autoAdminLogon:boolean;
+  }>([
+    "$ErrorActionPreference='Stop'",
+    "$task=Get-ScheduledTask -TaskName 'Nexowire Native Agent' -TaskPath '\\' -ErrorAction SilentlyContinue",
+    "$agentPresent=($null -ne $task)",
+    "$systemIdentity=$false",
+    "$bootTrigger=$false",
+    "$interactiveOnly=$false",
+    "if($agentPresent){",
+    "  $account=([string]$task.Principal.UserId).ToUpperInvariant()",
+    "  $logon=[string]$task.Principal.LogonType",
+    "  $systemIdentity=(($account -eq 'S-1-5-18' -or $account -eq 'SYSTEM' -or $account -eq 'NT AUTHORITY\\SYSTEM') -and $logon -eq 'ServiceAccount')",
+    "  $bootTrigger=@($task.Triggers | Where-Object { $_.CimClass.CimClassName -eq 'MSFT_TaskBootTrigger' }).Count -gt 0",
+    "  $interactiveOnly=($logon -eq 'Interactive')",
+    "}",
+    "$winlogon=Get-ItemProperty -LiteralPath 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon' -ErrorAction Stop",
+    "$auto=([string]$winlogon.AutoAdminLogon -eq '1')",
+    "[pscustomobject]@{agent=[pscustomobject]@{installed=$agentPresent;systemIdentity=$systemIdentity;bootTrigger=$bootTrigger;interactiveOnly=$interactiveOnly};autoAdminLogon=$auto}|ConvertTo-Json -Depth 4 -Compress",
+  ].join('\n'),taskEnv(options));
+  return assessWindowsUnattendedRebootReadiness({
+    systemHubInstalled:boot.installed,
+    agent:probe.agent,
+    autoAdminLogon:probe.autoAdminLogon,
+  });
+}
+
 export async function runHubBootLifecycleCommand(
   args: readonly string[],
   env: NodeJS.ProcessEnv = process.env,
@@ -914,13 +1000,17 @@ export async function runHubBootLifecycleCommand(
       result =
         await hubBootLifecycleStatus(options);
       break;
+    case 'reboot-readiness':
+      result =
+        await inspectWindowsUnattendedRebootReadiness(options);
+      break;
     case 'boot-uninstall':
       result =
         await uninstallHubBootLifecycle(options);
       break;
     default:
       throw new Error(
-        'Usage: nexowire hub [boot-install|boot-status|boot-uninstall]',
+        'Usage: nexowire hub [boot-install|boot-status|reboot-readiness|boot-uninstall]',
       );
   }
   process.stdout.write(
