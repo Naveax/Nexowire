@@ -82,6 +82,19 @@ Do not equate an exited shell, an empty `taskkill` stdout, a synthetic PID
 fixture, or a green unrelated CI job with an observed all-descendant exit.
 On an unknown incarnation, stop the trial and leave the gate `UNKNOWN`.
 
+### P007 D-092/D-096 — stop replay versus physical acceptance
+
+Synthetic rerun fixtures call the *same* private `killPidTree()` twice with
+an already-gone root and an independently live owned grandchild. Two
+`taskkill` exit-zero acknowledgements remain two `requested` results, **not**
+progress toward verified descendant exit. Two exit-128 responses remain
+`unconfirmed` and do not invent a terminal-success condition. Test fixture
+PID/creation-time labels are synthetic, not OS observations.
+
+Real Windows Node22/24 child-process and detached-grandchild sessions were
+**NOT_RUN** by K16; only owner-controlled disposable Work-PC trials with
+independent per-incarnation process readback can graduate these gates.
+
 The owner must link the exact-HEAD Windows CI result, the full isolated test
 process exit, and independent descendant-exit evidence to #540. If any owned
 descendant remains, identity is ambiguous, or a case is not run, keep that gate
