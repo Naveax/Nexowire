@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-09T00:00:00+03:00",
+  "s5": {
+    "sourceCommit": "52d452f717d891eeaf4c2b9aff3c6e1ea68369b0",
+    "ownerApprovalRef": "",
+    "runType": "NOT_RUN",
+    "environment": "NOT_RUN",
+    "providerName": "UNKNOWN",
+    "providerAccountScope": "UNKNOWN",
+    "measurementWindow": { "start": "", "end": "" },
+    "metrics": {
+      "usersPerDay": "UNKNOWN",
+      "hostedIngressCalls": "UNKNOWN",
+      "cpuMilliseconds": "UNKNOWN",
+      "d1Reads": "UNKNOWN",
+      "d1Writes": "UNKNOWN",
+      "relayBytes": "UNKNOWN",
+      "reconnects": "UNKNOWN",
+      "failedCalls": "UNKNOWN",
+      "p50Milliseconds": "UNKNOWN",
+      "p95Milliseconds": "UNKNOWN",
+      "billingPausedProbe": { "executed": false, "denialProven": false },
+      "quotaExhaustionProbe": { "executed": false, "denialProven": false }
+    },
+    "forecasts": [],
+    "providerInvoice": {
+      "kind": "UNKNOWN",
+      "documentRef": "",
+      "currency": "UNKNOWN",
+      "amountMinorUnits": "UNKNOWN",
+      "period": { "start": "", "end": "" }
+    }
+  },
+  "transfer": {
+    "sourceCommit": "52d452f717d891eeaf4c2b9aff3c6e1ea68369b0",
+    "runType": "NOT_RUN",
+    "requiredSizesBytes": [226304, 1048576, 268435457, 1073741824],
+    "cases": [],
+    "negativeCases": []
+  },
+  "notes": [
+    "No real provider invoice, quota test, Windows device or physical two-PC transfer was performed.",
+    "UNKNOWN is intentionally not zero; synthetic fixtures never become actual provider cost or device acceptance.",
+    "All provider or device test execution needs explicit owner authorization first."
+  ]
+}
