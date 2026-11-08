@@ -1,9 +1,42 @@
+import {randomUUID} from 'node:crypto';
+
 /**
  * Pre-login SYSTEM agent transport bootstrap only. This is not the ordinary
  * owner CORE agent, does not provide elevated mutating tools, and MUST NOT be
  * activated by a privileged task until separate protected token, identity and
  * runtime provisioning is independently verified.
  */
+/**
+ * Namespaced device IDs keep SYSTEM and interactive owner connections in
+ * separate Hub broker slots. The Hub accepts opaque IDs up to 128 chars.
+ */
+const PRELOGIN_ID_PATTERN=/^prelogin-system:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+export function createWindowsPreloginAgentIdentity():{id:string} {
+  return {id:'prelogin-system:'+randomUUID()};
+}
+
+export function parseWindowsPreloginAgentIdentity(value:unknown):string {
+  if(!value||typeof value!=='object'||!('id' in value)||
+     typeof value.id!=='string'||!PRELOGIN_ID_PATTERN.test(value.id))
+    throw new Error('PRELOGIN_AGENT_MACHINE_IDENTITY_INVALID');
+  return value.id;
+}
+
+/**
+ * A scheduler-level observation, not proof of an authenticated Hub session.
+ * Keep the SYSTEM transport available while the interactive Agent runs: its
+ * separate ID and bounded capabilities provide a non-destructive handoff.
+ */
+export function preloginHandoffTaskObservation(
+  systemTaskState:string,ownerTaskState:string,machineIdentityValid:boolean,
+):'identity-unverified'|'system-task-not-running'|'prelogin-only'|'owner-task-running' {
+  if(!machineIdentityValid)return 'identity-unverified';
+  if(systemTaskState.toLowerCase()!=='running')return 'system-task-not-running';
+  if(ownerTaskState.toLowerCase()==='running')return 'owner-task-running';
+  return 'prelogin-only';
+}
+
 const PRELOGIN_CAPABILITIES = new Set([
   'machine.health',
   'windows.tasks',
