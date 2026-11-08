@@ -101,6 +101,53 @@ online and credential-scope conditions; that inspection is **not** a live
 MCP authorization request. No auth, Broker, CORE or routing source was
 modified.
 
+## P005 follow-up: T-479–T-484 (#539, #812, #485)
+
+- **Current upstream main:** `b5a3f8840517d65ecbd6a018699c4c8bdde09987`
+  (the #1102 S5 merge). A path-specific `git diff --name-only`
+  against the preceding `4e7db16...` main for `web/app.js`,
+  `src/product/device-target-resolution.ts` and `src/mcp/create-server.ts`
+  was **empty**. The old/current source behavior is unchanged, not newly
+  accepted in the installed product.
+- **Owner #1068:** still Draft/unmerged at
+  `94d38799e9e4b50fe84f7924e6fc84f90aeba090`; no owner source copied
+  to K15's branch.
+- **T-479:** #1110's exact-head CI run
+  [42411906346](https://github.com/Naveax/Nexowire/actions/runs/42411906346)
+  finished **7 jobs success**. That job list does not include K15's
+  nested `.mjs` commands, so K15 test discovery in hosted CI is
+  **NOT_RUN**, despite the workflow's success. An isolated VM rerun with
+  current main's exact `web/app.js` still yields same-name a11y TODOs;
+  owner #1068 distinct names PASS.
+- **T-480:** Four `physicalConsole` local-enrollment and reported-active
+  combinations (false, true/fresh, true/stale, inactive) cannot turn CORE
+  or ROOT labels into a verified native input grant. Physical input is
+  **NOT_RUN**, and no protected authorization code is modified.
+- **T-481:** Null/undefined/false online telemetry suppresses stale
+  `adminBridgeReady` and Bridge APPLY; only a known-online machine yields
+  a Broker-ready *report*. The UI still calls unknown telemetry
+  `Çevrimdışı`, not an explicit third card state; owner can assess wording.
+- **T-482:** AUTO enabled with zero or two same-named devices is a saved
+  preference, not implicit pairing or an action. Render sends no POST;
+  actual MCP admission still separately requires scoped online ownership.
+- **T-483:** With two identical long Unicode names, the #1068 candidate
+  distinguishes action names on each render, unlike main. A separate
+  expected TODO isolates **ordinal label instability**: for the same
+  `device-alpha` on reorder, the CORE accessible name changes from
+  `Aynı PC · cihaz 1 · ...` to `Aynı PC · cihaz 2 · ...`. The target ID
+  remains stable, so this is an owner a11y/identity *review finding*, not
+  proof of a wrong-machine dispatch or native permission bug.
+- **T-484:** K10 browser evidence boundaries and actionable card cases
+  are separated in `P005_BROWSER_ACCEPTANCE.md`; no K10 branch files
+  or hosted screenshots were changed/created here.
+
+Source-only verification (Node 24.22.1): current main UI **11 PASS,
+5 expected TODO**; detached #1068 UI **15 PASS, 1 expected TODO**;
+main real pure resolver **13 PASS, 0 FAIL**. Current owner candidate's
+one TODO is the new ordinal stability observation, not an accepted fix.
+K15's entire P005 matrix remains unverified on a physical Windows
+machine, live account and assistive technology.
+
 Reproduction:
 
 ```sh
