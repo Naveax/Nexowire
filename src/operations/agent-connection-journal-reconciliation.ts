@@ -95,3 +95,38 @@ export function reconcileConnectionBoundAgentOperation(input: {
     ...(agentRecord ? { agentRecord } : {}),
   });
 }
+
+/**
+ * A continuity phase is NOT a grant. Socket-connected and authenticated are
+ * distinct, and journal terminal metadata is NOT independent OS-effect proof.
+ * This is a read-only snapshot for diagnostics, never a dispatch gate.
+ */
+export type ConnectionContinuityState =
+  | 'SOCKET_CONNECTED'
+  | 'AUTHENTICATED_ONLINE'
+  | 'MUTATION_DISPATCHED'
+  | 'MUTATION_COMPLETED'
+  | 'UNKNOWN'
+  | 'REVOKED'
+  | 'DISCONNECTED';
+
+export function connectionContinuityState(input: {
+  socketConnected: boolean;
+  authenticated: boolean;
+  revoked?: boolean;
+  mutationDispatched?: boolean;
+  assessment?: AgentOperationAssessment;
+}): ConnectionContinuityState {
+  if (input.revoked) return 'REVOKED';
+  if (input.mutationDispatched) {
+    if (input.assessment?.state === 'agent_confirmed') {
+      // Agent journal terminal metadata only; external effect is NOT proven.
+      return 'MUTATION_COMPLETED';
+    }
+    if (!input.socketConnected || !input.authenticated) return 'UNKNOWN';
+    return input.assessment?.state === 'agent_in_progress'
+      ? 'MUTATION_DISPATCHED' : 'UNKNOWN';
+  }
+  if (!input.socketConnected) return 'DISCONNECTED';
+  return input.authenticated ? 'AUTHENTICATED_ONLINE' : 'SOCKET_CONNECTED';
+}
