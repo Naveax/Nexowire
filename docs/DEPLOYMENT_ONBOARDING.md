@@ -98,6 +98,16 @@ If a first-run attempt is interrupted, inspect readiness and existing credential
 
 This is a **decision aid**, not an automatic retry script. Real paired-device and remote MCP health must be verified independently; Windows pairing and manual operator bootstrap are different flows.
 
+## Platform ownership and explicit consent
+
+| Workflow | Who may decide / state changes | Unsupported shortcut |
+| --- | --- | --- |
+| Normal hosted Windows installation | The user explicitly approves the account pairing in the browser; normal account linkage is not permission to expose a self-host Hub. | Do not require CLI credentials, local Tailscale or an elevation prompt to make **BAĞLA** succeed. |
+| Windows self-host `node bootstrap` | The **same Windows user** must approve local Scheduled Tasks and CurrentUser DPAPI credential state; separately approve optional public Funnel exposure. | Do not switch to an Administrator identity to bypass failures, share DPAPI state across accounts or silently add `--tailscale-funnel`. |
+| Linux/macOS manual operator `onboard` | The designated operator must approve explicit credential issuance and a supported protected-secret source on that host; the Windows `node bootstrap` path is rejected. | Do not promise per-user Windows Scheduled Tasks/DPAPI or unattended credential writes on Linux/macOS. |
+
+These workflows cannot inherit one another's permissions. A plan/readiness result is not consent, a source-only successful test is not a real installer acceptance, and a missing owner approval means the side-effecting command stays **NOT_RUN**.
+
 For remote deployments, `nexowire doctor --remote` remains the readiness gate. Onboarding does not pretend a loopback/plaintext/missing-TLS deployment is production-ready merely because credentials now exist. Linux/manual hosting requires its own supported, separately verified Agent secret source and lifecycle; the Windows Scheduled Task/DPAPI recipe does not transfer automatically.
 
 Remote readiness still does **not** prove ChatGPT can authenticate, discover the intended device, or call `machine_snapshot` and `machine_health`. Verify those paths with the real client before declaring the connection complete.
