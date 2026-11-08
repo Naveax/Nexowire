@@ -169,6 +169,73 @@ partial for physical/UI semantics; T-258 and narrow T-259 are offline-covered.
 Issue #485's signed installer, native pairing/recovery and #539's multi-layer
 error-origin contract remain separate protected owner work.
 
+## P006 T-535…T-539 — same-source RED / proposal GREEN (8 Nov 2026)
+
+**Source provenance:** upstream main now
+`52d452f717d891eeaf4c2b9aff3c6e1ea68369b0`; UI `web/connect.js`
+retains blob `a417a2715333ab555cbda25d1b3c020aa19d8b6a`.
+Owner Draft [#1068](https://github.com/Naveax/Nexowire/pull/1068)
+remains at `94d38799e9e4b50fe84f7924e6fc84f90aeba090` with UI blob
+`5618fd2a8a1bdfcd5d7e1a2ef7db688b8ed3eda1`.
+
+**T-535:** The actual owner `connect.js` receives a synthetic blank
+`pairingId`/`token` HTTP 200 response; original source navigates (RED).
+The test then runs an **in-memory replacement only** requiring
+`!value.trim()`; the blank results show `Hata` without navigation, and a
+valid ID/token still navigates (candidate GREEN). No owner source file
+changed; no production fix or device acceptance is claimed.
+
+**T-536:** 429 with `Retry-After: 15` still presents exactly the same
+generic message as 503 (RED). A test-only in-memory candidate adds a
+different rate-limit message with a bounded 15-second display hint and
+leaves 503 generic (candidate GREEN). No actual retry timing or server
+rate limiting was changed; owner #1068 chooses final behavior.
+
+**T-537:** GitHub's latest release is
+[v1.0.8](https://github.com/Naveax/Nexowire/releases/tag/v1.0.8),
+but the connection screen intentionally pins installer commit
+`96315d5dd4986fffbd24a96859309271d2a88ffe`. Its
+`installers/Nexowire-Setup.cmd` blob
+`8f7880123a0e21e345fcd1d9299514a0cc965c2b` explicitly sets
+`NX_VERSION=1.0.7` and downloads v1.0.7. UI CTA says v1.0.7 and
+does not claim to install v1.0.8/latest (**PASS source/VM**).
+K06 documentation can clarify pinned tested installer versus latest
+release; modifying installer binaries is release-owner work.
+
+**T-538:** A successful synthetic POST holds the in-page click handler
+busy while callback navigation is requested; a second click yields no
+second POST or navigation (**PASS source/VM**). Actual out-of-order
+responses across sessions, tabs or live requests are **NOT_RUN**.
+
+**T-539, new opt-in RED:** A synthetic fetch rejection containing a long
+Unicode fixture token is directly exposed in
+`error-message.textContent` via raw caught `error.message`, on both main
+and #1068. This source-level display gate **FAILS**. It does **not**
+prove that native browser fetch errors or live backend replies include
+tokens. Owner can map known actionable exceptions to user-safe messages
+and use a generic fallback for unexpected diagnostic details; K01 may
+not modify auth, tokens, logging or owner web source.
+
+### Repeatable local commands and results
+
+```sh
+node --test test/delegated/k01/issue485-state-truth.test.mjs
+# main: 19 tests / 13 PASS / 6 SKIP / 0 FAIL
+K01_CONNECT_REF=FETCH_HEAD K01_EXPECT_OWNER_VERSION=1 node --test test/delegated/k01/issue485-state-truth.test.mjs
+# owner #1068: 19 tests / 16 PASS / 3 SKIP / 0 FAIL
+K01_RUN_OPEN_NEGATIVES=1 node --test test/delegated/k01/issue485-state-truth.test.mjs
+# main: 13 PASS / 3 SKIP / 3 FAIL (blank pairing, 429, raw error token)
+K01_CONNECT_REF=FETCH_HEAD K01_RUN_OPEN_NEGATIVES=1 node --test test/delegated/k01/issue485-state-truth.test.mjs
+# owner #1068: 13 PASS / 3 SKIP / 3 FAIL (same three)
+```
+
+Previous exact HEAD `25f505f0fa36d52ec3ea0c23674a1d92de4a2df9`
+had [seven-job CI success](https://github.com/Naveax/Nexowire/actions/runs/42473583303).
+However the K01 nested `.test.mjs` is **not selected by the required CI**;
+new fixtures were run locally, **hosted NOT_RUN** unless an explicit
+per-file runner proves execution on exact HEAD. Real Windows/Agent/Hub,
+browser screenshots, device pairing/loopback listener **NOT_RUN**.
+
 ## T-260: real browser attempt and blocker
 
 `browser-capture.mjs` serves the three web source files through an isolated
