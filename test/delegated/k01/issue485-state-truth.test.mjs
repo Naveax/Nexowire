@@ -241,6 +241,17 @@ test('T-257 owner candidate: terminal account error receives focus', {
 test('T-259 OPEN NEGATIVE: empty success pairing fields must never navigate', {
   skip: process.env.K01_RUN_OPEN_NEGATIVES !== '1' && 'unfixed on main and owner #1068',
 }, async () => {
+  // Pair one valid control with the negative, so a blanket refusal to pair
+  // cannot make the negative gate pass after the owner-side fix.
+  const valid = await boot({ query: search(), pairing: async () =>
+    Response.json({ pairingId: 'pair-395', token: 'value-395' }) });
+  await valid.get('approve').dispatch('click');
+  assert.equal(valid.navigations.length, 1);
+  const callback = new URL(valid.navigations[0]);
+  assert.equal(callback.searchParams.get('pairing_id'), 'pair-395');
+  assert.equal(callback.searchParams.get('token'), 'value-395');
+  assert.equal(callback.searchParams.get('state'), 'test-nonce');
+
   const violations = [];
   for (const body of [
     { pairingId: '', token: 'fixture-value' },
@@ -256,4 +267,68 @@ test('T-259 OPEN NEGATIVE: empty success pairing fields must never navigate', {
     }
   }
   assert.deepEqual(violations, [], 'empty success fields must never navigate or present a non-error state');
+});
+
+test('T-396 #539: delayed dashboard 401 cannot race with a pairing POST', async () => {
+  const account = deferred();
+  const f = await boot({ query: search(), dashboard: () => account.promise });
+  assert.equal(f.get('approve').disabled, true);
+  assert.equal(f.requests.filter(({ path }) => path === '/api/v1/pairing').length, 0);
+  assert.equal(f.navigations.length, 0);
+  account.resolve(Response.json({}, { status: 401 }));
+  await flush();
+  assert.match(f.navigations[0], /^\/auth\/github\/start\?next=/);
+  assert.equal(f.requests.filter(({ path }) => path === '/api/v1/pairing').length, 0);
+  assert.equal(f.get('approve').handlers.has('click'), false);
+  // One loadAccount() call awaits dashboard before registering the click handler.
+  // It cannot start a later pairing on the same page after this 401.
+});
+
+test('T-397 #485: deceptive callback authority and missing context never reach pairing', async () => {
+  const badQueries = [
+    search({ callback: 'http://127.0.0.1.evil.invalid:49610/nexowire-connect' }),
+    search({ callback: 'http://evil.invalid@127.0.0.1:49610/nexowire-connect' }),
+    search({ callback: 'http://127.0.0.1:49610@evil.invalid/nexowire-connect' }),
+    search({ callback: 'http://127.0.0.1:49610/nexowire-connect/wrong' }),
+    search({ state: '' }),
+    search({ deviceId: '' }),
+    search({ deviceName: '' }),
+  ];
+  for (const query of badQueries) {
+    const f = await boot({ query });
+    assert.equal(f.get('pair-panel').classes.has('hidden'), true);
+    assert.equal(f.requests.filter(({ path }) => path.startsWith('/api/v1/')).length, 0);
+    assert.equal(f.navigations.length, 0);
+    assertNoConnectedClaim(f);
+  }
+});
+
+test('T-398 owner candidate: terminal 403 differs from transient 503', {
+  skip: process.env.K01_EXPECT_OWNER_VERSION !== '1' && 'requires #1068 owner candidate',
+}, async () => {
+  const quota = await boot({ query: search(), pairing: async () =>
+    Response.json({ error: 'DEVICE_LIMIT_REACHED' }, { status: 403 }) });
+  await quota.get('approve').dispatch('click');
+  const outage = await boot({ query: search(), pairing: async () =>
+    Response.json({ error: 'fixture' }, { status: 503 }) });
+  await outage.get('approve').dispatch('click');
+  assert.equal(quota.get('approve').disabled, true);
+  assert.equal(outage.get('approve').disabled, false);
+  assert.notEqual(quota.get('error-message').textContent, outage.get('error-message').textContent);
+});
+
+test('T-398 OPEN NEGATIVE: 429 Retry-After should not be identical to 503 error', {
+  skip: process.env.K01_RUN_OPEN_NEGATIVES !== '1' && 'unfixed on main and owner #1068',
+}, async () => {
+  const limited = await boot({ query: search(), pairing: async () =>
+    Response.json({ error: 'RATE_LIMITED' }, { status: 429, headers: { 'Retry-After': '15' } }) });
+  await limited.get('approve').dispatch('click');
+  const unavailable = await boot({ query: search(), pairing: async () =>
+    Response.json({ error: 'unavailable' }, { status: 503 }) });
+  await unavailable.get('approve').dispatch('click');
+  assert.equal(limited.navigations.length, 0);
+  assert.equal(unavailable.navigations.length, 0);
+  assert.notEqual(limited.get('error-message').textContent,
+    unavailable.get('error-message').textContent,
+    '429 has Retry-After but currently shows the same generic error as HTTP 503');
 });
