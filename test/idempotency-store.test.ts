@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import { spawnSync } from 'node:child_process';
 import {
   IdempotencyStore,
   IdempotencyStoreError,
@@ -119,18 +120,26 @@ test('in-progress records become unknown after hub restart', async () => {
   );
 
   try {
-    const first = new IdempotencyStore(root);
     const fingerprint = operationFingerprint({
       targetId: 'device-1',
       capability: 'files.patch',
       payload: { path: 'a.txt', operations: [{ old: 'a', next: 'b' }] },
     });
-    await first.begin({
-      key: 'patch-1',
-      fingerprint,
-      capability: 'files.patch',
-      targetId: 'device-1',
+    // A restart is a *different process incarnation*, not a second store
+    // object inside the still-running Hub. Reproduce a real abandoned claim.
+    const crashed = spawnSync(process.execPath, [
+      '--import', 'tsx', '--input-type=module', '--eval', `
+        import { IdempotencyStore } from './src/operations/idempotency-store.js';
+        const store = new IdempotencyStore(process.argv[1]);
+        await store.begin({
+          key: 'patch-1', fingerprint: process.argv[2],
+          capability: 'files.patch', targetId: 'device-1',
+        });
+      `, root, fingerprint,
+    ], {
+      cwd: process.cwd(), encoding: 'utf8', windowsHide: true, timeout: 20_000,
     });
+    assert.equal(crashed.status, 0, crashed.stderr);
 
     const second = new IdempotencyStore(root);
     await second.initialize();
