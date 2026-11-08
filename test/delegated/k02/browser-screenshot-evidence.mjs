@@ -66,7 +66,7 @@ export function auditBrowserScreenshot(input) {
     overflowIds, browserVersion, screenshotScale } = evidence;
   if (!Number.isInteger(targetCssWidth) || targetCssWidth <= 0 ||
       observedInnerWidth !== targetCssWidth ||
-      !Number.isFinite(documentScrollWidth) ||
+      !Number.isSafeInteger(documentScrollWidth) || documentScrollWidth < 0 ||
       !['css', 'device'].includes(screenshotScale) ||
       typeof browserVersion !== 'string' || browserVersion.trim().length < 3) {
     return result('UNKNOWN', 'missing browser viewport, scale, or version provenance');
