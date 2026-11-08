@@ -124,6 +124,35 @@ jobs:
           grep -qx '# fail 0' "$RUNNER_TEMP/nw-s5-qa-k111218.tap"
           grep -qx '# skipped 0' "$RUNNER_TEMP/nw-s5-qa-k111218.tap"
           grep -qx '# todo 0' "$RUNNER_TEMP/nw-s5-qa-k111218.tap"
+      - name: Verify K01 K02 K03 K04 isolated web UX regressions
+        # Real source / VM and CSS fixture QA; does not claim authenticated browser acceptance.
+        shell: bash
+        run: |
+          node --test --test-reporter=tap --import tsx --test-concurrency=1 \
+            test/delegated/k01/connect-state.test.ts \
+            test/delegated/k02/responsive-css.test.ts \
+            test/delegated/k03/panel-states.test.mjs \
+            test/delegated/k04/admin-a11y.test.mjs \
+            > "$RUNNER_TEMP/nw-ui-k0104.tap"
+          cat "$RUNNER_TEMP/nw-ui-k0104.tap"
+          grep -qx '# tests 57' "$RUNNER_TEMP/nw-ui-k0104.tap"
+          grep -qx '# pass 57' "$RUNNER_TEMP/nw-ui-k0104.tap"
+          grep -qx '# fail 0' "$RUNNER_TEMP/nw-ui-k0104.tap"
+          grep -qx '# skipped 0' "$RUNNER_TEMP/nw-ui-k0104.tap"
+          grep -qx '# todo 0' "$RUNNER_TEMP/nw-ui-k0104.tap"
+      - name: Verify K09 roadmap evidence (4 exact tests)
+        # Source/document ledger QA only; not live S1-S5 release acceptance.
+        shell: bash
+        run: |
+          node --test --test-reporter=tap --import tsx --test-concurrency=1 \
+            test/delegated/k09/roadmap-evidence.test.mjs \
+            > "$RUNNER_TEMP/nw-k09-roadmap.tap"
+          cat "$RUNNER_TEMP/nw-k09-roadmap.tap"
+          grep -qx '# tests 4' "$RUNNER_TEMP/nw-k09-roadmap.tap"
+          grep -qx '# pass 4' "$RUNNER_TEMP/nw-k09-roadmap.tap"
+          grep -qx '# fail 0' "$RUNNER_TEMP/nw-k09-roadmap.tap"
+          grep -qx '# skipped 0' "$RUNNER_TEMP/nw-k09-roadmap.tap"
+          grep -qx '# todo 0' "$RUNNER_TEMP/nw-k09-roadmap.tap"
       - name: Verify delegated K06 K07 K08 onboarding and MCP docs (32 exact tests)
         # Nested .mjs docs checks are excluded by npm test; never infer pass without execution.
         shell: bash
