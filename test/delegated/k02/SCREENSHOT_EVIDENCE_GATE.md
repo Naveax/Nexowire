@@ -1,0 +1,42 @@
+# #539 R21/R22 — hosted ekran kabul kanıtı (T-523)
+
+Bu çalışma otomatik olarak ekran görüntüsü üretmez. Chromium'un açılması
+engelliyse **NOT_RUN** sonucunu korur. Kaynak kodu/TAP/yeşil CI ile gerçek
+görsel ölçümün tamamlandığını ileri sürmez.
+
+`browser-screenshot-evidence.mjs` kontrolünün alanları:
+
+- `sourceSha`: test edilen tam kaynak commit SHA'sı.
+- `captureState`: `not_run`, `queued`, `in_progress` veya `completed`.
+- `attempted`: tarayıcı gerçekten başlatılarak capture denendi mi?
+- `screenshotFile`, `screenshotSha256`, `screenshotScale`: yerel PNG adı,
+  SHA-256 ve `css` ya da `device` piksel modu.
+- `observedInnerWidth`, `documentScrollWidth`, `overflowIds`,
+  `unknownVisible`: `mobile-dom-measurements.html` tarafından gerçek DOM'dan
+  toplanacak ölçümler.
+- `browserVersion`: ölçen tarayıcının sürümü.
+
+Örnek test:
+
+```sh
+node --test --test-reporter=tap test/delegated/k02/browser-screenshot-evidence.test.mjs
+```
+
+Negatif eşikler:
+
+| Gözlem | Rapor |
+| --- | --- |
+| Browser hiç çalışmadı / ekran görüntüsü yok, capture denenmedi | `NOT_RUN` |
+| Sırada veya devam ediyor | `PENDING` |
+| Capture denendi ama PNG kayboldu; yanlış checksum; dosya yolu kaçışı | `FAIL` |
+| Kaynak SHA uyumsuz; eksik viewport veya tarayıcı sürümü | `UNKNOWN` |
+| DOM yatay taşma veya UNKNOWN durumu görünmez | `FAIL` |
+| PNG ve kayıt içsel tutarlı | `REVIEW_REQUIRED` |
+
+Son satır **PASS değildir**: unsigned PNG + JSON kendi başına gerçek hosted
+runner kimliği ve ekran görüntüsünün özgünlüğünü ispatlamaz. GitHub exact-HEAD
+job/artefact bağlantısı, tarayıcı logu, viewport ve ekran görüntüsü owner
+tarafından ayrıca kontrol edilmeden #485/#539 ve T-406 tamamlanmış sayılmaz.
+
+Bu paket yalnız `test/delegated/k02/**` içindedir; Ömer'in tarayıcı, CORE,
+Windows, CI veya yayın dosyalarına dokunulmadı.
