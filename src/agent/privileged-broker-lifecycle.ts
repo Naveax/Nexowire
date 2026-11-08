@@ -278,11 +278,13 @@ export function buildPrivilegedBrokerLauncher(
       'Cannot determine Nexowire CLI entrypoint for broker task.',
     );
   }
+  const effectMode = requestedBrokerEffectMode(env);
   const execArgv = [
     ...(options.execArgv ?? process.execArgv),
     cliEntrypoint,
     'privileged-broker',
     'run',
+    ...(effectMode === 'local-owner' ? ['--local-owner-effects'] : []),
   ];
 
   const lines = [
@@ -291,6 +293,8 @@ export function buildPrivilegedBrokerLauncher(
     // not the installer process's sanitized task-registration environment.
     // Remove preload/import hooks before launching the privileged Node host.
     ...PRIVILEGED_NODE_INJECTION_ENV.map(name=>'$env:'+name+'=$null'),
+    // Inherited user environment cannot opt into privileged effects.
+    '$env:NEXOWIRE_PRIVILEGED_BROKER_EFFECT_MODE=$null',
   ];
 
   const brokerHost =
@@ -299,11 +303,9 @@ export function buildPrivilegedBrokerLauncher(
     env.NEXOWIRE_PRIVILEGED_BROKER_PORT?.trim();
   const secretFile =
     env.NEXOWIRE_PRIVILEGED_BROKER_SECRET_FILE?.trim();
-  const effectMode = requestedBrokerEffectMode(env);
   if (effectMode === 'local-owner') {
-    // Selection is persisted only by the local elevated task installer.
-    // Do not persist a bearer token, cloud credential or plaintext secret.
-    lines.push("$env:NEXOWIRE_PRIVILEGED_BROKER_EFFECT_MODE='local-owner'");
+    // The trusted task action's fixed argv, never an inherited user env var,
+    // authorizes this startup mode. Do not persist plaintext credentials.
     for (const name of [
       'NEXOWIRE_CORE_AUTHORITY_URL',
       'NEXOWIRE_AGENT_IDENTITY_FILE',
