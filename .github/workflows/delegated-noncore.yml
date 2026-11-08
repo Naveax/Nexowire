@@ -1,4 +1,4 @@
-name: Delegated Non-Core Seven-Path QA (K13 P006)
+name: Delegated Non-Core CI Evidence (K13 P005-P007)
 
 on:
   push:
@@ -30,10 +30,16 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
-      - name: Verify negative CI-evidence contracts
-        run: node --test test/delegated/k13/p006-ci-gates.test.mjs
+      - name: Verify discovery and negative CI-evidence contracts
+        run: >-
+          node --test
+          test/delegated/k13/p005-main-ci-inventory.test.mjs
+          test/delegated/k13/p005-pr-ci-coverage.test.mjs
+          test/delegated/k13/p006-ci-gates.test.mjs
       - name: Inventory source-discovery gaps
-        run: node scripts/delegated/k13/p006-ci-gates.mjs --inventory .
+        run: |
+          node scripts/delegated/k13/p005-main-ci-inventory.mjs .
+          node scripts/delegated/k13/p006-ci-gates.mjs --inventory .
       - name: Explicitly run all seven missing main-CI delegated tests
         shell: bash
         run: |
@@ -48,3 +54,28 @@ jobs:
             > "$RUNNER_TEMP/k13-p006-seven.tap"
           cat "$RUNNER_TEMP/k13-p006-seven.tap"
           node scripts/delegated/k13/p006-ci-gates.mjs --tap "$RUNNER_TEMP/k13-p006-seven.tap"
+
+  pr1112-auxiliary:
+    # Preserve unique historical K13 P005 evidence without promoting it to
+    # required PR CI for #1112. Its source HEAD differs from this run HEAD.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 3ca2cd12f003768ac66dea0f242b6b8007587101
+          persist-credentials: false
+      - name: Verify pinned historical PR source SHA
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "3ca2cd12f003768ac66dea0f242b6b8007587101"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Execute historical K13 CI evidence regression tests
+        run: >-
+          node --test
+          test/delegated/k13/main-ci-discovery.test.mjs
+          test/delegated/k13/main-ci-evidence-gate.test.mjs

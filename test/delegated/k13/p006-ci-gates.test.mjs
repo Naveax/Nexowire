@@ -108,6 +108,9 @@ test('fork CI workflow stays read-only and explicitly selects all seven omitted 
   assert.match(workflow, /persist-credentials: false/);
   assert.match(workflow, /node-version: \[22, 24\]/);
   assert.match(workflow, /git rev-parse HEAD.*GITHUB_SHA/);
+  assert.match(workflow, /test\/delegated\/k13\/p005-main-ci-inventory\.test\.mjs/);
+  assert.match(workflow, /test\/delegated\/k13\/p005-pr-ci-coverage\.test\.mjs/);
+  assert.match(workflow, /ref: 3ca2cd12f003768ac66dea0f242b6b8007587101/);
   for (const name of [
     'k09/roadmap-evidence.test.mjs',
     'k11/issue-487-commercial-unknown.test.ts',
@@ -117,5 +120,9 @@ test('fork CI workflow stays read-only and explicitly selects all seven omitted 
     'pool-k17/markdown-anchors.test.ts',
     'pool-k19/audit-physical-pass-labels.test.ts',
   ]) assert.ok(workflow.includes('test/delegated/' + name), `missing explicit test ${name}`);
+  for (const name of [
+    'test/delegated/k09/roadmap-evidence.test.mjs',
+    'test/delegated/k16/environment-doctor-contract.test.ts',
+  ]) assert.equal(workflow.split(name).length - 1, 1, `duplicate selected test ${name}`);
   assert.doesNotMatch(workflow, /pull_request_target|secrets\.|contents: write|id-token: write/);
 });
