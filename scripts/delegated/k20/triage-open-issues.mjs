@@ -10,7 +10,7 @@ const REVIEWED = new Map([
   [1001, ['journal-owner', 'blocked', 'Native journal ownership and process identity are CORE']],
   [974, ['journal-wal', 'blocked', 'WAL durability and installed-Agent restart are CORE']],
   [812, ['status-ux', 'candidate', 'Read-only status terminology QA only; authorization is CORE', 'K15 T-085–T-090']],
-  [780, ['coding-agent', 'candidate', 'Reviewed-diff UX acceptance notes only; sandbox/Git authority is CORE', 'unassigned: request ŞEF scope']],
+  [780, ['coding-agent', 'umbrella', 'Product epic: individual sandbox/Git/checkpoint requirements need their own evidence']],
   [617, ['admin-bridge', 'blocked', 'Elevated Windows/Hyper-V control is CORE']],
   [588, ['file-ux', 'candidate', 'Offline transfer progress/error QA only; streaming/auth is CORE', 'K19 T-109–T-114']],
   [587, ['journal-rollback', 'blocked', 'Anti-replay and independent journal authority are CORE']],
@@ -28,7 +28,24 @@ const REVIEWED = new Map([
   [271, ['stack-acl', 'blocked', 'Privileged runtime ACLs require owner and Windows acceptance']],
   [269, ['onboarding', 'candidate', 'Signed bootstrap user guidance only; native installer/release is protected', 'K06 T-031–T-036']],
   [265, ['mcp-router', 'blocked', 'Live Hub rollout and owner-bound routing are protected']],
-  [260, ['admin-bridge', 'blocked', 'Privileged Broker and installed Stack upgrade are CORE']],
+]);
+
+// Reviewed against the 22 actual open /issues records on 2026-11-07. These
+// classifications describe issue lineage and severity, NOT completion or
+// permission to work on a protected implementation. An unknown issue fails
+// closed into "review" instead of inheriting a nearby issue's classification.
+const ISSUE_LINEAGE = new Map([
+  [1006, ['standalone', 'P0']], [1001, ['standalone', 'P0']],
+  [974, ['standalone', 'P0']], [812, ['standalone', 'unspecified']],
+  [780, ['umbrella', 'P1']], [617, ['standalone', 'P0']],
+  [588, ['standalone', 'P1']], [587, ['standalone', 'P0']],
+  [540, ['subtask', 'P1', 539, 'R07']], [539, ['umbrella', 'mixed']],
+  [487, ['subtask', 'P0', 482, 'S5']], [486, ['subtask', 'P0', 482, 'S4']],
+  [485, ['subtask', 'P0', 482, 'S3']], [484, ['subtask', 'P0', 482, 'S2']],
+  [482, ['umbrella', 'P0']], [481, ['umbrella', 'index']],
+  [402, ['standalone', 'P0']], [323, ['standalone', 'P0']],
+  [322, ['standalone', 'P0']], [271, ['standalone', 'P0']],
+  [269, ['standalone', 'P4']], [265, ['standalone', 'P2']],
 ]);
 
 export function triage(pages) {
@@ -38,16 +55,21 @@ export function triage(pages) {
   const byNumber = new Map();
   let pullRequests = 0;
   let duplicates = 0;
+  let closedIssues = 0;
   for (const page of pages) {
     for (const item of page) {
       if (!item || !Number.isSafeInteger(item.number) || item.number < 1 ||
           typeof item.title !== 'string' || typeof item.html_url !== 'string' ||
-          !/^https:\/\/github\.com\/Naveax\/Nexowire\/issues\/\d+$/.test(item.html_url)) {
+          item.html_url !== `https://github.com/Naveax/Nexowire/issues/${item.number}`) {
         // A PR also appears under /issues, but its link is /pull/: never admit one.
         if (item?.pull_request && Number.isSafeInteger(item.number)) { pullRequests++; continue; }
         throw new TypeError('Malformed or foreign issue record');
       }
       if (item.pull_request) { pullRequests++; continue; }
+      if (item.state === 'closed') { closedIssues++; continue; }
+      if (item.state !== undefined && item.state !== 'open') {
+        throw new TypeError('Issue state must be open or closed');
+      }
       if (byNumber.has(item.number)) { duplicates++; continue; }
       byNumber.set(item.number, item);
     }
@@ -55,8 +77,11 @@ export function triage(pages) {
   const issues = [...byNumber.values()].sort((a, b) => b.number - a.number).map(item => {
     const [topic, disposition, boundary, coverage = '—'] = REVIEWED.get(item.number) ||
       ['unreviewed', 'review', 'Unknown issue: manually verify scope before assigning'];
+    const [kind = 'unreviewed', priority = 'unreviewed', parentIssue = null, parentSlice = null] =
+      ISSUE_LINEAGE.get(item.number) || [];
     return { number: item.number, title: item.title, url: item.html_url,
-      topic, disposition, boundary, coverage };
+      topic, disposition, boundary, coverage, kind, priority, parentIssue,
+      parentSlice, onHold: item.number === 271 };
   });
   const candidates = issues.filter(x => x.disposition === 'candidate');
   const byTopic = new Map();
@@ -69,7 +94,15 @@ export function triage(pages) {
     totalRecords: pages.reduce((n, p) => n + p.length, 0),
     pullRequestsExcluded: pullRequests,
     duplicateIssuesExcluded: duplicates,
+    closedIssuesExcluded: closedIssues,
     issueCount: issues.length,
+    issues,
+    byKind: {
+      standalone: issues.filter(x => x.kind === 'standalone'),
+      subtask: issues.filter(x => x.kind === 'subtask'),
+      umbrella: issues.filter(x => x.kind === 'umbrella'),
+      unreviewed: issues.filter(x => x.kind === 'unreviewed'),
+    },
     candidates,
     candidateGroups: [...byTopic].map(([topic, issueRefs]) => ({ topic, issueRefs,
       coverage: [...new Set(issueRefs.map(x => x.coverage))].join('; '),
@@ -85,6 +118,9 @@ export function markdown(result) {
     '# Open-issue non-core triage (offline snapshot)',
     '',
     `Issues: ${result.issueCount}; excluded PR entries: ${result.pullRequestsExcluded}; repeated issue entries: ${result.duplicateIssuesExcluded}.`,
+    `Closed issue entries excluded: ${result.closedIssuesExcluded}.`,
+    `Lineage: ${result.byKind.standalone.length} standalone, ${result.byKind.subtask.length} subtasks, ${result.byKind.umbrella.length} umbrella/index, ${result.byKind.unreviewed.length} unreviewed.`,
+    '#271 remains **ON HOLD** by #481 owner instruction; open/P0 does not authorize remediation.',
     `Non-core candidate slices (de-duplicated by topic): ${result.candidateGroups.length} from ${result.candidates.length} issue references.`,
     'Candidate means a **read-only/non-core subset**, not that the parent issue is resolved or implementation authorized.',
     '',
@@ -96,6 +132,11 @@ export function markdown(result) {
     const safe = s => s.replace(/\|/g, '\\|').replace(/[\r\n]/g, ' ');
     const refs = group.issueRefs.map(x => `[#${x.number}](${x.url})`).join(', ');
     lines.push(`| ${refs} | ${safe(group.boundaries.join('; '))} | ${safe(group.coverage)} |`);
+  }
+  lines.push('', '| Open issue | Lineage | Priority | Scope / hold |', '| --- | --- | --- | --- |');
+  for (const item of result.issues) {
+    const lineage = item.parentIssue ? `${item.kind} of #${item.parentIssue}/${item.parentSlice}` : item.kind;
+    lines.push(`| [#${item.number}](${item.url}) | ${lineage} | ${item.priority} | ${item.onHold ? 'OWNER ON HOLD; no work' : item.disposition} |`);
   }
   lines.push('', `Blocked CORE/billing/release issues: ${result.blocked.length}.`,
     `Umbrella/index issues (not separate tasks): ${result.umbrellas.length}.`,
