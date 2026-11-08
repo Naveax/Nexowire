@@ -86,6 +86,10 @@ test('measurable DOM includes long Unicode, URL, UNKNOWN status and real element
   assert.match(fixture, /window\.__nexowireK02ViewportEvidence = result/);
   assert.match(fixture, /getComputedStyle\(document\.getElementById\('device-name'\)\)\.overflowWrap/);
   assert.match(fixture, /window\.nexowireK02Measure = measure/);
+  assert.match(fixture, /id="retry-error" class="secondary"/);
+  assert.match(fixture, /id="support-action" class="secondary"/);
+  assert.match(fixture, /offscreenRecoveryIds:|offscreenRecoveryIds,/);
+  assert.match(fixture, /recoveryActionsVisible: offscreenRecoveryIds\.length === 0/);
 });
 
 test('320/375/768px CSS source retains mobile grids and wrapping', { skip: sourceSkip }, () => {
@@ -115,6 +119,25 @@ test('forced-colors focus and reduced-motion have distinct CSS source contracts'
     '3px solid Highlight !important');
   assert.equal(value(rules, '*::after', 'animation', 375, ['prefers-reduced-motion:reduce']),
     'none !important');
+});
+
+test('combined reduced-motion and forced-colors do not remove keyboard outline', { skip: sourceSkip }, () => {
+  const rules = parseRules(css);
+  const both = ['forced-colors:active', 'prefers-reduced-motion:reduce'];
+  assert.equal(value(rules, 'button:focus-visible', 'outline', 320, both),
+    '3px solid Highlight !important');
+  assert.equal(value(rules, 'button:focus-visible', 'outline-offset', 320, both), '3px');
+  assert.equal(value(rules, '*::after', 'animation', 320, both), 'none !important');
+  const broken = parseRules(css.replace(/outline:3px solid Highlight !important;/,
+    'outline:none !important;'));
+  assert.notEqual(value(broken, 'button:focus-visible', 'outline', 320, both),
+    '3px solid Highlight !important');
+});
+
+test('mobile recovery actions retain a browser-measurable offscreen check', () => {
+  assert.match(fixture, /getBoundingClientRect\(\)/);
+  assert.match(fixture, /rect\.left < 0 \|\| rect\.right > innerWidth \|\| !visible\(el\)/);
+  assert.match(fixture, /offscreenRecoveryIds\.length === 0/);
 });
 
 test('negative: removing inherited wrap from both long-text sinks is detected', () => {
