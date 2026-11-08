@@ -112,6 +112,34 @@ export async function auditAdminDenials(source) {
   };
 }
 
+// Inspect the accessibility wiring to which the VM-mutated strings are bound.
+// This proves source markup relationships, not any screen reader announcement.
+export function assessAnnouncementMarkup(html) {
+  const tags = [...html.matchAll(/<([a-z][\w-]*)\b([^>]*)>/gi)];
+  const attributes = (source) => new Map([...source.matchAll(/([\w-]+)\s*=\s*"([^"]*)"/g)]
+    .map(([, key, value]) => [key, value]));
+  const indexed = new Map();
+  for (const [, tag, source] of tags) {
+    const attrs = attributes(source);
+    const id = attrs.get('id');
+    if (id) indexed.set(id, [...(indexed.get(id) ?? []), { tag, attrs }]);
+  }
+  const one = (id) => indexed.get(id)?.length === 1 ? indexed.get(id)[0].attrs : null;
+  const status = one('admin-pill');
+  const alert = one('admin-error');
+  const message = one('admin-error-message');
+  const title = one('admin-error-title');
+  const checks = {
+    statusLive: status?.get('role') === 'status' &&
+      status.get('aria-live') === 'polite' && status.get('aria-atomic') === 'true',
+    errorAlert: alert?.get('role') === 'alert',
+    alertLabelBound: Boolean(title && alert?.get('aria-labelledby') === 'admin-error-title'),
+    alertDescriptionBound: Boolean(message && alert?.get('aria-describedby') === 'admin-error-message'),
+    metricsBusy: one('admin-metrics')?.get('aria-busy') === 'true',
+  };
+  return { pass: Object.values(checks).every(Boolean), checks };
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   if (!process.argv[2]) {
     console.error('NOT_RUN: supply exact checked-out web/admin.js path');
@@ -119,6 +147,10 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   } else {
     try {
       const report = await auditAdminDenials(readFileSync(resolve(process.argv[2]), 'utf8'));
+      if (process.argv[3]) {
+        report.announcements = assessAnnouncementMarkup(readFileSync(resolve(process.argv[3]), 'utf8'));
+        report.pass &&= report.announcements.pass;
+      }
       console.log(JSON.stringify(report, null, 2));
       process.exitCode = report.pass ? 0 : 1;
     } catch (error) {
