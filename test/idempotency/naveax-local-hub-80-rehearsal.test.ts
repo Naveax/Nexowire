@@ -6,6 +6,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { IdempotencyStore } from '../../src/operations/idempotency-store.js';
+import {modelExitedHubWriter} from './fixtures/model-exited-hub-writer.js';
 
 test('NAVEAX synthetic 80-key legacy profile migrates without loss or replay', async (t) => {
   const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), 'nwx-naveax80-rehearsal-'));
@@ -56,7 +57,9 @@ test('NAVEAX synthetic 80-key legacy profile migrates without loss or replay', a
   const reserved = await hub.begin(newInput);
   assert.equal(reserved.created, true);
 
-  // A simulated restart must fence the abandoned reservation as UNKNOWN.
+  // An exited process incarnation, not a second object in one running Hub,
+  // must fence the abandoned reservation as UNKNOWN.
+  modelExitedHubWriter(stateDir);
   const restarted = new IdempotencyStore(stateDir);
   const unknown = await restarted.get(newInput.key);
   assert.equal(unknown?.status, 'unknown');
@@ -64,6 +67,8 @@ test('NAVEAX synthetic 80-key legacy profile migrates without loss or replay', a
   const same = await restarted.begin(newInput);
   assert.equal(same.created, false);
   assert.equal(same.record.operationId, reserved.record.operationId);
+  // The prior same-process store still observes the terminal UNKNOWN record;
+  // it cannot rewrite a recovered tombstone as success.
   await assert.rejects(() => hub.complete(newInput.key, 'succeeded'),
     { code: 'IDEMPOTENCY_TERMINAL_REWRITE_DENIED' });
   await assert.rejects(() => restarted.begin({ ...newInput, fingerprint: 'c'.repeat(64) }),
