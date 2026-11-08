@@ -54,6 +54,12 @@ test('hosted OAuth, local loopback and self-host Funnel are distinct URL familie
   assert.match(install, /oauth-protected-resource/);
   assert.match(install, /Giriş panelinin adresine kendin `\/mcp` ekleyip tahmin etme/);
   assert.match(install, /panel veya `localhost` adresini kullanma/);
+
+  const examples = section(doc, '### Connector address examples (source and trust boundary)');
+  assert.match(examples, /http:\/\/127\.0\.0\.1:<port>\/mcp.*Reject for remote ChatGPT/);
+  assert.match(examples, /unknown\.example\/mcp.*Reject as unverified/);
+  assert.match(examples, /actual non-null `mcpUrl` returned by the owner's `node connector`/);
+  assert.match(examples, /If `mcpUrl` is null.*NOT_RUN\/FAILED/);
 });
 
 test('platform descriptions do not present unverified Linux/macOS as Windows bootstrap', async () => {
@@ -78,6 +84,18 @@ test('platform descriptions do not present unverified Linux/macOS as Windows boo
   const doctor = await read('docs/environment-doctor.md');
   assert.match(doctor, /unavailable optional tools are warnings/);
   assert.match(doctor, /physicalAcceptance.*NOT_TESTED/);
+
+  const firstRun = section(doc, '## One-command Windows bootstrap (changes local state)');
+  const commands = [...firstRun.matchAll(/^nexowire node bootstrap[^\n]+$/gm)].map((m) => m[0]);
+  assert.equal(commands[0], 'nexowire node bootstrap --device-name work-pc',
+    'Ordinary local bootstrap must not silently opt in to public Funnel exposure');
+  assert.equal(commands[1], 'nexowire node bootstrap --device-name work-pc --tailscale-funnel');
+  assert.match(firstRun, /owner's informed approval/);
+  const bootstrap = await read('src/self-host-bootstrap.ts');
+  assert.match(bootstrap, /if \(arg === '--tailscale-funnel'\) \{\s*options\.tailscaleFunnel = true/);
+  const preflight = section(doc, '### Core setup versus optional environment tools');
+  assert.match(preflight, /node --import tsx scripts\/run-environment-doctor\.ts --tool=node:22/);
+  assert.match(preflight, /NOT_TESTED.*physical USB, phone, gamepad or VM acceptance/);
 });
 
 test('disconnection recovery is diagnostic-only and secret reveal stays separate', async () => {
@@ -132,6 +150,12 @@ test('risk categories explicitly separate credential reveal, issuance and exposu
   assert.match(consent, /deliberate, informed decision/);
   assert.match(consent, /NOT_RUN/);
   assert.match(consent, /do \*\*not\*\* grant admin\/CORE approval, automate elevation or authorize deployment/);
+
+  const recoveryGuide = section(doc, '## Recover the right flow before retrying');
+  assert.match(recoveryGuide, /BAĞLANIYOR….*TEKRAR DENE/);
+  assert.match(recoveryGuide, /onboard bootstrap --force.*not authenticated device health/);
+  assert.match(recoveryGuide, /failed check as \*\*FAIL\*\*.*unattempted check as \*\*NOT_RUN\*\*/);
+  assert.doesNotMatch(recoveryGuide, /Run `nexowire node connector` to debug/);
 });
 
 test('credential examples use protected-source references, not real inline values', async () => {
