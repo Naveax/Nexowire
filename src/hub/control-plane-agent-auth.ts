@@ -59,6 +59,7 @@ export function createControlPlaneAgentCredentialVerifier(
   options: ControlPlaneAgentVerifierOptions,
 ): (
   authorizationHeader: string | undefined,
+  signal?: AbortSignal,
 ) => Promise<RemoteAgentAuthorization | undefined> {
   const base = normalizeControlPlaneBase(
     options.controlPlaneUrl,
@@ -81,6 +82,7 @@ export function createControlPlaneAgentCredentialVerifier(
 
   return async (
     authorizationHeader: string | undefined,
+    signal?: AbortSignal,
   ): Promise<RemoteAgentAuthorization | undefined> => {
     const credential = bearerFromHeader(
       authorizationHeader,
@@ -111,7 +113,7 @@ export function createControlPlaneAgentCredentialVerifier(
             authorization: 'Bearer ' + serviceToken,
           },
           body: JSON.stringify({ credential }),
-          signal: controller.signal,
+          signal: signal ? AbortSignal.any([signal,controller.signal]) : controller.signal,
         },
       );
 
