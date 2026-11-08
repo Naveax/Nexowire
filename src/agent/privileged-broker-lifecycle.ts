@@ -4,6 +4,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import * as z from 'zod';
 import { isWindowsProcessElevated } from './privileged-broker.js';
+import { requestedBrokerEffectMode } from './privileged-broker-local-owner.js';
 import { PrivilegedBrokerClient } from './privileged-broker-client.js';
 import { PrivilegedBrokerModeDeniedError } from './privileged-broker-denial.js';
 import { NEXOWIRE_VERSION } from '../version.js';
@@ -116,6 +117,20 @@ const TaskStatusSchema = z.object({
 export type PrivilegedBrokerTaskStatus = z.infer<
   typeof TaskStatusSchema
 >;
+
+/** A running task may show 0x800710E0 after an IgnoreNew repeat trigger.
+ * Task history/process health is still required before calling this benign. */
+export function classifyPrivilegedBrokerTaskResult(
+  status: Pick<PrivilegedBrokerTaskStatus,'state'|'lastTaskResult'>,
+  multipleInstances: 'IgnoreNew' | 'Other' | 'Unverified' = 'Unverified',
+): 'NO_LAST_RESULT' | 'SUCCESS' | 'POSSIBLE_IGNORE_NEW' | 'TASK_FAILURE_OR_UNVERIFIED' {
+  if(status.lastTaskResult===null)return 'NO_LAST_RESULT';
+  if(status.lastTaskResult===0)return 'SUCCESS';
+  if((status.lastTaskResult>>>0)===0x800710E0 &&
+     status.state==='Running' && multipleInstances==='IgnoreNew')
+    return 'POSSIBLE_IGNORE_NEW';
+  return 'TASK_FAILURE_OR_UNVERIFIED';
+}
 
 export interface PrivilegedBrokerTaskOptions {
   env?: NodeJS.ProcessEnv;
@@ -263,11 +278,13 @@ export function buildPrivilegedBrokerLauncher(
       'Cannot determine Nexowire CLI entrypoint for broker task.',
     );
   }
+  const effectMode = requestedBrokerEffectMode(env);
   const execArgv = [
     ...(options.execArgv ?? process.execArgv),
     cliEntrypoint,
     'privileged-broker',
     'run',
+    ...(effectMode === 'local-owner' ? ['--local-owner-effects'] : []),
   ];
 
   const lines = [
@@ -276,6 +293,8 @@ export function buildPrivilegedBrokerLauncher(
     // not the installer process's sanitized task-registration environment.
     // Remove preload/import hooks before launching the privileged Node host.
     ...PRIVILEGED_NODE_INJECTION_ENV.map(name=>'$env:'+name+'=$null'),
+    // Inherited user environment cannot opt into privileged effects.
+    '$env:NEXOWIRE_PRIVILEGED_BROKER_EFFECT_MODE=$null',
   ];
 
   const brokerHost =
@@ -284,6 +303,19 @@ export function buildPrivilegedBrokerLauncher(
     env.NEXOWIRE_PRIVILEGED_BROKER_PORT?.trim();
   const secretFile =
     env.NEXOWIRE_PRIVILEGED_BROKER_SECRET_FILE?.trim();
+  if (effectMode === 'local-owner') {
+    // The trusted task action's fixed argv, never an inherited user env var,
+    // authorizes this startup mode. Do not persist plaintext credentials.
+    for (const name of [
+      'NEXOWIRE_CORE_AUTHORITY_URL',
+      'NEXOWIRE_AGENT_IDENTITY_FILE',
+      'NEXOWIRE_AGENT_TOKEN_PLATFORM_NAME',
+      'NEXOWIRE_AGENT_TOKEN_DPAPI_FILE',
+    ] as const) {
+      const value = env[name]?.trim();
+      if (value) lines.push('$env:' + name + '=' + psLiteral(value));
+    }
+  }
 
   if (brokerHost) {
     lines.push(
@@ -567,7 +599,11 @@ $ErrorActionPreference='Stop'
 $name=$env:NEXOWIRE_BROKER_TASK_NAME
 $task=Get-ScheduledTask -TaskName $name -ErrorAction Stop
 ${privilegedBrokerTaskControlPreflightScript}
-Start-ScheduledTask -TaskName $name -ErrorAction Stop
+# Do not request a duplicate launch of the one-minute IgnoreNew singleton.
+# An already-running Broker is validated by authenticated /health separately.
+if([string]$task.State -ne 'Running'){
+  Start-ScheduledTask -TaskName $name -ErrorAction Stop
+}
 [pscustomobject]@{ ok=$true } | ConvertTo-Json -Compress
 `;
   await runPowerShellJson<{ ok: boolean }>(
