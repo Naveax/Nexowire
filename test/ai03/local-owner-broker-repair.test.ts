@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createLocalOwnerBrokerAdmission, requestedBrokerEffectMode } from '../../src/agent/privileged-broker-local-owner.js';
+import { createLocalOwnerBrokerAdmission, requestedBrokerEffectMode, brokerRunEffectMode } from '../../src/agent/privileged-broker-local-owner.js';
 import { classifyPrivilegedBrokerTaskResult, buildPrivilegedBrokerLauncher } from '../../src/agent/privileged-broker-lifecycle.js';
 import { assertCoreWindowsMutationAdmission } from '../../src/agent/core-windows-mutation-dispatch.js';
 import { startPrivilegedBroker } from '../../src/agent/privileged-broker.js';
@@ -20,6 +20,9 @@ test('P0 task result is only POSSIBLE IgnoreNew with confirmed running singleton
 
 test('P0 local Broker mode is explicit and persists no plaintext credential in launcher',()=>{
   assert.equal(requestedBrokerEffectMode({}),'external');
+  assert.equal(brokerRunEffectMode([]),'external');
+  assert.equal(brokerRunEffectMode(['--local-owner-effects']),'local-owner');
+  assert.throws(()=>brokerRunEffectMode(['--local-owner-effects','--extra']),/BROKER_RUN_ARGUMENTS_INVALID/);
   assert.equal(requestedBrokerEffectMode({NEXOWIRE_PRIVILEGED_BROKER_EFFECT_MODE:'local-owner'}),'local-owner');
   assert.throws(()=>requestedBrokerEffectMode({NEXOWIRE_PRIVILEGED_BROKER_EFFECT_MODE:'disabled-checks'}),/BROKER_EFFECT_MODE_INVALID/);
   const launcher=buildPrivilegedBrokerLauncher({
@@ -31,7 +34,9 @@ test('P0 local Broker mode is explicit and persists no plaintext credential in l
       NEXOWIRE_AGENT_TOKEN_DPAPI_FILE:'C:\\ProgramData\\Nexowire\\agent.dpapi',
       NEXOWIRE_AGENT_TOKEN:'fixture-plaintext-secret-never-persisted'},
   });
-  assert.match(launcher,/NEXOWIRE_PRIVILEGED_BROKER_EFFECT_MODE='local-owner'/);
+  assert.match(launcher,/--local-owner-effects/);
+  // A user-level environment variable cannot select the elevated run mode.
+  assert.match(launcher,/NEXOWIRE_PRIVILEGED_BROKER_EFFECT_MODE=\\$null/);
   assert.match(launcher,/NEXOWIRE_AGENT_TOKEN_DPAPI_FILE/);
   assert.doesNotMatch(launcher,/fixture-plaintext-secret-never-persisted/);
   assert.doesNotMatch(launcher,/\$env:NEXOWIRE_AGENT_TOKEN='/);
@@ -41,7 +46,7 @@ test('P0 local Broker mode is explicit and persists no plaintext credential in l
     execArgv:[],
     env:{},
   });
-  assert.doesNotMatch(legacy,/NEXOWIRE_PRIVILEGED_BROKER_EFFECT_MODE/);
+  assert.doesNotMatch(legacy,/--local-owner-effects/);
 });
 
 test('P0 local owner admission reserves once, checks fresh state twice and denies stale owner',async()=>{
