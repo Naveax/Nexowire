@@ -79,6 +79,13 @@ test('reported horizontal overflow or hidden UNKNOWN fails even with a PNG', () 
   });
 });
 
+test('impossible negative or fractional document geometry cannot request review', () => {
+  withFixture(({ dir, evidence }) => {
+    assert.equal(evaluate(dir, evidence, { documentScrollWidth: -1 }).status, 'UNKNOWN');
+    assert.equal(evaluate(dir, evidence, { documentScrollWidth: 0.25 }).status, 'UNKNOWN');
+  });
+});
+
 test('incomplete viewport or browser provenance is UNKNOWN', () => {
   withFixture(({ dir, evidence }) => {
     assert.equal(evaluate(dir, evidence, { browserVersion: null }).status, 'UNKNOWN');
