@@ -148,6 +148,83 @@ one TODO is the new ordinal stability observation, not an accepted fix.
 K15's entire P005 matrix remains unverified on a physical Windows
 machine, live account and assistive technology.
 
+## P006 follow-up: T-619–T-624 (#539, #812, #485, #1006)
+
+- **Current upstream main** after #1135: `52d452f717d891eeaf4c2b9aff3c6e1ea68369b0`.
+  `git diff --name-only b5a3f884..52d452f -- web/app.js web/index.html
+  src/product/device-target-resolution.ts src/mcp/create-server.ts`
+  was empty; source behavior did not change. Owner #1068 still open Draft
+  at `94d38799e9e4b50fe84f7924e6fc84f90aeba090`.
+- **T-619 (real RED on main):** Two identically named devices are
+  associated with distinct folders. With the warehouse selected, a newer
+  fetch returns the correct `machine-b`, then a slower older fetch moves
+  `machine-a` into that folder. On current main the **older** response
+  erroneously overwrites the card ID (`machine-b` -> `machine-a`), even
+  though the selected folder remains the same. Reproduced as a deliberate
+  TODO on current main, PASS on detached #1068 (load-generation fence).
+  This is a stale-response/identity UI bug, not proof of an erroneous
+  Agent dispatch. The screen-reader label of the kept card is checked
+  as well.
+- **T-620:** Two same-named FULL devices differ in localConsole
+  enrollment/active report; both still show CORE pending, `aria-pressed`
+  false and no completed-input claim, despite FULL badge. No actual native
+  permission is inferred from UI fields; local source VM PASS.
+- **T-621 (owner UX decision/RED):** An authenticated dashboard fetch
+  returning **zero registered devices** renders the explicit empty-list
+  recovery hint and enabled connect button, yet sets the global success
+  pill to **`Bağlı`** on both current main and #1068 candidate. This may
+  mean *account session connected*, but can be mistaken for *device
+  paired*. An expected TODO requires an account-vs-device recovery label;
+  K03/owner should decide exact wording. No false physical pairing was
+  claimed by K15.
+- **T-622:** `resolveOwnerDeviceTarget()` independently returns
+  `ambiguous-folder` for two normalization-equivalent folder names,
+  regardless of input order. An explicit correct folderId/deviceId
+  selects the intended candidate; wrong folderId/deviceId rejects with
+  `DEVICE_NOT_FOUND`. Pure resolver is not authorization or grant.
+- **T-623:** K15 PR #1110 previous exact HEAD
+  `fd687a145bc08e51cf5ce2cbf136bbe90d727a3a` automated CI
+  [42473857473](https://github.com/Naveax/Nexowire/actions/runs/42473857473)
+  completed **7/7 success**, but the seven jobs' step-name inventory
+  contains **no K15 `test/delegated/k15/*.mjs` invocation**. K13
+  [#1134](https://github.com/Naveax/Nexowire/pull/1134) hosted auxiliary
+  tests include K09/K16, **not K15**; its 4/4 job PASS cannot be borrowed
+  for K15. These new nested K15 tests are therefore **hosted NOT_RUN**.
+- **T-624:** #1068 source remains Draft/unmerged; T-339/T-479/T-624
+  post-merge exact-main retest is **BLOCKED**, no manufactured acceptance.
+
+Node 24.22.1, current main web/app.js: **12 PASS / 7 expected TODO**;
+owner #1068 read-only web/app.js: **17 PASS / 2 expected TODO**;
+pure main resolver: **14 PASS / 0 FAIL**. Expected TODO failures are not
+PASS. The two owner candidate TODOs are ordinal-name instability and
+ambiguous zero-device `Bağlı` recovery wording; existing authenticated
+device routing/physical input admission remains out of scope. New
+T-619 stale-folder race and the #485 empty-list symptom are directly
+reproducible from actual UI source with deterministic fake fetch/DOM;
+real Chromium, Windows, screen reader, live enrollment and device
+acceptance remain **NOT_RUN**.
+
+### P006 pool T-666 — heading versus stable target ID
+
+After reading all 19 other KNN records and finding no T-666 claim, K15
+reserved T-666 in `ekip/durum/K15.md` **before writing the fixture**.
+The added regression filters two same-named devices into a single
+folder, then reverses the original array order. It checks that the
+visible Unicode/HTML-like heading is stored as literal text, the
+per-row stable ID remains `device-b`, and the actionable screen-reader
+label contains the heading and continues to address that same device.
+Two actual Access-mode POSTs are checked for exact ID. It isolates
+one current-main expected TODO (generic unscoped aria label) versus
+owner #1068 candidate PASS. No actual cross-device POST was reproduced;
+the residual risk is **user-facing heading/action identification** until
+#1068 is reviewed and merged.
+
+Extended Node24 source-only total: current main UI **12 PASS / 8
+expected TODO**, owner #1068 UI **18 PASS / 2 expected TODO**, pure
+main resolver **14 PASS / 0 FAIL**. This is not real browser or physical
+input acceptance. T-666 is source QA evidence only, pending second
+19-KNN ownership sweep immediately before final claim of completion.
+
 Reproduction:
 
 ```sh
