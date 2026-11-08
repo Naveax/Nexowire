@@ -63,6 +63,25 @@ processes must be excluded by ownership and creation-time evidence. Capture:
 See `WINDOWS_HOSTED_CI_DISCOVERY.md`: historical successful #1105 CI
 did not discover K16 nested `.test.ts`, so it cannot satisfy the test gate.
 
+### #540 T-629 — owner-only leaked-descendant trials
+
+For each trial, capture root and **every** descendant PID+creation time before
+the stop, including a detached child/grandchild. Do not look up or signal
+unrelated live PIDs for fixture preparation. In a disposable owned session only:
+
+| Scenario | Negative postcondition to reproduce | Acceptance |
+| --- | --- | --- |
+| Root exits ahead of its child | Child owns an open stdout/stderr handle after root exit | `FAIL` if any exact owned descendant still runs after deadline |
+| `taskkill` returns zero | Grandchild survives with the same original PID+creation time | Never promote `treeCleanup=requested` to verified |
+| Root PID recycled | New unrelated incarnation appears at the same PID while original grandchild stays live | `UNKNOWN` root identity; no signal to unrelated incarnation |
+| Access denied / exit 128 | Owned child still live after stop attempt | `FAIL`/`unconfirmed`, record bounded error and retry policy for owner review |
+| Job handle released unexpectedly | Guardian/parent exits but child remains outside expected Job closure | `FAIL`; owner must inspect actual native Job readback |
+| Child exits cleanly, handle drained | All exact owned incarnations independently absent and TAP command exit 0 | Source/process proof only; full Work-PC acceptance still separate |
+
+Do not equate an exited shell, an empty `taskkill` stdout, a synthetic PID
+fixture, or a green unrelated CI job with an observed all-descendant exit.
+On an unknown incarnation, stop the trial and leave the gate `UNKNOWN`.
+
 The owner must link the exact-HEAD Windows CI result, the full isolated test
 process exit, and independent descendant-exit evidence to #540. If any owned
 descendant remains, identity is ambiguous, or a case is not run, keep that gate
