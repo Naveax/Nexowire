@@ -118,6 +118,12 @@ These are status/diagnostic paths, not a remote-connection acceptance test. Star
 
 These commands are non-repairing status/diagnostic operations. They may probe local services; they do not establish a physical acceptance result. `nexowire node connector` is **not** part of this diagnostic sequence because it reveals a bearer token.
 
+### A safe support report after a failed local connection
+
+Record only the **category** of the failing step (`Hub health`, `Agent connection`, `Funnel ingress`, or `remote MCP authentication`), the exit/status code when actually observed, and a sanitized diagnostic summary. Replace tokens, callback query parameters, cookie values, device identifiers, private paths and full URLs with `[REDACTED]` before sharing. A password, bearer credential, signed callback or raw `node connector` output must never appear in a support ticket. If the relevant observation was not collected, use **NOT_RUN**, not a fabricated healthy value; if a probe ran without an interpretable answer, use **UNKNOWN**.
+
+For an interrupted attempt: first inspect existing `node status`, then follow the failed layer. Retry only the already-approved operation after its prerequisites are understood; a new `onboard bootstrap --force` rotates credentials and is not a pairing recovery step. Do not delete state, rerun with another Windows account, reinstall, or disable authentication to turn a failed diagnostic green. If actual remote MCP authentication fails, capture only a redacted status/error classification and request the appropriate owner's investigation.
+
 The node bootstrap is resumable. If Windows restarts or the command is interrupted after protected state is created, rerun the same bootstrap command. Nexowire reuses the DPAPI-protected credentials instead of silently issuing duplicates. Conflicting port, device-name, state-directory, expired, revoked, or inconsistent credential state fails closed.
 
 ## ChatGPT connector information
@@ -137,6 +143,18 @@ The local native agent does not require Funnel. It connects to the Hub through `
 `nexowire tailscale funnel` remains fail-closed unless usable MCP and native-agent authentication already exist. Tailscale is a connectivity aid, not a required Nexowire runtime dependency.
 
 ## Completion criteria
+
+### Do not collapse browser, task and remote evidence
+
+| Observation | What it can establish | What it cannot establish |
+| --- | --- | --- |
+| Windows installer finished / Start menu shortcut exists | Local installation step may have completed | No proof of healthy Hub/Agent or account pairing |
+| Windows Scheduled Task says `Running` | A launcher/task may be active | No proof the Hub is healthy or the Agent authenticated |
+| `node status` reports local Hub health | Local Hub responded to a status probe | No proof the browser's **BAĞLA** approval, account identity or remote MCP call succeeded |
+| Browser shows **BAĞLANIYOR…**, **TEKRAR DENE** or a successful pairing message | Browser-side pairing state was rendered | No proof of self-host Funnel, native Agent health or authenticated remote MCP execution |
+| Remote client reports MCP connected | The remote connector handshake may have succeeded | No proof that `devices_list`, `machine_snapshot` and `machine_health` passed against the intended device |
+
+Treat missing evidence as **NOT_RUN** and an attempted but inconclusive observation as **UNKNOWN**, never as an implicit successful connection. Require the actual per-layer checks below before saying *connected*.
 
 A bootstrap is not considered remotely complete merely because the Scheduled Tasks are installed. Final verification requires:
 
