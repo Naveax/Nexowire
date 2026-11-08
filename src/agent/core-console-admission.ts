@@ -15,12 +15,19 @@ export interface CoreConsoleBinding {
 export interface CoreConsoleEvidence {
   readonly certificate: SignedCoreConsoleEnrollmentV1 | null;
   readonly pinnedLocalSpkiDer: Uint8Array | null;
+  // Kept OUTSIDE the strict ten-field CoreConsoleCurrentReadback contract.
+  // The real Windows provider must source these from a fresh D1 read; missing
+  // values fail closed at its own native admission boundary.
   readonly current: CoreConsoleCurrentReadback | null;
+  readonly devicePlatform?: string;
+  readonly deviceReady?: boolean;
   readonly observedAtMs: number;
   readonly desktop: 'default' | 'private' | 'secure' | 'locked' | 'unknown';
   readonly nativeAdmission: 'verified' | 'unavailable';
   /** Verified from the on-device, authenticated elevated Broker health probe. */
   readonly brokerVersionVerified?: boolean;
+  /** Only the locally composed native consent verifier can set true. */
+  readonly nativeConsentProviderPresent?: boolean;
 }
 
 export interface CoreConsoleDispatch {
@@ -142,13 +149,16 @@ export class CoreConsoleAdmission {
       const evaluation=evaluateCoreConsoleEnrollment({...evaluationInput,desktop:evidence.desktop});
       const enrollment=evidence.desktop==='default'?evaluation:
         evaluateCoreConsoleEnrollment({...evaluationInput,desktop:'default'});
-      const active = evaluation.policyEligible && evidence.nativeAdmission === 'verified';
+      const nativeProviderPresent=evidence.nativeConsentProviderPresent===true;
+      const localEnrolled=nativeProviderPresent&&enrollment.policyEligible;
+      const active = nativeProviderPresent&&evaluation.policyEligible&&evidence.nativeAdmission === 'verified';
       return {evidence,status:{
         preferenceEnabled: typeof evidence.current?.coreEnabled === 'boolean'
           ? evidence.current.coreEnabled : null,
-        localEnrolled:enrollment.policyEligible,
+        localEnrolled,
         active,duration:'indefinite-revocable',expiresAt:null,
         state:active ? 'ACTIVE'
+          : evidence.nativeConsentProviderPresent !== true ? 'LOCAL_ENROLLMENT_REQUIRED'
           : evidence.current?.coreEnabled === false ? 'CORE_NOT_EFFECTIVE'
           : evidence.brokerVersionVerified === false &&
             evidence.current?.coreEnabled === true &&
