@@ -47,8 +47,14 @@ export interface InfrastructureSnapshot {
 export interface AuthenticatedDeviceIdentity {
   deviceId: string;
   ownerAccountId: string;
+  /** Alias of trusted ownerAccountId, emitted with a live authority grant only. */
+  ownerId?: string;
   deviceName: string;
   platform: string;
+  /** Present only while the authoritative Control Plane grant is active. */
+  authorizationEpoch?: number;
+  /** Server-issued 30-second authority lease, Unix milliseconds. */
+  leaseExpiresAtMs?: number;
 }
 
 export interface ControlPlaneServiceOptions {
@@ -143,6 +149,7 @@ export class ControlPlaneService {
   private readonly now: () => Date;
   /** A ROOT lease is a short-lived policy signal, never an OS elevation grant. */
   private static readonly ROOT_LEASE_MS = 15 * 60 * 1000;
+  private static readonly REMOTE_AUTHORIZATION_LEASE_MS = 30_000;
   private readonly infrastructure: () => InfrastructureSnapshot;
   private readonly freeOnly: boolean;
   private readonly unmeteredGithubIds: readonly string[];
@@ -710,11 +717,53 @@ export class ControlPlaneService {
       );
     if (!device) return null;
 
+    // Server state only: a device or MCP client cannot supply an epoch/lease.
+    // Missing migration, failed D1 or invalid clock MUST NOT mint a grant.
+    const epoch = await this.store.getRemoteDeviceAuthorization(
+      device.id, device.credentialHash, device.ownerAccountId,
+    );
+    const nowMs = this.now().getTime();
+    if (epoch !== null && (!Number.isSafeInteger(nowMs) || nowMs < 0 ||
+        nowMs > Number.MAX_SAFE_INTEGER - ControlPlaneService.REMOTE_AUTHORIZATION_LEASE_MS)) {
+      throw new Error('REMOTE_AUTHORIZATION_CLOCK_UNAVAILABLE');
+    }
     return {
       deviceId: device.id,
       ownerAccountId: device.ownerAccountId,
       deviceName: device.name,
       platform: device.platform,
+      ...(epoch === null ? {} : {
+        ownerId: device.ownerAccountId,
+        authorizationEpoch: epoch,
+        leaseExpiresAtMs: nowMs + ControlPlaneService.REMOTE_AUTHORIZATION_LEASE_MS,
+      }),
+    };
+  }
+
+  /** Explicit, owner-authenticated revocation. Regrant requires SAFE -> FULL. */
+  async revokeDeviceRemoteAuthorization(
+    identity: ControlPlaneIdentity, deviceIdInput: string,
+  ): Promise<{deviceId: string; revoked: boolean}> {
+    if (identity.role === 'service') throw new Error('OWNER_LOGIN_REQUIRED');
+    const account = await this.requireAccount(identity.accountId);
+    const deviceId = boundedId('deviceId', deviceIdInput);
+    const device = await this.store.getDevice(deviceId);
+    if (!device || device.ownerAccountId !== account.id)
+      throw new Error('DEVICE_NOT_FOUND');
+    return {
+      deviceId,
+      revoked: await this.store.revokeRemoteDeviceAuthorization(deviceId, account.id),
+    };
+  }
+
+  /** Invalidate every current remote grant of the verified owner. */
+  async revokeOwnerRemoteAuthorizations(
+    identity: ControlPlaneIdentity,
+  ): Promise<{revokedDevices: number}> {
+    if (identity.role === 'service') throw new Error('OWNER_LOGIN_REQUIRED');
+    const account = await this.requireAccount(identity.accountId);
+    return {
+      revokedDevices: await this.store.revokeRemoteOwnerAuthorizations(account.id),
     };
   }
 

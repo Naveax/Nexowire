@@ -8,6 +8,7 @@ import {
   type AgentHello,
 } from '../protocol/agent.js';
 import { NexowireError } from './errors.js';
+import type { AtomicMutationCoordinator } from './atomic-mutation-authority.js';
 import { isReadOnlyCapability } from '../protocol/capabilities.js';
 import { safelyRecordScaleMetric, type ScaleTransportMetrics } from '../ops/scale-transport-metrics.js';
 
@@ -36,6 +37,9 @@ interface PendingRequest {
 export interface AgentConnectionHealth {
   deviceId: string;
   online: boolean;
+  // AUTHENTICATED_ONLINE is set only after the authorized hello is registered.
+  // Socket OPEN by itself is not an authorization or mutation completion.
+  state: 'AUTHENTICATED_ONLINE' | 'UNKNOWN' | 'DISCONNECTED';
   transport: 'websocket';
   epoch: number;
   reconnectCount: number;
@@ -78,6 +82,12 @@ export interface AgentBrokerOptions {
   maxEventBytes?: number;
   reconnectGraceMs?: number;
   maxReadOnlyReplays?: number;
+  maxResumesPerEpoch?: number;
+  maxGlobalResumesPerSecond?: number;
+  /** Remote-admission hubs MUST set this true; missing per-socket verifier is denied at registration. */
+  requireMutationReauthorization?: boolean;
+  /** Independent durable CAS + serialized dispatch is mandatory when enabled. */
+  requireAtomicMutationAuthority?: boolean;
   metrics?: ScaleTransportMetrics;
   onDeviceState?: (
     event: DeviceStateEvent,
@@ -98,12 +108,21 @@ export class AgentBroker {
   private readonly healthByDevice = new Map<string, AgentConnectionHealth>();
   private readonly socketDeviceIds = new WeakMap<WebSocket, string>();
   private readonly heartbeatTimedOut = new WeakSet<WebSocket>();
+  // Bound to one authenticated WebSocket: never promote an expired device
+  // credential into permission to dispatch a new mutation.
+  private readonly dispatchAuthorization = new WeakMap<WebSocket, () => Promise<boolean>>();
+  private readonly atomicMutationCoordinators = new WeakMap<WebSocket, AtomicMutationCoordinator>();
   private readonly events: StoredBrokerEvent[] = [];
   private readonly eventWaiters = new Set<() => void>();
   private readonly maxEvents: number;
   private readonly maxEventBytes: number;
   private readonly reconnectGraceMs: number;
   private readonly maxReadOnlyReplays: number;
+  private readonly maxResumesPerEpoch: number;
+  private readonly maxGlobalResumesPerSecond: number;
+  private readonly requireMutationReauthorization: boolean;
+  private readonly requireAtomicMutationAuthority: boolean;
+  private readonly recentResumeTimes: number[] = [];
   private readonly metrics?: ScaleTransportMetrics;
   private readonly onDeviceState?: (
     event: DeviceStateEvent,
@@ -120,10 +139,43 @@ export class AgentBroker {
       Math.max(250, options.reconnectGraceMs ?? 5_000),
     );
     this.maxReadOnlyReplays = Math.min(5, Math.max(0, options.maxReadOnlyReplays ?? 2));
+    this.maxResumesPerEpoch = Math.min(512, Math.max(1, options.maxResumesPerEpoch ?? 32));
+    this.maxGlobalResumesPerSecond = Math.min(512, Math.max(1, options.maxGlobalResumesPerSecond ?? 64));
+    // Existing explicit local/legacy fixtures remain compatible. V2-03 must opt
+    // remote-only admission into this mandatory verifier boundary at creation.
+    this.requireMutationReauthorization = options.requireMutationReauthorization === true;
+    this.requireAtomicMutationAuthority = options.requireAtomicMutationAuthority === true;
     this.onDeviceState = options.onDeviceState;
   }
 
-  register(socket: WebSocket, hello: AgentHello): void {
+  /** Read-only trusted constructor policy: client headers cannot change it. */
+  isMandatoryMutationReauthorizationEnabled(): boolean {
+    return this.requireMutationReauthorization;
+  }
+
+  isMandatoryAtomicMutationAuthorityEnabled(): boolean {
+    return this.requireAtomicMutationAuthority;
+  }
+
+  register(
+    socket: WebSocket,
+    hello: AgentHello,
+    reauthorizeMutation?: () => Promise<boolean>,
+    atomicCoordinator?: AtomicMutationCoordinator,
+  ): void {
+    // A remote session without its bound owner/device verifier is only a
+    // socket, never AUTHENTICATED_ONLINE or permission to dispatch a mutation.
+    if (this.requireMutationReauthorization && typeof reauthorizeMutation !== 'function') {
+      socket.close(1008, 'Bound device authorization required');
+      return;
+    }
+    if (this.requireAtomicMutationAuthority && !atomicCoordinator) {
+      socket.close(1008, 'Independent atomic mutation authority required');
+      return;
+    }
+    // Install before connection events can expose the device to callers.
+    if (reauthorizeMutation) this.dispatchAuthorization.set(socket, reauthorizeMutation);
+    if (atomicCoordinator) this.atomicMutationCoordinators.set(socket, atomicCoordinator);
     const deviceId = hello.device.id;
     const existing = this.agents.get(deviceId);
     if (existing && existing.socket !== socket) {
@@ -142,6 +194,7 @@ export class AgentBroker {
     this.healthByDevice.set(deviceId, {
       deviceId,
       online: true,
+      state: 'AUTHENTICATED_ONLINE',
       transport: 'websocket',
       epoch: (previous?.epoch ?? 0) + 1,
       reconnectCount,
@@ -209,12 +262,17 @@ export class AgentBroker {
 
   has(deviceId: string): boolean {
     const connection = this.agents.get(deviceId);
-    return connection?.socket.readyState === WebSocket.OPEN;
+    return Boolean(connection && connection.socket.readyState === WebSocket.OPEN &&
+      !this.heartbeatTimedOut.has(connection.socket));
   }
 
   getConnectionHealth(deviceId: string): AgentConnectionHealth | undefined {
     const health = this.healthByDevice.get(deviceId);
-    return health ? { ...health } : undefined;
+    if (!health) return undefined;
+    if (health.online && !this.has(deviceId)) {
+      return {...health, online: false, state: 'UNKNOWN'};
+    }
+    return { ...health };
   }
 
   noteHeartbeatPing(socket: WebSocket): void {
@@ -230,6 +288,8 @@ export class AgentBroker {
     const deviceId = this.socketDeviceIds.get(socket);
     if (deviceId && this.agents.get(deviceId)?.socket === socket) {
       this.heartbeatTimedOut.add(socket);
+      const health = this.healthByDevice.get(deviceId);
+      if (health) { health.online = false; health.state = 'UNKNOWN'; }
       this.recordDisconnectReason(deviceId, 'heartbeat_timeout');
     }
   }
@@ -376,13 +436,61 @@ export class AgentBroker {
     accessMode: 'safe' | 'full' = 'safe',
   ): Promise<unknown> {
     const connection = this.agents.get(deviceId);
-    if (!connection || connection.socket.readyState !== WebSocket.OPEN) {
+    if (!connection || !this.has(deviceId)) {
       throw new NexowireError(
         'AGENT_OFFLINE',
         `Native agent "${deviceId}" is not connected.`,
       );
     }
 
+    // Seal immutable request bytes BEFORE the first authorization await.
+    // Mutable input references cannot change the payload after CAS verification.
+    const immutableMutationFrame = !isReadOnlyCapability(capability)
+      ? JSON.stringify({type:'request', requestId, capability, input, accessMode})
+      : undefined;
+
+    // An authenticated HTTP 101 is not a permanent mutation grant. The
+    // credential may be revoked between WebSocket periodic checks; revalidate
+    // on *every* mutation, fail closed, and check the socket epoch after await.
+    // Remote-only strict mode protects confidential reads as well as effects.
+    // Otherwise a revoked owner could still read until the periodic WS check.
+    if (this.requireMutationReauthorization || !isReadOnlyCapability(capability)) {
+      const reauthorize = this.dispatchAuthorization.get(connection.socket);
+      if (!reauthorize && this.requireMutationReauthorization) {
+        throw new NexowireError(
+          'AGENT_AUTH_NOT_BOUND',
+          'Agent request authorization verifier was not bound to the active socket.',
+          {deviceId, capability, requestId},
+        );
+      }
+      if (reauthorize) {
+        let allowed = false;
+        try { allowed = await reauthorize(); } catch { /* fail closed */ }
+        if (!allowed) {
+          throw new NexowireError(
+            'AGENT_AUTH_REVOKED',
+            'Agent device authorization expired or was revoked before request dispatch.',
+            {deviceId, capability, requestId},
+          );
+        }
+        if (this.agents.get(deviceId) !== connection || !this.has(deviceId)) {
+          throw new NexowireError(
+            'AGENT_OFFLINE',
+            'Agent connection changed while revalidating mutation authorization.',
+          );
+        }
+      }
+    }
+
+    const mutation = !isReadOnlyCapability(capability);
+    const atomicCoordinator = this.atomicMutationCoordinators.get(connection.socket);
+    if (mutation && this.requireAtomicMutationAuthority && !atomicCoordinator) {
+      throw new NexowireError('MUTATION_CAS_UNAVAILABLE',
+        'Durable revoke-ordered mutation authority is not bound to this socket.');
+    }
+
+    // Recheck after asynchronous authorization to prevent duplicate UUID
+    // races between concurrent callers; neither request can be dispatched twice.
     if (this.pending.has(requestId)) {
       throw new NexowireError(
         'AGENT_REQUEST_EXISTS',
@@ -420,7 +528,28 @@ export class AgentBroker {
       this.pending.set(requestId, pending);
 
       try {
-        this.sendPending(connection, pending);
+        if (mutation && atomicCoordinator) {
+          // The trusted coordinator reserves the immutable exact frame first,
+          // then serializes revoke-vs-send within its independent authority.
+          // The pending Map is only transport state, NEVER a durable CAS.
+          const frame = immutableMutationFrame!;
+          void atomicCoordinator.dispatch({requestId, capability, frame}, (exactFrame) => {
+            if (this.pending.get(requestId) !== pending ||
+                this.agents.get(deviceId) !== connection ||
+                connection.socket.readyState !== WebSocket.OPEN ||
+                !this.has(deviceId)) {
+              throw new NexowireError('MUTATION_STATE_UNKNOWN',
+                'Connection changed before atomic frame delivery.');
+            }
+            connection.socket.send(exactFrame);
+            safelyRecordScaleMetric(this.metrics, 'agent.tx_frames',
+              Buffer.byteLength(exactFrame));
+          }).catch(error => {
+            this.rejectPending(requestId, error);
+          });
+        } else {
+          this.sendPending(connection, pending);
+        }
       } catch (error) {
         this.rejectPending(requestId, error);
       }
@@ -495,6 +624,7 @@ export class AgentBroker {
     const health = this.healthByDevice.get(deviceId);
     if (health) {
       health.online = false;
+      health.state = 'DISCONNECTED';
       health.lastDisconnectedAt = new Date().toISOString();
       health.lastDisconnectReason = this.heartbeatTimedOut.has(socket)
         ? 'heartbeat_timeout'
@@ -566,6 +696,22 @@ export class AgentBroker {
         continue;
       }
 
+      // Reconnect replay bypasses request(); strict remote sessions therefore
+      // cannot resend even a read-only request without a fresh owner/device
+      // authorization. Reject the old pending request and require a new call.
+      if (this.requireMutationReauthorization) {
+        this.rejectPending(
+          pending.requestId,
+          new NexowireError(
+            'AGENT_REAUTH_REQUIRED',
+            'Remote read-only request must be reauthorized as a fresh request after reconnect.',
+            { deviceId, requestId: pending.requestId, capability: pending.capability },
+          ),
+        );
+        rejected++;
+        continue;
+      }
+
       if (pending.readOnlyReplays >= this.maxReadOnlyReplays) {
         this.rejectPending(
           pending.requestId,
@@ -600,6 +746,15 @@ export class AgentBroker {
         clearTimeout(pending.reconnectTimer);
         pending.reconnectTimer = undefined;
       }
+      if (resumed >= this.maxResumesPerEpoch || !this.takeResumeSlot()) {
+        this.rejectPending(pending.requestId, new NexowireError(
+          'AGENT_RECONNECT_BUDGET',
+          'Read-only reconnect resend budget exhausted; caller may retry only after reauthorization.',
+          {deviceId, requestId: pending.requestId, capability: pending.capability},
+        ));
+        rejected++;
+        continue;
+      }
       pending.sentInstanceId = connection.instanceId;
       pending.readOnlyReplays++;
 
@@ -615,11 +770,23 @@ export class AgentBroker {
     return { resumed, rejected };
   }
 
+  private takeResumeSlot(): boolean {
+    const now = Date.now();
+    while (this.recentResumeTimes.length > 0 &&
+      this.recentResumeTimes[0]! <= now - 1_000) {
+      this.recentResumeTimes.shift();
+    }
+    if (this.recentResumeTimes.length >= this.maxGlobalResumesPerSecond) return false;
+    this.recentResumeTimes.push(now);
+    return true;
+  }
+
   private sendPending(
     connection: AgentConnection,
     pending: PendingRequest,
   ): void {
-    if (connection.socket.readyState !== WebSocket.OPEN) {
+    if (connection.socket.readyState !== WebSocket.OPEN ||
+      this.heartbeatTimedOut.has(connection.socket)) {
       throw new NexowireError(
         'AGENT_OFFLINE',
         `Native agent "${pending.deviceId}" is not connected.`,

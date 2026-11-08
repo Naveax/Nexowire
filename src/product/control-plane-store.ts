@@ -240,6 +240,17 @@ export interface ControlPlaneStore {
     credentialHash: string,
   ): Promise<ProductDeviceRecord | null>;
   putDevice(record: ProductDeviceRecord): Promise<void>;
+  /**
+   * Live owner/credential/FULL policy bound authority. Null is a denial.
+   * Epoch and lease are never supplied by the device or MCP caller.
+   */
+  getRemoteDeviceAuthorization(
+    deviceId: string, credentialHash: string, ownerAccountId: string,
+  ): Promise<number | null>;
+  /** Atomic, persistent revocation. */
+  revokeRemoteDeviceAuthorization(deviceId: string, ownerAccountId: string): Promise<boolean>;
+  /** Trusted owner-account lifecycle hook; never accept caller-provided ownership. */
+  revokeRemoteOwnerAuthorizations(ownerAccountId: string): Promise<number>;
   getRootModeLease(deviceId: string): Promise<RootModeLeaseRecord | null>;
   putRootModeLease(record: RootModeLeaseRecord): Promise<void>;
   getDeviceMaintenancePreference(deviceId: string): Promise<DeviceMaintenancePreferenceRecord | null>;
