@@ -54,3 +54,40 @@ npm run build      # PASS; executed on this source tree
 ```
 
 Full `npm test`, physically installed Windows/Linux/macOS, 2-PC, production and owner sandbox acceptance: **NOT_RUN**. #780/#539 remain open; ŞEF owns #1006 merge/acceptance decisions.
+
+## P007 D-097…D-102 — existing PR #1150 completion handoff (2026-11-08)
+
+The V006 instruction supersedes earlier work: **no new PR** and **no merge without Ömer's explicit approval**. This section updates only existing #1150, with no registry/parser/security runtime changes.
+
+### D-097 / D-099 — second concrete path read and honest interpretation
+
+The earlier P006 fixture reproduced an *external symlinked directory*, which normal catalogue enumeration omits. A new fixture checks a **normal in-root directory whose `SKILL.md` is a symlink pointing outside the catalogue**. The current `SkillRegistry.load()` reads that external file, and `validate()` considers the resulting manifest valid. This proves that merely rejecting symlink *directories* would not address the manifest-file entry point.
+
+The new test is explicitly named **`KNOWN OPEN GAP`**. Its passing TAP result means **the negative behavior was observed**, not that the security boundary now rejects external reads. The protected runtime still needs an owner change. Parent 18/18 test result was earlier HEAD; updated local selection is **19/19 PASS (2 independent OPEN-GAP reproductions)**.
+
+### D-098 / D-100 — SHA, duplication and hosted callsite
+
+| Draft PR | Exact HEAD before this P007 update | Generic hosted CI | What remains outside that evidence |
+| --- | --- | --- | --- |
+| [#1030](https://github.com/Naveax/Nexowire/pull/1030) | `bc97cd84c7b224cdfe140a77a7f9200d6bcf50e4` | [run 41338216468](https://github.com/Naveax/Nexowire/actions/runs/41338216468) `action_required`, **0 jobs** | Protected manifest/registry diff, case collisions and direct-load TODO; no merge gate |
+| [#1113](https://github.com/Naveax/Nexowire/pull/1113) | `079cef00aaabc093fe400b47ef71e65144dff0f6` | [run 42474111487](https://github.com/Naveax/Nexowire/actions/runs/42474111487) **7/7 SUCCESS** | Job steps lack explicit named K17 nested tests; hosted K17 scope **NOT_PROVEN** |
+| [#1150](https://github.com/Naveax/Nexowire/pull/1150) | `fb7e4cadcccfd0e073aa1ab28f1f55d61ab85f35` | [run 42485540131](https://github.com/Naveax/Nexowire/actions/runs/42485540131) **7/7 SUCCESS** | Generic CI jobs do **not** prove its new nested `p006-skill-source-evidence.test.ts` actually executed |
+
+Distinct work: #1030 owns parser/case-collision metadata improvements; #1113 scans catalogue symlinks and claim text without following them; #1150 independently calls the *actual* registry and reproduces direct-load boundary failures. No copied source patch, no runtime owner change. K13's #1149 helper workflow ran seven **main-existing** delegated files, not unmerged K17 #1150. #1149 auxiliary 33/33 checks are not #1150 hosted acceptance.
+
+### D-101 — physical NOT_RUN ledger
+
+- Linux: two harmless Node temp symlink fixtures ran locally. This is **not** a Linux production/native-agent path policy check.
+- Windows: file symlink creation and reparse/junction/UNC/NTFS identity behavior **NOT_RUN** (tests explicitly skip on win32); no UAC/Broker/installer.
+- macOS: native filesystem and Agent symlink behavior **NOT_RUN**.
+- Real device/install/canonical path race, SDK admission, permissions and user-grant revocation **NOT_RUN**.
+
+### D-102 — owner-only minimal corrective test contract
+
+1. Validate the requested skill **name** first (reject traversal, alternate separators, absolute paths, NUL), and resolve the trusted catalogue root against a known owner-approved directory. Do not treat lexical string-prefix matching (`/skills-good` vs `/skills`) as containment.
+2. Reject or explicitly authorize **both** symlinked skill directories and symlinked `SKILL.md` files; also cover dangling links, nested links, junction/reparse points, path casing and path components that look like the root's prefix.
+3. Require the actual file handle/read target to remain inside the trusted directory. `lstat`/`realpath` followed by a later ordinary `readFile` alone can race an attacker changing the path; consider platform-appropriate no-follow/handle identity and verified readback, with owner design review. No invented cross-platform guarantee.
+4. Add owner source regressions asserting direct `load(name)` **rejects** both external directory and external manifest symlinks, not merely that `list()/validate()` hide them; use benign temp fixtures. After owner implementation, the two K17 *reproduction-as-PASS* tests will need conversion into rejection assertions rather than silently remaining green against a repaired implementation.
+5. Keep task-sandbox, capability/admission and real OS integration behind [#1080](https://github.com/Naveax/Nexowire/pull/1080)/#1096 protected ownership. Exact-SHA hosted test discovery and actual Windows/Linux/macOS acceptance remain independent gates.
+
+P007 local run: `node --import tsx --test test/delegated/k17/p006-skill-source-evidence.test.ts test/skills.test.ts test/shipped-skills.test.ts` **19/19 PASS**, containing the two explicit open-bug reproductions. New exact HEAD hosted and physical checks must be recorded separately, never inherited from previous SHA.
