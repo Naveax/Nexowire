@@ -140,3 +140,58 @@ without waiting on the ephemeral runner's ScheduledTasks service. The
 physical Work-PC `nexowire hub reboot-readiness` was independently executed
 and recorded earlier. Both real and simulated claims remain distinct.
 The corrected hosted test executes all seven assertions with zero SKIPs.
+
+## 2026-11-08 first-party SYSTEM prelogin Agent lifecycle implementation
+
+New first-party CLI actions:
+- nexowire agent prelogin-status: read-only stage and exact task status
+- nexowire agent prelogin-stage: elevated, protected-runtime-only stage
+- nexowire agent prelogin-install: elevated, exact-marker SYSTEM AtStartup task registration
+- nexowire agent prelogin-uninstall: exact-task-only rollback preserving the staged identity, sealed credential and SQLite state
+
+The stage transaction refuses untrusted source-checkout/unsigned runtime trees,
+untrusted ProgramData parent ACL, missing checksum-verified bundled native Job
+guardian, foreign or existing prelogin task, missing current-user DPAPI bearer,
+existing stage root and unsafe content. Stage copies only the previously approved
+agent bearer in memory into a separate local-machine DPAPI envelope; it creates
+a separate identity, protected state directory and Job-owned launcher, and
+performs ACL readbacks. Neither raw bearer nor owner CORE/Broker credentials
+are written to the launcher. A failed stage cleans up only its newly created
+empty stage root when the task is independently confirmed absent.
+
+Task installation requires the *existing first-party* trusted SYSTEM Hub Boot
+identity to pass the same independent Hub lifecycle validation. It registers
+only the canonical Nexowire Prelogin Agent under SYSTEM with one boot trigger,
+highest level and restart settings; no replacement/Force or changes to the
+interactive Nexowire Native Agent task. The task is not automatically started
+during installation. Task readback verifies the exact launcher, principal SID,
+argument string, trigger, description marker, run level, and logon type.
+Installation failures attempt marker-owned rollback; a foreign/ambiguous task
+is preserved for manual reconciliation instead of being deleted. Uninstall
+unregisters only that marker-owned task, leaving protected stage/journals for
+incident review and future owner-controlled release/cutover. Native Job-owner
+runtime status files are written into the protected `system-agent\\state`
+subdirectory rather than the immutable installer root. Otherwise the first
+successful start would make the root-content check reject a legitimate
+uninstall or rollback. Existing interactive Agent launchers continue to use
+their original status-marker path.
+
+**Physical Work-PC preflight (read-only except native helper build):**
+- Exact ProgramData parent C:\ProgramData\Nexowire failed trusted ACL verification.
+- The remote PowerShell native Agent is not running elevated.
+- Native windows-job-owner.exe built locally from reviewed C source with
+  Visual Studio Build Tools: 198656 bytes; manifest SHA-256
+  3f3e61fd9aa96c0253ce09040e9c71d338a86bc7d4f2e49e3e1b19d3862d3929.
+  The build is a **local test binary, not an Authenticode-signed release**.
+- The stage command was attempted exactly once in the unelevated context and
+  rejected with PRELOGIN_AGENT_ELEVATION_REQUIRED before credential read or
+  any filesystem/task mutation. Independent readback showed no system-agent
+  root, no Nexowire Prelogin Agent task, no SYSTEM Hub Boot task, Hub HTTP 200.
+- Source worktree retains a clean history; source tests are validated on
+  Work-PC and the dedicated hosted Windows Node 22/24 CI steps.
+
+**Not yet claimed:** no trusted elevated signed installer executed, no SYSTEM
+Hub/Agent tasks installed, no machine credential provisioned, no login-handoff
+or physical pre-login remote proof, no full PC reboot. The dedicated prelogin
+Agent currently provides only bounded status capabilities; it is not an
+unrestricted CORE agent. Production/24x7 release remains NO-GO.

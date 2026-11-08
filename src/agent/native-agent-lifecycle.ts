@@ -45,6 +45,8 @@ const PERSISTED_ENV_NAMES = [
   'NEXOWIRE_HUB_WS_URL',
   'NEXOWIRE_HUB_WS_URLS',
   'NEXOWIRE_DEVICE_NAME',
+  'NEXOWIRE_WINDOWS_PRELOGIN_AGENT',
+  'NEXOWIRE_AGENT_IDENTITY_FILE',
   'NEXOWIRE_ALLOWED_ROOTS',
   'NEXOWIRE_STATE_DIR',
   'NEXOWIRE_PROCESS_STATE_FILE',
@@ -94,6 +96,8 @@ export interface NativeAgentLifecycleOptions {
   windowsTaskName?: string;
   /** Fixed, bundled native Job guardian; used for installed Windows task only. */
   windowsTaskJobOwnerPath?: string;
+  /** Only for protected pre-login Agent: keep Job status markers in machine-owned state, not installation root. */
+  windowsTaskJobStatusDir?: string;
   linuxUnitName?: string;
   macLabel?: string;
   uid?: number;
@@ -309,11 +313,16 @@ export function buildNativeAgentLauncher(
       if (!path.win32.isAbsolute(options.windowsTaskJobOwnerPath)) {
         throw new Error('NATIVE_AGENT_TASK_JOB_HELPER_PATH_UNCONFIRMED');
       }
+      const statusDir=options.windowsTaskJobStatusDir;
+      if(statusDir && (!path.win32.isAbsolute(statusDir) ||
+          statusDir.startsWith('\\\\') || statusDir.startsWith('\\\\?\\'))){
+        throw new Error('NATIVE_AGENT_TASK_JOB_STATUS_PATH_UNTRUSTED');
+      }
       lines.push(
         '# NEXOWIRE_AGENT_TASK_JOB_GUARD_V1',
         '$jobHelper=' + psLiteral(options.windowsTaskJobOwnerPath),
         "if (-not (Test-Path -LiteralPath $jobHelper -PathType Leaf)) { throw 'NATIVE_AGENT_TASK_JOB_HELPER_UNAVAILABLE' }",
-        "$jobMarker=Join-Path $PSScriptRoot ('agent-job-'+[guid]::NewGuid().ToString('N')+'.status')",
+        "$jobMarker=Join-Path " + (statusDir?psLiteral(statusDir):'$PSScriptRoot') + " ('agent-job-'+[guid]::NewGuid().ToString('N')+'.status')",
         '& $jobHelper ' +
           "'--status' $jobMarker '--cwd' '-' '--parent' ([string]$PID) '--' " +
           [rt.executable, ...rt.args].map(psLiteral).join(' '),

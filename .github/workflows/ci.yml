@@ -529,7 +529,7 @@ jobs:
         timeout-minutes: 5
         shell: pwsh
         run: |
-          node --test --import tsx --test-concurrency=1 test/windows-prelogin-agent-bootstrap.test.ts
+          node --test --import tsx --test-concurrency=1 test/windows-prelogin-agent-bootstrap.test.ts test/windows-prelogin-lifecycle.test.ts
           if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_PRELOGIN_BOOTSTRAP_CAPABILITY_RED' }
 
   connection-v2-native-git-dag:

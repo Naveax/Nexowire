@@ -3,6 +3,7 @@ import { runNativeAgent } from './agent/native-agent.js';
 import {runLocalOwnerCoreCommand} from './agent/local-owner-core-cli.js';
 import { runConnectCommand } from './connect.js';
 import { runNativeAgentLifecycleCommand } from './agent/native-agent-lifecycle.js';
+import {runSystemAgentPreloginLifecycleCommand} from './agent/windows-prelogin-lifecycle.js';
 import { runNativeAgentEnrollmentCommand } from './agent/native-agent-enrollment.js';
 import { runProcessWorker } from './agent/process-worker.js';
 import { loadConfig } from './config.js';
@@ -46,7 +47,7 @@ Usage:
                    Manage one-time local-owner physical console consent
   nexowire http    Start the MCP hub and native-agent WebSocket endpoint
   nexowire stdio   Start an MCP server over stdio
-  nexowire agent [run|enroll|doctor|status|install|start|stop|restart|uninstall]\n                   Enroll, diagnose, run, or manage the native computer agent\n  nexowire relay   Start a first-party native-agent relay
+  nexowire agent [run|enroll|doctor|status|install|start|stop|restart|uninstall]\n                   Enroll, diagnose, run, or manage the native computer agent\n  nexowire agent prelogin-status|prelogin-stage|prelogin-install|prelogin-uninstall\n                   Inspect or prepare the separate SYSTEM pre-login status Agent\n  nexowire relay   Start a first-party native-agent relay
   nexowire tailscale [status|serve|funnel|reset]  Manage Tailscale exposure\n  nexowire hub [preflight|install|status|start|stop|restart|uninstall]  Manage user-logon Hub autostart\n  nexowire hub [boot-install|boot-status|reboot-readiness|boot-uninstall]  Manage elevated pre-logon SYSTEM Hub\n  nexowire node [bootstrap|status|connector]  Bootstrap a self-hosted Hub + local Agent\n  nexowire local-first ingress [--listen-port=43111] [--public-host=host.example.com]
   nexowire local-first funnel-plan               Inspect Tailscale safely; no route changes\n                   LOOPBACK MCP-only origin for a secure tunnel (opt-in)\n  nexowire connect                             Connect this PC to Nexowire\n  nexowire privileged-broker [run|install|status|probe|start|stop|uninstall]\n                              Run or manage the elevated Windows broker\n  nexowire credentials <list|issue|revoke>  Manage hash-only revocable credentials
   nexowire secrets <purposes|inspect|seal>   Manage protected bootstrap secret sources
@@ -112,6 +113,13 @@ async function main(): Promise<void> {
     const action = process.argv[3] ?? 'run';
     if (action === 'run') {
       await runNativeAgent();
+    } else if (
+      action === 'prelogin-status' ||
+      action === 'prelogin-stage' ||
+      action === 'prelogin-install' ||
+      action === 'prelogin-uninstall'
+    ) {
+      await runSystemAgentPreloginLifecycleCommand(process.argv.slice(3));
     } else if (
       action === 'enroll' ||
       action === 'doctor' ||
