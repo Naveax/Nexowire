@@ -109,14 +109,21 @@ test('missing confirmation phrase does not send any command', async () => {
   assert.match(h.history.at(-1), /tam olarak APPLY BRIDGE MODE/);
 });
 
-test('poll HTTP errors cannot become applied and restore the confirmation controls', async () => {
-  const h = harness([{ httpStatus: 503, status: 'applied', error: 'BRIDGE_UNAVAILABLE' }]);
-  const { reloaded } = await h.run();
-  assert.equal(reloaded, 0);
-  assert.doesNotMatch(h.history.at(-1), /İmzalı cihaz onayı alındı/);
-  assert.match(h.history.at(-1), /BRIDGE_UNAVAILABLE/);
-  assert.equal(h.elements.get('.bridge-apply-toggle').disabled, false);
-  assert.equal(h.elements.get('.bridge-apply-approve').disabled, false);
+test('poll HTTP 401/503 cannot become applied and restore the confirmation controls', async (t) => {
+  for (const { status, error } of [
+    { status: 401, error: 'AUTH_REQUIRED' },
+    { status: 503, error: 'BRIDGE_UNAVAILABLE' },
+  ]) {
+    await t.test(`HTTP ${status}`, async () => {
+      const h = harness([{ httpStatus: status, status: 'applied', error }]);
+      const { reloaded } = await h.run();
+      assert.equal(reloaded, 0);
+      assert.doesNotMatch(h.history.at(-1), /İmzalı cihaz onayı alındı/);
+      assert.match(h.history.at(-1), new RegExp(error));
+      assert.equal(h.elements.get('.bridge-apply-toggle').disabled, false);
+      assert.equal(h.elements.get('.bridge-apply-approve').disabled, false);
+    });
+  }
 });
 
 test('missing or malformed issue receipt cannot claim a completed device change', async (t) => {
