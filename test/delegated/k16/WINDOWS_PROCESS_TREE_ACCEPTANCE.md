@@ -16,6 +16,9 @@ source-level outcomes:
 | `taskkill` exit zero | Root appears alive | `treeCleanup=requested` only; descendants not verified |
 | `taskkill` exit zero | Root exited, *owned grandchild remains alive* | `treeCleanup=requested` **cannot mean succeeded**; grandchild postcondition missing (#540 T-387) |
 | `taskkill` exit nonzero | Root exited, *owned grandchild remains alive* | `treeCleanup=unconfirmed`; parent exit cannot prove tree exit (#540 T-387) |
+| `taskkill` exit 128 | Original root exited but numeric PID **reused**; owned grandchild alive | `PROCESS_TREE_TERMINATION_UNCONFIRMED`; PID-only liveness never proves original identity (#540 T-486) |
+| `taskkill` exit null | Original root exited, owned grandchild alive | `treeCleanup=unconfirmed`; missing exit status is not a confirmed stop (#540 T-486) |
+| `taskkill` exit zero | Original root exited, numeric PID now belongs to unrelated process | `treeCleanup=requested` **not** verified; this fixture does not signal/kill live PIDs (#540 T-486) |
 
 ## Real Work-PC acceptance required by #540
 
@@ -45,6 +48,20 @@ processes must be excluded by ownership and creation-time evidence. Capture:
    environment variables, and command-line arguments from shared artifacts.
 
 ## Completion rule
+
+### #540 T-487 — owner handoff evidence matrix
+
+| Gate | Required real Windows observation | When missing / contradictory |
+| --- | --- | --- |
+| Identity | Session owner plus root and *each* descendant PID **and creation time** before stop; exclude unrelated/reused incarnations | `UNKNOWN`, no action on ambiguous ownership |
+| Job readback | Owner #1096 native Job handle/result and its assignment/closure evidence for this exact session | `NOT_RUN` if no readback; `FAIL` if readback disproves assignment |
+| Stop request | Bounded `taskkill` or Job return/error with exact source SHA and timestamps | `requested`/`unconfirmed`, **never** `succeeded` alone |
+| Independent exit | Re-enumerate exact owned process incarnations after bounded deadline, including grandchildren and detached shells | `FAIL` if still live; `UNKNOWN` if evidence or identity incomplete |
+| Test completion | Windows Node 22/24 (as actually configured) process exit 0, full TAP final line, no skip/TODO; include tested test path | `NOT_RUN` if test not discovered, even if general CI 7/7 |
+| Unrelated-process safety | Unrelated pre-existing PIDs/creation times unchanged; no signal outside owned session | `FAIL` on collateral termination, no source-only waiver |
+
+See `WINDOWS_HOSTED_CI_DISCOVERY.md`: historical successful #1105 CI
+did not discover K16 nested `.test.ts`, so it cannot satisfy the test gate.
 
 The owner must link the exact-HEAD Windows CI result, the full isolated test
 process exit, and independent descendant-exit evidence to #540. If any owned
