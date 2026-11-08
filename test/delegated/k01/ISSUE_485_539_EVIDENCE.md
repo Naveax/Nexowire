@@ -236,6 +236,82 @@ new fixtures were run locally, **hosted NOT_RUN** unless an explicit
 per-file runner proves execution on exact HEAD. Real Windows/Agent/Hub,
 browser screenshots, device pairing/loopback listener **NOT_RUN**.
 
+## P007 D-001…D-006 — PR consolidation evidence (8 Nov 2026)
+
+**PR inventory and path ownership (D-001).** Source PR
+[#1011](https://github.com/Naveax/Nexowire/pull/1011)
+exact HEAD `6e740dfe919e5f615655f68815b078447915ce6f`
+has four changed paths. All **four** file blobs are **byte-identical**
+to owner Draft [#1068](https://github.com/Naveax/Nexowire/pull/1068)
+HEAD `94d38799e9e4b50fe84f7924e6fc84f90aeba090`:
+
+| Path | Matching SHA in both PR heads |
+| --- | --- |
+| `web/connect.js` | `5618fd2a8a1bdfcd5d7e1a2ef7db688b8ed3eda1` |
+| `web/connect.html` | `1fdbe1c4d3e8cf92a3dbaddc06ecb7dbbcaa6c24` |
+| `test/delegated/k01/connect-state.test.ts` | `3a8ea6a60c0896021a4dce3d28d62ab4efe52bdb` |
+| `test/delegated/k01/ACCEPTANCE.md` | `f1af623799d264fbaf79bee9d12788fa8194ef41` |
+
+Therefore **#1011 has no unique content to preserve by copying files**.
+Its standalone merge would conflict with #1068 web ownership. Preserve
+the owner-integrated blobs and keep the distinct #1114 negative tests
+on the existing #1114 branch. Recommend **closing redundant Draft #1011
+only after owner/ŞEF confirmation**, not unilateral closure or merge.
+
+**D-002:** Both current main `52d452f717d891eeaf4c2b9aff3c6e1ea68369b0`
+and owner #1068 (exact SHA above) still present three source-level
+RED gates: blank pairingId/token, 429 vs 503 identical error text, and
+raw exception text in DOM. Their associated test-only in-memory proposals
+are GREEN for the narrow stimuli; no owner source was changed.
+
+**D-003, new RED:** The original owner `connect.js` completes dashboard
+200 then, if the pairing POST returns **401 SESSION_EXPIRED**, shows
+the identical generic `Bağlantı hazırlanamadı.` retry text as a 503
+service outage. Its 403 quota denial *does* get a terminal message
+with retry disabled in owner #1068. A new opt-in test enforces that 401
+and 503 explain different user actions: it **FAILS** on main and owner.
+The appropriate login/expired-session decision is auth-owner work;
+K01 only supplies UI evidence and no auth flow changes.
+
+**D-004, actual hosted CI:** #1011 HEAD `6e740df` had
+[run 41337712422](https://github.com/Naveax/Nexowire/actions/runs/41337712422)
+`completed/action_required` and **zero jobs**; this is NOT_PASS.
+#1114 prior HEAD `0366113952f8a006432a3370ffc4933fc4c9f40d`
+had [run 42485193172](https://github.com/Naveax/Nexowire/actions/runs/42485193172)
+`completed/success`, seven jobs; nevertheless required CI workflow blob
+`90185b6f4297bc3e4feaca44817ed6a8248bd4be` does not call
+`test/delegated/k01/issue485-state-truth.test.mjs` or even its directory.
+Thus **K01's new .mjs is hosted NOT_RUN**. K13 owns auxiliary test
+discovery; upstream ci.yml remains owner #1096.
+
+**D-005, exact owner request:** on `web/connect.js` blob `5618fd2a`:
+
+1. Reject empty/whitespace pairingId and token strings (the test already
+   proves valid pairing continues to navigate after candidate validation).
+2. Give 429 with valid bounded Retry-After distinct, actionable text
+   from 503, keeping terminal 403 distinct.
+3. Pairing 401 should offer a session-expiry or reauthentication path,
+   rather than suggesting another identical transient-service retry.
+4. Do not copy unexpected exception diagnostics verbatim to the DOM;
+   preserve user-facing known errors and generic fallback for unknowns.
+
+These are **proposals**, not source changes or claims that live services
+sent the synthetic payloads.
+
+**D-006 acceptance/closure recommendation:** #1114 remains Draft with
+intentional failing opt-in tests, hosted test discovery NOT_RUN, and
+real keyboard/375-768px screenshots/Windows/two-device/onboarding
+NOT_RUN. Retain #1114 until owner fixes plus exact-source tests and
+CI discovery are verified; do not merge or close issue #485/#539.
+For #1011, get owner/ŞEF signoff to close it as redundant once #1068
+will carry the identical four blobs. No unilateral PR closure.
+
+New local test totals: main **20 tests / 13 PASS / 7 SKIP**; owner
+**20 / 16 PASS / 4 SKIP**. Opt-in RED main and owner **13 PASS / 3 SKIP /
+4 FAIL** (pairing blanks, 429, raw exception, pairing 401). Host exact
+HEAD for any following commit must be checked again; no rerun of existing
+same-SHA workflows.
+
 ## T-260: real browser attempt and blocker
 
 `browser-capture.mjs` serves the three web source files through an isolated
