@@ -200,6 +200,90 @@ These are conservative support-language examples, not new runtime states or
 permission grants. End-to-end provider refusal, live Agent and original-device
 acceptance remain separate evidence gates for [#539](https://github.com/Naveax/Nexowire/issues/539).
 
+### Do not combine Bridge, Hub, and device status namespaces (#539)
+
+There is no universal `APPLIED`/`FAILED`/`UNKNOWN` response across these
+surfaces. An operator should identify **which request ID, source and evidence**
+produced a state before translating it into a Turkish status message:
+
+| Surface / source | Actual status vocabulary | Safe display and evidence boundary |
+| --- | --- | --- |
+| Admin Bridge command, [`web/app.js`](../web/app.js) `applyDeviceBridgeMode`, [`control-plane-http.ts`](../src/product/control-plane-http.ts) | `queued`, `claimed`, `applied`, `failed`, `expired` | `queued` = “Komut sırada”; `claimed` = “Cihaz işliyor”; `applied` = “İmzalı cihaz onayıyla bu Bridge komutu uygulandı”. The last proves its signed **Bridge command receipt**, not completion of an unrelated MCP/business task. `failed`/`expired` remain specific to that command. |
+| MCP Hub idempotency, [`create-server.ts`](../src/mcp/create-server.ts) | `in_progress`, `succeeded`, `failed`, `unknown` | `succeeded` means a **recorded Hub operation outcome**; `unknown` = “Sonuç bilinmiyor; orijinal istek uzlaştırılmalı”. Do not relabel these records `applied` or infer a physical Windows grant. |
+| Native Agent operation journal, `agent_operation_status` | `in_progress`, `succeeded`, `failed`, `unknown` | A successful **read-only query** can return no record or a journal record. `succeeded` is the recorded native operation outcome, not independent acceptance of the user's business postcondition. |
+| Device panel, [`web/app.js`](../web/app.js) `render` | `device.online` boolean, “Çevrimiçi”/“Çevrimdışı”; separate Broker readiness | Connectivity or a “Broker hazır” signal does not imply a command was issued, applied, authorized for physical input, or independently verified. |
+
+Three misleading cross-surface shortcuts to avoid:
+
+1. **“Bağlı = işlem uygulandı”**: the dashboard currently displays the top
+   **“Bağlı”** pill even for `devices: []`, alongside a `0` count and
+   **“Henüz bağlı cihaz yok”**. This reproducible *source-label collision* is
+   recorded in K08 [#1128](https://github.com/Naveax/Nexowire/pull/1128);
+   the panel badge reflects dashboard loading, not enrolled/online devices.
+   The UI file belongs to [#1068](https://github.com/Naveax/Nexowire/pull/1068),
+   so this document does not silently apply a UI change. Proposed owner copy:
+   **“Kontrol paneli yüklendi”** for the top badge.
+2. **“Hub FAILED = Bridge FAILED”**: a Hub journal `failed` record is not a
+   signed Bridge `failed` receipt. Only compare statuses with the same
+   request identity and source; never merge unrelated error fields into a
+   fabricated global outcome.
+3. **“Bridge APPLIED = Windows owner permission / whole task verified”**:
+   an authenticated, signed command receipt establishes only that command's
+   documented application. Independent physical permission, installed binary
+   provenance and requested business postcondition need their own evidence.
+
+For a Bridge polling timeout, connection loss or unrecognized status, display
+**“Komut sonucu doğrulanamadı; istek kimliğiyle durumu yeniden sorgula”**;
+do not invent a `failed`/`applied` receipt or immediately issue a second
+mutation. This is *support copy*, not a new Bridge protocol state. The
+`#1128` Node VM reproduction and K08 offline source-matrix test cover only
+source text, not a live browser, signed receipt or device.
+
+### HTTP gate failures versus execution results (#539)
+
+These are illustrative **HTTP rejection bodies at separate entry gates**,
+not MCP `structuredContent`, native Agent journal outcomes, or evidence of a
+previously dispatched mutation. Check the original request ID and whether
+dispatch was possible before choosing a retry action.
+
+| HTTP gate and code from source | What the caller may conclude | What it does **not** prove |
+| --- | --- | --- |
+| `POST /mcp` HTTP `401`, `MCP_AUTH_REQUIRED`, `layer: token`, `next_action: reauthorize` | This invocation lacks a valid accepted credential; authenticate legitimately | The token can be bypassed, or a prior invocation had no side effects |
+| `POST /mcp` HTTP `403`, `MCP_TOOL_NOT_AUTHORIZED` | The tool is denied by the caller's allowlist; stop or request scoped authority | An alternate tool, credential or encoding is an authorized workaround |
+| Hosted quota gate HTTP `429`, `MCP_QUOTA_EXHAUSTED` (or feature-specific `403`, `MCP_FEATURE_NOT_IN_PLAN`) | The current metered request is denied; check quota/plan | A prior charged or ambiguous request may safely be replayed under a new ID |
+| Authentication verifier HTTP `503`, `MCP_AUTH_VERIFIER_UNAVAILABLE`, `layer: verification`, `next_action: retry_later`, `Retry-After: 5` | Identity verification infrastructure is unavailable; do not demand a password reset | A failed local token, a granted tool permission, or an Agent task failure |
+| Hosted charge gate HTTP `503`, `MCP_AUTH_CHARGE_UNAVAILABLE` | Charge/reservation outcome is uncertain; preserve the invocation identity and reconcile | Definitely no reservation occurred, or retry with a new ID is safe |
+| Device Bridge control-plane HTTP `503`, `BRIDGE_COMMAND_TRANSPORT_DISABLED` | Bridge command transport is unavailable at that endpoint | The MCP transport is down, or a different command was reversed/failed |
+
+`src/mcp/http.ts` emits the MCP `401`/`403`/verifier `503` branches;
+`src/mcp/hosted-metering.ts` implements the active MCP hosted quota gate;
+`src/product/fused-mcp-authorize-charge.ts` also defines the candidate fused
+charge/quota handler (not proof that the candidate route is mounted);
+`src/product/control-plane-http.ts` defines Bridge transport rejection.
+**HTTP succeeded** only means that HTTP handling succeeded: a `201` Bridge
+enqueue, `200` poll, or `200` status query is not the same as a verified
+business postcondition. An HTTP timeout *after possible dispatch* remains
+`UNKNOWN` until the original operation is reconciled. The local source-matrix
+tests are offline; original Hub, OAuth, real Windows and browser: **NOT_RUN**.
+
+### Nested K08 QA discovery, exact-commit evidence (#1006)
+
+At [PR #1106](https://github.com/Naveax/Nexowire/pull/1106)
+`b9f9dc79b35e6281f5074f4abd12c4706d0ec0c8`, hosted
+[CI run 42473986638](https://github.com/Naveax/Nexowire/actions/runs/42473986638)
+finished **7/7 jobs success**. Its required `.github/workflows/ci.yml`
+explicitly calls the three older K08 files (`mcp-doc-contract`,
+`mcp-doc-fences-endpoints`, `mcp-output-language`), but **does not select**
+`issue539-mcp-evidence-matrix.test.mjs` or the newer nested K08 files.
+Therefore the previous new K08 assertions are **HOSTED_NOT_RUN**, despite
+the generally green job; their separate local run was 24/24 PASS. The
+current additional `issue539-cross-surface-status.test.mjs` is also
+**HOSTED_NOT_RUN pending a future exact-HEAD selection**. K13 owns CI
+discovery; K08 does not edit the owner-controlled workflow. A later
+selection must be verified by the **exact filename + commit SHA + run ID**;
+neither a positive workflow conclusion nor a Windows runner's unrelated
+tests establish a physical Nexowire acceptance result.
+
 ## v1 compatibility rule
 
 `src/mcp/surface.ts` contains `MCP_V1_STABLE_TOOLS`, the compatibility floor for v1.

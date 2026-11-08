@@ -137,6 +137,25 @@ an `active:false` report alone does not prove which installed binary and
 input path produced the historical #812 observation. Neither stored FULL
 preference nor a successful MCP status query supplies missing local consent.
 
+**Never write “physical authorization verified” from status text alone.** An
+HTTP `200`, Agent journal `succeeded`, Hub idempotency `succeeded`, device
+`online`, stored FULL preference, or signed Bridge `applied` receipt covers
+its *own* observation only. For issue #812, “yerel izin doğrulandı” needs
+fresh owner grant evidence, effective permission checked at the **exact
+physical action boundary**, installed build identity and independent local
+readback for the requested effect. Those device/Windows checks are **NOT_RUN**
+in these source-only documents. A signed Bridge command receipt may prove its
+particular Bridge application, not a separate physical input action.
+
+The same-word status collision across dashboard (“Bağlı” with `devices: []`),
+Bridge (`queued`/`claimed`/`applied`/`failed`/`expired`), Hub idempotency
+(`in_progress`/`succeeded`/`failed`/`unknown`) and native operation journal is
+broken down in [MCP surface documentation](MCP_SURFACE.md#do-not-combine-bridge-hub-and-device-status-namespaces-539).
+These **different namespaces** cannot be mapped to one global completed
+boolean. The dashboard wording remains with the owner [PR #1068](https://github.com/Naveax/Nexowire/pull/1068);
+K08 reproduced the no-device contradiction in [PR #1128](https://github.com/Naveax/Nexowire/pull/1128)
+and only maintains its own docs/test QA here.
+
 For compatibility and tool name details, see
 [`MCP_SURFACE.md`](MCP_SURFACE.md). For the versioned structured error
 classification, see
