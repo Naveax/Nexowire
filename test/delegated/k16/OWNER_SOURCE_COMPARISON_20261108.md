@@ -49,3 +49,29 @@ checkout SHA. If no safe physical test environment exists, mark **NOT_RUN**.
 
 No CORE, CI, Job ownership, Windows process, security, auth, release, or
 deployment mutation was performed by K16.
+
+## P007 D-091/D-095 — current owner head and no file collision
+
+Read-only `git ls-remote` / `git diff` after P007 replaced the earlier
+#1096 head with **`b675897dce171a4f5e7a7ccb3187a16ac13630d0`**.
+Upstream main was still `52d452f717d891eeaf4c2b9aff3c6e1ea68369b0`.
+At this newer owner SHA, `process-manager.ts` is **88 insertions / 30 deletions**,
+owner `.github/workflows/ci.yml` is **304 insertions / 14 deletions** relative
+to main. Owner PR's changed files include the two protected paths, but
+**zero** files under `test/delegated/k16/**`; #1105 has four K16-only paths
+and #1121 has one K16-only path. No same-path collision; **semantic**
+ProcessManager/Job behavior and CI test-discovery dependencies remain open.
+
+Owner minimal delta for review, not a K16 source change:
+
+1. Treat a `taskkill` exit-zero as **request** until exact owned descendant
+   PID+creation-time readback confirms all descendants exited.
+2. If a detached child survives after root exits, return an unconfirmed/
+   explicit failure result and preserve session/Job ownership identity;
+   do not blindly kill by a recycled PID.
+3. Include the explicit K16 nested test file under a reviewed Windows
+   Node22/24 CI command and capture final TAP exit. The current owner
+   `ci.yml` candidate still does **not** name
+   `test/delegated/k16/windows-taskkill-contract.test.ts`.
+
+This note is a QA handoff to ŞEF/Ömer, not a permission to patch #1096.
