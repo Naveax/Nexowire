@@ -97,8 +97,11 @@ source paths is changed. The patch *does* modify `src/agent/executors.ts`,
 but its current hunks add Windows CORE/Broker dispatch admission, not a
 file read/hash/write transfer-size override. This is **source comparison**,
 not a test of a running Hub, Agent or ChatGPT upload. A user-reported
-220 KiB transfer is below these particular size guards; the failing
-client/provider/Hub/Agent boundary is still **UNKNOWN**.
+220 KiB transfer is below these particular size guards. **The original
+failure was later found in the historical owner Work PC issue log**: an
+HTTP `413` on the `/mcp` request path *before a tool result*, not a
+demonstrated filesystem size ceiling. The precise proxy/ingress/Hub hop
+producing the 413 remains **UNKNOWN** (details below).
 
 Four existing K19 Draft PRs are open, unmerged, each with distinct files:
 
@@ -134,3 +137,47 @@ Drafts, turn 7/7 generic success into hosted test success, or close issue
 owner approval, and physical two-PC acceptance are still distinct gates.
 Owner-coordinated merge/PR-closure decisions are deliberately **not** made
 by K19 under protocol V006. No new PR was opened for this P007 handoff.
+
+## P007 follow-up: genuine Work PC #588 evidence versus K19 local fixtures (2026-11-08)
+
+Rechecked **Naveax's original issue comment**, not just #588's title:
+[Work PC HTTP 413 / successful bounded write, 2026-10-20](https://github.com/Naveax/Nexowire/issues/588#issuecomment-6289416326).
+This is **historical owner-provided real-device evidence**, not a new K19
+live-device test:
+
+| Historical observation | What it proves / does not prove |
+| --- | --- |
+| Work PC Agent **1.0.5**: one `Nexowire.file_write` carrying approximately 230 KiB synthetic UTF-8 failed **before any tool result** with `INVALID_ARGUMENT / McpServerError` and HTTP `413 Request Entity Too Large` at tailnet `/mcp` | Confirms a **single serialized request / HTTP-path** failure, not a whole-file disk-size limit; the exact component returning 413 is **UNKNOWN** |
+| Same authorized API: **231,474** synthetic bytes succeeded in four bounded calls (`65,536 + 65,536 + 65,536 + 34,866`), `file_stat` confirmed 231,474 bytes, `file_hash` SHA-256 `4be215a260d0c3eb3ba3717678b9eacacb5f396ac89c79650c2fd90dcabd0f91` | **Actual owner Work PC success**, not K19's local mock; does **not** constitute an idempotent or resumable production protocol |
+| [Owner's separate #588 update](https://github.com/Naveax/Nexowire/issues/588#issuecomment-6290078921): 221 KiB physical cross-PC in four bounded writes; 1 MiB physical cross-PC in sixteen 64 KiB writes, SHA-matched | Historical **physical chunked-file evidence exists**; does not establish a **single logical request** that triggers an automatically managed stream, reconnect resume, or independently authenticated final receiver ACK |
+| That update separately describes **256 MiB+1 B** and **1 GiB** source-only/isolated-Hub streaming acceptance | **Not** a deployed two-device Agent/Hub 1 GiB acceptance; do not claim current service capacity |
+
+Owner clarified in [#588](https://github.com/Naveax/Nexowire/issues/588#issuecomment-6289689077)
+that **one user instruction / one logical MCP invocation** should start an
+automatically streamed, durable multi-device job; it does **not** mean
+placing GB of bytes in one JSON request. Manual repeated `append` is unsafe
+on uncertain acknowledgment (duplicate append or writer race). A production
+protocol needs session/transfer ID, exact-offset compare-and-swap,
+idempotency, target/device authorization, bounded memory, SHA verification,
+and atomic publish—owned by the protected Agent/Hub/Artifact workstreams,
+not implemented by these K19 UX reference tests. No new body-limit changes
+or unsafe automatic retry are proposed here.
+
+**Updated hosted check on exact #1147 HEAD**
+`709639e80ec322d6735650d38688dce8a3d0c2ca`:
+[Actions 42500690813](https://github.com/Naveax/Nexowire/actions/runs/42500690813)
+**7/7 generic jobs SUCCESS**. Specifically the `test (22)` job
+`128792553773` ran `test/delegated/k19/file-transfer-copy-reference.test.ts`
+and `file-transfer-user-contract.test.ts`, but **did not invoke**
+`p006-receiver-ack-reference.test.ts`, `p005-ci-discovery-qa.test.ts`,
+`issue588-large-file-acceptance.test.ts`, or
+`issue588-limits-inventory.test.ts`; these four nested cases are still
+**hosted NOT_RUN**, although their separately reported local tests passed.
+
+**Still open / routing:** confirm the 413-producing intermediary using
+authorized redacted request/ingress logs and serialized wire sizes; prove
+the current deployment rather than historic Agent 1.0.5; test durable
+one-invocation transfer (including >256 MiB, restart/reconnect/replay,
+collision, disk full), separate receiving-device final readback and
+authenticated ACK. These are owner/ŞEF/CI-owner actions; K19 has not
+changed protected service code, deployed anything, or closed #588.
