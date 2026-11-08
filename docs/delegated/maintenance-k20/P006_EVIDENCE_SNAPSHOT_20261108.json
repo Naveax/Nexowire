@@ -1,0 +1,590 @@
+{
+  "source": "read-only GitHub connector and PANO P006, 2026-11-08",
+  "upstreamMain": "52d452f717d891eeaf4c2b9aff3c6e1ea68369b0",
+  "panoBlobSha": "ee3b9f65df141ce5d2b8933ab82956597aca30e7",
+  "workflowSource": "upstream main .github/workflows/ci.yml (protected owner #1096)",
+  "p005": {
+    "completedReported": 92,
+    "total": 120,
+    "openReported": 28,
+    "independentCreditVerification": false
+  },
+  "p006": {
+    "workers": {
+      "K01": [
+        535,
+        536,
+        537,
+        538,
+        539,
+        540
+      ],
+      "K02": [
+        541,
+        542,
+        543,
+        544,
+        545,
+        546
+      ],
+      "K03": [
+        547,
+        548,
+        549,
+        550,
+        551,
+        552
+      ],
+      "K04": [
+        553,
+        554,
+        555,
+        556,
+        557,
+        558
+      ],
+      "K05": [
+        559,
+        560,
+        561,
+        562,
+        563,
+        564
+      ],
+      "K06": [
+        565,
+        566,
+        567,
+        568,
+        569,
+        570
+      ],
+      "K07": [
+        571,
+        572,
+        573,
+        574,
+        575,
+        576
+      ],
+      "K08": [
+        577,
+        578,
+        579,
+        580,
+        581,
+        582
+      ],
+      "K09": [
+        583,
+        584,
+        585,
+        586,
+        587,
+        588
+      ],
+      "K10": [
+        589,
+        590,
+        591,
+        592,
+        593,
+        594
+      ],
+      "K11": [
+        595,
+        596,
+        597,
+        598,
+        599,
+        600
+      ],
+      "K12": [
+        601,
+        602,
+        603,
+        604,
+        605,
+        606
+      ],
+      "K13": [
+        607,
+        608,
+        609,
+        610,
+        611,
+        612
+      ],
+      "K14": [
+        613,
+        614,
+        615,
+        616,
+        617,
+        618
+      ],
+      "K15": [
+        619,
+        620,
+        621,
+        622,
+        623,
+        624
+      ],
+      "K16": [
+        625,
+        626,
+        627,
+        628,
+        629,
+        630
+      ],
+      "K17": [
+        631,
+        632,
+        633,
+        634,
+        635,
+        636
+      ],
+      "K18": [
+        637,
+        638,
+        639,
+        640,
+        641,
+        642
+      ],
+      "K19": [
+        643,
+        644,
+        645,
+        646,
+        647,
+        648
+      ],
+      "K20": [
+        649,
+        650,
+        651,
+        652,
+        653,
+        654
+      ]
+    },
+    "taskRange": [
+      535,
+      654
+    ]
+  },
+  "claimsByWorker": {
+    "K01": [],
+    "K02": [
+      235,
+      385,
+      523
+    ],
+    "K03": [],
+    "K04": [
+      238
+    ],
+    "K05": [
+      253
+    ],
+    "K06": [
+      378
+    ],
+    "K07": [
+      122,
+      389
+    ],
+    "K08": [
+      123
+    ],
+    "K09": [
+      124
+    ],
+    "K10": [
+      134
+    ],
+    "K11": [
+      131
+    ],
+    "K12": [
+      252
+    ],
+    "K13": [
+      128
+    ],
+    "K14": [
+      140
+    ],
+    "K15": [
+      246
+    ],
+    "K16": [
+      385,
+      387
+    ],
+    "K17": [
+      244
+    ],
+    "K18": [
+      384
+    ],
+    "K19": [
+      245
+    ],
+    "K20": [
+      129
+    ]
+  },
+  "prs": [
+    {
+      "number": 1099,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "2ae40bd36a3e97b8544102a96b4e63673f6a5fd0"
+    },
+    {
+      "number": 1100,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "6d8a555c371c323bb73d858053cd2794dde54152"
+    },
+    {
+      "number": 1101,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "3d4408e84b50e7787dec922a0332ddb35156e700"
+    },
+    {
+      "number": 1102,
+      "state": "closed",
+      "merged": true,
+      "draft": false,
+      "head_sha": "86f1224ccdc9252c98131de187ad40985a0752ac"
+    },
+    {
+      "number": 1103,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "697ea5e50fa5051451704e877d401dd2c1df7de9"
+    },
+    {
+      "number": 1104,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "247be5e246ae19b0237841950f8c680ce10bfcf0"
+    },
+    {
+      "number": 1105,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "96767f3c7acf344cf8070b0be7ff9959b103a4dc"
+    },
+    {
+      "number": 1106,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "b9f9dc79b35e6281f5074f4abd12c4706d0ec0c8"
+    },
+    {
+      "number": 1107,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "fed3b1c67a413a175e67593f87203e8610840d79"
+    },
+    {
+      "number": 1108,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "7056c5ff88985ef6dfd19259e9bdc8f0d32dca8d"
+    },
+    {
+      "number": 1109,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "d14a24c52243371d1111634d26ea0e256164b7ac"
+    },
+    {
+      "number": 1110,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "fd687a145bc08e51cf5ce2cbf136bbe90d727a3a"
+    },
+    {
+      "number": 1111,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "c5119a65a914ec339ad1c362ba9ba1ca19e339b4"
+    },
+    {
+      "number": 1112,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "3ca2cd12f003768ac66dea0f242b6b8007587101"
+    },
+    {
+      "number": 1113,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "079cef00aaabc093fe400b47ef71e65144dff0f6"
+    },
+    {
+      "number": 1114,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "0366113952f8a006432a3370ffc4933fc4c9f40d"
+    },
+    {
+      "number": 1115,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "2a74d9d2c0c42265c4ee27494eb530059904c0b3"
+    },
+    {
+      "number": 1116,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "0f3916ecd3d3ff0db5d7a1743b007e52a0cd16aa"
+    },
+    {
+      "number": 1117,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "822b4247dc7066897ac6427723e1c4c99083c1e4"
+    },
+    {
+      "number": 1118,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "d51d9d4c2c25797405227bad223039c6b31055d2"
+    },
+    {
+      "number": 1119,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "6515f3777e510a6f62c8bc6cf9333d2fbe67877e"
+    },
+    {
+      "number": 1120,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "f6ae93d8746f5b753618cbbb5f1f1b2a73ef2090"
+    },
+    {
+      "number": 1121,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "1b97d6341c036e1eadde491be1abfe743c716b7c"
+    },
+    {
+      "number": 1122,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "aaa96bde77bd6c4a03bc6b653be268727ee44f18"
+    },
+    {
+      "number": 1123,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "eed5becc5bb107a26e0c789f81ca9dd9c4230e0e"
+    },
+    {
+      "number": 1124,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "4d1a3dc32bd8c6718392ec743769c5409e114f3c"
+    },
+    {
+      "number": 1125,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "fdea20a8758dc734f65ad3fd2f9001dfe4438235"
+    },
+    {
+      "number": 1126,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "332e211e8894bfa6222ecc9c0e03b89463b8acd0"
+    },
+    {
+      "number": 1127,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "32f76f575c4baf68c4c3c105bbcc7726c3999610"
+    },
+    {
+      "number": 1128,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "5f2b654d4c23d55a1ff3dd141f2117cb9e7f0872"
+    },
+    {
+      "number": 1129,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "eb89ea72f73a7549cd44831537c1ccd5093efe3d"
+    },
+    {
+      "number": 1130,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "8a5bc56ebe1004595e4cebbd5bc363fe51892534"
+    },
+    {
+      "number": 1131,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "a670647298d878d71f60e3a4af1a660ac2a30c37"
+    },
+    {
+      "number": 1132,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "1f1d912b164a01485abdf3b56cfe62fa37752955"
+    },
+    {
+      "number": 1133,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "98beceafb1ef6715ae44dff56fdb70fb2ed0351d"
+    },
+    {
+      "number": 1134,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "ec640fc144b1fe10e4a4490f353fd753eeaf3ad5"
+    },
+    {
+      "number": 1135,
+      "state": "closed",
+      "merged": true,
+      "draft": false,
+      "head_sha": "1267ea14554cca3545e962b1bbdec57487994a99"
+    },
+    {
+      "number": 1136,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "ed5fa137bc875e613691e13d1b72a8df9ebf9d56"
+    },
+    {
+      "number": 1137,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "4869fe31ff47c97220c73af66a4eab5d3c73f027"
+    },
+    {
+      "number": 1138,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "6f2505bb183f60ad9967e50db9f73a6223e2e96d"
+    },
+    {
+      "number": 1139,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "51d8400430dd0b78bee6afb300cfe44ac67e560d"
+    },
+    {
+      "number": 1140,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "ec1f38d8db3a74eb8fe300218fc4190a2a591ac2"
+    },
+    {
+      "number": 1141,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "a13dd68d0585d5f4b2617beb121702a2db7850ea"
+    },
+    {
+      "number": 1142,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head_sha": "5cb6bd2e249102a8ca7d675b80993b0962c81cba"
+    }
+  ],
+  "runs": [
+    {
+      "pr": 1118,
+      "runId": 42411030903,
+      "jobId": 128519002548,
+      "job": "test (22)",
+      "jobConclusion": "failure",
+      "tapPass": 50,
+      "tapTests": 50,
+      "ciConclusion": "failure"
+    },
+    {
+      "pr": 1130,
+      "runId": 42412252743,
+      "jobId": 128522716363,
+      "job": "test (24)",
+      "jobConclusion": "failure",
+      "tapPass": 48,
+      "tapTests": 48,
+      "ciConclusion": "failure"
+    },
+    {
+      "pr": 1141,
+      "runId": 42474379692,
+      "jobId": 128712299256,
+      "job": "test (22)",
+      "jobConclusion": "failure",
+      "tapPass": 52,
+      "tapTests": 52,
+      "ciConclusion": "failure"
+    }
+  ],
+  "issue487": {
+    "state": "open",
+    "pr1135Merged": true,
+    "autoCloseThenReopen": "reported in PANO P006; timeline not independently fetched",
+    "physical": "NOT_RUN"
+  }
+}
