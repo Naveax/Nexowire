@@ -3,7 +3,8 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { auditFixedCountGate, findClosingKeywords, auditIssueLifecycle,
+import { auditFixedCountGate, auditDynamicTapSummary, auditRequiredCiPaths,
+  findClosingKeywords, auditIssueLifecycle,
   auditHostedAcceptance } from '../../../scripts/delegated/k20/p006-ci-issue-gate.mjs';
 import { auditP006Board, auditPrCohort, auditCrossWorkerPoolClaims } from
   '../../../scripts/delegated/k20/p006-board-pr-audit.mjs';
@@ -38,6 +39,56 @@ test('T-649: matching baseline 41 is green assertions only; stale/head incomplet
     runId: 42474379692 }).verdict, 'ASSERTIONS_RED');
   assert.equal(auditFixedCountGate({ ...prior, tap: tap(52).split('\n').map(s => s && `2026-11-08T11:14:36.00Z ${s}`).join('\n'),
     runId: 42474379692 }).verdict, 'COUNT_DRIFT_REPRODUCED');
+});
+
+test('D-117: dynamic owner TAP count survives 41/48/50/52/55 drift while rejecting zero tests', () => {
+  for (const n of [41,48,50,52,55]) {
+    assert.equal(auditDynamicTapSummary(tap(n)).verdict,'DYNAMIC_COUNT_VALID');
+  }
+  assert.equal(auditDynamicTapSummary(tap(0)).verdict,'RED_TAP');
+  assert.equal(auditDynamicTapSummary('# tests 1\n# pass 1\n# fail 0\n# skipped 1\n# todo 0\n').verdict,
+    'RED_TAP');
+  assert.equal(auditDynamicTapSummary('# tests 1\n# pass 1\n# fail 0\n# skipped 0\n# todo 1\n').verdict,
+    'RED_TAP');
+  assert.equal(auditDynamicTapSummary('# tests 1\n# pass 1\n# fail 0\n').verdict,
+    'UNTRUSTED_OR_INCOMPLETE_TAP');
+  assert.equal(auditDynamicTapSummary(`${tap(1)}# tests 1\n`).verdict,
+    'UNTRUSTED_OR_INCOMPLETE_TAP');
+});
+
+test('D-119: owner-ready --tap CLI returns zero on positive 55/55 fixture without fixed 41 pin', () => {
+  const cli = fileURLToPath(new URL('../../../scripts/delegated/k20/p006-ci-issue-gate.mjs', import.meta.url));
+  const fixture = fileURLToPath(new URL('./fixtures/p007-clean-55.tap', import.meta.url));
+  const proc = spawnSync(process.execPath, [cli,'--tap',fixture],{encoding:'utf8',timeout:5000});
+  assert.equal(proc.error,undefined);
+  assert.equal(proc.status,0);
+  assert.equal(JSON.parse(proc.stdout).verdict,'DYNAMIC_COUNT_VALID');
+  assert.equal(JSON.parse(proc.stdout).ownerAcceptance,false);
+});
+
+const requiredSeven = [
+  'test/delegated/k09/roadmap-evidence.test.mjs',
+  'test/delegated/k11/issue-487-commercial-unknown.test.ts',
+  'test/delegated/k11/issue-487-meter-acceptance.test.ts',
+  'test/delegated/k11/p005-s5-evidence.test.ts',
+  'test/delegated/k16/environment-doctor-contract.test.ts',
+  'test/delegated/pool-k17/markdown-anchors.test.ts',
+  'test/delegated/pool-k19/audit-physical-pass-labels.test.ts',
+];
+
+test('D-119: current owner ci.yml lacks seven explicitly selected auxiliary #1149 tests', () => {
+  const r = auditRequiredCiPaths({workflow,paths:requiredSeven});
+  assert.equal(r.total,7);
+  assert.equal(r.staticallyReferenced,0);
+  assert.deepEqual(r.missing,requiredSeven);
+  assert.equal(r.hostedExecution,'NOT_VERIFIED');
+  assert.equal(auditRequiredCiPaths({workflow:`node --test ${requiredSeven.join(' ')}`,paths:requiredSeven}).verdict,
+    'STATIC_PATHS_PRESENT_NOT_EXECUTION');
+});
+
+test('D-119: commented out test paths do not count as an invoked hosted test', () => {
+  const r = auditRequiredCiPaths({workflow:requiredSeven.map(x=>`# ${x}`).join('\n'),paths:requiredSeven});
+  assert.equal(r.missing.length,7);
 });
 
 const fixtureBoard = () => [
@@ -151,13 +202,24 @@ test('T-653: actual CLI rejects false-green snapshot with nonzero process exit',
 });
 
 test('T-653: explicit path and runner output marker are required; 7/7 is not physical proof', () => {
-  const log = `node --test ${nested[0].path}\n# Subtest: T-653: hosted proof sentinel\nok 1`;
+  const log = `node --test ${nested[0].path}\n# Subtest: T-653: hosted proof sentinel\nok 1 - T-653: hosted proof sentinel`;
   const s = auditHostedAcceptance({head:SHA,run:{...goodRun,log},jobs,newTests:nested});
   assert.equal(s.discovery,'REPORTED_LOG_PATH_AND_MARKER');
   assert.equal(s.physical,'NOT_RUN_OR_NOT_VERIFIED');
   assert.equal(s.accepted,false);
   assert.equal(auditHostedAcceptance({head:SHA,run:{...goodRun,log:'path absent'},jobs,newTests:[]}).discovery,
     'NOT_VERIFIED');
+});
+
+test('D-117: echoing path and bare marker without TAP success cannot fake hosted discovery', () => {
+  const fake = `node --test ${nested[0].path}\n# Subtest: ${nested[0].marker}\nok 1 - unrelated`;
+  assert.equal(auditHostedAcceptance({head:SHA,run:{...goodRun,log:fake},jobs,newTests:nested}).discovery,
+    'NOT_VERIFIED');
+  const rawTimestamped = `2026-11-08T13:43:10.123Z node --test ${nested[0].path}\n` +
+    `2026-11-08T13:43:11.123Z # Subtest: ${nested[0].marker}\n` +
+    `2026-11-08T13:43:11.123Z ok 1 - ${nested[0].marker}`;
+  assert.equal(auditHostedAcceptance({head:SHA,run:{...goodRun,log:rawTimestamped},jobs,newTests:nested}).discovery,
+    'REPORTED_LOG_PATH_AND_MARKER');
 });
 
 test('T-654: stale exact HEAD, empty jobs and failed jobs cannot inherit green acceptance', () => {

@@ -9,6 +9,34 @@ const SHA = /^[a-f\d]{40}$/i;
 const exact = value => typeof value === 'string' && SHA.test(value);
 const positive = value => Number.isSafeInteger(value) && value > 0;
 
+/** Owner-facing dynamic TAP rule: no brittle total pin and no zero-test green. */
+export function auditDynamicTapSummary(tap) {
+  if (typeof tap !== 'string') throw new TypeError('TAP text required');
+  const normalized = tap.replace(/^\d{4}-\d{2}-\d{2}T[^\s]+\s+/gm, '');
+  const values = Object.fromEntries(['tests','pass','fail','skipped','todo'].map(name => {
+    const all = [...normalized.matchAll(new RegExp(`^# ${name} (\\d+)$`, 'gm'))];
+    return [name, all.length === 1 ? Number(all[0][1]) : null];
+  }));
+  const complete = Object.values(values).every(Number.isSafeInteger);
+  return { verdict: !complete ? 'UNTRUSTED_OR_INCOMPLETE_TAP' :
+    values.tests > 0 && values.pass === values.tests && values.fail === 0 &&
+    values.skipped === 0 && values.todo === 0 ? 'DYNAMIC_COUNT_VALID' : 'RED_TAP',
+  values, ownerAcceptance: false };
+}
+
+/** Static inventory only: textual selection never proves execution on the hosted runner. */
+export function auditRequiredCiPaths({ workflow, paths }) {
+  if (typeof workflow !== 'string' || !Array.isArray(paths) || !paths.length ||
+      paths.some(x => typeof x !== 'string' || !/^test\/[\w./-]+\.test\.(?:mjs|ts)$/.test(x))) {
+    throw new TypeError('Owner workflow and explicit delegated test paths required');
+  }
+  const commandText = workflow.split('\n').filter(line => !/^\s*#/.test(line)).join('\n');
+  const missing = paths.filter(path => !commandText.includes(path));
+  return { total: paths.length, staticallyReferenced: paths.length - missing.length,
+    missing, verdict: missing.length ? 'OWNER_REQUIRED_CI_DISCOVERY_GAP' : 'STATIC_PATHS_PRESENT_NOT_EXECUTION',
+    hostedExecution: 'NOT_VERIFIED' };
+}
+
 export function auditFixedCountGate({ workflow, tap, expectedFile, head, runHead, runId, conclusion }) {
   if (typeof workflow !== 'string' || typeof tap !== 'string' ||
       typeof expectedFile !== 'string' || !/^[\w.-]+\.tap$/.test(expectedFile) ||
@@ -77,7 +105,12 @@ export function auditHostedAcceptance({ head, run, jobs = [], newTests = [], phy
   const allGreen = runCurrent && jobsValid && run.status === 'completed' &&
     run.conclusion === 'success' && jobs.every(x => x.status === 'completed' && x.conclusion === 'success');
   const executed = runCurrent && typeof run.log === 'string' ? run.log : '';
-  const missing = newTests.filter(x => !executed.includes(x.path) || !executed.includes(x.marker))
+  const cleanLog = executed.replace(/\x1b\[[\d;]*m/g, '')
+    .replace(/^\d{4}-\d{2}-\d{2}T[^\s]+\s+/gm, '');
+  const lines = cleanLog.split('\n');
+  const missing = newTests.filter(x => !executed.includes(x.path) ||
+    !lines.includes(`# Subtest: ${x.marker}`) ||
+    !lines.some(line => /^ok \d+ - /.test(line) && line.slice(line.indexOf(' - ') + 3) === x.marker))
     .map(x => x.path);
   const discovered = newTests.length > 0 && missing.length === 0 && Boolean(executed);
   const physicalValid = physical?.environment === 'physical-windows' && physical?.status === 'PASS' &&
@@ -93,8 +126,14 @@ export function auditHostedAcceptance({ head, run, jobs = [], newTests = [], phy
 }
 
 function main() {
+  if (process.argv.length === 4 && process.argv[2] === '--tap') {
+    const result = auditDynamicTapSummary(readFileSync(process.argv[3], 'utf8'));
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    if (result.verdict !== 'DYNAMIC_COUNT_VALID') process.exitCode = 1;
+    return;
+  }
   if (process.argv.length !== 4 || process.argv[2] !== '--input')
-    throw new Error('Usage: node p006-ci-issue-gate.mjs --input snapshot.json');
+    throw new Error('Usage: node p006-ci-issue-gate.mjs --input snapshot.json | --tap results.tap');
   const input = JSON.parse(readFileSync(process.argv[3], 'utf8'));
   const report = auditHostedAcceptance(input);
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
