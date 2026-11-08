@@ -21,6 +21,14 @@ export function requestedBrokerEffectMode(
   return mode;
 }
 
+/** The privileged RUN mode is selected by the protected task action's literal
+ * argv, NOT by a user-modifiable environment variable inherited by the task. */
+export function brokerRunEffectMode(args: readonly string[]): 'external' | 'local-owner' {
+  if (args.length === 0) return 'external';
+  if (args.length === 1 && args[0] === '--local-owner-effects') return 'local-owner';
+  throw new Error('BROKER_RUN_ARGUMENTS_INVALID');
+}
+
 /**
  * Local owner mode deliberately has weaker proof than independent signed CAS.
  * Never infer it from /execute JSON, bearer possession, or a READY health
