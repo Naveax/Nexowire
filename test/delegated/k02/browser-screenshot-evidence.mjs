@@ -79,3 +79,31 @@ export function auditBrowserScreenshot({ evidence, expectedSha, evidenceDir, tar
   return result('REVIEW_REQUIRED',
     `PNG ${width}x${height}, SHA256 and ${targetCssWidth}px geometry internally consistent; external runner authenticity unverified`);
 }
+
+// Two repeated hashes may be legitimate identical screens, but never count as
+// *independent* viewport / retry captures without external attestation.
+// This is an evidence-uniqueness audit, not a proof that different hashes came
+// from a real browser. The result list intentionally has no aggregate PASS.
+export function auditIndependentScreenshotCaptures({ captures, expectedSha, evidenceDir }) {
+  if (!Array.isArray(captures)) return [result('UNKNOWN', 'capture list missing')];
+  const seenDigest = new Map();
+  const seenId = new Set();
+  return captures.map(({ evidence, targetCssWidth } = {}) => {
+    const individual = auditBrowserScreenshot({ evidence, expectedSha, evidenceDir, targetCssWidth });
+    if (individual.status !== 'REVIEW_REQUIRED') return individual;
+    if (typeof evidence.captureId !== 'string' || !evidence.captureId.trim()) {
+      return result('UNKNOWN', 'independent capture identity not recorded');
+    }
+    if (seenId.has(evidence.captureId)) {
+      return result('REPLAY_UNVERIFIED', 'same capture identity reused');
+    }
+    seenId.add(evidence.captureId);
+    const previous = seenDigest.get(evidence.screenshotSha256);
+    if (previous) {
+      return result('REPLAY_UNVERIFIED',
+        `identical PNG digest to ${previous}; independent capture unverified`);
+    }
+    seenDigest.set(evidence.screenshotSha256, evidence.captureId);
+    return individual;
+  });
+}
