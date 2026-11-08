@@ -59,7 +59,7 @@ function emptyDashboard() {
   };
 }
 
-function bridgeSequence(statuses) {
+function bridgeSequence(statuses, { requestId = 'request-3' } = {}) {
   const history = [];
   const status = {
     set textContent(value) { history.push(String(value)); },
@@ -77,17 +77,19 @@ function bridgeSequence(statuses) {
     return nodes.get(selector);
   } };
   const replies = [
-    { status: 'queued', requestId: 'request-3', expiresAt: '2099-01-01T00:00:00.000Z' },
+    { status: 'queued', requestId, expiresAt: '2099-01-01T00:00:00.000Z' },
     ...statuses.map((state) => ({
-      requestId: 'request-3', deviceId: 'device-3', status: state,
+      requestId, deviceId: 'device-3', status: state,
     })),
   ];
   let reloads = 0;
+  let fetchCalls = 0;
   const context = vm.createContext({
     document: { getElementById: () => { throw Error('Unexpected DOM access'); } },
     fetch: async () => ({
       ok: true, status: 200,
       json: async () => {
+        fetchCalls += 1;
         assert.ok(replies.length, 'Exceeded bounded fixture response count');
         return replies.shift();
       },
@@ -100,6 +102,7 @@ function bridgeSequence(statuses) {
   vm.runInContext('load = async () => { globalThis.reloads = (globalThis.reloads || 0) + 1; }', context);
   return {
     history,
+    get fetchCalls() { return fetchCalls; },
     run: async () => {
       await vm.runInContext("applyDeviceBridgeMode('device-3', 'on', __row)", context);
       reloads = context.reloads ?? 0;
@@ -132,5 +135,13 @@ test('T-408: unknown outcome after claimed cannot announce applied', async () =>
   const reloads = await bridge.run();
   assert.equal(reloads, 0);
   assert.match(bridge.history.at(-1), /Beklenmeyen cihaz komut durumu/);
+  assert.ok(bridge.history.every((line) => !/İmzalı cihaz onayı alındı/.test(line)));
+});
+
+test('T-408: empty command receipt must not poll into a false applied result', async () => {
+  const bridge = bridgeSequence(['applied'], { requestId: '' });
+  const reloads = await bridge.run();
+  assert.equal(reloads, 0, 'An empty command identity cannot prove a device transition');
+  assert.equal(bridge.fetchCalls, 1, 'Invalid issue receipt must not be polled');
   assert.ok(bridge.history.every((line) => !/İmzalı cihaz onayı alındı/.test(line)));
 });
