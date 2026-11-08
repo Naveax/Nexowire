@@ -124,3 +124,19 @@ Pre-login bootstrap runtime tests and explicit Windows Node 22/24
 CI tests verify the separate mode. No live tasks, credentials,
 UAC, startup settings or Work-PC/NAVEAX service state were changed
 by this source round. Full OS reboot remains NOT_RUN.
+
+## 2026-11-08 hosted Windows CI test-harness correction
+
+Exact source SHA `ab41dfd84` ran normal CORE and connection negative jobs
+successfully, but both hosted Windows Node 22/24 jobs failed before reaching
+the new bootstrap test. The cause was a test fixture that launched a nested
+full CLI/Task Scheduler probe on an unprovisioned ephemeral GitHub runner and
+timed out after 20 seconds. This was **test infrastructure**, not a verified
+Windows reboot failure or a failing CORE authorization check.
+
+The hosted gate now checks the real CLI `--help` routing, the read-only
+inspection source boundary, and the full deterministic reboot-blocker model
+without waiting on the ephemeral runner's ScheduledTasks service. The
+physical Work-PC `nexowire hub reboot-readiness` was independently executed
+and recorded earlier. Both real and simulated claims remain distinct.
+The corrected hosted test executes all seven assertions with zero SKIPs.

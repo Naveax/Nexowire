@@ -78,15 +78,18 @@ test('CI explicitly runs this preflight on Windows Node 22 and Node 24',()=>{
   assert.match(job,/WINDOWS_UNATTENDED_REBOOT_READINESS_RED/);
 });
 
-test('real CLI shows the Work-PC reboot blockers without rebooting or changing task state',{
-  skip:process.platform!=='win32',
-},()=>{
-  const run=spawnSync(process.execPath,[
-    '--import','tsx','src/cli.ts','hub','reboot-readiness',
-  ],{cwd:process.cwd(),encoding:'utf8',windowsHide:true,timeout:20_000});
-  assert.equal(run.status,0,run.stderr.slice(0,700));
-  const data=JSON.parse(run.stdout);
-  assert.equal(data.remoteRebootAccepted,false);
-  assert.ok(data.blockers.includes('PRELOGIN_REMOTE_RECOVERY_NOT_VERIFIED'));
-  assert.equal(typeof data.startupTopologyReady,'boolean');
+test('CLI routing and reboot readiness inspection are read-only without requiring hosted Task Scheduler',()=>{
+  const cli=readFileSync(new URL('../src/cli.ts',import.meta.url),'utf8');
+  const boot=readFileSync(new URL('../src/hub/hub-boot-lifecycle.ts',import.meta.url),'utf8');
+  const inspect=boot.slice(boot.indexOf('export async function inspectWindowsUnattendedRebootReadiness('),
+    boot.indexOf('export async function runHubBootLifecycleCommand('));
+  assert.ok(inspect.includes('await hubBootLifecycleStatus(options)'));
+  assert.match(inspect,/Get-ScheduledTask/);
+  assert.match(inspect,/Get-ItemProperty/);
+  assert.doesNotMatch(inspect,/(?:Register|Unregister|Disable|Enable|Start|Stop)-ScheduledTask/);
+  assert.match(cli,/action === 'reboot-readiness'/);
+  const run=spawnSync(process.execPath,['--import','tsx','src/cli.ts','--help'],
+    {cwd:process.cwd(),encoding:'utf8',windowsHide:true,timeout:12_000});
+  assert.equal(run.status,0,run.stderr.slice(0,500));
+  assert.match(run.stdout,/hub \[boot-install\|boot-status\|reboot-readiness\|boot-uninstall\]/);
 });
