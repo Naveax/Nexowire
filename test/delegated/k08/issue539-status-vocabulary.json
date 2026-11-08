@@ -1,0 +1,69 @@
+{
+  "issue": 539,
+  "task": "T-375",
+  "scope": "Offline Turkish UI wording QA; no live device or authorization inference",
+  "sourceBase": "4e7db16f4233048a956664bef6b607781eb63fb7",
+  "dictionary": [
+    {
+      "state": "dashboard_loaded",
+      "label": "Kontrol paneli yüklendi",
+      "evidence": "Authenticated dashboard response parsed",
+      "notEvidenceOf": "Any device registered, online or usable"
+    },
+    {
+      "state": "device_registered",
+      "label": "Cihaz hesaba eklendi",
+      "evidence": "Enrollment independently confirmed on the account",
+      "notEvidenceOf": "Device online, authorized to mutate or healthy"
+    },
+    {
+      "state": "device_online",
+      "label": "Cihaz çevrimiçi bildiriliyor",
+      "evidence": "Fresh authenticated device heartbeat",
+      "notEvidenceOf": "Broker ready, owner permission or task completion"
+    },
+    {
+      "state": "request_queued",
+      "label": "İstek sıraya alındı",
+      "evidence": "Original request ID and positive queue receipt",
+      "notEvidenceOf": "Request executed or postcondition reached"
+    },
+    {
+      "state": "outcome_unknown",
+      "label": "İşlem sonucu bilinmiyor",
+      "evidence": "Timeout, disconnected transport or missing authoritative receipt",
+      "notEvidenceOf": "Safe replay or definite execution failure"
+    },
+    {
+      "state": "task_verified",
+      "label": "İşlem sonucu doğrulandı",
+      "evidence": "Independent readback of requested business postcondition",
+      "notEvidenceOf": "Universal authorization or future device availability"
+    }
+  ],
+  "sourceObservations": [
+    {
+      "surface": "web/app.js",
+      "condition": "Dashboard payload has devices: []",
+      "pill": "Bağlı",
+      "count": "0",
+      "empty": "Henüz bağlı cihaz yok. Yeni cihaz bağlayarak başlayabilirsin.",
+      "classification": "confirmed_source_copy_collision",
+      "proposedCopy": "Kontrol paneli yüklendi"
+    },
+    {
+      "surface": "web/app.js",
+      "condition": "device.accessMode === 'full' without physical authorization evidence",
+      "observedCopy": "Full Access açık",
+      "classification": "ambiguous_preference_copy_owner_review",
+      "proposedCopy": "Full Access tercihi seçili; işlem yetkisi ayrıca doğrulanır"
+    },
+    {
+      "surface": "web/connect.js",
+      "condition": "Authenticated pairing page before BAĞLA",
+      "observedCopy": "Hazır",
+      "classification": "contextualized_readiness_not_claimed_enrollment",
+      "explanation": "Adjacent text explicitly says enrollment occurs after BAĞLA"
+    }
+  ]
+}
