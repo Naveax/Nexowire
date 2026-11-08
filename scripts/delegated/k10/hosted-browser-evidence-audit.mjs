@@ -47,19 +47,30 @@ function runCommands(jobLines) {
       index++;
       if (next.trim() && !next.trim().startsWith('#')) lines.push(next.trim());
     }
-    commands.push(lines.join(' '));
+    // Preserve shell statement boundaries. Joining unrelated lines with spaces
+    // can make a later `echo path` look like an argument of an earlier `node`.
+    commands.push(lines.join('\n'));
   }
   return commands;
 }
 
 function invokesNodePath(commands, path) {
   return commands.some((command) => {
-    // Recognize explicit node executions, not a comment, environment variable,
-    // step name or echo mentioning a file. A workflow is still not execution proof.
-    if (!/(?:^|[;&|]\s*)node(?:\.exe)?\s/.test(command)) return false;
-    const index = command.indexOf(path);
-    return index >= 0 && !/[\w./-]/.test(command[index - 1] ?? ' ') &&
-      !/[\w./-]/.test(command[index + path.length] ?? ' ');
+    // Recognize only a Node shell statement that itself names the target. A
+    // separate echo/comment (even in the same run block) is not an invocation.
+    const statements = command.replace(/\\\s*\r?\n/g, ' ')
+      .split(/\r?\n|&&|\|\||;|\|/);
+    return statements.some((statement) => {
+      const text = statement.trim().replace(/\s+#.*$/, '');
+      if (!/^node(?:\.exe)?\s/.test(text)) return false;
+      // A path in an eval string or a Node script's descriptive arguments is
+      // not proof that its test file has been selected by `node --test`.
+      if (/(?:^|\s)(?:-e|--eval|-p|--print)(?:\s|=)/.test(text)) return false;
+      if (path.includes('.test.') && !/(?:^|\s)--test(?:\s|=|$)/.test(text)) return false;
+      const index = text.indexOf(path);
+      return index >= 0 && !/[\w./-]/.test(text[index - 1] ?? ' ') &&
+        !/[\w./-]/.test(text[index + path.length] ?? ' ');
+    });
   });
 }
 

@@ -82,3 +82,48 @@ appear in a completed job's logs at the same SHA to count as hosted coverage.
   (#812): `NOT_RUN`.
 - Actual browser keyboard/focus navigation for 375/768/1440: `NOT_RUN`.
 - Source-only DOM/PNG fixture test passing never closes #485/#539/#812.
+
+## P007 PR-readiness audit — D-055…D-060 (2026-11-08)
+
+- **Two separate, still-Draft K10 PRs:** [#1116](https://github.com/Naveax/Nexowire/pull/1116)
+  at `0f3916ecd3d3ff0db5d7a1743b007e52a0cd16aa` changes **six** K10
+  paths (visual smoke, evidence contract, two issue suites, JSON manifest and
+  `web/README.md`); [#1142](https://github.com/Naveax/Nexowire/pull/1142)
+  previously at `550a6497fec85fddb0cfc1702e5b6556d8621d6a` changes **five**
+  different K10 paths (hosted audit/fixture scripts, two hosted suites and this
+  report). The diff path sets have **zero overlap**. The first enforces
+  screenshot/manifest integrity and redaction; the second audits CI selection
+  and renders labelled *offline* layouts. Both should retain their unique
+  negative tests during owner-reviewed integration; neither replaces the other.
+- **Exact-head CI:** #1116 [run 42411883766](https://github.com/Naveax/Nexowire/actions/runs/42411883766)
+  and #1142 at the SHA above [run 42485334997](https://github.com/Naveax/Nexowire/actions/runs/42485334997)
+  each completed **7/7 generic jobs SUCCESS**, including a real Windows Edge
+  browser-live job on the separate 800×600 loopback sample. The `test (22)`
+  and `test (24)` workflow steps select **only**
+  `test/delegated/k10/offline-web-smoke.test.mjs`, plus old pool/QA24 paths.
+  Neither PR's **four new nested K10 `.test.mjs` suites** appear in the required
+  CI invocation. Their hosted execution is `NOT_RUN`, even when generic CI is
+  green. [K13 #1149](https://github.com/Naveax/Nexowire/pull/1149) explicitly
+  selects seven **other** nested paths on an auxiliary fork workflow and does
+  not cover the four K10 suites; owner required `ci.yml` remains read-only.
+- **Owner UI differential:** [#1068](https://github.com/Naveax/Nexowire/pull/1068)
+  remains Draft; its `web/connect.html` adds `#error-title` and `#retry-hint`,
+  `aria-busy` on `#pair-panel`, and a live region on the pair copy. The K10
+  fixture's required IDs (`#connect-pill`, `#error-panel`, `#pair-panel`,
+  `#chatgpt-panel`, `#chatgpt-status`, `#error-message`, `#device-name`,
+  `#status-title`, `#status-text`, `#approve`) exist in **both** main and #1068.
+  This is DOM anchor compatibility **only**, not owner browser visual or
+  functional proof; K10 changes no `web` source.
+- **False-positive fix (D-060):** The audit previously joined shell script
+  lines into one long string. An unrelated `node --test other.test.mjs`
+  followed by `echo test/delegated/k10/issue-evidence-contract.test.mjs`
+  could falsely mark the echoed suite as selected. The audit now preserves
+  statement boundaries, handles `\\`-continued real Node tests, rejects eval
+  and requires `node --test` for `.test.*` paths. New positive and negative
+  regression assertions distinguish invoked tests from merely named files.
+- **Local Node 24 tests:** #1116 snapshot's three K10 suites **27/27 PASS**;
+  #1142 source's three K10 suites **35/35 PASS** after the D-060 parser
+  change; static smoke **34/34 PASS**. These are **local**, not hosted/new-HEAD
+  CI. Real Playwright/320–1440 capture, keyboard/focus, Windows user PC,
+  OAuth/pairing and native consent remain **NOT_RUN**. No merge, issue close,
+  workflow change, or new PR is authorized by this report.

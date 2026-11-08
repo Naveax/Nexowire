@@ -70,6 +70,52 @@ test('#485: a comment, step name, or echo containing capture path is not an exec
   assert.equal(result.status, 'NOT_RUN');
 });
 
+test('#1006 D-060: echo after unrelated Node command cannot fake selected K10 suites', () => {
+  const workflow = `jobs:
+  test:
+    steps:
+      - run: |
+          node --test test/unrelated.test.mjs
+          echo test/delegated/k10/issue-browser-negative.test.mjs
+          node --test test/unrelated.test.mjs && echo test/delegated/k10/issue-evidence-contract.test.mjs
+          node -e "console.log('test/delegated/k10/offline-web-smoke.test.mjs')"
+  browser-live:
+    steps:
+      - run: |
+          node --version
+          echo scripts/delegated/k10/hosted-connect-three-state.mjs
+          node scripts/irrelevant.mjs; echo scripts/delegated/k10/browser-visual-smoke.mjs
+`;
+  const result = auditHostedBrowserEvidence({ workflow, targetSha: head, runSha: head, jobs: successfulBrowserJob });
+  assert.equal(result.checks.baselineOfflineTestListed, false);
+  assert.equal(result.checks.issueNegativesListed, false);
+  assert.equal(result.checks.pngContractListed, false);
+  assert.equal(result.checks.staticVisualCaptureListed, false);
+  assert.equal(result.checks.threeStateCaptureListed, false);
+  assert.equal(result.reason, 'THREE_STATE_CAPTURE_NOT_IN_WORKFLOW');
+});
+
+test('#1006 D-060: a continued real Node test command remains discoverable', () => {
+  const workflow = `jobs:
+  test:
+    steps:
+      - run: |
+          node --test --test-reporter=tap \\
+            test/delegated/k10/issue-browser-negative.test.mjs \\
+            test/delegated/k10/issue-evidence-contract.test.mjs
+          echo complete
+  browser-live:
+    steps:
+      - run: node scripts/delegated/k10/hosted-connect-three-state.mjs --out fixtures
+`;
+  const result = auditHostedBrowserEvidence({ workflow, targetSha: head, runSha: head, jobs: successfulBrowserJob });
+  assert.equal(result.checks.issueNegativesListed, true);
+  assert.equal(result.checks.pngContractListed, true);
+  assert.equal(result.checks.threeStateCaptureListed, true);
+  assert.equal(result.status, 'NOT_RUN');
+  assert.equal(result.reason, 'CAPTURE_ARTIFACTS_NOT_PROVIDED');
+});
+
 test('#485: even a wired runner with a green job cannot establish screenshot origin without artifacts', () => {
   const workflow = `jobs:\n  test:\n    steps:\n      - run: node --test test/delegated/k10/issue-evidence-contract.test.mjs\n  browser-live:\n    steps:\n      - run: node scripts/delegated/k10/hosted-connect-three-state.mjs --out temp\n`;
   const result = auditHostedBrowserEvidence({ workflow, targetSha: head, runSha: head, jobs: successfulBrowserJob });
