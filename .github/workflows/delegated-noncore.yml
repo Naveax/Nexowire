@@ -49,3 +49,28 @@ jobs:
           grep -qx '# fail 0' "$RUNNER_TEMP/k13-explicit-delegated.tap"
           grep -qx '# skipped 0' "$RUNNER_TEMP/k13-explicit-delegated.tap"
           grep -qx '# todo 0' "$RUNNER_TEMP/k13-explicit-delegated.tap"
+
+  pr1112-auxiliary:
+    # Historical exact code checkout for K13-owned PR #1112 regression tests.
+    # This is NOT a CI check on that PR's own Actions head; no gate promotion.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 3ca2cd12f003768ac66dea0f242b6b8007587101
+          persist-credentials: false
+      - name: Verify pinned K13 PR source commit
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "3ca2cd12f003768ac66dea0f242b6b8007587101"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Execute exact K13 PR evidence regression tests offline
+        run: >-
+          node --test
+          test/delegated/k13/main-ci-discovery.test.mjs
+          test/delegated/k13/main-ci-evidence-gate.test.mjs

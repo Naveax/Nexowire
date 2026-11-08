@@ -28,13 +28,21 @@ No assumption is made about indirect imports or a future owner CI revision.
 ## Hosted evidence bridge (not required upstream CI)
 
 The new branch-only `.github/workflows/delegated-noncore.yml` has two Linux
-jobs (Node 22 and 24), read-only contents permission, no secrets, no trusted
+source-discovery jobs (Node 22 and 24), read-only contents permission, no secrets, no trusted
 PR-target event. A `push` to `k13/p005-ci-discovery` checks exact checkout
 `HEAD == GITHUB_SHA`, runs inventory tests, prints the snapshot, and **explicitly**
 runs the omitted K09 MJS and K16 nested TS regressions. TAP output must show
 nonzero tests, zero failures, skips and TODOs. It proves only those files once
 the actual job log confirms execution; it does **not** make all six missing
 files covered, nor validate installed physical Windows devices.
+
+The workflow also has two strictly auxiliary Linux jobs that check out the
+known exact code SHA `3ca2cd12f003768ac66dea0f242b6b8007587101` of
+our earlier PR #1112 and execute its two K13 MJS files under Node 22/24.
+That will prove only *pinned source execution in this different workflow*
+once green logs are present; GitHub's workflow `head_sha` is still the P005
+branch head, **not** the #1112 PR head. It is therefore not a required
+upstream PR CI check and cannot replace owner CI discovery or acceptance.
 
 The branch-only workflow is **auxiliary fork evidence**, not a substitute for
 Naveax's required main CI. Owner PR #1096 owns `.github/workflows/ci.yml`:
