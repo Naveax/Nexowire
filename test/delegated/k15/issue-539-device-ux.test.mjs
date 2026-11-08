@@ -214,6 +214,41 @@ test('T-339/T-343/#539: same-named cards have distinct screen-reader action name
   }
 });
 
+test('T-479/T-483/#539: long Unicode duplicate names preserve action identity after reorder', {
+  todo: !hasDeviceLabelFix && '#1068 accessible card labels are not in current main',
+}, () => {
+  const h = harness();
+  const name = '🔎 İstanbul / 设备 · ' + 'ğ'.repeat(96);
+  const first = device({id: 'stable-id-a', name});
+  const second = device({id: 'stable-id-b', name});
+  for (const order of [[first, second], [second, first]]) {
+    h.render(snapshot(order));
+    const controls = h.cards().map(card => ({
+      id: card.dataset.deviceId,
+      name: card.querySelector('.core-shortcut').getAttribute('aria-label'),
+      panelControl: card.querySelector('.pc-settings-button').getAttribute('aria-controls'),
+    }));
+    assert.equal(new Set(controls.map(control => control.name)).size, 2);
+    assert.equal(new Set(controls.map(control => control.panelControl)).size, 2);
+    assert.ok(controls.every(control => control.name?.includes(name)));
+    assert.deepEqual(controls.map(control => control.id), order.map(item => item.id));
+  }
+});
+
+test('T-483/#539: repeated name action label should not silently change identity on reorder', {
+  todo: '#1068 uses display ordinals; stable accessible identity needs owner review',
+}, () => {
+  const h = harness();
+  const a = device({id: 'device-alpha', name: 'Aynı PC'});
+  const b = device({id: 'device-beta', name: 'Aynı PC'});
+  h.render(snapshot([a, b]));
+  const firstLabel = h.cards()[0].querySelector('.core-shortcut').getAttribute('aria-label');
+  h.render(snapshot([b, a]));
+  const after = h.cards()[1].querySelector('.core-shortcut').getAttribute('aria-label');
+  assert.ok(firstLabel?.includes(a.name), 'accessible name must identify device');
+  assert.equal(after, firstLabel, 'reordering should not rename the same stable device');
+});
+
 test('T-340/#812: FULL and browser-provided CORE/ROOT flags are not effective authorization', () => {
   const h = harness();
   h.render(snapshot([device({
@@ -227,6 +262,30 @@ test('T-340/#812: FULL and browser-provided CORE/ROOT flags are not effective au
   assert.equal(row.querySelector('.core-shortcut').textContent, 'CORE BEKLEMEDE');
   assert.match(row.querySelector('.root-state-chip').textContent, /BEKLEMEDE/);
   assert.match(row.querySelector('.bridge-copy').textContent, /kanıt değildir/);
+});
+
+test('T-480/#812: local grant telemetry false/true is never an input authorization receipt', () => {
+  const h = harness();
+  const freshTime = Date.now();
+  const variants = [
+    {id: 'not-enrolled', physicalConsole: {localEnrolled: false, active: true, observedAtMs: freshTime}},
+    {id: 'enrolled-claimed', physicalConsole: {localEnrolled: true, active: true, observedAtMs: freshTime}},
+    {id: 'enrolled-stale', physicalConsole: {localEnrolled: true, active: true, observedAtMs: freshTime - 120_000}},
+    {id: 'enrolled-inactive', physicalConsole: {localEnrolled: true, active: false, observedAtMs: freshTime}},
+  ];
+  h.render(snapshot(variants.map(({id, physicalConsole}) => device({
+    id, physicalConsole, accessMode: 'full', privilegeMode: 'broker',
+    adminBridgeReady: true,
+    persistentMaintenance: {enabled: true, active: true},
+    rootMode: {active: true, expiresAt: new Date(freshTime + 60_000).toISOString()},
+  }))));
+  for (const row of h.cards()) {
+    assert.equal(row.querySelector('.core-shortcut').getAttribute('aria-pressed'), 'false');
+    assert.equal(row.querySelector('.core-shortcut').textContent, 'CORE BEKLEMEDE');
+    assert.match(row.querySelector('.root-state-chip').textContent, /BEKLEMEDE/);
+    assert.doesNotMatch(row.querySelector('.core-copy').textContent, /FİZİKSEL AÇIK/);
+  }
+  assert.equal(h.requests.length, 0, 'rendering grant claims never sends device input');
 });
 
 test('T-341/#539: offline and missing online telemetry never render a false positive', () => {
@@ -264,6 +323,27 @@ test('T-340/T-341/#812: offline stale Broker flags cannot enable a real device c
   assert.equal(h.requests.length, 0, 'rendering stale flags never dispatches a command');
 });
 
+test('T-481/#539: absent/unknown connection data stays unready regardless of stale flags', () => {
+  const h = harness();
+  h.render(snapshot([
+    device({id: 'unknown-null', online: null, accessMode: 'full',
+      privilegeMode: 'broker', adminBridgeReady: true}),
+    device({id: 'unknown-missing', online: undefined, accessMode: 'full',
+      privilegeMode: 'broker', adminBridgeReady: true}),
+    device({id: 'known-offline', online: false, accessMode: 'full',
+      privilegeMode: 'broker', adminBridgeReady: true}),
+    device({id: 'known-online', online: true, accessMode: 'full',
+      privilegeMode: 'broker', adminBridgeReady: true}),
+  ]));
+  assert.equal(h.id('devices-detail').textContent, '1 çevrimiçi');
+  for (const row of h.cards().slice(0, 3)) {
+    assert.equal(row.querySelector('.bridge-chip').textContent, 'Broker durumu bilinmiyor');
+    assert.equal(row.querySelector('.bridge-apply-toggle').disabled, true);
+  }
+  assert.equal(h.cards()[3].querySelector('.bridge-chip').textContent, 'Broker hazır bildirimi');
+  assert.equal(h.requests.length, 0);
+});
+
 test('T-342/#485: no device selected cannot imply automatic MCP target or setup completion', () => {
   const h = harness();
   h.render(snapshot([]));
@@ -274,6 +354,20 @@ test('T-342/#485: no device selected cannot imply automatic MCP target or setup 
   assert.equal(h.id('connect-device').disabled, false);
   h.render(snapshot([device({id: 'single'})]));
   assert.equal(h.id('auto-status').textContent, 'Kapalı · cihaz belirtilmediyse seçim zorunlu.');
+});
+
+test('T-482/#485: AUTO preference with zero or ambiguous devices never claims a chosen target', () => {
+  const h = harness();
+  h.render(snapshot([], {autoSelectDevices: true}));
+  assert.match(h.id('auto-status').textContent, /MCP entegrasyonu ayrıca doğrulanmalıdır/);
+  assert.match(h.cards()[0].textContent, /Henüz bağlı cihaz yok/);
+  assert.equal(h.requests.length, 0);
+  const duplicate = [device({id: 'a', name: 'Ortak PC'}), device({id: 'b', name: 'Ortak PC'})];
+  h.render(snapshot(duplicate, {autoSelectDevices: true}));
+  assert.equal(h.cards().length, 2);
+  assert.deepEqual(h.cards().map(card => card.dataset.deviceId), ['a', 'b']);
+  assert.equal(h.requests.length, 0, 'AUTO preference display cannot dispatch to either device');
+  assert.match(mcpSource, /ownerAuto && ownerIds\.length === 1 && onlineIds\.has\(ownerIds\[0\]!\)/);
 });
 
 test('T-343/#539: device platform and Unicode name remain literal text, never HTML', () => {
