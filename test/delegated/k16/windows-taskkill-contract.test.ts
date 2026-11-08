@@ -21,7 +21,8 @@ const executableSource = ts.transpileModule(functionNode.getText(parsed), {
 }).outputText;
 
 type FakeOutcome = { event: "close"; exitCode: number | null } |
-  { event: "error"; message: string };
+  { event: "error"; message: string } |
+  { event: "timeout" };
 
 function makeFixture(outcome: FakeOutcome, rootAlive: boolean) {
   const commands: Array<{ file: string; args: string[]; options: Record<string, unknown> }> = [];
@@ -40,12 +41,16 @@ function makeFixture(outcome: FakeOutcome, rootAlive: boolean) {
       child.kill = () => { fakeKillCalls++; return true; };
       queueMicrotask(() => {
         if (outcome.event === "close") child.emit("close", outcome.exitCode);
-        else child.emit("error", new Error(outcome.message));
+        else if (outcome.event === "error") child.emit("error", new Error(outcome.message));
+        // Timeout case deliberately never emits close/error. Its mocked
+        // timer advances immediately, with no real ten-second wait or PID.
       });
       return child;
     },
-    setTimeout,
-    clearTimeout,
+    setTimeout: outcome.event === "timeout"
+      ? (callback: () => void) => { queueMicrotask(callback); return 0; }
+      : setTimeout,
+    clearTimeout: outcome.event === "timeout" ? () => undefined : clearTimeout,
   };
   const terminate = runInNewContext(
     `${executableSource}\nkillPidTree`, sandbox,
@@ -201,4 +206,25 @@ test("#540 D-092: repeated exit-128 stop after parent exit stays unconfirmed", a
   }
   assert.deepEqual(fixture.checkedPids, [orphan.originalParentPid, orphan.originalParentPid]);
   assert.equal(orphan.alive, true);
+});
+
+test("#540: hung taskkill with live root fails closed after bounded timeout", async () => {
+  const fixture = makeFixture({ event: "timeout" }, true);
+  await assert.rejects(fixture.terminate(17316), (error: unknown) => {
+    assert.equal((error as { code?: string }).code, "PROCESS_TREE_TERMINATION_UNCONFIRMED");
+    assert.match((error as Error).message, /taskkill did not terminate within 10 seconds/);
+    return true;
+  });
+  assert.equal(fixture.fakeKillCalls, 1, "only the owned fake taskkill child is cancelled");
+  assert.deepEqual(fixture.checkedPids, [17316], "numeric root alone was checked, no descendant readback");
+  assert.equal(fixture.commands.length, 1, "no retry or unrelated process kill was attempted");
+});
+
+test("#540: hung taskkill with gone root remains unconfirmed, not confirmed cleanup", async () => {
+  const orphan = { pid: 17318, originalParentPid: 17317, alive: true };
+  const fixture = makeFixture({ event: "timeout" }, false);
+  assert.equal(await fixture.terminate(orphan.originalParentPid), "unconfirmed");
+  assert.equal(fixture.fakeKillCalls, 1);
+  assert.deepEqual(fixture.checkedPids, [orphan.originalParentPid]);
+  assert.equal(orphan.alive, true, "a timeout cannot establish the grandchild postcondition");
 });
