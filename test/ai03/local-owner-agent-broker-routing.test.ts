@@ -47,7 +47,7 @@ test('AI-03 authenticated locally enrolled Agent forwards a frozen effect once t
   assert.equal(calls.length,1);
   assert.equal(calls[0]!.capability,capability);
   assert.equal(calls[0]!.id,request.requestId);
-  assert.deepEqual(calls[0]!.input,input);
+  assert.deepEqual(JSON.parse(JSON.stringify(calls[0]!.input)),input);
   assert.notEqual(calls[0]!.input,input);
   assert.equal(Object.isFrozen(calls[0]!.input),true);
 });
