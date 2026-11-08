@@ -104,6 +104,23 @@ test('CLI routes prelogin lifecycle separately from interactive Agent',()=>{
   assert.match(cliSource,/runNativeAgentLifecycleCommand\(\s*process\.argv\.slice\(3\),?\s*\)/);
 });
 
+test('task shell is fixed Windows PowerShell with bounded noninteractive execution',()=>{
+  const source=readFileSync(new URL('../src/agent/windows-prelogin-lifecycle.ts',import.meta.url),'utf8');
+  const start=source.indexOf('function taskShell(script:string):unknown{');
+  const end=source.indexOf('interface TaskProbe',start);
+  const shell=source.slice(start,end);
+  assert.ok(start>0&&end>start);
+  assert.match(shell,/spawnSync\(POWERSHELL/);
+  assert.match(shell,/NonInteractive/);
+  assert.match(shell,/EncodedCommand/);
+  assert.match(shell,/shell:false/);
+  assert.match(shell,/timeout:30_000/);
+  assert.match(shell,/maxBuffer:256\*1024/);
+  assert.match(shell,/stdio:\['ignore','pipe','pipe'\]/);
+  assert.match(shell,/PSModulePath:/);
+  assert.doesNotMatch(shell,/\bexecSync\(|Start-Process|UseShellExecute/);
+});
+
 test('CI executes prelogin lifecycle tests on actual Windows Node 22 and 24',()=>{
   const workflow=readFileSync(new URL('../.github/workflows/ci.yml',import.meta.url),'utf8');
   const win=workflow.slice(workflow.indexOf('  connection-v2-negative-windows:'),
