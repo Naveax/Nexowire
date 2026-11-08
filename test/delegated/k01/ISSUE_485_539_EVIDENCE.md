@@ -312,6 +312,44 @@ New local test totals: main **20 tests / 13 PASS / 7 SKIP**; owner
 HEAD for any following commit must be checked again; no rerun of existing
 same-SHA workflows.
 
+## D-005 follow-up — reproducible UI fallback candidate (8 Nov 2026)
+
+After the P007 duplicate-PR audit, two further **in-memory-only** source
+proposals were exercised on pinned main and owner #1068:
+
+1. **Pairing POST 401** is genuinely identical to 503 in the original
+   source. The candidate displays a session-expiry and re-login hint for
+   401, while leaving the 503 message unchanged. This is only a message
+   example, **not** an auth/session change or proof that a live 401 occurs.
+   Authorization behavior remains with its owner.
+2. **Unexpected exception text** can contain a synthetic token, which is
+   copied into the DOM by the original catch handler. The candidate
+   preserves four known user-safe messages, sends an unexpected diagnostic
+   to a generic user message and does not copy the fixture secret into the
+   DOM. It is a narrow sample policy, not a production allowlist or
+   security review. Owner must review future error contracts.
+
+The two tests assert original source **RED in behavior**, proposed source
+**GREEN in the VM**, and do not write any `web/connect.js` content.
+No auth tokens, backend data, release or protected source were modified.
+
+```sh
+node --test test/delegated/k01/issue485-state-truth.test.mjs
+# main 22 tests: 15 PASS / 7 SKIP / 0 FAIL
+K01_CONNECT_REF=FETCH_HEAD K01_EXPECT_OWNER_VERSION=1 node --test test/delegated/k01/issue485-state-truth.test.mjs
+# owner 22 tests: 18 PASS / 4 SKIP / 0 FAIL
+K01_RUN_OPEN_NEGATIVES=1 node --test test/delegated/k01/issue485-state-truth.test.mjs
+# main 15 PASS / 3 SKIP / 4 FAIL (the original 4 owner gaps)
+K01_CONNECT_REF=FETCH_HEAD K01_RUN_OPEN_NEGATIVES=1 node --test test/delegated/k01/issue485-state-truth.test.mjs
+# owner 15 PASS / 3 SKIP / 4 FAIL (same gaps)
+```
+
+Previous HEAD `e539348e209cd007d4e094a4eca99d49aebe7945`
+[CI run 42500485458](https://github.com/Naveax/Nexowire/actions/runs/42500485458)
+finished **success** for seven generic jobs, but still did not select
+the nested K01 `.test.mjs`. Explicit hosted K01 test invocation remains
+**NOT_RUN**; source fix, owner signoff and real browser are pending.
+
 ## T-260: real browser attempt and blocker
 
 `browser-capture.mjs` serves the three web source files through an isolated
