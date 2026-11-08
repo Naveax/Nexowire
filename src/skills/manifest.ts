@@ -148,7 +148,12 @@ function frontmatter(markdown: string): Map<string, string> {
 
     const key = line.slice(0, separator).trim().toLowerCase();
     const value = line.slice(separator + 1).trim();
-    if (key) values.set(key, value);
+    if (key) {
+      if (values.has(key)) {
+        throw new Error(`Duplicate skill frontmatter field: ${key}`);
+      }
+      values.set(key, value);
+    }
   }
 
   throw new Error('Skill frontmatter is not terminated with ---');
