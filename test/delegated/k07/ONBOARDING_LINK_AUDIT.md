@@ -1,4 +1,6 @@
-# Onboarding source QA — #485 / T-383 and T-389
+# Onboarding source QA — #485 / T-389 and supplemental link regression
+
+Ownership update (P005/V004): **K06 owns pool T-383**, with the earlier valid claim and release-link fixture in its own test area. This K07 link/asset snapshot remains independent supplemental QA only and must **not** be counted as a second T-383 completion. K07 owns T-389 pairing-recovery coverage. Source contributions here do not change K06's ownership or the #485 physical acceptance requirement.
 
 Source baseline: upstream `Naveax/Nexowire` main `4e7db16f4233048a956664bef6b607781eb63fb7` (2026-11-07). This is a **source-link audit**, not live Windows installation acceptance.
 
