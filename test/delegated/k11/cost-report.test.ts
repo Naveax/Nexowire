@@ -108,18 +108,33 @@ test('T-065: total and per-user formula, including zero users and explicit zero 
   assert.equal(noUsers.modeledCostPerUser,'UNKNOWN');
   const free=rates();for(const meter of S5_COST_METERS)free[meter]={...free[meter]!,amount:0};
   assert.equal(quoteS5Cost(assumptions(),free).modeledTotal,0);
+  const tenModeledUsers=quoteS5Cost({...assumptions(),activeUsers:10},free);
+  assert.equal(tenModeledUsers.freeThresholdSafeguard.numericThresholdsFit,true);
+  assert.equal(tenModeledUsers.freeThresholdSafeguard.zeroExtraInvoiceProven,false);
+  assert.equal(tenModeledUsers.actualProviderBill,'UNKNOWN');
+  assert.equal(tenModeledUsers.capacityEvidence.measuredSustainedHostedWssSessions,'UNKNOWN');
   const subCent={...free};
   subCent.workerRequests={...free.workerRequests!,amount:0.001,per:1_000_000};
   const tiny=quoteS5Cost(assumptions(),subCent);
   assert.ok(typeof tiny.componentCosts.workerRequests==='number'&&
     tiny.componentCosts.workerRequests>0,'nonzero sub-cent cost cannot become zero');
   assert.ok(typeof tiny.modeledTotal==='number'&&tiny.modeledTotal>0);
+  // P006 #487: the selected 57-test CI entrypoint must cover cent boundaries.
+  for(const [amount,expected] of [[0,0],[0.004,0.004],[0.005,0.01],[1e12,1e12]] as const){
+    const quote={...free,workerRequests:{...free.workerRequests!,amount,per:60}};
+    const modeled=quoteS5Cost(assumptions(),quote);
+    assert.equal(modeled.componentCosts.workerRequests,expected);
+    assert.equal(modeled.modeledTotal,expected);
+    assert.equal(modeled.actualProviderBill,'UNKNOWN');
+  }
 });
 test('T-066: report renderer does not call missing inputs a provider bill or render invalid input',()=>{
   const defaults=JSON.parse(renderS5CostReport([]));
   assert.equal(defaults.scenarios.length,5);
   assert.ok(defaults.scenarios[0].paidPartialUsd);
   assert.equal(defaults.scenarios[0].report.actualProviderBill,'UNKNOWN');
+  assert.equal(defaults.scenarios[0].report.capacityEvidence.measuredCompletedToolCallsPerDay,'UNKNOWN');
+  assert.equal(defaults.scenarios[0].report.capacityEvidence.measuredSustainedHostedWssSessions,'UNKNOWN');
   assert.equal(defaults.pricesAsOf,'2026-10-18');
   const dir=mkdtempSync(join(tmpdir(),'nexowire-k11-'));
   try{
@@ -129,6 +144,7 @@ test('T-066: report renderer does not call missing inputs a provider bill or ren
     assert.match(output.source,/SIMULATION/);
     assert.equal(output.scenarios[0].report.modeledTotal,'UNKNOWN');
     const csv=renderS5CostReport(['--csv','--input',empty]);
+    assert.match(csv,/"OFFLINE_SIMULATION_NOT_PROVIDER_BILL"/);
     assert.ok(csv.includes('"UNKNOWN"'));
     const invalid=join(dir,'invalid.json');
     writeFileSync(invalid,JSON.stringify({assumptions:{...assumptions(),activeUsers:-1},rates:rates()}));
