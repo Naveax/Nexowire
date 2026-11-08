@@ -38,7 +38,7 @@ jobs:
         shell: pwsh
         timeout-minutes: 5
         run: |
-          node --test --import tsx --test-concurrency=1 test/ai03/local-owner-broker-repair.test.ts
+          node --test --import tsx --test-concurrency=1 test/ai03/local-owner-broker-repair.test.ts test/ai03/local-owner-agent-broker-routing.test.ts
           if ($LASTEXITCODE -ne 0) { throw 'AI03_BROKER_WINDOWS_P0_RED' }
       - name: Real Windows D1 migration chain, revoke, epoch, lease and HTTP negative gate
         shell: pwsh
