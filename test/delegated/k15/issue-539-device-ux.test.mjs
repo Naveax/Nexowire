@@ -288,6 +288,31 @@ test('T-480/#812: local grant telemetry false/true is never an input authorizati
   assert.equal(h.requests.length, 0, 'rendering grant claims never sends device input');
 });
 
+test('T-620/#812: identical cards with different console claims never imply completed control', () => {
+  const h = harness();
+  const now = Date.now();
+  h.render(snapshot([
+    device({id: 'unverified', name: 'Aynı PC', accessMode: 'full',
+      privilegeMode: 'broker', adminBridgeReady: true,
+      persistentMaintenance: {enabled: true, active: true},
+      physicalConsole: {localEnrolled: false, active: false, observedAtMs: now}}),
+    device({id: 'claims-grant', name: 'Aynı PC', accessMode: 'full',
+      privilegeMode: 'broker', adminBridgeReady: true,
+      persistentMaintenance: {enabled: true, active: true},
+      physicalConsole: {localEnrolled: true, active: true, observedAtMs: now}}),
+  ]));
+  for (const row of h.cards()) {
+    assert.equal(row.querySelector('.access-mode').textContent, 'FULL ACCESS');
+    assert.equal(row.querySelector('.core-shortcut').textContent, 'CORE BEKLEMEDE');
+    assert.equal(row.querySelector('.core-shortcut').getAttribute('aria-pressed'), 'false');
+    assert.doesNotMatch(row.querySelector('.core-copy').textContent, /tamamlandı|FİZİKSEL AÇIK/i);
+  }
+  assert.match(h.cards()[0].querySelector('.core-copy').textContent, /yerel kayıt bekliyor/i);
+  assert.match(h.cards()[1].querySelector('.core-copy').textContent, /doğrulanamadı/i);
+  assert.deepEqual(h.cards().map(row => row.dataset.deviceId), ['unverified', 'claims-grant']);
+  assert.equal(h.requests.length, 0);
+});
+
 test('T-341/#539: offline and missing online telemetry never render a false positive', () => {
   const h = harness();
   h.render(snapshot([
@@ -370,6 +395,20 @@ test('T-482/#485: AUTO preference with zero or ambiguous devices never claims a 
   assert.match(mcpSource, /ownerAuto && ownerIds\.length === 1 && onlineIds\.has\(ownerIds\[0\]!\)/);
 });
 
+test('T-621/#485: successful account response with zero paired devices needs a recovery label', {
+  todo: 'main and #1068 mark an empty device dashboard as Bağlı; UI owner wording required',
+}, async () => {
+  const h = harness();
+  h.setFetch(async () => ({ok: true, status: 200, json: async () => snapshot([])}));
+  await h.load();
+  assert.match(h.cards()[0].textContent, /Henüz bağlı cihaz yok/);
+  assert.equal(h.id('connect-device').disabled, false);
+  assert.notEqual(h.id('connection-pill').textContent, 'Bağlı',
+    'account login success alone must not look like completed device pairing');
+  assert.match(h.id('connection-pill').textContent, /cihaz|eşleş/i,
+    'give an actionable account-vs-device distinction');
+});
+
 test('T-343/#539: device platform and Unicode name remain literal text, never HTML', () => {
   const h = harness();
   const name = '📟 Özel-电脑-İş <img src=x onerror=alert(1)> ' + 'Ş'.repeat(80);
@@ -422,6 +461,61 @@ test('T-344/#539: late success cannot resurrect private device cards after a new
   assert.equal(h.cards().some(card => card.dataset.deviceId === 'stale-private-device'), false);
   assert.equal(h.id('login').classList.contains('hidden'), false);
   assert.match(h.id('device-list-status').textContent, /giriş yap/);
+});
+
+test('T-619/#539: delayed stale folder snapshot cannot swap identically named target cards', {
+  todo: !hasLoadingReset && 'current main lacks load-generation fencing until owner #1068',
+}, async () => {
+  const h = harness();
+  const folders = [{id: 'office', name: 'Ofis'}, {id: 'warehouse', name: 'Depo'}];
+  const a = device({id: 'machine-a', name: 'Ortak PC', folderId: 'office'});
+  const b = device({id: 'machine-b', name: 'Ortak PC', folderId: 'warehouse'});
+  const latest = snapshot([a, b], {folders});
+  const old = snapshot([
+    {...b, folderId: 'office'}, {...a, folderId: 'warehouse'},
+  ], {folders});
+  h.setFolder('warehouse');
+  h.render(latest);
+  assert.deepEqual(h.cards().map(card => card.dataset.deviceId), ['machine-b']);
+
+  const pending = [];
+  h.setFetch(() => new Promise(resolve => pending.push(resolve)));
+  const slow = h.load();
+  const fast = h.load();
+  assert.equal(pending.length, 2);
+  pending[1]({status: 200, ok: true, json: async () => latest});
+  await fast;
+  const verifiedLabel = h.cards()[0].querySelector('.core-shortcut').getAttribute('aria-label');
+  pending[0]({status: 200, ok: true, json: async () => old});
+  await slow;
+  assert.deepEqual(h.cards().map(card => card.dataset.deviceId), ['machine-b']);
+  assert.equal(h.id('folder-filter').value, 'warehouse');
+  assert.equal(h.cards()[0].querySelector('.core-shortcut').getAttribute('aria-label'), verifiedLabel);
+});
+
+test('T-666/#539: filtered card heading, accessible identity and POST target agree', {
+  todo: !hasDeviceLabelFix && 'main has no device-scoped accessible action labels yet',
+}, () => {
+  const h = harness();
+  const name = '📦 Ofis-PC İsim <b>etiket değil</b>';
+  const folders = [{id: 'office', name: 'Ofis'}, {id: 'depot', name: 'Depo'}];
+  const a = device({id: 'device-a', name, folderId: 'office'});
+  const b = device({id: 'device-b', name, folderId: 'depot'});
+  h.setFetch(() => new Promise(() => {}));
+  h.setFolder('depot');
+  for (const order of [[a, b], [b, a]]) {
+    h.render(snapshot(order, {folders}));
+    assert.equal(h.cards().length, 1);
+    const row = h.cards()[0];
+    assert.equal(row.dataset.deviceId, 'device-b');
+    assert.equal(row.querySelector('.device-name').textContent, name);
+    assert.equal(row.template.includes(name), false, 'heading must remain literal text');
+    const accessible = row.querySelector('.core-shortcut').getAttribute('aria-label');
+    assert.ok(accessible?.includes(name), 'action label should identify this visible heading');
+    row.querySelector('.access-toggle').listeners.get('click')();
+  }
+  assert.deepEqual(h.requests.map(req => JSON.parse(req.options.body).deviceId),
+    ['device-b', 'device-b']);
 });
 
 test('T-340/T-342: UI AUTO display never replaces server authorization', () => {
