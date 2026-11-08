@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
-import { captureLocalStaticViews } from '../../../scripts/delegated/k10/browser-visual-smoke.mjs';
+import { allowLocalWebAssetRequest, captureLocalStaticViews } from '../../../scripts/delegated/k10/browser-visual-smoke.mjs';
 
 function disposable(t) {
   const dir = mkdtempSync(join(tmpdir(), 'nexowire-browser-proof-'));
@@ -69,4 +69,52 @@ test('#539 R11: output directory error remains NOT_RUN and redacts local path', 
   assert.equal(report.status, 'NOT_RUN');
   assert.match(report.reason, /output directory is unavailable/);
   assert.doesNotMatch(JSON.stringify(report), /not-a-directory|private fixture path/);
+});
+
+test('#539 R11: browser fixture must abort a local file request outside the web root', async (t) => {
+  const dir = disposable(t);
+  const outside = join(dir, 'outside-private-canary.txt');
+  const decisionFile = join(dir, 'route-decision.txt');
+  const stub = join(dir, 'file-route-playwright.mjs');
+  writeFileSync(outside, 'not-a-web-asset');
+  writeFileSync(stub, `import { writeFileSync } from 'node:fs';
+const url = ${JSON.stringify(pathToFileURL(outside).href)};
+const decisionFile = ${JSON.stringify(decisionFile)};
+export const chromium = { launch: async () => ({
+  close: async () => {},
+  newContext: async () => ({
+    close: async () => {},
+    route: async (_pattern, handler) => {
+      await handler({
+        request: () => ({ url: () => url }),
+        continue: async () => writeFileSync(decisionFile, 'CONTINUE'),
+        abort: async () => writeFileSync(decisionFile, 'ABORT'),
+      });
+    },
+    newPage: async () => ({ goto: async () => { throw new Error('fixture stops before screenshot'); } }),
+  }),
+}) };`);
+  const report = await captureLocalStaticViews({
+    outputDir: join(dir, 'screenshots'), playwrightModule: pathToFileURL(stub).href,
+  });
+  assert.equal(report.status, 'FAIL'); // No actual page was loaded.
+  assert.equal(readFileSync(decisionFile, 'utf8'), 'ABORT');
+});
+
+test('#539 R11: static assets inside web are permitted; symlink escapes and HTTP remain denied', (t) => {
+  const dir = disposable(t);
+  const webRoot = join(dir, 'web');
+  mkdirSync(webRoot);
+  const safeCss = join(webRoot, 'styles.css');
+  const outside = join(dir, 'secrets.txt');
+  writeFileSync(safeCss, 'body{}');
+  writeFileSync(outside, 'private');
+  const link = join(webRoot, 'linked-secrets.txt');
+  symlinkSync(outside, link);
+  assert.equal(allowLocalWebAssetRequest(pathToFileURL(safeCss).href, webRoot), true);
+  assert.equal(allowLocalWebAssetRequest('data:text/plain,fixture', webRoot), true);
+  assert.equal(allowLocalWebAssetRequest(pathToFileURL(outside).href, webRoot), false);
+  assert.equal(allowLocalWebAssetRequest(pathToFileURL(link).href, webRoot), false);
+  assert.equal(allowLocalWebAssetRequest('http://127.0.0.1:8080/', webRoot), false);
+  assert.equal(allowLocalWebAssetRequest('file:///definitely-missing-private-file.txt', webRoot), false);
 });

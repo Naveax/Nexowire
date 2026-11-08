@@ -3,8 +3,8 @@
  * Opt-in browser capture of local static files. Needs an already installed
  * Playwright package/browser. All HTTP(S) requests are blocked. No login/API.
  */
-import { mkdirSync, readFileSync } from 'node:fs';
-import { basename, dirname, join, resolve } from 'node:path';
+import { mkdirSync, readFileSync, realpathSync } from 'node:fs';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { inflateSync } from 'node:zlib';
 import { PAGES, VIEWPORTS } from './offline-web-smoke.mjs';
@@ -80,6 +80,21 @@ export function inspectPng(pathOrBytes, width, height) {
   return { status: 'PASS', ...dimensions };
 }
 
+// file:// in Playwright is not automatically confined to the opened page's
+// directory. Restrict static fixture subresources to the checked-out web tree,
+// following symlinks to prevent a local file outside web from being loaded.
+export function allowLocalWebAssetRequest(address, webDir) {
+  try {
+    const url = new URL(address);
+    if (url.protocol === 'data:') return true;
+    if (url.protocol !== 'file:') return false;
+    const webRoot = realpathSync(webDir);
+    const candidate = realpathSync(fileURLToPath(url));
+    const within = relative(webRoot, candidate);
+    return !isAbsolute(within) && within !== '..' && !within.startsWith(`..${sep}`);
+  } catch { return false; }
+}
+
 export async function captureLocalStaticViews({ outputDir, playwrightModule = 'playwright' }) {
   const scenarios = [];
   let chromium;
@@ -112,8 +127,7 @@ export async function captureLocalStaticViews({ outputDir, playwrightModule = 'p
         try {
           context = await browser.newContext({ viewport: { width: viewport.width, height: viewport.height }, serviceWorkers: 'block' });
           await context.route('**/*', (route) => {
-            const protocol = new URL(route.request().url()).protocol;
-            return protocol === 'file:' || protocol === 'data:' ? route.continue() : route.abort();
+            return allowLocalWebAssetRequest(route.request().url(), webDir) ? route.continue() : route.abort();
           });
           const page = await context.newPage();
           await page.goto(pathToFileURL(join(webDir, spec.file)).href, { waitUntil: 'domcontentloaded' });
