@@ -112,3 +112,38 @@ test("#540 T-387: a gone root with a live grandchild remains UNCONFIRMED on task
   assert.equal(await fixture.terminate(root.pid), "unconfirmed");
   assert.equal(descendant.alive, true, "the mock taskkill never touched the owned descendant");
 });
+
+test("#540 T-486: reused root PID and exit 128 cannot be mistaken for tree success", async () => {
+  // The original owned shell incarnation has exited, but its numeric PID was
+  // reused. A process.kill(pid, 0) liveness probe cannot identify incarnation.
+  const oldOwnedShell = { pid: 17301, incarnation: "old-shell", alive: false };
+  const unrelatedReplacement = { pid: 17301, incarnation: "new-unrelated", alive: true };
+  const ownedGrandchild = { pid: 17302, incarnation: "old-child", alive: true };
+  const fixture = makeFixture({ event: "close", exitCode: 128 }, unrelatedReplacement.alive);
+  await assert.rejects(fixture.terminate(oldOwnedShell.pid), (error: unknown) => {
+    assert.equal((error as { code?: string }).code, "PROCESS_TREE_TERMINATION_UNCONFIRMED");
+    assert.match((error as Error).message, /exitCode=128/);
+    return true;
+  });
+  assert.notEqual(oldOwnedShell.incarnation, unrelatedReplacement.incarnation);
+  assert.equal(oldOwnedShell.alive, false);
+  assert.equal(ownedGrandchild.alive, true);
+  assert.equal(fixture.fakeKillCalls, 0, "no unrelated process should be signaled by this fake runner");
+});
+
+test("#540 T-486: taskkill null exit with gone root and live child stays UNCONFIRMED", async () => {
+  const ownedGrandchild = { pid: 17304, alive: true };
+  const fixture = makeFixture({ event: "close", exitCode: null }, false);
+  assert.equal(await fixture.terminate(17303), "unconfirmed");
+  assert.equal(ownedGrandchild.alive, true);
+});
+
+test("#540 T-486: reused root PID with zero taskkill exit has REQUESTED, never verified", async () => {
+  const oldOwnedShell = { pid: 17305, incarnation: "old-shell", alive: false };
+  const unrelatedReplacement = { pid: 17305, incarnation: "new-unrelated", alive: true };
+  const fixture = makeFixture({ event: "close", exitCode: 0 }, unrelatedReplacement.alive);
+  const result = await fixture.terminate(oldOwnedShell.pid);
+  assert.equal(result, "requested");
+  assert.notEqual(result, "verified");
+  assert.notEqual(oldOwnedShell.incarnation, unrelatedReplacement.incarnation);
+});
