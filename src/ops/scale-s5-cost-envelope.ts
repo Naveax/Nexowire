@@ -28,6 +28,14 @@ function nat(n:number,name:string,max=1_000_000_000):bigint{
 }
 function above(x:bigint,y:bigint){return x>y?x-y:0n}
 function round(n:number){return Math.round(n*100)/100}
+/** Keep nonzero sub-cent modeled charges visible; reject cent precision overflow. */
+function roundQuotedCost(value:number):number{
+  if(!Number.isFinite(value)||value<0||value>Number.MAX_SAFE_INTEGER/100){
+    throw new Error('Unsafe projected cost precision');
+  }
+  const cents=round(value);
+  return value>0&&cents===0?Number(value.toPrecision(6)):cents;
+}
 const EXCLUDED=[
   'Cloudflare Durable Objects: WebSocket messages, hibernation eligibility, duration',
   'Additional paid Cloudflare features, custom tunnels, Argo, domain, taxes',
@@ -237,14 +245,14 @@ export function quoteS5Cost(
     }
     subtotal+=raw;
     if(!Number.isFinite(subtotal))throw new Error('Unsafe projected cost total');
-    report.componentCosts[meter]=round(raw);
+    report.componentCosts[meter]=roundQuotedCost(raw);
     known++;
   }
-  if(known>0)report.knownSubtotal=round(subtotal);
+  if(known>0)report.knownSubtotal=roundQuotedCost(subtotal);
   if(known===S5_COST_METERS.length){
-    report.modeledTotal=round(subtotal);
+    report.modeledTotal=roundQuotedCost(subtotal);
     // A fixed monthly fee with zero users is not a zero per-user charge.
-    if(full.activeUsers>0)report.modeledCostPerUser=round(subtotal/full.activeUsers);
+    if(full.activeUsers>0)report.modeledCostPerUser=roundQuotedCost(subtotal/full.activeUsers);
   }
   return report;
 }
