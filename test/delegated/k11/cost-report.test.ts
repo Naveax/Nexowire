@@ -46,6 +46,11 @@ test('T-061: missing rates remain UNKNOWN even if monthly usage is calculable',(
   assert.equal(allUnknown.knownSubtotal,'UNKNOWN');
   assert.deepEqual(allUnknown.missing,S5_COST_METERS.map(m=>'rates.'+m));
   assert.equal(quoteS5Cost(assumptions(),null).modeledTotal,'UNKNOWN');
+  const explicitZero=rates();explicitZero.workerRequests={...explicitZero.workerRequests!,amount:0};
+  delete explicitZero.workerCpuMs;
+  const partial=quoteS5Cost(assumptions(),explicitZero);
+  assert.equal(partial.modeledTotal,'UNKNOWN');
+  assert.equal(partial.actualProviderBill,'UNKNOWN');
 });
 test('T-062: nonfinite and negative assumptions fail closed even when others are absent',()=>{
   for(const value of [-1,NaN,Infinity,-Infinity]){
@@ -63,6 +68,10 @@ test('T-062: invalid pricing, rates and arithmetic overflow do not serialize nul
   assert.throws(()=>quoteS5Cost(assumptions(),zeroDenom));
   const overflowing=rates();overflowing.workerRequests={...overflowing.workerRequests!,amount:1e308};
   assert.throws(()=>quoteS5Cost(assumptions(),overflowing));
+  const finiteButUnroundable=rates();
+  finiteButUnroundable.workerRequests={...finiteButUnroundable.workerRequests!,amount:1e308};
+  assert.throws(()=>quoteS5Cost({...assumptions(),activeUsers:1,
+    callsPerUserDaily:1,days:1},finiteButUnroundable),/Unsafe projected cost precision/);
 });
 test('T-063: mixed currencies, mismatched and unknown units are rejected',()=>{
   const mixed=rates();mixed.workerCpuMs={...mixed.workerCpuMs!,currency:'TRY'};
@@ -83,6 +92,8 @@ test('T-064: CSV headings are stable, RFC-style quoted, and formula-safe',()=>{
   assert.ok(csv.includes('"OFFLINE_SIMULATION_NOT_PROVIDER_BILL"'));
   assert.equal(formatS5CostCsv([{label:'safe',activeUsers:2,report}]),
     formatS5CostCsv([{label:'safe',activeUsers:2,report}]));
+  assert.equal(report.capacityEvidence.measuredCompletedToolCallsPerDay,'UNKNOWN');
+  assert.equal(report.capacityEvidence.measuredSustainedHostedWssSessions,'UNKNOWN');
 });
 test('T-065: total and per-user formula, including zero users and explicit zero rates',()=>{
   const report=quoteS5Cost(assumptions(),rates());
@@ -97,6 +108,12 @@ test('T-065: total and per-user formula, including zero users and explicit zero 
   assert.equal(noUsers.modeledCostPerUser,'UNKNOWN');
   const free=rates();for(const meter of S5_COST_METERS)free[meter]={...free[meter]!,amount:0};
   assert.equal(quoteS5Cost(assumptions(),free).modeledTotal,0);
+  const subCent={...free};
+  subCent.workerRequests={...free.workerRequests!,amount:0.001,per:1_000_000};
+  const tiny=quoteS5Cost(assumptions(),subCent);
+  assert.ok(typeof tiny.componentCosts.workerRequests==='number'&&
+    tiny.componentCosts.workerRequests>0,'nonzero sub-cent cost cannot become zero');
+  assert.ok(typeof tiny.modeledTotal==='number'&&tiny.modeledTotal>0);
 });
 test('T-066: report renderer does not call missing inputs a provider bill or render invalid input',()=>{
   const defaults=JSON.parse(renderS5CostReport([]));

@@ -82,19 +82,18 @@ jobs:
           grep -qx '# skipped 0' "$RUNNER_TEMP/nw-batch3.tap"
           grep -qx '# todo 0' "$RUNNER_TEMP/nw-batch3.tap"
       - name: Verify delegated K20 evidence audits and safe URL offline QA
-        # npm test excludes .mjs; require a real TAP run with zero TODO/SKIP.
+        # npm test excludes .mjs. Reject missing/partial TAP while allowing
+        # the K20 suite to grow beyond its original 41 assertions.
         shell: bash
         run: |
+          set -euo pipefail
+          node --test --test-reporter=tap test/ci/assert-tap-summary.test.mjs
           node --test --test-reporter=tap --import tsx --test-concurrency=1 \
             test/delegated/k20/*.test.mjs \
             test/delegated/pool-k07/safe-url-language.test.mjs \
             > "$RUNNER_TEMP/nw-k20-qa.tap"
           cat "$RUNNER_TEMP/nw-k20-qa.tap"
-          grep -qx '# tests 41' "$RUNNER_TEMP/nw-k20-qa.tap"
-          grep -qx '# pass 41' "$RUNNER_TEMP/nw-k20-qa.tap"
-          grep -qx '# fail 0' "$RUNNER_TEMP/nw-k20-qa.tap"
-          grep -qx '# skipped 0' "$RUNNER_TEMP/nw-k20-qa.tap"
-          grep -qx '# todo 0' "$RUNNER_TEMP/nw-k20-qa.tap"
+          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/nw-k20-qa.tap" 41
       - name: Verify delegated K14 offline PR and integration audit QA
         # npm test excludes .mjs. Require explicit TAP with zero skipped/TODO.
         shell: bash
@@ -128,7 +127,8 @@ jobs:
           grep -qx '# todo 0' "$RUNNER_TEMP/nw-k10-qa24.tap"
       - run: npm run build
       - name: Verify isolated S5 transport, quota, and offline cost reports
-        # 57 real TS assertions, including negative bounds, stale metrics and UNKNOWN handling.
+        # At least 57 real TS assertions, including all newly merged issue #487
+        # fixtures; never infer coverage from a green job that omitted their paths.
         # Local loopback/SQLite + synthetic price fixtures, NOT provider capacity or billing acceptance.
         shell: bash
         run: |
@@ -142,15 +142,14 @@ jobs:
             test/delegated/pool-k12/unknown-versus-zero.test.ts \
             test/delegated/csv-units-k11/s5-csv-locale.test.ts \
             test/delegated/k11/cost-report.test.ts \
+            test/delegated/k11/issue-487-commercial-unknown.test.ts \
+            test/delegated/k11/issue-487-meter-acceptance.test.ts \
+            test/delegated/k11/p005-s5-evidence.test.ts \
             test/delegated/k11/s5-cost-acceptance-regressions.test.ts \
             test/delegated/pool-k11/s5-canonical-units.test.ts \
             > "$RUNNER_TEMP/nw-s5-qa-k111218.tap"
           cat "$RUNNER_TEMP/nw-s5-qa-k111218.tap"
-          grep -qx '# tests 57' "$RUNNER_TEMP/nw-s5-qa-k111218.tap"
-          grep -qx '# pass 57' "$RUNNER_TEMP/nw-s5-qa-k111218.tap"
-          grep -qx '# fail 0' "$RUNNER_TEMP/nw-s5-qa-k111218.tap"
-          grep -qx '# skipped 0' "$RUNNER_TEMP/nw-s5-qa-k111218.tap"
-          grep -qx '# todo 0' "$RUNNER_TEMP/nw-s5-qa-k111218.tap"
+          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/nw-s5-qa-k111218.tap" 57
       - name: Verify delegated K06 K07 K08 onboarding and MCP docs (32 exact tests)
         # Nested .mjs docs checks are excluded by npm test; never infer pass without execution.
         shell: bash
