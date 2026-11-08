@@ -10,6 +10,12 @@ const script = process.env.K01_CONNECT_REF
   ? execFileSync('git', ['show', `${process.env.K01_CONNECT_REF}:web/connect.js`], { encoding: 'utf8' })
   : readFileSync('web/connect.js', 'utf8');
 
+function candidateSource(before, after) {
+  // A test-only in-memory proposal, never a write to owner #1068 web source.
+  assert.equal(script.split(before).length, 2, 'owner source changed; inspect before updating candidate');
+  return script.replace(before, after);
+}
+
 class Node {
   constructor() {
     this.textContent = '';
@@ -63,7 +69,7 @@ async function flush() {
   await new Promise((done) => setImmediate(done));
 }
 
-async function boot({ query = '', dashboard, pairing, metadata } = {}) {
+async function boot({ query = '', dashboard, pairing, metadata, source = script } = {}) {
   const nodes = new Map();
   const get = (id) => {
     if (!nodes.has(id)) nodes.set(id, new Node());
@@ -104,7 +110,7 @@ async function boot({ query = '', dashboard, pairing, metadata } = {}) {
       return metadata?.() ?? Response.json({ resource: 'https://mcp.fixture.invalid/mcp', authorization_servers: [origin] });
     },
   });
-  runInContext(script, ctx, { timeout: 1000 });
+  runInContext(source, ctx, { timeout: 1000 });
   await flush();
   return { get, tabs, requests, navigations, copied };
 }
@@ -331,4 +337,92 @@ test('T-398 OPEN NEGATIVE: 429 Retry-After should not be identical to 503 error'
   assert.notEqual(limited.get('error-message').textContent,
     unavailable.get('error-message').textContent,
     '429 has Retry-After but currently shows the same generic error as HTTP 503');
+});
+
+test('T-535 #485: same owner response is RED before and GREEN after minimal in-memory validation', async () => {
+  const proposed = candidateSource(
+    "typeof body.pairingId !== 'string' ||\n        typeof body.token !== 'string'",
+    "typeof body.pairingId !== 'string' || !body.pairingId.trim() ||\n" +
+    "        typeof body.token !== 'string' || !body.token.trim()",
+  );
+  for (const body of [
+    { pairingId: '   ', token: 'valid-token' },
+    { pairingId: 'valid-id', token: '   ' },
+  ]) {
+    const original = await boot({ query: search(), pairing: async () => Response.json(body) });
+    await original.get('approve').dispatch('click');
+    assert.equal(original.navigations.length, 1, 'baseline must reproduce the owner acceptance gap');
+
+    const fixed = await boot({ source: proposed, query: search(), pairing: async () => Response.json(body) });
+    await fixed.get('approve').dispatch('click');
+    assert.equal(fixed.navigations.length, 0);
+    assert.equal(fixed.get('connect-pill').textContent, 'Hata');
+    assert.match(fixed.get('error-message').textContent, /geçersiz/);
+  }
+  const valid = await boot({ source: proposed, query: search(), pairing: async () =>
+    Response.json({ pairingId: 'valid-pair', token: 'valid-token' }) });
+  await valid.get('approve').dispatch('click');
+  assert.equal(valid.navigations.length, 1);
+  assert.equal(new URL(valid.navigations[0]).searchParams.get('pairing_id'), 'valid-pair');
+});
+
+test('T-536 #539: rate-limit message is RED on owner but GREEN in minimal in-memory candidate', async () => {
+  const proposed = candidateSource(
+    "        throw new Error('Bağlantı hazırlanamadı.');",
+    `        if (pairing.status === 429) {
+          const seconds = Number(pairing.headers.get('retry-after'));
+          const wait = Number.isInteger(seconds) && seconds > 0 && seconds <= 3600
+            ? seconds + ' saniye bekle.' : 'Biraz bekle.';
+          throw new Error('Çok fazla bağlantı isteği. ' + wait);
+        }
+        throw new Error('Bağlantı hazırlanamadı.');`,
+  );
+  const limited = async () => Response.json({ error: 'RATE_LIMITED' },
+    { status: 429, headers: { 'Retry-After': '15' } });
+  const before = await boot({ query: search(), pairing: limited });
+  await before.get('approve').dispatch('click');
+  assert.equal(before.get('error-message').textContent, 'Bağlantı hazırlanamadı.');
+  const after = await boot({ source: proposed, query: search(), pairing: limited });
+  await after.get('approve').dispatch('click');
+  assert.match(after.get('error-message').textContent, /15 saniye bekle/);
+  assert.equal(after.navigations.length, 0);
+  const serviceDown = await boot({ source: proposed, query: search(), pairing: async () =>
+    Response.json({}, { status: 503 }) });
+  await serviceDown.get('approve').dispatch('click');
+  assert.equal(serviceDown.get('error-message').textContent, 'Bağlantı hazırlanamadı.');
+});
+
+test('T-537 #485: installer CTA is pinned to 1.0.7 rather than mislabelled as latest 1.0.8', async () => {
+  const f = await boot();
+  assert.match(f.get('download-installer').href,
+    /\/blob\/96315d5dd4986fffbd24a96859309271d2a88ffe\/installers\/Nexowire-Setup\.cmd$/);
+  assert.match(f.get('install-note').textContent, /v1\.0\.7/);
+  assert.doesNotMatch(f.get('install-note').textContent, /v1\.0\.8|en yeni sürüm/i);
+  assert.match(f.get('install-command').value,
+    /\/96315d5dd4986fffbd24a96859309271d2a88ffe\/installers\/Nexowire-Setup\.cmd/);
+});
+
+test('T-538 #539: successful navigation cannot be followed by a second in-page pairing POST', async () => {
+  const f = await boot({ query: search() });
+  await f.get('approve').dispatch('click');
+  assert.equal(f.navigations.length, 1);
+  assert.equal(f.requests.filter(({ path }) => path === '/api/v1/pairing').length, 1);
+  await f.get('approve').dispatch('click');
+  assert.equal(f.navigations.length, 1);
+  assert.equal(f.requests.filter(({ path }) => path === '/api/v1/pairing').length, 1);
+  // The actual browser leaves the page on navigation; no real network race was run.
+});
+
+test('T-539 OPEN NEGATIVE: synthetic failed fetch must not disclose a token in the error panel', {
+  skip: process.env.K01_RUN_OPEN_NEGATIVES !== '1' && 'owner displays raw fetch error.message',
+}, async () => {
+  const secret = 'nxw-fixture-SECRET-uzun-秘密-🪿-' + 'a'.repeat(120);
+  const f = await boot({ query: search(), pairing: async () => {
+    throw new Error('fetch diagnostics accidentally included token: ' + secret);
+  } });
+  await f.get('approve').dispatch('click');
+  assert.equal(f.navigations.length, 0);
+  assert.equal(f.get('connect-pill').textContent, 'Hata');
+  assert.equal(f.get('error-message').textContent.includes(secret), false,
+    'raw caught error.message is inserted into the DOM');
 });
