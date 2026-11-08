@@ -129,3 +129,14 @@ test('a forged second digest stays FAIL, not independent capture evidence', () =
     assert.deepEqual(checks.map(x => x.status), ['REVIEW_REQUIRED', 'FAIL']);
   });
 });
+
+test('malformed or absent screenshot audit inputs fail closed without crashing', () => {
+  assert.equal(auditBrowserScreenshot(undefined).status, 'UNKNOWN');
+  assert.equal(auditBrowserScreenshot(null).status, 'UNKNOWN');
+  assert.equal(auditBrowserScreenshot([]).status, 'UNKNOWN');
+  assert.equal(auditIndependentScreenshotCaptures(undefined)[0].status, 'UNKNOWN');
+  assert.equal(auditIndependentScreenshotCaptures(null)[0].status, 'UNKNOWN');
+  assert.deepEqual(auditIndependentScreenshotCaptures({ captures: [null, undefined, 0, [], 'bad'],
+    expectedSha: SHA, evidenceDir: '/unused' }).map(x => x.status),
+  ['UNKNOWN', 'UNKNOWN', 'UNKNOWN', 'UNKNOWN', 'UNKNOWN']);
+});
