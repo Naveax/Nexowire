@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage } from 'node:http';
 import { executeLocallyEnrolledBrokerEffect } from './core-windows-mutation-dispatch.js';
-import { createWindowsLocalOwnerBrokerAdmission, requestedBrokerEffectMode, type LocalOwnerBrokerAdmission } from './privileged-broker-local-owner.js';
+import { createWindowsLocalOwnerBrokerAdmission, brokerRunEffectMode, type LocalOwnerBrokerAdmission } from './privileged-broker-local-owner.js';
 import { spawnSync } from 'node:child_process';
 import { matchesBearerHeader, parseTokenList } from '../security/tokens.js';
 import {
@@ -395,6 +395,7 @@ export async function startPrivilegedBroker(
 
 export async function runPrivilegedBroker(
   env: NodeJS.ProcessEnv = process.env,
+  args: readonly string[] = [],
 ): Promise<never> {
   let tokens = parseTokenList(
     env.NEXOWIRE_PRIVILEGED_BROKER_TOKEN,
@@ -421,7 +422,7 @@ export async function runPrivilegedBroker(
     );
   }
 
-  const effectMode = requestedBrokerEffectMode(env);
+  const effectMode = brokerRunEffectMode(args);
   const localOwnerAdmission = effectMode === 'local-owner'
     ? await createWindowsLocalOwnerBrokerAdmission(env, tokens[0]!)
     : undefined;
