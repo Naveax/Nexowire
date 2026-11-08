@@ -426,3 +426,20 @@ test('T-539 OPEN NEGATIVE: synthetic failed fetch must not disclose a token in t
   assert.equal(f.get('error-message').textContent.includes(secret), false,
     'raw caught error.message is inserted into the DOM');
 });
+
+test('D-003 #539 OPEN NEGATIVE: expired pairing session 401 must differ from service outage 503', {
+  skip: process.env.K01_RUN_OPEN_NEGATIVES !== '1' && 'owner #1068 handles pairing 401 as a generic retryable 503',
+}, async () => {
+  const expired = await boot({ query: search(), pairing: async () =>
+    Response.json({ error: 'SESSION_EXPIRED' }, { status: 401 }) });
+  await expired.get('approve').dispatch('click');
+  const outage = await boot({ query: search(), pairing: async () =>
+    Response.json({ error: 'service down' }, { status: 503 }) });
+  await outage.get('approve').dispatch('click');
+  assert.equal(expired.navigations.length, 0);
+  assert.equal(outage.navigations.length, 0);
+  assert.equal(expired.get('connect-pill').textContent, 'Hata');
+  assert.notEqual(expired.get('error-message').textContent,
+    outage.get('error-message').textContent,
+    'session expiration needs an actionable login/session explanation, not a transient-service message');
+});
