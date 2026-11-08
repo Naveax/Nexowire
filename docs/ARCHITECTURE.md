@@ -128,6 +128,15 @@ the authoritative effective policy, the particular operation result, and the
 actual installed binary provenance. A read-only status value is neither a
 grant of new authority nor proof of a later action's success.
 
+For support logs, keep four columns separate: **reported console status**
+(`windows.console_control.status`), **local owner decision** (fresh enrollment
+and any expiry/revocation), **effective authorization at the individual
+mutation boundary**, and **observed input effect** (independent local
+readback). A stale `active:true` snapshot does not bypass a later revocation;
+an `active:false` report alone does not prove which installed binary and
+input path produced the historical #812 observation. Neither stored FULL
+preference nor a successful MCP status query supplies missing local consent.
+
 For compatibility and tool name details, see
 [`MCP_SURFACE.md`](MCP_SURFACE.md). For the versioned structured error
 classification, see

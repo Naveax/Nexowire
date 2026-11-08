@@ -18,7 +18,7 @@ tool-to-capability mappings in
 Agent's read-only capability classification in
 [`src/protocol/capabilities.ts`](../src/protocol/capabilities.ts).
 The matrix below is the intersection of those three sources. Rechecked on
-2026-11-07 at upstream `main` `4e7db16f4233048a956664bef6b607781eb63fb7`
+2026-11-08 at upstream `main` `b5a3f8840517d65ecbd6a018699c4c8bdde09987`
 after the source integration in [PR #1066](https://github.com/Naveax/Nexowire/pull/1066). It is checked by
 [`test/delegated/k08/mcp-doc-contract.test.mjs`](../test/delegated/k08/mcp-doc-contract.test.mjs).
 
@@ -152,12 +152,41 @@ does not prove the component that emitted it.
 | Native Agent reports `SHELL_EXIT_NONZERO` | A command returned a nonzero exit code | The entire requested user task succeeded because MCP transport completed |
 | Independent `task_verification` reports `TASK_VERIFICATION_FAILED` | A postcondition failed independently of transport and process status | A running PID or accepted command proves business-task completion |
 
+**Error-origin decision matrix (concrete v2 inputs, not a live capture):**
+
+| Observed event | `observedAt` / `dispatched` | `causeLayer` / `retrySafety` from `classifyFailure` | Safe user-facing action |
+| --- | --- | --- | --- |
+| Client refusal `UPSTREAM_TOOL_REFUSAL_OBSERVED` | `upstream_client` / `false` | `upstream_client` / `manual_review` | Stop; inspect the provider-visible refusal, never route around it |
+| Lost Agent `AGENT_OFFLINE` | `device_connection` / `unknown` | `device_connection` / `reconcile_first` | Check device connectivity and original operation before any mutation retry |
+| Hub target denial `MCP_TARGET_NOT_AUTHORIZED` | `mcp_hub` / `false` | `mcp_hub` / `after_reauthorization` | Choose only a permitted device or request scoped authorization |
+| Agent local path denial `PATH_DENIED` | `native_agent` / `false` | `native_agent` / `after_reauthorization` | Ask the owner for an explicit path grant; never switch to shell to evade a denial |
+| Uncertain dispatch `MUTATION_STATE_UNKNOWN` | `mcp_hub` / `unknown` | `undetermined` / `reconcile_first` | Query the original operation ID and read back the target; do not replay |
+
+The same public error string with a different actual observer may remain
+`undetermined`; the Hub cannot infer an unseen provider refusal. For a
+possibly dispatched mutation, `retrySafety` stays `reconcile_first` even if
+the visible error resembles an authorization or connectivity denial. These
+exact cases are executed against the non-mutating error classifier by the
+K08 decision-matrix regression test; the table does not change access policy.
+
 For an unconfirmed mutation, first use the original operation ID and an
 authorized read-only status/readback path such as `agent_operation_status` when
 available; a missing operation record is **not** proof of no effect. This v1
 tool's input requires a `request_id` UUID, not a guessed command name. Do not
 invent an operation ID or auto-replay after a timeout. The `agent_operation_status`
 schema and output profile are frozen in the v1 JSON contracts linked above.
+
+**Successful status query is not successful mutation:** a normal
+`agent_operation_status` MCP result may have `structuredContent.ok === true`
+while `structuredContent.data.found === false`, or while the returned
+`record.status` is `in_progress` or `unknown`. These are observation results,
+not completion proof. The Agent metadata journal currently accepts the
+`in_progress`/`succeeded`/`failed`/`unknown` status set; even a journal
+`succeeded` record describes that recorded native operation, not necessarily
+an independently verified *business* postcondition. A missing record is not
+proof the original request had no effect. The broader `audit_query` filter's
+`started`/`succeeded`/`failed` enum must not be substituted for the Agent
+journal's four statuses.
 
 **User-facing status wording:**
 
