@@ -117,6 +117,20 @@ export type PrivilegedBrokerTaskStatus = z.infer<
   typeof TaskStatusSchema
 >;
 
+/** A running task may show 0x800710E0 after an IgnoreNew repeat trigger.
+ * Task history/process health is still required before calling this benign. */
+export function classifyPrivilegedBrokerTaskResult(
+  status: Pick<PrivilegedBrokerTaskStatus,'state'|'lastTaskResult'>,
+  multipleInstances: 'IgnoreNew' | 'Other' | 'Unverified' = 'Unverified',
+): 'NO_LAST_RESULT' | 'SUCCESS' | 'POSSIBLE_IGNORE_NEW' | 'TASK_FAILURE_OR_UNVERIFIED' {
+  if(status.lastTaskResult===null)return 'NO_LAST_RESULT';
+  if(status.lastTaskResult===0)return 'SUCCESS';
+  if((status.lastTaskResult>>>0)===0x800710E0 &&
+     status.state==='Running' && multipleInstances==='IgnoreNew')
+    return 'POSSIBLE_IGNORE_NEW';
+  return 'TASK_FAILURE_OR_UNVERIFIED';
+}
+
 export interface PrivilegedBrokerTaskOptions {
   env?: NodeJS.ProcessEnv;
   cliEntrypoint?: string;
@@ -567,7 +581,11 @@ $ErrorActionPreference='Stop'
 $name=$env:NEXOWIRE_BROKER_TASK_NAME
 $task=Get-ScheduledTask -TaskName $name -ErrorAction Stop
 ${privilegedBrokerTaskControlPreflightScript}
-Start-ScheduledTask -TaskName $name -ErrorAction Stop
+# Do not request a duplicate launch of the one-minute IgnoreNew singleton.
+# An already-running Broker is validated by authenticated /health separately.
+if([string]$task.State -ne 'Running'){
+  Start-ScheduledTask -TaskName $name -ErrorAction Stop
+}
 [pscustomobject]@{ ok=$true } | ConvertTo-Json -Compress
 `;
   await runPowerShellJson<{ ok: boolean }>(
