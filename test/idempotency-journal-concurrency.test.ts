@@ -5,6 +5,7 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { IdempotencyStore } from '../src/operations/idempotency-store.js';
+import { modelExitedHubWriter } from './idempotency/fixtures/model-exited-hub-writer.js';
 
 test('concurrent SQLite reservations do not resurrect failed insert after restart', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nwx-idempotency-concurrency-'));
@@ -28,6 +29,9 @@ test('concurrent SQLite reservations do not resurrect failed insert after restar
     assert.equal(second.status, 'fulfilled');
     assert.equal(await store.get(failed.key), undefined);
     assert.equal((await store.get(survivor.key))?.status, 'in_progress');
+    // Reopening a store object in the same process is not a Hub restart.
+    // Mark only a *verified exited* writer as the previous incarnation.
+    modelExitedHubWriter(root);
     const reopened = new IdempotencyStore(root);
     assert.equal(await reopened.get(failed.key), undefined);
     assert.equal((await reopened.get(survivor.key))?.status, 'unknown');
