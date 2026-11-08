@@ -95,6 +95,30 @@ test('two identically named folders cannot silently scope a selection', () => {
   assert.equal(result.folders.length, 2);
 });
 
+test('T-622/#539: ambiguous folder names do not select by device or input order', () => {
+  const sameNames = [
+    {id: 'floor-a', name: 'Ofis'},
+    {id: 'floor-b', name: 'ＯＦＩＳ'},
+  ];
+  const d1 = {...A, folderId: 'floor-a'};
+  const d2 = {...B, folderId: 'floor-b'};
+  for (const [devices, folderOrder] of [
+    [[d1, d2], sameNames],
+    [[d2, d1], [...sameNames].reverse()],
+  ]) {
+    const result = resolveOwnerDeviceTarget(devices, folderOrder,
+      {folderName: 'ofis', deviceName: 'Ortak PC'}, true);
+    assert.equal(result.status, 'selection_required');
+    assert.equal(result.reason, 'ambiguous-folder');
+    const exact = resolveOwnerDeviceTarget(devices, folderOrder,
+      {folderId: 'floor-b', deviceId: d2.id}, false);
+    assert.equal(exact.status, 'selected');
+    assert.equal(exact.device.id, d2.id);
+    assert.throws(() => resolveOwnerDeviceTarget(devices, folderOrder,
+      {folderId: 'floor-a', deviceId: d2.id}), /DEVICE_NOT_FOUND/);
+  }
+});
+
 test('contradictory device ID/name and folder ID/name are rejected explicitly', () => {
   assert.throws(() => resolveOwnerDeviceTarget([A, C], folders,
     {deviceId: A.id, deviceName: C.name}), /DEVICE_NOT_FOUND/);
