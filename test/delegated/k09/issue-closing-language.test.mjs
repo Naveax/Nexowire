@@ -15,6 +15,17 @@ test('several documented keyword inflections are flagged independently', () => {
   assert.deepEqual(risks.map((r) => r.issue), [487, 487, 487]);
 });
 
+test('qualified same-repository references are not missed when keyword is negated', () => {
+  const result = detectUnsafeClosingRefs('We cannot fix Naveax/Nexowire#487 yet. Resolves: naveax/nexowire#487');
+  assert.equal(result.length, 2);
+  assert.deepEqual(result.map((risk) => risk.issue), [487, 487]);
+});
+
+test('qualified references to a different repository do not implicate Nexowire issue 487', () => {
+  assert.deepEqual(detectUnsafeClosingRefs('Fixes unrelated/project#487.'), []);
+  assert.equal(detectUnsafeClosingRefs('Fixes unrelated/project#487.', [487], 'unrelated/project').length, 1);
+});
+
 test('neutral reference leaves issue open and returns no false acceptance', () => {
   assert.deepEqual(detectUnsafeClosingRefs(suggestedSafeWording), []);
   assert.deepEqual(detectUnsafeClosingRefs('Investigate issue #487 and update evidence.'), []);
@@ -34,5 +45,6 @@ test('PR title, body and commit messages all receive the same preflight', () => 
 test('malformed input and zero issue numbers fail closed', () => {
   assert.throws(() => detectUnsafeClosingRefs(null), /Invalid text/);
   assert.throws(() => detectUnsafeClosingRefs('fix #487', [0]), /Invalid text/);
+  assert.throws(() => detectUnsafeClosingRefs('fix #487', [487], '../wrong'), /Invalid text/);
   assert.throws(() => reviewPullRequestText({ title: '', body: '', commits: [42] }), /Commit messages/);
 });
