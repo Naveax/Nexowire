@@ -125,6 +125,15 @@ test('disconnection recovery is diagnostic-only and secret reveal stays separate
     'runTailscaleCommand',
   ]) assert.ok(cli.includes(handler), `Missing CLI diagnostic handler: ${handler}`);
   assert.match(cli, /action === 'doctor'/);
+
+  const support = section(doc, '### A safe support report after a failed local connection');
+  for (const label of ['Hub health', 'Agent connection', 'Funnel ingress', 'remote MCP authentication']) {
+    assert.ok(support.includes(label), `Missing failure layer: ${label}`);
+  }
+  assert.match(support, /\[REDACTED\]/);
+  assert.match(support, /raw `node connector` output must never appear/);
+  assert.match(support, /If the relevant observation was not collected, use \*\*NOT_RUN\*\*/);
+  assert.match(support, /new `onboard bootstrap --force` rotates credentials and is not a pairing recovery step/);
 });
 
 test('risk categories explicitly separate credential reveal, issuance and exposure', async () => {
@@ -156,6 +165,12 @@ test('risk categories explicitly separate credential reveal, issuance and exposu
   assert.match(recoveryGuide, /onboard bootstrap --force.*not authenticated device health/);
   assert.match(recoveryGuide, /failed check as \*\*FAIL\*\*.*unattempted check as \*\*NOT_RUN\*\*/);
   assert.doesNotMatch(recoveryGuide, /Run `nexowire node connector` to debug/);
+
+  const platformConsent = section(doc, '## Platform ownership and explicit consent');
+  assert.match(platformConsent, /same Windows user.*Scheduled Tasks and CurrentUser DPAPI/);
+  assert.match(platformConsent, /Windows `node bootstrap` path is rejected/);
+  assert.match(platformConsent, /Do not switch to an Administrator identity/);
+  assert.match(platformConsent, /missing owner approval means the side-effecting command stays \*\*NOT_RUN\*\*/);
 });
 
 test('credential examples use protected-source references, not real inline values', async () => {
@@ -176,6 +191,16 @@ test('credential examples use protected-source references, not real inline value
   assert.match(evidence, /UNKNOWN.*inconclusive/);
   assert.match(evidence, /action_required.*not a test PASS/);
   assert.match(evidence, /clean-user installation, pairing and remote MCP checks still require a real Windows acceptance run/);
+
+  const layers = section(await read('docs/SELF_HOST.md'), '### Do not collapse browser, task and remote evidence');
+  for (const label of [
+    'Windows installer finished', 'Scheduled Task says `Running`',
+    '`node status` reports local Hub health', 'Browser shows **BAĞLANIYOR…**',
+    'Remote client reports MCP connected',
+  ]) assert.ok(layers.includes(label), `Missing false-success boundary: ${label}`);
+  assert.match(layers, /No proof.*Hub\/Agent or account pairing/);
+  assert.match(layers, /No proof.*native Agent health or authenticated remote MCP execution/);
+  assert.match(layers, /Require the actual per-layer checks/);
 });
 
 test('cross-guide links and target heading anchors are valid offline', async () => {
