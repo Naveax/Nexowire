@@ -14,6 +14,8 @@ export interface S5StormOptions{
   signal?:AbortSignal;
   /** Test-only snapshot after bounded teardown, including on abort/error. */
   onTeardown?:(state:Readonly<S5StormTeardown>)=>void;
+  /** Test-only abort/inspection point after a batch is connected. */
+  onConnectedBatch?:(round:number,start:number)=>void;
 }
 export interface S5StormTeardown{
   openClients:number;openServerSockets:number;queued:number;processing:number;
@@ -25,11 +27,12 @@ export interface S5ReconnectStormResult{
   requests:number;uniqueReservations:number;duplicates:number;backpressure:number;
   peakQueue:number;peakProcessing:number;
   latencyMs:{p50:number;p95:number;p99:number};
+  latencyEvidence:{samples:number;classification:'LOCAL_SYNTHETIC_DESCRIPTIVE_ONLY';tailSloAccepted:false};
   reportedNativeCompleted:0;verifiedNativeCompleted:0;
 }
 export async function runS5ReconnectStorm(input:S5StormOptions):
   Promise<S5ReconnectStormResult>{
-  const {socketsPerRound,rounds,queueLimit,processingLimit,signal,onTeardown}=input;
+  const {socketsPerRound,rounds,queueLimit,processingLimit,signal,onTeardown,onConnectedBatch}=input;
   const checkAbort=()=>{if(signal?.aborted)throw new Error('S5 storm aborted')};
   checkAbort();
   if(!Number.isSafeInteger(socketsPerRound)||socketsPerRound<1||socketsPerRound>128||
@@ -107,6 +110,7 @@ export async function runS5ReconnectStorm(input:S5StormOptions):
           if(ws.readyState===WebSocket.OPEN)return resolve();
           ws.once('open',resolve);ws.once('error',reject);
         })));
+        onConnectedBatch?.(round,start);
         checkAbort();
         const attempts=sockets.map((ws,j)=>new Promise<void>((resolve,reject)=>{
           const clientIndex=start+j;
@@ -155,6 +159,8 @@ export async function runS5ReconnectStorm(input:S5StormOptions):
     return {kind:'SYNTHETIC_LOOPBACK_WS_NO_REAL_NATIVE_TOOL',socketsPerRound,rounds,opened,closed,
       peakOpen,requests,uniqueReservations,duplicates,backpressure,peakQueue,peakProcessing,
       latencyMs:{p50:timing.p50,p95:timing.p95,p99:timing.p99},
+      latencyEvidence:{samples:latencies.length,
+        classification:'LOCAL_SYNTHETIC_DESCRIPTIVE_ONLY',tailSloAccepted:false},
       reportedNativeCompleted:0,verifiedNativeCompleted:0};
   }finally{
     signal?.removeEventListener('abort',abort);

@@ -51,6 +51,8 @@ export interface S5LoadResult{
   sockets:{connected:number;peak:number;closed:number};
   rpc:{attempted:number;reserved:number;duplicate:number;rateLimited:number;backpressure:number;other:number;peakInFlight:number;peakQueue:number;perSecond:number};
   latencyMs:{p50:number;p95:number;p99:number;max:number};
+  /** Optional for compatibility with previously captured S5 JSON fixtures. */
+  latencyEvidence?:{samples:number;classification:'LOCAL_SYNTHETIC_DESCRIPTIVE_ONLY';tailSloAccepted:false};
   cpuMs:{user:number;system:number};memoryBytes:{rssStart:number;rssPeak:number;rssEnd:number};
   ioBytes:{sqlite:number;wal:number;received:number;sent:number};
   fairness:{jainIndex:number;minUserSuccess:number;maxUserSuccess:number};
@@ -236,6 +238,8 @@ export async function runS5LoopbackLoad(opts:S5LoadOptions):Promise<S5LoadResult
       rpc:{attempted:attempts,reserved,duplicate,rateLimited,backpressure,other,
         peakInFlight,peakQueue,perSecond:Number((reserved/(elapsed/1000)).toFixed(2))},
       latencyMs:summarizeS5Latencies(latencies),
+      latencyEvidence:{samples:latencies.length,
+        classification:'LOCAL_SYNTHETIC_DESCRIPTIVE_ONLY',tailSloAccepted:false},
       cpuMs:{user:cpu.user/1000,system:cpu.system/1000},
       memoryBytes:{rssStart,rssPeak,rssEnd:process.memoryUsage().rss},
       ioBytes:{sqlite:statSync(dbPath).size,wal:existsSync(dbPath+'-wal')?statSync(dbPath+'-wal').size:0,
