@@ -36,7 +36,7 @@ test('P0 local Broker mode is explicit and persists no plaintext credential in l
   });
   assert.match(launcher,/--local-owner-effects/);
   // A user-level environment variable cannot select the elevated run mode.
-  assert.match(launcher,/NEXOWIRE_PRIVILEGED_BROKER_EFFECT_MODE=\\$null/);
+  assert.match(launcher,/NEXOWIRE_PRIVILEGED_BROKER_EFFECT_MODE=\$null/);
   assert.match(launcher,/NEXOWIRE_AGENT_TOKEN_DPAPI_FILE/);
   assert.doesNotMatch(launcher,/fixture-plaintext-secret-never-persisted/);
   assert.doesNotMatch(launcher,/\$env:NEXOWIRE_AGENT_TOKEN='/);
