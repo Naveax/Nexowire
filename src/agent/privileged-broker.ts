@@ -398,7 +398,7 @@ export async function startPrivilegedBroker(
 
 export async function runPrivilegedBroker(
   env: NodeJS.ProcessEnv = process.env,
-  args: readonly string[] = [],
+  args: readonly string[] = process.argv.slice(4),
 ): Promise<never> {
   let tokens = parseTokenList(
     env.NEXOWIRE_PRIVILEGED_BROKER_TOKEN,
