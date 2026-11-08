@@ -5,7 +5,7 @@ import { assessTap, classifyHostedEvidence, sourceInventory } from '../../../scr
 
 const sha = 'a'.repeat(40);
 const otherSha = 'b'.repeat(40);
-const tap = count => `TAP version 13\n# tests ${count}\n# pass ${count}\n# fail 0\n# skipped 0\n# todo 0\n`;
+const tap = count => `TAP version 13\n# tests ${count}\n# pass ${count}\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n`;
 
 test('55 source files can include seven not selected by main CI without claiming they were run', () => {
   const paths = [
@@ -43,6 +43,12 @@ test('TAP missing a summary, skipped tests or failed assertions is NOT_PASS', ()
   assert.equal(assessTap(tap(41).replace('# skipped 0', '# skipped 1')).job_acceptance, 'NOT_PASS');
   assert.equal(assessTap(tap(41).replace('# fail 0', '# fail 1')).job_acceptance, 'NOT_PASS');
   assert.equal(assessTap(tap(0)).job_acceptance, 'NOT_PASS');
+});
+
+test('cancelled or missing cancelled TAP summaries are never mistaken for PASS', () => {
+  assert.equal(assessTap(tap(41).replace('# cancelled 0', '# cancelled 1')).job_acceptance, 'NOT_PASS');
+  assert.equal(assessTap(tap(41).replace('# cancelled 0\n', '')).job_acceptance, 'NOT_PASS');
+  assert.equal(assessTap(tap(41) + '# cancelled 0\n').job_acceptance, 'NOT_PASS');
 });
 
 const proof = () => ({

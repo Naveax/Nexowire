@@ -46,11 +46,11 @@ export function assessTap(tap, hardcodedCount = null) {
   };
   const counts = {
     tests: number('tests'), pass: number('pass'), fail: number('fail'),
-    skipped: number('skipped'), todo: number('todo'),
+    cancelled: number('cancelled'), skipped: number('skipped'), todo: number('todo'),
   };
   const assertions = Object.values(counts).every(Number.isSafeInteger) &&
     counts.tests > 0 && counts.tests === counts.pass &&
-    counts.fail === 0 && counts.skipped === 0 && counts.todo === 0 ? 'PASS' : 'NOT_PASS';
+    counts.fail === 0 && counts.cancelled === 0 && counts.skipped === 0 && counts.todo === 0 ? 'PASS' : 'NOT_PASS';
   const fixedGate = hardcodedCount === null ? 'NOT_APPLICABLE' :
     !Number.isSafeInteger(hardcodedCount) || counts.tests !== hardcodedCount ||
       counts.pass !== hardcodedCount ? 'FAIL_COUNT_MISMATCH' : 'PASS';
