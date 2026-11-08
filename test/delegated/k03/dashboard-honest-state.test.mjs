@@ -6,7 +6,11 @@ import vm from 'node:vm';
 // #539/R18 / K03 T-407 and T-408. Real web/app.js is executed with fake
 // DOM/HTTP only. These are intentionally RED until the web owner resolves the
 // display mismatch. No Windows, Hub, Agent or Broker is contacted.
-const app = readFileSync(new URL('../../../web/app.js', import.meta.url), 'utf8');
+// An optional pinned source lets the maintainer verify the exact unmerged
+// owner candidate without copying that candidate into this PR.
+const app = process.env.K03_APP_SOURCE_JSON
+  ? JSON.parse(process.env.K03_APP_SOURCE_JSON)
+  : readFileSync(process.env.K03_APP_SOURCE ?? new URL('../../../web/app.js', import.meta.url), 'utf8');
 const boundary = app.indexOf("$('folder-filter').addEventListener('change'");
 assert.ok(boundary > 0, 'web/app.js bootstrap boundary');
 
@@ -17,10 +21,16 @@ function emptyDashboard() {
       this.children = [];
       this.style = {};
       this.classList = { toggle() {}, add() {} };
+      this.elements = new Map();
     }
     replaceChildren(...children) { this.children = children; }
     appendChild(child) { this.children.push(child); }
     add(item) { this.children.push(item); }
+    setAttribute(name, value) { (this.attributes ??= new Map()).set(name, value); }
+    querySelector(selector) {
+      if (!this.elements.has(selector)) this.elements.set(selector, new Element());
+      return this.elements.get(selector);
+    }
   }
   const elements = new Map();
   const get = (id) => {
