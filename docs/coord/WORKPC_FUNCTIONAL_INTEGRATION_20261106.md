@@ -93,3 +93,34 @@ recovered HTTP 200 and preserved all 2,398 existing SQLite records
 (`quick_check=ok`); that does not establish whole-computer reboot or
 pre-user-login reachability. Do not enable auto-logon merely to hide this
 acceptance gap. Production release remains NO-GO.
+
+## 2026-11-08 SYSTEM pre-login Agent transport bootstrap, source only
+
+The native Agent can now enter a separate **opt-in** Windows
+`NEXOWIRE_WINDOWS_PRELOGIN_AGENT=1` transport-bootstrap mode.
+It advertises only `machine.health` and `windows.tasks`. Even if
+the Hub sends a forged or hidden request for `shell.exec`,
+`files.read`, browser/desktop or a mutation, the Agent returns
+`AGENT_PRELOGIN_CAPABILITY_UNAVAILABLE` **before** the request
+cache, independent CAS, journal, or executor. CORE Broker discovery is
+disabled in bootstrap mode. The standard interactive Agent mode
+is not changed.
+
+This is an actual runtime guard, not a SYSTEM service installation.
+The future pre-login task must be provisioned with its own
+independently verified machine-scope DPAPI token, device identity,
+trusted executable/tree and protected persistent state. The source
+now requires a canonical `C:\\ProgramData\\Nexowire\\system-agent`
+profile: machine-DPAPI `agent-bearer-token`, a separate protected
+`agent.json`, state and journal, an exact loopback Hub WebSocket endpoint,
+trusted Node/CLI code and verified parent, child and secret ACLs. It
+rejects owner CORE credentials, arbitrary file roots and user DPAPI
+before opening the Agent identity. No SYSTEM task has been registered. Do not run
+the owner-account DPAPI launcher in SYSTEM or share an untrusted
+user-writable runtime. A separate controlled logon handoff is still
+required to restore full owner CORE capabilities.
+
+Pre-login bootstrap runtime tests and explicit Windows Node 22/24
+CI tests verify the separate mode. No live tasks, credentials,
+UAC, startup settings or Work-PC/NAVEAX service state were changed
+by this source round. Full OS reboot remains NOT_RUN.

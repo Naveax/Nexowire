@@ -525,6 +525,12 @@ jobs:
         run: |
           node --test --import tsx --test-concurrency=1 test/windows-unattended-reboot-readiness.test.ts
           if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_UNATTENDED_REBOOT_READINESS_RED' }
+      - name: Verify pre-login SYSTEM Agent bootstrap denies privileged capabilities
+        timeout-minutes: 5
+        shell: pwsh
+        run: |
+          node --test --import tsx --test-concurrency=1 test/windows-prelogin-agent-bootstrap.test.ts
+          if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_PRELOGIN_BOOTSTRAP_CAPABILITY_RED' }
 
   connection-v2-native-git-dag:
     if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'coord/connection-v2-release-candidate-') || startsWith(github.head_ref, 'coord/ai05-core-connection-v2-windows-'))

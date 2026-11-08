@@ -28,13 +28,21 @@ import {verifyAgentJournalWal} from './operation-journal-wal.js';
 import {RemoteMutationCasClient,MutationCasError} from './remote-mutation-cas.js';
 import { PrivilegedBrokerClient } from './privileged-broker-client.js';
 import { loadOrCreatePrivilegedBrokerToken } from '../security/privileged-broker-secret.js';
-import { resolveProtectedSingleSecret } from '../security/protected-secret-files.js';
+import { resolveProtectedSingleSecret,inspectProtectedSecretFile } from '../security/protected-secret-files.js';
+import {verifyWindowsPrivateAcl} from '../security/windows-programdata-acl.js';
+import {assertWindowsPrivilegedRuntimeTrusted,assertNoPrivilegedNodeStartupFlags} from '../security/windows-privileged-runtime-trust.js';
 import { optionalPlatformSecretSync } from '../security/platform-secret-store.js';
 import { NEXOWIRE_VERSION } from '../version.js';
 import { acquireNativeAgentSingleton } from './native-agent-singleton.js';
 import {createWindowsCoreConsoleAdmission, type NativeCoreConsentAuthority} from './windows-core-console-provider.js';
 import {revokePhysicalConsoleGrant} from './windows-console-grant.js';
 import {initializeNativeAgentState} from './native-agent-startup-diagnostic.js';
+import {
+  getWindowsPreloginAgentMode,
+  assertWindowsPreloginStartupConfiguration,
+  filterWindowsPreloginCapabilities,
+  preloginBootstrapAllowsCapability,
+} from './windows-prelogin-bootstrap.js';
 
 
 export interface AgentIdentity {
@@ -441,6 +449,24 @@ export async function runNativeAgent(
   trustedNativeMutationProvider?: TrustedNativeMutationProvider,
   trustedCoreConsentProvider?: NativeCoreConsentAuthority,
 ): Promise<never> {
+  const preloginBootstrap=getWindowsPreloginAgentMode(env);
+  if(preloginBootstrap){
+    // No user-writable code, owner DPAPI, identity creation, or journal I/O
+    // may precede the privileged bootstrap's independent trust verification.
+    const scope=assertWindowsPreloginStartupConfiguration(env);
+    assertNoPrivilegedNodeStartupFlags(process.execArgv);
+    assertWindowsPrivilegedRuntimeTrusted({
+      executable:process.execPath,cliEntrypoint:process.argv[1]??'',env,
+    });
+    for(const trusted of [
+      path.win32.dirname(scope.root),scope.root,scope.stateRoot,
+      scope.identityFile,scope.tokenFile,
+    ]) verifyWindowsPrivateAcl(trusted);
+    const tokenEnvelope=inspectProtectedSecretFile(scope.tokenFile);
+    if(tokenEnvelope.protection!=='windows-dpapi-local-machine'||
+       tokenEnvelope.purpose!=='agent-bearer-token')
+      throw new Error('PRELOGIN_AGENT_MACHINE_DPAPI_REQUIRED');
+  }
   const identity = await loadOrCreateAgentIdentity(env);
   const instanceId = randomUUID();
   const hubEndpoints = parseHubEndpoints(env);
@@ -457,11 +483,14 @@ export async function runNativeAgent(
     env.NEXOWIRE_RUNBOOK_STATE_FILE?.trim() ||
     path.join(os.homedir(), '.nexowire', 'runbooks.json');
   const socketHeartbeatMs = heartbeatMs(env);
-  const activePrivilegeMode = await resolveNativeAgentPrivilegeMode(env);
-  const privilegedBroker = await privilegedBrokerFromEnv(
-    env,
-    activePrivilegeMode,
-  );
+  // A SYSTEM pre-login transport is restricted to machine status. It must
+  // never resolve the owner Broker or infer CORE authorization from its token.
+  const activePrivilegeMode = preloginBootstrap
+    ? 'broker' as const
+    : await resolveNativeAgentPrivilegeMode(env);
+  const privilegedBroker = preloginBootstrap
+    ? undefined
+    : await privilegedBrokerFromEnv(env,activePrivilegeMode);
   const requestCache = new AgentRequestCache<AgentResponse>();
   // Fail closed: an independently provisioned, rollback-independent authority
   // is mandatory for native mutating agents. Never auto-create one from a
@@ -490,9 +519,8 @@ export async function runNativeAgent(
     ? new RemoteMutationCasClient({endpoint:casEndpoint,token:casToken,
         authorityId:casAuthorityId,epoch:casEpoch,deviceId:identity.id})
     : undefined;
-  const advertisedCapabilities = await capabilitiesForAgent(
-    process.platform,
-    env,
+  const advertisedCapabilities = filterWindowsPreloginCapabilities(
+    await capabilitiesForAgent(process.platform,env),preloginBootstrap,
   );
 
   let stopped = false;
@@ -677,7 +705,16 @@ export async function runNativeAgent(
               request.data.input,
               request.data.accessMode,
             );
-            response = await requestCache.run(
+            // Pre-login SYSTEM has no owner desktop. Deny even forged or
+            // hidden Hub requests BEFORE cache, CAS, journal, or executor.
+            response = preloginBootstrap &&
+              !preloginBootstrapAllowsCapability(request.data.capability)
+              ? {
+                  type:'response',requestId:request.data.requestId,ok:false,
+                  error:{code:'AGENT_PRELOGIN_CAPABILITY_UNAVAILABLE',
+                    message:'The pre-login transport accepts only bounded machine status. Sign in for owner capabilities.'},
+                }
+              : await requestCache.run(
               request.data.requestId,
               fingerprint,
               async () => {
