@@ -4,6 +4,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import * as z from 'zod';
 import { isWindowsProcessElevated } from './privileged-broker.js';
+import { requestedBrokerEffectMode } from './privileged-broker-local-owner.js';
 import { PrivilegedBrokerClient } from './privileged-broker-client.js';
 import { PrivilegedBrokerModeDeniedError } from './privileged-broker-denial.js';
 import { NEXOWIRE_VERSION } from '../version.js';
@@ -298,6 +299,21 @@ export function buildPrivilegedBrokerLauncher(
     env.NEXOWIRE_PRIVILEGED_BROKER_PORT?.trim();
   const secretFile =
     env.NEXOWIRE_PRIVILEGED_BROKER_SECRET_FILE?.trim();
+  const effectMode = requestedBrokerEffectMode(env);
+  if (effectMode === 'local-owner') {
+    // Selection is persisted only by the local elevated task installer.
+    // Do not persist a bearer token, cloud credential or plaintext secret.
+    lines.push("$env:NEXOWIRE_PRIVILEGED_BROKER_EFFECT_MODE='local-owner'");
+    for (const name of [
+      'NEXOWIRE_CORE_AUTHORITY_URL',
+      'NEXOWIRE_AGENT_IDENTITY_FILE',
+      'NEXOWIRE_AGENT_TOKEN_PLATFORM_NAME',
+      'NEXOWIRE_AGENT_TOKEN_DPAPI_FILE',
+    ] as const) {
+      const value = env[name]?.trim();
+      if (value) lines.push('$env:' + name + '=' + psLiteral(value));
+    }
+  }
 
   if (brokerHost) {
     lines.push(
