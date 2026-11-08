@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
+import {readFileSync} from 'node:fs';
 import {
   assessWindowsUnattendedRebootReadiness,
 } from '../src/hub/hub-boot-lifecycle.js';
@@ -66,6 +67,15 @@ test('Windows auto-login is not a substitute for a proven pre-login Agent',()=>{
   assert.equal(result.remoteRebootAccepted,false);
   assert.equal(result.autoAdminLogon,true);
   assert.ok(result.blockers.includes('NATIVE_AGENT_LOGON_ONLY'));
+});
+
+test('CI explicitly runs this preflight on Windows Node 22 and Node 24',()=>{
+  const workflow=readFileSync(new URL('../.github/workflows/ci.yml',import.meta.url),'utf8');
+  const job=workflow.slice(workflow.indexOf('  connection-v2-negative-windows:'),
+    workflow.indexOf('  connection-v2-native-git-dag:'));
+  assert.match(job,/node-version: \[22, 24\]/);
+  assert.match(job,/test\/windows-unattended-reboot-readiness\.test\.ts/);
+  assert.match(job,/WINDOWS_UNATTENDED_REBOOT_READINESS_RED/);
 });
 
 test('real CLI shows the Work-PC reboot blockers without rebooting or changing task state',{
