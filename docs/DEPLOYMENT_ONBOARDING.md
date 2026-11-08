@@ -87,6 +87,17 @@ Supported reference names in the operator next-step report include `NEXOWIRE_AGE
 
 If a first-run attempt is interrupted, inspect readiness and existing credential state before considering another issuance. `--force` is a rotation decision, not a connectivity troubleshooting flag.
 
+## Recover the right flow before retrying
+
+| Observed failure | Safe first step | Do not infer / do |
+| --- | --- | --- |
+| Hosted Windows page shows **BAĞLANIYOR…** or **TEKRAR DENE** | Follow the [normal Windows pairing guide](INSTALL_WINDOWS.md#3-cihaz%C4%B1-kendi-hesab%C4%B1na-ba%C4%9Fla) under the same GitHub identity; allow the pending attempt to finish and use the documented retry once. | Do not issue self-host credentials, reset the Windows node or paste an OAuth callback into support. |
+| Windows self-host Hub/Agent unhealthy or absent | Check `nexowire node status`, then `nexowire hub status` or `nexowire agent doctor` as indicated; preserve existing protected state. | `Running` Scheduled Task or a fresh `onboard bootstrap --force` is not authenticated device health. |
+| Self-host local health is good but remote URL is absent or fails | If Funnel was deliberately configured, check `nexowire tailscale status` before any credential reveal; record whether an actual remote MCP client was tried. | Do not paste a loopback address, a guessed HTTPS endpoint or an unverified bearer token into ChatGPT. |
+| Manual operator onboarding exits nonzero or readiness is inconclusive | Record the sanitized `onboard plan` / `doctor --remote` result and whether state initialization occurred; classify a failed check as **FAIL** and an unattempted check as **NOT_RUN**. | Do not silently rerun issuance, clear DB/credential state or label a missing observation PASS. |
+
+This is a **decision aid**, not an automatic retry script. Real paired-device and remote MCP health must be verified independently; Windows pairing and manual operator bootstrap are different flows.
+
 For remote deployments, `nexowire doctor --remote` remains the readiness gate. Onboarding does not pretend a loopback/plaintext/missing-TLS deployment is production-ready merely because credentials now exist. Linux/manual hosting requires its own supported, separately verified Agent secret source and lifecycle; the Windows Scheduled Task/DPAPI recipe does not transfer automatically.
 
 Remote readiness still does **not** prove ChatGPT can authenticate, discover the intended device, or call `machine_snapshot` and `machine_health`. Verify those paths with the real client before declaring the connection complete.
