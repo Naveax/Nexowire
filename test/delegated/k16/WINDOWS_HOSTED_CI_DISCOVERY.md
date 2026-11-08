@@ -92,3 +92,27 @@ status cannot substitute for that evidence.
 
 The above is a read-only result; no CI reruns, issue state change, PR merge,
 or owner workflow edit was performed.
+
+## P007 HAVUZ D-131 — Linux mock vs real Windows/WSL evidence (2026-11-08)
+
+At #1105 **exact head `d75e00028e25357d4ec875055603b40a28d04dcc`**,
+[CI run #42500686653](https://github.com/Naveax/Nexowire/actions/runs/42500686653)
+completed **7/7 jobs successfully**. The exact job logs distinguish four
+different acceptance categories; a green overall status does not merge them:
+
+| Environment / evidence | Exact job / observed test | Supported conclusion | Unsupported conclusion |
+| --- | --- | --- | --- |
+| Local **Linux VM**, TypeScript AST in `runInNewContext`, fake `spawn` and liveness checks | `node --test --import tsx test/delegated/k16/*.test.ts`, 22/22 PASS before this documentation change | K16 negative path *contract* against the checked-out private source | No real `taskkill.exe`, Windows PID incarnation, Job cleanup or escaped grandchild was exercised |
+| GitHub-hosted **Windows**, Node 24, real controlled process/Job fixtures | `browser-live` job **128792543806**: explicit `test/windows-job-owner.test.ts`, `test/windows-job-capacity-128.test.ts`, `test/process-manager-tree-cleanup.test.ts`, `test/process-manager.test.ts`, **21/21 PASS**, including real synthetic root-killed-before-stop and descendant absence | These *named* existing main-tree fixture cases really ran on a Windows runner; this is stronger than a Linux mock | These do **not** execute the K16 nested file or prove owner #1096's unmerged code/physical Work-PC incident is resolved |
+| GitHub-hosted **Windows**, WSL2 Ubuntu-24.04 distro | `wsl2-live` job **128792543885**, real `wsl.exec` against WSL2, **1/1 PASS** | WSL command/distro/cwd behavior on Windows host | Not Windows `taskkill`/owned Job descendant cleanup; not a K16 nested test |
+| GitHub-hosted **Ubuntu**, Node 22 and 24 | `test (22)` **128792543854** and `test (24)` **128792544004**, both succeeded | Existing explicitly selected tests and general checks succeeded | Neither decoded log invokes `test/delegated/k16/windows-taskkill-contract.test.ts`; K16 hosted test discovery remains **NOT_RUN** |
+| Owner's physical **Work-PC** Windows postcondition from issue #540 | No Work-PC run/artifact for the unmerged owner integration; K16's own test is mocked | **NOT_RUN** | Hosted Windows fixture success is not automatically installed-Work-PC acceptance |
+
+The four decoded CI logs contain **zero** occurrences of
+`test/delegated/k16`, `windows-taskkill-contract`, or
+`environment-doctor-contract`. This is an **exact-SHA test discovery gap**, not
+a CI failure. The owner #1096 candidate has advanced to
+`ada951d08a96d5d7ba62c07c63be01942ef4f7d0`; its unmerged CI workflow
+still does not name the nested K16 taskkill file. No workflow rerun or protected
+source edit was performed; K16's remaining hosted-nested/Work-PC gates are
+**NOT_RUN** pending owner integration and explicit physical acceptance.
