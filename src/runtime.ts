@@ -15,6 +15,16 @@ import { SkillRegistry } from './skills/registry.js';
 import { WorkspaceStore } from './workspace/store.js';
 import { createControlPlaneAgentPresenceReporter } from './hub/control-plane-agent-auth.js';
 
+/** Public Cloudflare/Agent remote-only admission cannot permit a WebSocket
+ * hello without an owner/device-bound mutation revalidator. Local/legacy
+ * broker constructions remain compatible until their own security migration.
+ */
+export function requireBoundRemoteMutationAuthorization(
+  config: Pick<NexowireConfig,'remoteAgentAuthOnly'>,
+):boolean {
+  return config.remoteAgentAuthOnly === true;
+}
+
 export async function createRuntime(config: NexowireConfig) {
   const devices = new DeviceDirectory(config.stateDir);
   await devices.initialize();
@@ -35,6 +45,7 @@ export async function createRuntime(config: NexowireConfig) {
       : undefined;
 
   const broker = new AgentBroker({
+    requireMutationReauthorization: requireBoundRemoteMutationAuthorization(config),
     onDeviceState: async (event) => {
       if (event.type === 'connected') {
         await devices.observeConnected(event.device, event.at);

@@ -62,13 +62,120 @@ export function loadedMcpRouterSha256(): string {
     .digest('hex');
 }
 
+/** A public Agent endpoint may be advertised only by a broker whose own
+ * constructor enabled mandatory per-mutation reauthorization. This is a
+ * capability attestation provided by V2-07, NOT a client HTTP claim.
+ * Older binaries deliberately fail closed. Local-only mode is unchanged. */
+export const REMOTE_AGENT_STRICT_CONTRACT = 'owner-device-epoch-lease-v1' as const;
+
+export interface RemoteAgentAuthorityEvidence {
+  ownerId: string;
+  deviceId: string;
+  authorizationEpoch: number;
+  leaseExpiresAtMs: number;
+}
+
+/** Never promote a legacy deviceId-only admission into an owner-bound grant.
+ * Epoch and expiry are authority-issued; the Hub must compare both on every
+ * mutation, not cache them as permanent authorization. */
+export function hasTrustedRemoteAgentGrant(
+  input: unknown,
+  now = Date.now(),
+): input is RemoteAgentAuthorityEvidence {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return false;
+  const p = input as Record<string, unknown>;
+  return typeof p.ownerId === 'string' &&
+    /^[A-Za-z0-9][A-Za-z0-9._:@-]{1,127}$/.test(p.ownerId) &&
+    typeof p.deviceId === 'string' &&
+    /^[A-Za-z0-9][A-Za-z0-9._:@-]{1,127}$/.test(p.deviceId) &&
+    Number.isSafeInteger(p.authorizationEpoch) &&
+    (p.authorizationEpoch as number) >= 0 &&
+    Number.isSafeInteger(p.leaseExpiresAtMs) &&
+    (p.leaseExpiresAtMs as number) > now &&
+    (p.leaseExpiresAtMs as number) <= now + 300_000;
+}
+
+/** Bound proof for ONE WebSocket incarnation. Consumers must attach this to
+ * strict AgentBroker.register and must NEVER treat it as a global owner grant.
+ * The trusted Hub verifier must obtain fresh authoritative control-plane data.
+ * Checking here does not close the revoke-after-check / send TOCTOU gap. */
+export function bindRemoteAgentMutationReauthorization(input: {
+  grant: RemoteAgentAuthorityEvidence;
+  authorizationHeader: string | undefined;
+  verify: (header: string | undefined, signal: AbortSignal) => Promise<unknown>;
+  timeoutMs?: number;
+  clock?: () => number;
+}): () => Promise<boolean> {
+  const now = input.clock ?? (() => Date.now());
+  const timeout = input.timeoutMs ?? 3_000;
+  if (!Number.isSafeInteger(timeout) || timeout < 250 || timeout > 10_000)
+    throw new Error('REMOTE_REAUTH_TIMEOUT_INVALID');
+  if (typeof input.verify !== 'function')
+    throw new Error('REMOTE_REAUTH_VERIFIER_REQUIRED');
+  if (!hasTrustedRemoteAgentGrant(input.grant,now()))
+    throw new Error('REMOTE_REAUTH_INITIAL_GRANT_INVALID');
+  const bound = {...input.grant};
+  let invalidated=false;
+  return async (): Promise<boolean> => {
+    if (invalidated || !hasTrustedRemoteAgentGrant(bound,now())) {
+      invalidated=true;
+      return false;
+    }
+    const controller=new AbortController();
+    let timer:NodeJS.Timeout|undefined;
+    let abort!:()=>void;
+    const timeoutPromise=new Promise<undefined>(resolve=>{
+      abort=()=>{controller.abort();resolve(undefined);};
+      timer=setTimeout(abort,timeout);
+      timer.unref?.();
+    });
+    try {
+      const refreshed=await Promise.race([
+        Promise.resolve().then(()=>input.verify(input.authorizationHeader,controller.signal))
+          .catch(()=>undefined),
+        timeoutPromise,
+      ]);
+      const valid=hasTrustedRemoteAgentGrant(refreshed,now()) &&
+        hasTrustedRemoteAgentGrant(bound,now()) &&
+        refreshed.ownerId===bound.ownerId &&
+        refreshed.deviceId===bound.deviceId &&
+        refreshed.authorizationEpoch===bound.authorizationEpoch;
+      if (!valid) invalidated=true;
+      return valid;
+    } catch {
+      invalidated=true;
+      return false;
+    } finally {
+      clearTimeout(timer);
+      controller.abort();
+    }
+  };
+}
+
+export function assertRemoteAgentAuthorizationContract(
+  broker: AgentBroker,
+  remoteOnly: boolean,
+): void {
+  if (!remoteOnly) return;
+  const implementation = broker as AgentBroker & {
+    isMandatoryMutationReauthorizationEnabled?: () => boolean;
+  };
+  if (typeof implementation.isMandatoryMutationReauthorizationEnabled !== 'function' ||
+      implementation.isMandatoryMutationReauthorizationEnabled() !== true) {
+    throw new Error(
+      'REMOTE_AGENT_STRICT_REAUTHORIZATION_REQUIRED: remote-only Hub must use a strict Broker with per-socket mutation verifier',
+    );
+  }
+}
+
 /** Metadata only: configured OAuth is not proof of a successful owner acceptance test. */
-export function hubRuntimeIdentity(ownerOauthConfigured: boolean) {
+export function hubRuntimeIdentity(ownerOauthConfigured: boolean, remoteAgentAdmission=false) {
   return {
     packageVersion: NEXOWIRE_VERSION,
     mcpRouterSha256: loadedMcpRouterSha256(),
     ownerAutoRoutingContract: 'owner-auto-v1',
     ownerOauthConfigured,
+    ...(remoteAgentAdmission?{remoteAgentAdmissionContract:REMOTE_AGENT_STRICT_CONTRACT}:{}),
   };
 }
 
@@ -112,7 +219,13 @@ export async function runHttpServer(
   broker: AgentBroker,
   context: McpContext,
 ): Promise<void> {
-  const remoteAgentCredentialVerifier =
+  // Fail BEFORE listen / HTTP 101 when a remote-only Broker was created
+  // without the mandatory V2-07 mutation authority. Old Broker builds
+  // intentionally cannot publish Agent admission.
+  assertRemoteAgentAuthorizationContract(
+    broker, config.remoteAgentAuthOnly === true,
+  );
+  const untrustedRemoteVerifier =
     config.controlPlaneAgentAuth
       ? createControlPlaneAgentCredentialVerifier({
           controlPlaneUrl:
@@ -127,6 +240,18 @@ export async function runHttpServer(
             : {}),
         })
       : undefined;
+  if(config.remoteAgentAuthOnly === true && !untrustedRemoteVerifier)
+    throw new Error('REMOTE_AGENT_OWNER_DEVICE_VERIFIER_REQUIRED');
+  // Backend v1 returned deviceId only, which is insufficient to bind a
+  // remote owner's authorization/epoch to the socket. Deny, never guess.
+  const remoteAgentCredentialVerifier = untrustedRemoteVerifier
+    ? async (header: string | undefined, signal?: AbortSignal) => {
+        const evidence = await untrustedRemoteVerifier(header, signal);
+        if(config.remoteAgentAuthOnly === true &&
+           !hasTrustedRemoteAgentGrant(evidence))return undefined;
+        return evidence;
+      }
+    : undefined;
 
   const remoteMcpClient =
     config.controlPlaneAgentAuth &&
@@ -169,7 +294,8 @@ export async function runHttpServer(
   });
   const tlsEnabled = hasDirectTls(config);
   const scheme = tlsEnabled ? 'https' : 'http';
-  const runtimeIdentity = hubRuntimeIdentity(Boolean(remoteMcpClient));
+  const runtimeIdentity = hubRuntimeIdentity(Boolean(remoteMcpClient),
+    config.remoteAgentAuthOnly===true&&Boolean(remoteAgentCredentialVerifier));
 
   app.get('/health', (_req: Request, res: Response) => {
     res.json({
@@ -398,11 +524,22 @@ export async function runHttpServer(
     agentAuthTokens(config),
     {
       credentialStore: context.credentials,
+      remoteOnly:config.remoteAgentAuthOnly===true,
       ...(remoteAgentCredentialVerifier
         ? {
             remoteCredentialVerifier:
               remoteAgentCredentialVerifier,
           }
+        : {}),
+      ...(config.remoteAgentAuthOnly === true && untrustedRemoteVerifier
+        ? {remoteMutationAuthorizationFactory: (
+            grant: import('../hub/control-plane-agent-auth.js').RemoteAgentAuthorization,
+            authorizationHeader: string | undefined,
+          ) => hasTrustedRemoteAgentGrant(grant)
+            ? bindRemoteAgentMutationReauthorization({
+                grant,authorizationHeader,verify:untrustedRemoteVerifier,
+              })
+            : undefined}
         : {}),
     },
   );
