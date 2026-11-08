@@ -1,0 +1,50 @@
+name: Delegated Non-Core Seven-Path QA (K13 P006)
+
+on:
+  push:
+    branches: ["k13/p006-ci-gap-seven"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: k13-p006-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  seven-path-source-qa:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify exact checkout SHA
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - name: Verify negative CI-evidence contracts
+        run: node --test test/delegated/k13/p006-ci-gates.test.mjs
+      - name: Inventory source-discovery gaps
+        run: node scripts/delegated/k13/p006-ci-gates.mjs --inventory .
+      - name: Explicitly run all seven missing main-CI delegated tests
+        shell: bash
+        run: |
+          node --test --import tsx --test-reporter=tap --test-concurrency=1 \
+            test/delegated/k09/roadmap-evidence.test.mjs \
+            test/delegated/k11/issue-487-commercial-unknown.test.ts \
+            test/delegated/k11/issue-487-meter-acceptance.test.ts \
+            test/delegated/k11/p005-s5-evidence.test.ts \
+            test/delegated/k16/environment-doctor-contract.test.ts \
+            test/delegated/pool-k17/markdown-anchors.test.ts \
+            test/delegated/pool-k19/audit-physical-pass-labels.test.ts \
+            > "$RUNNER_TEMP/k13-p006-seven.tap"
+          cat "$RUNNER_TEMP/k13-p006-seven.tap"
+          node scripts/delegated/k13/p006-ci-gates.mjs --tap "$RUNNER_TEMP/k13-p006-seven.tap"
