@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "issue": 485,
+  "sourceSha": null,
+  "evidenceKind": "PLANNED_BROWSER_SCREENSHOTS_NOT_CAPTURED",
+  "screenshots": [
+    { "state": "loading", "trigger": "offline fixture: ChatGPT address request still loading", "anchor": "chatgpt-status", "file": null, "width": 375, "height": 812, "sha256": null, "status": "NOT_RUN" },
+    { "state": "error", "trigger": "offline fixture: connection attempt failed", "anchor": "error-panel", "file": null, "width": 375, "height": 812, "sha256": null, "status": "NOT_RUN" },
+    { "state": "success", "trigger": "requires authorized device pairing; cannot be claimed from a fixture", "anchor": "pair-panel", "file": null, "width": 375, "height": 812, "sha256": null, "status": "NOT_RUN" }
+  ],
+  "browserCapture": "NOT_RUN",
+  "windowsAcceptance": "NOT_RUN",
+  "livePairingAcceptance": "NOT_RUN"
+}
