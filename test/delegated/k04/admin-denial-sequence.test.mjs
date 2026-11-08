@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { auditAdminDenials, probeAdminSequence } from './admin-denial-sequence.mjs';
+import {
+  assessAnnouncementMarkup, auditAdminDenials, probeAdminSequence,
+} from './admin-denial-sequence.mjs';
+
+const regionHtml = `<div id="admin-pill" role="status" aria-live="polite" aria-atomic="true"></div>
+<section id="admin-metrics" aria-busy="true"></section>
+<section id="admin-error" role="alert" aria-labelledby="admin-error-title" aria-describedby="admin-error-message"></section>
+<strong id="admin-error-title">Yönetim verisi alınamadı</strong><p id="admin-error-message"></p>`;
 
 // Compact deterministic fake page verifies that the probe can catch failures.
 // Product acceptance is separate: run admin-denial-sequence.mjs on the owner SHA.
@@ -79,4 +86,32 @@ test('detects a forbidden credential-mode change during retry', async () => {
 
 test('rejects unsupported status before exercising a fake page', async () => {
   await assert.rejects(() => probeAdminSequence(fixture(), 418), RangeError);
+});
+
+test('K05-compatible role=status and role=alert bindings reach the IDs updated by admin.js', () => {
+  assert.deepEqual(assessAnnouncementMarkup(regionHtml), {
+    pass: true,
+    checks: {
+      statusLive: true,
+      errorAlert: true,
+      alertLabelBound: true,
+      alertDescriptionBound: true,
+      metricsBusy: true,
+    },
+  });
+});
+
+test('a missing role=alert or orphaned description fails even if the status is live', () => {
+  const bad = regionHtml.replace('role="alert"', 'role="status"')
+    .replace('aria-describedby="admin-error-message"', 'aria-describedby="missing-id"');
+  const result = assessAnnouncementMarkup(bad);
+  assert.equal(result.pass, false);
+  assert.equal(result.checks.errorAlert, false);
+  assert.equal(result.checks.alertDescriptionBound, false);
+});
+
+test('duplicate dynamic error IDs fail the source binding audit', () => {
+  const result = assessAnnouncementMarkup(regionHtml + '<p id="admin-error-message"></p>');
+  assert.equal(result.pass, false);
+  assert.equal(result.checks.alertDescriptionBound, false);
 });
