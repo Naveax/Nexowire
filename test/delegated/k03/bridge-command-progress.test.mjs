@@ -13,7 +13,7 @@ function response(body, status = 200) {
   return { ok: status >= 200 && status < 300, status, json: async () => body };
 }
 
-function harness(states, { requestId = 'req-7', deviceId = 'device-7', mode = 'on' } = {}) {
+function harness(states, { requestId = 'req-7', deviceId = 'device-7', mode = 'on', issueReceipt } = {}) {
   const history = [];
   const status = {
     get textContent() { return history.at(-1) ?? ''; },
@@ -32,8 +32,8 @@ function harness(states, { requestId = 'req-7', deviceId = 'device-7', mode = 'o
   } };
   const requests = [];
   let reloaded = 0;
-  const queue = [response({ status: 'queued', requestId, expiresAt: '2099-01-01T00:00:00.000Z' }),
-    ...states.map((state) => response({ requestId, deviceId, ...state }))];
+  const queue = [response(issueReceipt ?? { status: 'queued', requestId, expiresAt: '2099-01-01T00:00:00.000Z' }),
+    ...states.map(({ httpStatus = 200, ...state }) => response({ requestId, deviceId, ...state }, httpStatus))];
   const context = vm.createContext({
     document: { getElementById: () => { throw Error('DOM was not expected'); } },
     fetch: async (url, options) => {
@@ -107,4 +107,33 @@ test('missing confirmation phrase does not send any command', async () => {
   assert.equal(reloaded, 0);
   assert.equal(h.requests.length, 0);
   assert.match(h.history.at(-1), /tam olarak APPLY BRIDGE MODE/);
+});
+
+test('poll HTTP errors cannot become applied and restore the confirmation controls', async () => {
+  const h = harness([{ httpStatus: 503, status: 'applied', error: 'BRIDGE_UNAVAILABLE' }]);
+  const { reloaded } = await h.run();
+  assert.equal(reloaded, 0);
+  assert.doesNotMatch(h.history.at(-1), /İmzalı cihaz onayı alındı/);
+  assert.match(h.history.at(-1), /BRIDGE_UNAVAILABLE/);
+  assert.equal(h.elements.get('.bridge-apply-toggle').disabled, false);
+  assert.equal(h.elements.get('.bridge-apply-approve').disabled, false);
+});
+
+test('missing or malformed issue receipt cannot claim a completed device change', async (t) => {
+  for (const receipt of [
+    { status: 'applied', requestId: 'req-7' },
+    { status: 'queued', requestId: null },
+    { status: 'queued', requestId: 7 },
+    { status: 'queued', requestId: 'req-7', expiresAt: 'bad-date' },
+  ]) {
+    await t.test(JSON.stringify(receipt), async () => {
+      const h = harness([], { issueReceipt: receipt });
+      const { reloaded } = await h.run();
+      assert.equal(reloaded, 0);
+      assert.equal(h.requests.length, 1, 'invalid receipt must not be polled');
+      assert.doesNotMatch(h.history.at(-1), /İmzalı cihaz onayı alındı/);
+      assert.equal(h.elements.get('.bridge-apply-toggle').disabled, false);
+      assert.equal(h.elements.get('.bridge-apply-approve').disabled, false);
+    });
+  }
 });
