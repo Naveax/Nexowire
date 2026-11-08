@@ -53,3 +53,32 @@ wrapping, CORS/cookies, actual MCP admission, local input rights, Windows
 Agent/Broker or two-PC behavior. The browser runner, real screenshots,
 Windows hardware and source merge are **NOT_RUN** here. K03 owns UI changes;
 K10 owns browser artifacts; K13 owns CI test discovery.
+
+## P007 / Adım 9 — actual Chromium runner preparation (2026-11-09)
+
+K15 added a reusable **loopback-only** browser acceptance fixture,
+`test/delegated/k15/chromium-device-ux.test.mjs`, to its existing Draft
+#1110 code branch. The runner serves owner or main `web/index.html`,
+`web/styles.css`, and `web/app.js` unchanged from a mock HTTP server,
+and returns controlled dashboard HTTP 200/403/200 responses. If Chromium
+launches, CDP assertions cover a **real 375px viewport**, exact two-device
+`data-device-id`/accessible labels, horizontal overflow, physical keyboard
+Enter on the list-layout control, permission-denial error and retry to zero
+devices. It prohibits any non-GET mutation request to the local fixture.
+
+Reproduction on a runner with Chromium installed:
+
+```sh
+K15_WEB_DIR=/absolute/path/to/owner-1068/web \
+  node --test test/delegated/k15/chromium-device-ux.test.mjs
+```
+
+**This environment did not successfully start Chromium.** Its OS denied
+Chromium's process singleton UNIX socket: `socket() failed: Operation not
+permitted (1)` (`exit 134`). A bounded retry reports a Node test
+**SKIP 1 / PASS 0 / FAIL 0** with the explicit `EPERM` reason; code syntax
+and diff checks pass. No browser screenshot, focus, rendering, keyboard
+interaction or accessibility-tree PASS is claimed. The fixture is
+**WIP/NOT_RUN** until a permitted runner executes it against an immutable
+owner commit. Linux Chromium success would still be separate from native
+Windows/NVDA, real pairing, signed input grants and two-PC acceptance.
