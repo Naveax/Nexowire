@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {renderS5CostReport} from '../../../scripts/report-s5-cost-matrix.js';
 import {
-  quoteS5Cost,formatS5CostCsv,S5_ASSUMPTION_DEFAULTS,S5_COST_METERS,
+  estimateS5Cost,quoteS5Cost,formatS5CostCsv,S5_ASSUMPTION_DEFAULTS,S5_COST_METERS,
   type S5RateQuotes,
 } from '../../../src/ops/scale-s5-cost-envelope.js';
 import {parseScaleTransportMetricRows} from '../../../src/ops/scale-transport-metrics.js';
@@ -90,4 +90,22 @@ test('T-599 #487: offline report CLI rejects transport evidence masquerading as 
     assert.throws(()=>renderS5CostReport(['--input',source]),/Unexpected offline scenario field/);
     assert.throws(()=>renderS5CostReport(['--csv','--input',source]),/Unexpected offline scenario field/);
   }finally{rmSync(folder,{recursive:true,force:true});}
+});
+
+test('D-064 #487: ten modeled users cannot certify ten businesses or a free provider bill',()=>{
+  // activeUsers is a workload assumption, not a count of independently
+  // authenticated businesses, account invoices, or hosted WSS sessions.
+  const usage={...one(),activeUsers:10,callsPerUserDaily:1};
+  const modest=estimateS5Cost(usage);
+  assert.equal(modest.freeEnvelope.numericThresholdsFit,true);
+  assert.equal(modest.freeEnvelope.zeroExtraInvoiceProven,false);
+  const quoted=quoteS5Cost(usage,pricing(0));
+  assert.equal(quoted.modeledTotal,0); // Only explicitly hypothetical zero rates.
+  assert.equal(quoted.actualProviderBill,'UNKNOWN');
+  assert.equal(quoted.capacityEvidence.measuredSustainedHostedWssSessions,'UNKNOWN');
+  assert.equal(quoted.capacityEvidence.measuredCompletedToolCallsPerDay,'UNKNOWN');
+  const overloaded=estimateS5Cost({...usage,callsPerUserDaily:20_000});
+  assert.equal(overloaded.freeEnvelope.numericThresholdsFit,false);
+  assert.equal(overloaded.freeEnvelope.zeroExtraInvoiceProven,false);
+  assert.equal(quoteS5Cost({...usage,callsPerUserDaily:20_000}).actualProviderBill,'UNKNOWN');
 });

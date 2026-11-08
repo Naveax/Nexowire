@@ -108,6 +108,11 @@ test('T-065: total and per-user formula, including zero users and explicit zero 
   assert.equal(noUsers.modeledCostPerUser,'UNKNOWN');
   const free=rates();for(const meter of S5_COST_METERS)free[meter]={...free[meter]!,amount:0};
   assert.equal(quoteS5Cost(assumptions(),free).modeledTotal,0);
+  const tenModeledUsers=quoteS5Cost({...assumptions(),activeUsers:10},free);
+  assert.equal(tenModeledUsers.freeThresholdSafeguard.numericThresholdsFit,true);
+  assert.equal(tenModeledUsers.freeThresholdSafeguard.zeroExtraInvoiceProven,false);
+  assert.equal(tenModeledUsers.actualProviderBill,'UNKNOWN');
+  assert.equal(tenModeledUsers.capacityEvidence.measuredSustainedHostedWssSessions,'UNKNOWN');
   const subCent={...free};
   subCent.workerRequests={...free.workerRequests!,amount:0.001,per:1_000_000};
   const tiny=quoteS5Cost(assumptions(),subCent);
