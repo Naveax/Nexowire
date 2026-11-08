@@ -38,7 +38,7 @@ export async function observeAdminHttpError(source, status) {
 
 export function diagnoseAdminError(observation, html) {
   const found = [];
-  if (![401, 403, 429].includes(observation.status)) return ['unrecognized-scenario'];
+  if (![401, 403, 429, 503].includes(observation.status)) return ['unrecognized-scenario'];
   if (/offline/i.test(observation.pill ?? '')) found.push('http-error-collapsed-to-offline');
   if (/başarı|success|hazır|ready/i.test(observation.pill ?? '') || /\bgood\b/.test(observation.pillClass ?? '')) {
     found.push('http-error-falsely-successful');
@@ -46,6 +46,41 @@ export function diagnoseAdminError(observation, html) {
   if (!observation.errorVisible || !observation.errorText) found.push('http-error-not-visible');
   if (!/<[^>]+id="admin-error"[^>]+role="alert"/.test(html)) found.push('admin-alert-semantics-not-proven');
   return found;
+}
+
+// D-138: shared negative contract for HTTP errors. 401 and 403 may share a
+// status pill provided the visible error preserves their distinct HTTP code;
+// neither rate-limiting nor service-unavailable may collapse into that pill.
+export function validateAdminHttpMatrix(observations, html) {
+  const allowed = [401, 403, 429, 503];
+  const issues = [];
+  const entries = new Map();
+  for (const observation of observations ?? []) {
+    const status = observation?.status;
+    if (!allowed.includes(status)) {
+      issues.push(`unexpected-http-status:${status}`);
+      continue;
+    }
+    if (entries.has(status)) {
+      issues.push(`duplicate-http-status:${status}`);
+      continue;
+    }
+    entries.set(status, observation);
+    issues.push(...diagnoseAdminError(observation, html).map((finding) => `${status}:${finding}`));
+    if (!String(observation.errorText ?? '').includes(`HTTP ${status}`)) {
+      issues.push(`${status}:http-code-not-visible`);
+    }
+  }
+  for (const status of allowed) {
+    if (!entries.has(status)) issues.push(`missing-http-status:${status}`);
+  }
+  const pill = (status) => String(entries.get(status)?.pill ?? '').trim().toLocaleLowerCase('tr');
+  for (const [a, b] of [[401,429],[403,429],[401,503],[403,503],[429,503]]) {
+    if (entries.has(a) && entries.has(b) && pill(a) && pill(a) === pill(b)) {
+      issues.push(`indistinguishable-http-status:${a}-${b}`);
+    }
+  }
+  return issues;
 }
 
 export function inspectPairingRateLimit(js) {
@@ -124,11 +159,15 @@ export function readUiSource(root) {
 export async function auditUi(root) {
   const src = readUiSource(root);
   const errors = {};
-  for (const status of [401, 403, 429]) {
-    errors[status] = diagnoseAdminError(await observeAdminHttpError(src.adminJs, status), src.adminHtml);
+  const observations = [];
+  for (const status of [401, 403, 429, 503]) {
+    const observation = await observeAdminHttpError(src.adminJs, status);
+    observations.push(observation);
+    errors[status] = diagnoseAdminError(observation, src.adminHtml);
   }
   return {
-    errors, pairing: inspectPairingRateLimit(src.connectJs),
+    errors, httpMatrix: validateAdminHttpMatrix(observations, src.adminHtml),
+    pairing: inspectPairingRateLimit(src.connectJs),
     devices: inspectDeviceNames(src.appJs),
     responsive: inspectResponsiveSource(src.connectHtml, src.css),
     verified: 'SOURCE_ONLY', browser: 'NOT_RUN', nvda: 'NOT_RUN', physical: 'NOT_RUN',
@@ -138,6 +177,6 @@ export async function auditUi(root) {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const result = await auditUi(resolve(process.argv[2] ?? '.'));
   console.log(JSON.stringify(result, null, 2));
-  if (Object.values(result.errors).some((x) => x.length) || result.pairing.length || result.devices.length ||
+  if (Object.values(result.errors).some((x) => x.length) || result.httpMatrix.length || result.pairing.length || result.devices.length ||
       result.responsive.findings.length) process.exitCode = 1;
 }

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import {
   observeAdminHttpError, diagnoseAdminError, inspectPairingRateLimit,
   inspectDeviceNames, inspectResponsiveSource, validateUiEvidence,
-  inspectLongErrorFixture, readUiSource, auditUi,
+  inspectLongErrorFixture, readUiSource, auditUi, validateAdminHttpMatrix,
 } from '../../../scripts/delegated/k05/audit-p006-ui.mjs';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
@@ -30,6 +30,68 @@ test('T-559: denial/rate-limit, true alert and false success are independent che
     errorText:'',errorVisible:false}, '<div id="admin-error"></div>');
   assert.deepEqual(bad, ['http-error-falsely-successful','http-error-not-visible','admin-alert-semantics-not-proven']);
   assert.deepEqual(diagnoseAdminError({status:200}, html), ['unrecognized-scenario']);
+});
+
+const httpHtml = '<section id="admin-error" role="alert"></section>';
+const httpScenario = (status, pill) => ({status, pill, pillClass:'bad',errorText:`HTTP ${status}`,errorVisible:true});
+const validHttpMatrix = () => [httpScenario(401,'Oturum gerekli'),httpScenario(403,'Erişim reddedildi'),
+  httpScenario(429,'İstek sınırı'),httpScenario(503,'Hizmet kullanılamıyor')];
+
+test('D-138: current admin.js reproduces 503 as misleading Offline, not as successful action', async () => {
+  const observation = await observeAdminHttpError(src.adminJs, 503);
+  assert.equal(observation.pill, 'Offline');
+  assert.equal(observation.errorText, 'HTTP 503');
+  assert.equal(observation.errorVisible, true);
+  assert.ok(diagnoseAdminError(observation, src.adminHtml).includes('http-error-collapsed-to-offline'));
+  assert.ok(!diagnoseAdminError(observation, src.adminHtml).includes('http-error-falsely-successful'));
+});
+
+test('D-138: four HTTP categories have a positive, announced and code-visible fixture', () => {
+  assert.deepEqual(validateAdminHttpMatrix(validHttpMatrix(), httpHtml), []);
+  const sameAccessLabel = validHttpMatrix();
+  sameAccessLabel[1].pill = sameAccessLabel[0].pill;
+  assert.deepEqual(validateAdminHttpMatrix(sameAccessLabel, httpHtml), []);
+});
+
+test('D-138: missing, duplicate, unexpected, invisible and false success cannot pass matrix', () => {
+  const matrix = validHttpMatrix();
+  const missing = validateAdminHttpMatrix(matrix.slice(0,3), httpHtml);
+  assert.ok(missing.includes('missing-http-status:503'));
+  const duplicate = validateAdminHttpMatrix([...matrix,matrix[0]], httpHtml);
+  assert.ok(duplicate.includes('duplicate-http-status:401'));
+  const unexpected = validateAdminHttpMatrix([...matrix,httpScenario(502,'Sunucu hatası')], httpHtml);
+  assert.ok(unexpected.includes('unexpected-http-status:502'));
+  const corrupted = matrix.map((x) => ({...x}));
+  corrupted[1].pill = 'Başarılı'; corrupted[1].errorVisible = false;
+  corrupted[2].errorText = '';
+  const issues = validateAdminHttpMatrix(corrupted, '<section id="admin-error"></section>');
+  assert.ok(issues.includes('403:http-error-falsely-successful'));
+  assert.ok(issues.includes('403:http-error-not-visible'));
+  assert.ok(issues.includes('429:http-code-not-visible'));
+  assert.ok(issues.includes('503:admin-alert-semantics-not-proven'));
+});
+
+test('D-138: rate-limit and service-down pills must differ from denial and each other', () => {
+  const matrix = validHttpMatrix();
+  matrix[2].pill = matrix[0].pill;
+  matrix[3].pill = matrix[2].pill;
+  const issues = validateAdminHttpMatrix(matrix, httpHtml);
+  assert.ok(issues.includes('indistinguishable-http-status:401-429'));
+  assert.ok(issues.includes('indistinguishable-http-status:401-503'));
+  assert.ok(issues.includes('indistinguishable-http-status:429-503'));
+  assert.ok(!issues.includes('indistinguishable-http-status:401-403'));
+});
+
+test('D-138: actual main reports all four HTTP cases as SOURCE_ONLY findings, not browser acceptance', async () => {
+  const report = await auditUi(root);
+  assert.deepEqual(Object.keys(report.errors), ['401','403','429','503']);
+  for (const status of [401,403,429,503]) {
+    assert.ok(report.errors[status].includes('http-error-collapsed-to-offline'));
+    assert.equal(report.httpMatrix.some((finding) => finding.startsWith(`${status}:`)), true);
+  }
+  assert.ok(report.httpMatrix.includes('indistinguishable-http-status:429-503'));
+  assert.equal(report.browser, 'NOT_RUN');
+  assert.equal(report.physical, 'NOT_RUN');
 });
 
 test('T-559: pairing 429 is not distinguished in current source and failure focus is unproven', () => {
