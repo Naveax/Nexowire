@@ -222,8 +222,59 @@ the residual risk is **user-facing heading/action identification** until
 Extended Node24 source-only total: current main UI **12 PASS / 8
 expected TODO**, owner #1068 UI **18 PASS / 2 expected TODO**, pure
 main resolver **14 PASS / 0 FAIL**. This is not real browser or physical
-input acceptance. T-666 is source QA evidence only, pending second
-19-KNN ownership sweep immediately before final claim of completion.
+input acceptance. T-666 is source QA evidence only; the second 19-KNN
+ownership sweep finished with no other claim before PR and status update.
+
+## P007 existing-PR delivery review: D-085–D-090
+
+- V006 halts **new PRs and upstream merging without Ömer's explicit
+  approval**. K15 continues solely in existing Draft [#1110](https://github.com/Naveax/Nexowire/pull/1110);
+  no protected web/authorization/CI source was edited.
+- **D-085:** Rechecked actual current main
+  `52d452f717d891eeaf4c2b9aff3c6e1ea68369b0` and owner #1068
+  `94d38799e9e4b50fe84f7924e6fc84f90aeba090`. The existing matrix
+  continues to separate main's **12 PASS/8 expected TODO** from #1068's
+  **18 PASS/2 expected TODO** before the added denial tests. Main source
+  has not acquired #1068 UI behavior via an unrelated merge.
+- **D-086 (new source RED):** A dashboard 403 is an authorization
+  denial, but current main and owner #1068 treat it as generic transport
+  failure. The test expects private device cards to be invalidated,
+  a permission-specific recovery message and a non-network status.
+  Both versions currently return a **known TODO**, not a fix claim.
+  The authenticated dashboard with zero registered devices also still
+  renders global `Bağlı` status (earlier T-621 owner UX finding).
+- **D-087:** Actual browser keyboard/focus, Windows, signed native grant,
+  account pairing and two-PC acceptance remain **NOT_RUN**. VM `aria`
+  properties or success of unrelated `browser-live` job cannot certify
+  these acceptance steps.
+- **D-088:** Exactly these two *submitted* K15 nested test files require
+  explicit hosted invocation:
+  `test/delegated/k15/issue-539-device-ux.test.mjs` and
+  `test/delegated/k15/target-versus-permission-matrix.test.mjs`.
+  PR #1110 previous exact HEAD
+  `21cda33666c65e8d74676db54debd0f0be575cf3` ran CI
+  [42485528886](https://github.com/Naveax/Nexowire/actions/runs/42485528886)
+  with **7/7 jobs success**, but none of seven job step names invoked
+  K15. K13 [#1149](https://github.com/Naveax/Nexowire/pull/1149)
+  auxiliary Node22/24 workflow explicitly ran *seven missing main*
+  delegated paths; K15's still-unmerged tests are **not** among those
+  main files. Neither workflow is a K15 hosted test PASS. K13/owner
+  must add explicit calls after reviewing ownership/CI conflict.
+- **D-089:** Independent 403 -> HTTP 200/zero devices retry confirms
+  old private cards and errors do not remain after successful refresh
+  on owner #1068 (PASS); current main retains stale presentation
+  (expected TODO). No real account or browser was used.
+- **D-090:** Current PR head, exact CI, honest TODOs, owner integration
+  asks and unverified browser/native acceptance are consolidated in
+  #1110 PR description and K15's `ekip/durum/K15.md`. The main/owner
+  source code must be reviewed and merged by its owner before a
+  post-merge replay, and no issue is being marked resolved here.
+
+Node24.22.1 current main **12 PASS / 10 expected TODO**, detached owner
+#1068 **19 PASS / 3 expected TODO**, pure real target resolver
+**14 PASS / 0 FAIL**. The new 403 tests are negative source evidence;
+TODO is not PASS. Full browser, native permission, release and hosted
+K15 test execution remain NOT_RUN.
 
 Reproduction:
 
