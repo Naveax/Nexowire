@@ -78,3 +78,59 @@ Record only redacted evidence, no credentials or customer files:
 No test machine, live user account, Hub, provider, real Windows UI or
 receiving-device authority was used in this PR. Physical acceptance:
 **NOT_RUN**. Issue #588 remains open. No production receiver-ack fix claimed.
+
+## P007 D-109–D-114 owner handoff / four-PR reconciliation (2026-11-08)
+
+On current upstream `main@52d452f717d891eeaf4c2b9aff3c6e1ea68369b0`,
+the four actual source blobs below are **byte-identical** on owner #1096
+`b675897dce171a4f5e7a7ccb3187a16ac13630d0`:
+
+| Layer / source | Main and owner-branch blob SHA | Bound / owner implications |
+| --- | --- | --- |
+| `src/mcp/create-server.ts` | `9e8cbe6d59910f7b05adc7da7776eae60edd776b` | Direct MCP public max **8 MiB**; no new #1096 file-transfer bound |
+| `src/mcp/cross-device-file-transfer.ts` | `f422dfa43a3fa8fc9e5fb692e74da948c4aaf6dc` | Direct helper max **64 MiB**, default 48 KiB chunks |
+| `src/mcp/artifact-bridge-device-ingest.ts` | `ebee8010de8c5e05d8d5e8bf81ebee70991707f9` | Separate ingest source max **256 MiB**, 64 KiB chunks / 32 per call |
+| `src/workspace/artifact-bridge.ts` | `c36a6c0ce3c373f622d862e4a41a6aaa13adf04a` | Separate artifact manifest max **256 MiB**, 4096 chunks |
+
+Compared owner #1096's **315-file actual patch**: none of those four
+source paths is changed. The patch *does* modify `src/agent/executors.ts`,
+but its current hunks add Windows CORE/Broker dispatch admission, not a
+file read/hash/write transfer-size override. This is **source comparison**,
+not a test of a running Hub, Agent or ChatGPT upload. A user-reported
+220 KiB transfer is below these particular size guards; the failing
+client/provider/Hub/Agent boundary is still **UNKNOWN**.
+
+Four existing K19 Draft PRs are open, unmerged, each with distinct files:
+
+| PR | Exact HEAD at this audit | Unique payload | Required CI outcome |
+| --- | --- | --- | --- |
+| [#1111](https://github.com/Naveax/Nexowire/pull/1111) | `c5119a65a914ec339ad1c362ba9ba1ca19e339b4` | 221 KiB/1 MiB real local capability fixture + acceptance matrix | [42410254755](https://github.com/Naveax/Nexowire/actions/runs/42410254755): 7/7 generic success; new `issue588-large-file-acceptance.test.ts` **NOT_RUN** |
+| [#1124](https://github.com/Naveax/Nexowire/pull/1124) | `4d1a3dc32bd8c6718392ec743769c5409e114f3c` | Nine source bounds, parser/negative test | [42411882607](https://github.com/Naveax/Nexowire/actions/runs/42411882607): 7/7 generic success; new `issue588-limits-inventory.test.ts` **NOT_RUN** |
+| [#1136](https://github.com/Naveax/Nexowire/pull/1136) | `ed5fa137bc875e613691e13d1b72a8df9ebf9d56` | CI-discovery negative and physical repro | [42474024855](https://github.com/Naveax/Nexowire/actions/runs/42474024855): 7/7 generic success; new `p005-ci-discovery-qa.test.ts` **NOT_RUN** |
+| [#1147](https://github.com/Naveax/Nexowire/pull/1147) | `3e60a55a9a88d83a7c8f14319112945ebd7df445` (prior to this doc-only update) | Receiver ACK/source SHA reference fixture | [42485370999](https://github.com/Naveax/Nexowire/actions/runs/42485370999): 7/7 generic success; new `p006-receiver-ack-reference.test.ts` **NOT_RUN** |
+
+`test (22)` raw log job `128745953233` on #1147 explicitly calls
+the two older K19 tests, not these four nested new test filenames.
+The same absence was checked in `test (22)` jobs of the other three runs.
+An auxiliary workflow or future main CI invocation is **not** treated as
+coverage without exact file name, run ID and commit. K13 and owner #1096
+own the necessary hosted discovery change. Do **not** re-dispatch the
+already-started workflow for the same SHA.
+
+On exact current main source, with #1111/#1124 files temporarily overlaid
+**for local execution only**, K19 reran:
+
+- `p006-receiver-ack-reference.test.ts` (this PR): **8/8 local PASS**.
+- `issue588-large-file-acceptance.test.ts` (#1111): **5/5 local PASS**.
+- `issue588-limits-inventory.test.ts` (#1124): **5/5 local PASS**.
+- Existing `cross-device-file-transfer.test.ts` and
+  `cross-device-agent-file-io.test.ts`: **16/16 local PASS**.
+- `npm run typecheck` and `npm run build`: **PASS**.
+
+Consolidation recommendation for ŞEF/Ömer: preserve the four unique test
+files and their source/acceptance contracts; do not bulk-merge the four
+Drafts, turn 7/7 generic success into hosted test success, or close issue
+#588. Source paths and PR code changes don't overlap, but CI discovery,
+owner approval, and physical two-PC acceptance are still distinct gates.
+Owner-coordinated merge/PR-closure decisions are deliberately **not** made
+by K19 under protocol V006. No new PR was opened for this P007 handoff.
