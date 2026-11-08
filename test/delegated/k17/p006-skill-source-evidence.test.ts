@@ -115,6 +115,34 @@ test('D-097: KNOWN OPEN GAP — a regular skill directory can contain a symlinke
   });
 });
 
+test('P007 followup: KNOWN OPEN GAP — validation does not bind a later manifest read', {
+  skip: process.platform === 'win32' ? 'Windows file symlink privileges are not established' : false,
+}, async () => {
+  await withCatalog(async (root) => {
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'nexowire-k17-swapped-manifest-'));
+    try {
+      const skillDir = path.join(root, 'swapped-manifest');
+      const manifestFile = path.join(skillDir, 'SKILL.md');
+      const outsideFile = path.join(outside, 'SKILL.md');
+      await fs.mkdir(skillDir);
+      await fs.writeFile(manifestFile, source('swapped-manifest'));
+      const registry = new SkillRegistry(root);
+
+      // A trusted initial check says nothing about the path used by a future read.
+      assert.equal((await registry.validate()).ok, true);
+      await fs.writeFile(outsideFile, `${source('swapped-manifest')}\nEXTERNAL_READ_MARKER`);
+      await fs.unlink(manifestFile);
+      await fs.symlink(outsideFile, manifestFile);
+
+      const readback = await registry.read('swapped-manifest');
+      assert.match(readback, /EXTERNAL_READ_MARKER/,
+        'Current source follows the replaced manifest path after prior validation; OPEN GAP');
+    } finally {
+      await fs.rm(outside, { recursive: true, force: true });
+    }
+  });
+});
+
 test('T-633: platform source admission is separate from a physically executed install command', () => {
   const windowsOnly = parseSkillManifest(source('fixture', ['platforms: win32']));
   const linuxResult = evaluateSkillManifest(windowsOnly, { platform: 'linux' });
