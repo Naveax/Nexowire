@@ -5,7 +5,7 @@ export interface CatalogueFinding {
   directory: string;
   code: 'missing-manifest' | 'symlink-entry' | 'symlink-manifest' |
     'duplicate-field' | 'identity-mismatch' | 'platform-unknown' |
-    'unsupported-platform-claim';
+    'unsupported-platform-claim' | 'unknown-metadata-key';
   detail: string;
 }
 
@@ -20,6 +20,27 @@ const platformTerms: Record<string, string> = {
   macos: 'darwin',
 };
 
+// These spellings are silently ignored by the runtime frontmatter parser.
+// Report only concrete, easily-confused fields, not extension metadata.
+const likelyMetadataTypos: Readonly<Record<string, string>> = {
+  platform: 'platforms',
+  platfoms: 'platforms',
+  descripton: 'description',
+  require: 'requires',
+  'requires-any': 'requires_any',
+  priviledge: 'privilege',
+};
+
+/** Match the runtime's per-field list-value unquoting (not whole-line YAML). */
+function unquote(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.length > 1 && (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  )) return trimmed.slice(1, -1).trim();
+  return trimmed;
+}
+
 /** Only explicit text claims are checked; platform mentions alone are not promises. */
 export function auditManifestText(directory: string, markdown: string): CatalogueFinding[] {
   const findings: CatalogueFinding[] = [];
@@ -31,16 +52,19 @@ export function auditManifestText(directory: string, markdown: string): Catalogu
   const fields = new Map<string, string>();
 
   for (const line of frontmatter) {
-    const match = line.match(/^\s*([a-z_]+)\s*:\s*(.*?)\s*$/i);
+    const match = line.match(/^\s*([a-z][a-z0-9_-]*)\s*:\s*(.*?)\s*$/i);
     if (!match) continue;
     const key = (match[1] ?? '').toLowerCase();
+    if (Object.hasOwn(likelyMetadataTypos, key)) {
+      findings.push({ directory, code: 'unknown-metadata-key', detail: `${key} (did you mean ${likelyMetadataTypos[key]}?)` });
+    }
     if (fields.has(key)) {
       findings.push({ directory, code: 'duplicate-field', detail: key });
     }
     fields.set(key, match[2] ?? '');
   }
 
-  if (fields.get('name') !== directory) {
+  if (unquote(fields.get('name') ?? '') !== directory) {
     findings.push({
       directory,
       code: 'identity-mismatch',
@@ -60,8 +84,8 @@ export function auditManifestText(directory: string, markdown: string): Catalogu
     return findings;
   }
 
-  const platforms = new Set(platformsRaw.split(',').map((value) => value.trim()));
-  const description = fields.get('description') ?? '';
+  const platforms = new Set(platformsRaw.split(',').map(unquote));
+  const description = unquote(fields.get('description') ?? '');
   const claimed = [...description.matchAll(/\b(?:supports|runs on|works on|available on)\s+(windows|linux|macos)\b/gi)]
     .map((match) => (match[1] ?? '').toLowerCase());
   for (const claim of new Set(claimed)) {
