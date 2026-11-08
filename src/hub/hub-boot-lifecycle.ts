@@ -548,6 +548,7 @@ async function writeManifest(
   options: HubBootLifecycleOptions,
   sourceSecretFile: string,
   port: number,
+  userTaskPreviousState: string,
 ): Promise<void> {
   const p = pathsFor(options);
   await fs.writeFile(
@@ -558,6 +559,7 @@ async function writeManifest(
         installedAt: new Date().toISOString(),
         taskName: bootTaskName(options),
         userTaskName: userTaskName(options),
+        userTaskPreviousState,
         launcher: p.launcher,
         secretFile: p.secret,
         sourceSecretFile,
@@ -643,7 +645,7 @@ export async function installHubBootLifecycle(
 
   // Fail BEFORE any DPAPI credential read or launcher overwrite if a root
   // task matching our canonical name actually belongs to different code.
-  await runPowerShellJson<{ok:true}>([
+  const taskPreflight = await runPowerShellJson<{ok:true;legacyState:string}>([
     "$ErrorActionPreference='Stop'",
     '$boot=$env:NEXOWIRE_HUB_BOOT_TASK_NAME',
     '$user=$env:NEXOWIRE_HUB_TASK_NAME',
@@ -653,7 +655,9 @@ export async function installHubBootLifecycle(
     // Upgrading a preexisting SYSTEM Boot task requires a separately
     // backed-up owner-approved migration; do not overwrite it in place.
     "if($null -ne $bootTask){throw 'HUB_BOOT_EXISTING_TASK_INSTALL_DENIED'}",
-    '[pscustomobject]@{ok=$true}|ConvertTo-Json -Compress',
+    "$legacyState=if($userTask){[string]$userTask.State}else{'NotInstalled'}",
+    "if($legacyState -notin @('Running','Ready','Disabled','NotInstalled')){throw 'HUB_USER_TASK_UNEXPECTED_STATE'}",
+    '[pscustomobject]@{ok=$true;legacyState=$legacyState}|ConvertTo-Json -Compress',
   ].join('\n'),taskEnv(options));
 
   const currentLauncher =
@@ -710,38 +714,53 @@ export async function installHubBootLifecycle(
     }
     throw error;
   }
-  // Repair a stale child DACL before any overwrite or DPAPI work.
-  hardenProgramDataAcl(p.root);
-  await writeProtectedSecretFile(
-    p.secret,
-    'control-plane-service-token',
-    serviceToken,
-    {
-      overwrite: true,
-      scope: 'local-machine',
-    },
-  );
-
-  const env: NodeJS.ProcessEnv = {
-    ...sourceEnv,
-    NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_DPAPI_FILE:
+  // Stage files in one recoverable phase: a DPAPI or launcher write failure
+  // must not leave an undeployable, permanently blocking protected root.
+  try {
+    hardenProgramDataAcl(p.root);
+    await writeProtectedSecretFile(
       p.secret,
-  };
-  delete env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_FILE;
-  delete env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_PLATFORM_NAME;
+      'control-plane-service-token',
+      serviceToken,
+      {
+        overwrite: true,
+        scope: 'local-machine',
+      },
+    );
 
-  await fs.writeFile(
-    p.launcher,
-    buildHubBootLauncher({
-      env,
-      executable: rt.executable,
-      args: rt.args,
-      pidFile: p.pid,
-    }),
-    'utf8',
-  );
+    const env: NodeJS.ProcessEnv = {
+      ...sourceEnv,
+      NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_DPAPI_FILE:
+        p.secret,
+    };
+    delete env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_FILE;
+    delete env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_PLATFORM_NAME;
 
-  hardenProgramDataAcl(p.root);
+    await fs.writeFile(
+      p.launcher,
+      buildHubBootLauncher({
+        env,
+        executable: rt.executable,
+        args: rt.args,
+        pidFile: p.pid,
+      }),
+      'utf8',
+    );
+
+    hardenProgramDataAcl(p.root);
+  } catch (stageError) {
+    try {
+      verifyWindowsPrivateAcl(path.win32.dirname(p.root));
+      await assertHubBootRootSafeToRemove(p.root);
+      verifyWindowsPrivateAcl(p.root);
+      await fs.rm(p.root,{recursive:true,force:true});
+    } catch (cleanupError) {
+      // Preserve files when their ownership is uncertain; never delete
+      // another install's directory just to hide the original error.
+      throw new AggregateError([stageError,cleanupError],'HUB_BOOT_STAGE_CLEANUP_FAILED');
+    }
+    throw stageError;
+  }
 
   const envForTask = taskEnv(options);
   // An exclusive ephemeral task marker prevents a failed install from
@@ -758,6 +777,8 @@ export async function installHubBootLifecycle(
         '$boot=$env:NEXOWIRE_HUB_BOOT_TASK_NAME',
         '$user=$env:NEXOWIRE_HUB_TASK_NAME',
         '$marker='+psLiteral(installMarker),
+        '$expectedLegacyState='+psLiteral(taskPreflight.legacyState),
+        '$port='+String(port),
         '$launcher=$env:NEXOWIRE_HUB_BOOT_LAUNCHER',
         '$argument=\'-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "\' + $launcher.Replace(\'"\',\'""\') + \'"\'',
         "$action=New-ScheduledTaskAction -Execute 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe' -Argument $argument",
@@ -768,6 +789,8 @@ export async function installHubBootLifecycle(
         "$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue",
         hubBootRegisteredTaskIdentityGuard,
         "if($null -ne $bootTask){throw 'HUB_BOOT_EXISTING_TASK_INSTALL_DENIED'}",
+        "$actualLegacyState=if($userTask){[string]$userTask.State}else{'NotInstalled'}",
+        "if($actualLegacyState -cne $expectedLegacyState){throw 'HUB_USER_TASK_STATE_RACE'}",
         // No -Force: a concurrent registration must fail rather than replace.
         'Register-ScheduledTask -TaskName $boot -TaskPath \\ -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description $marker|Out-Null',
         '$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
@@ -775,7 +798,14 @@ export async function installHubBootLifecycle(
         '  Stop-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
         '  Disable-ScheduledTask -TaskName $user -TaskPath \\ | Out-Null',
         '}',
-        'Start-Sleep -Milliseconds 500',
+        // An orphan Node listener must never race the SYSTEM Hub handoff.
+        '$deadline=(Get-Date).AddSeconds(15)',
+        'do {',
+        '  $listeners=@(Get-NetTCPConnection -State Listen -ErrorAction Stop | Where-Object { $_.LocalPort -eq $port })',
+        '  if($listeners.Count -eq 0){break}',
+        '  Start-Sleep -Milliseconds 250',
+        '} while((Get-Date) -lt $deadline)',
+        "if($listeners.Count -gt 0){throw 'HUB_LEGACY_PORT_STILL_OWNED'}",
         'Start-ScheduledTask -TaskName $boot -TaskPath \\',
         '[pscustomobject]@{ok=$true}|ConvertTo-Json -Compress',
       ].join('\n'),
@@ -786,6 +816,7 @@ export async function installHubBootLifecycle(
       options,
       sourceSecretFile,
       port,
+      taskPreflight.legacyState,
     );
     hardenProgramDataAcl(p.root);
     return await hubBootLifecycleStatus(options);
@@ -799,6 +830,7 @@ export async function installHubBootLifecycle(
             '$boot=$env:NEXOWIRE_HUB_BOOT_TASK_NAME',
             '$user=$env:NEXOWIRE_HUB_TASK_NAME',
             '$marker='+psLiteral(installMarker),
+            '$expectedLegacyState='+psLiteral(taskPreflight.legacyState),
             "$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue",
             "$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue",
             hubBootRegisteredTaskIdentityGuard,
@@ -807,8 +839,8 @@ export async function installHubBootLifecycle(
             '  Stop-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue',
             '  Unregister-ScheduledTask -TaskName $boot -TaskPath \\ -Confirm:$false',
             '  if($userTask){',
-            '    Enable-ScheduledTask -TaskName $user -TaskPath \\ | Out-Null',
-            '    Start-ScheduledTask -TaskName $user -TaskPath \\',
+            "    if($expectedLegacyState -ne 'Disabled' -and $expectedLegacyState -ne 'NotInstalled'){Enable-ScheduledTask -TaskName $user -TaskPath \\ | Out-Null}",
+            "    if($expectedLegacyState -eq 'Running'){Start-ScheduledTask -TaskName $user -TaskPath \\}",
             '  }',
             '}',
             '[pscustomobject]@{ok=$true}|ConvertTo-Json -Compress',
@@ -853,6 +885,13 @@ export async function uninstallHubBootLifecycle(
   const parent=path.win32.dirname(p.root);
   verifyWindowsPrivateAcl(parent);
   await assertHubBootRootSafeToRemove(p.root);
+  verifyWindowsPrivateAcl(p.root);
+  // Preserve the pre-install user task state. Uninstall must not start a Hub
+  // that was deliberately stopped or disabled before the SYSTEM migration.
+  const installedManifest = z.object({
+    userTaskPreviousState: z.enum(['Running','Ready','Disabled','NotInstalled']),
+    port: z.number().int().min(1).max(65535),
+  }).parse(JSON.parse(await fs.readFile(p.manifest,'utf8')));
   const result = await runPowerShellJson<{
     removed: boolean;
     userHubRestored: boolean;
@@ -861,20 +900,29 @@ export async function uninstallHubBootLifecycle(
       "$ErrorActionPreference='Stop'",
       '$boot=$env:NEXOWIRE_HUB_BOOT_TASK_NAME',
       '$user=$env:NEXOWIRE_HUB_TASK_NAME',
+      '$expectedLegacyState='+psLiteral(installedManifest.userTaskPreviousState),
+      '$port='+String(installedManifest.port),
       "$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue",
       "$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue",
       hubBootRegisteredTaskIdentityGuard,
       '$removed=$false',
       'if($bootTask){',
       '  Stop-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue',
+      '  $deadline=(Get-Date).AddSeconds(15)',
+      '  do {',
+      '    $listeners=@(Get-NetTCPConnection -State Listen -ErrorAction Stop | Where-Object { $_.LocalPort -eq $port })',
+      '    if($listeners.Count -eq 0){break}',
+      '    Start-Sleep -Milliseconds 250',
+      '  } while((Get-Date) -lt $deadline)',
+      "  if($listeners.Count -gt 0){throw 'HUB_BOOT_PORT_STILL_OWNED'}",
       '  Unregister-ScheduledTask -TaskName $boot -TaskPath \\ -Confirm:$false',
       '  $removed=$true',
       '}',
       '$restored=$false',
       '$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
-      'if($userTask){',
+      "if($userTask -and $expectedLegacyState -ne 'Disabled' -and $expectedLegacyState -ne 'NotInstalled'){",
       '  Enable-ScheduledTask -TaskName $user -TaskPath \\ | Out-Null',
-      '  Start-ScheduledTask -TaskName $user -TaskPath \\',
+      "  if($expectedLegacyState -eq 'Running'){Start-ScheduledTask -TaskName $user -TaskPath \\}",
       '  $restored=$true',
       '}',
       '[pscustomobject]@{removed=$removed;userHubRestored=$restored}|ConvertTo-Json -Compress',
