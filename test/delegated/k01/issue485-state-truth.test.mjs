@@ -443,3 +443,51 @@ test('D-003 #539 OPEN NEGATIVE: expired pairing session 401 must differ from ser
     outage.get('error-message').textContent,
     'session expiration needs an actionable login/session explanation, not a transient-service message');
 });
+
+test('D-005 #539: 401 session-expiry UI proposal is distinct in memory, not in owner source', async () => {
+  const proposed = candidateSource(
+    '        if (pairing.status === 403) {',
+    `        if (pairing.status === 401) {
+          throw new Error('Oturumun sona erdi. Yeniden giriş yapıp bağlantıyı dene.');
+        }
+        if (pairing.status === 403) {`,
+  );
+  const expired = async () => Response.json({ error: 'SESSION_EXPIRED' }, { status: 401 });
+  const before = await boot({ query: search(), pairing: expired });
+  await before.get('approve').dispatch('click');
+  assert.equal(before.get('error-message').textContent, 'Bağlantı hazırlanamadı.');
+  const after = await boot({ query: search(), pairing: expired, source: proposed });
+  await after.get('approve').dispatch('click');
+  assert.match(after.get('error-message').textContent, /Oturumun sona erdi/);
+  assert.equal(after.navigations.length, 0);
+  // This proposal changes only the displayed message, not the auth/session flow.
+});
+
+test('D-005 #485: unexpected exception UI fallback can hide fixture token and preserve known error', async () => {
+  const ownerRetryable = script.includes('        retryable,\n      );');
+  const oldCall = `      showError(
+        error instanceof Error ? error.message : String(error),
+        ${ownerRetryable ? 'retryable' : 'true'},
+      );`;
+  const proposed = candidateSource(oldCall, `      const message = error instanceof Error ? error.message : '';
+      const known = new Set([
+        'Bağlantı hazırlanamadı.', 'Bağlantı cevabı geçersiz.',
+        'Bu hesap için cihaz limiti dolu.', 'Bu cihaz bu hesaba bağlanamadı.',
+      ]);
+      showError(known.has(message) ? message : 'Beklenmeyen bağlantı hatası.',
+        ${ownerRetryable ? 'retryable' : 'true'});`);
+  const secret = 'nxw-internal-SECRET-秘密-' + 'z'.repeat(80);
+  const rejected = async () => { throw new Error('upstream diagnostics: ' + secret); };
+  const before = await boot({ query: search(), pairing: rejected });
+  await before.get('approve').dispatch('click');
+  assert.equal(before.get('error-message').textContent.includes(secret), true);
+  const after = await boot({ query: search(), pairing: rejected, source: proposed });
+  await after.get('approve').dispatch('click');
+  assert.equal(after.get('error-message').textContent.includes(secret), false);
+  assert.equal(after.get('error-message').textContent, 'Beklenmeyen bağlantı hatası.');
+  const outage = await boot({ query: search(), pairing: async () =>
+    Response.json({}, { status: 503 }), source: proposed });
+  await outage.get('approve').dispatch('click');
+  assert.equal(outage.get('error-message').textContent, 'Bağlantı hazırlanamadı.');
+  // Future owner message types must be reviewed, not silently declassified.
+});
