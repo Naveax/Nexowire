@@ -40,3 +40,27 @@ and the real Windows runner labels. This command only exercises a mocked
 Only the protected owner may supply that independent evidence and decide #540.
 
 No CI workflow, CORE source, live PID or service was changed in this task.
+
+## P006 T-627 — later exact-run recheck (2026-11-08)
+
+- PR #1105 updated head `96767f3c7acf344cf8070b0be7ff9959b103a4dc`:
+  [run #42473773588](https://github.com/Naveax/Nexowire/actions/runs/42473773588)
+  **7/7 CI jobs success**, including Windows `browser-live` job `128710444395`
+  and Linux `test (22)` / `test (24)` jobs `128710444409` / `128710444489`.
+  All three full job logs again contain **zero** occurrences of `test/delegated/k16`,
+  `windows-taskkill-contract`, or the T-387 test label. Thus the *new* K16
+  process-tree source/fixture coverage remains **HOSTED NOT_RUN** at that SHA.
+- K13 independent [PR #1134](https://github.com/Naveax/Nexowire/pull/1134)
+  reports fork auxiliary run `42474499872`, **4/4 success** with Ubuntu Node22/24
+  source-discovery jobs. Its explicit list includes the **old**
+  `test/delegated/k16/environment-doctor-contract.test.ts` (8 tests) plus a K09
+  MJS fixture, **not** `windows-taskkill-contract.test.ts`. This is useful
+  auxiliary hosted evidence for doctor source, **not Windows process-tree** or
+  this PR's latest SHA.
+- The owner #1096 `.github/workflows/ci.yml` draft has more Windows test jobs
+  (including Node22/24), but its current tested commands also do not name K16
+  `windows-taskkill-contract.test.ts`; draft code is **not merged**.
+
+Require explicit test filename plus exact source SHA and runner OS/Node version
+to upgrade the missing scope from NOT_RUN. A general 7/7 or auxiliary 4/4
+status cannot substitute for that evidence.
