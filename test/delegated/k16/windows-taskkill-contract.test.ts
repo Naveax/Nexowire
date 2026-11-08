@@ -181,3 +181,24 @@ test("#540 T-626: access-denied with live root fails closed and leaves grandchil
   assert.deepEqual(fixture.checkedPids, [17310]);
   assert.equal(ownedGrandchild.alive, true);
 });
+
+test("#540 D-092: repeated zero-exit stop with orphan grandchild never accumulates confirmed proof", async () => {
+  const orphan = { pid: 17313, originalParentPid: 17312, alive: true };
+  const fixture = makeFixture({ event: "close", exitCode: 0 }, false);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    assert.equal(await fixture.terminate(orphan.originalParentPid), "requested");
+  }
+  assert.equal(fixture.commands.length, 2, "both calls only requested taskkill for the exited root PID");
+  assert.equal(fixture.checkedPids.length, 0, "neither success response inspected a descendant");
+  assert.equal(orphan.alive, true, "the separate owned-child postcondition remains unsatisfied");
+});
+
+test("#540 D-092: repeated exit-128 stop after parent exit stays unconfirmed", async () => {
+  const orphan = { pid: 17315, originalParentPid: 17314, alive: true };
+  const fixture = makeFixture({ event: "close", exitCode: 128 }, false);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    assert.equal(await fixture.terminate(orphan.originalParentPid), "unconfirmed");
+  }
+  assert.deepEqual(fixture.checkedPids, [orphan.originalParentPid, orphan.originalParentPid]);
+  assert.equal(orphan.alive, true);
+});
