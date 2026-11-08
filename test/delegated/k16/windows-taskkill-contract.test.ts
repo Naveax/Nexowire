@@ -25,13 +25,14 @@ type FakeOutcome = { event: "close"; exitCode: number | null } |
 
 function makeFixture(outcome: FakeOutcome, rootAlive: boolean) {
   const commands: Array<{ file: string; args: string[]; options: Record<string, unknown> }> = [];
+  const checkedPids: number[] = [];
   let fakeKillCalls = 0;
   class FixtureProcessManagerError extends Error {
     constructor(readonly code: string, message: string) { super(message); }
   }
   const sandbox = {
     process: { platform: "win32" },
-    isPidAlive: (_pid: number) => rootAlive,
+    isPidAlive: (pid: number) => { checkedPids.push(pid); return rootAlive; },
     ProcessManagerError: FixtureProcessManagerError,
     spawn: (file: string, args: string[], options: Record<string, unknown>) => {
       commands.push({ file, args, options });
@@ -49,7 +50,7 @@ function makeFixture(outcome: FakeOutcome, rootAlive: boolean) {
   const terminate = runInNewContext(
     `${executableSource}\nkillPidTree`, sandbox,
   ) as (pid: number) => Promise<"requested" | "unconfirmed">;
-  return { terminate, commands, get fakeKillCalls() { return fakeKillCalls; } };
+  return { terminate, commands, checkedPids, get fakeKillCalls() { return fakeKillCalls; } };
 }
 
 test("#540 T-346: taskkill exit 1 with live root rejects, never silently succeeds", async () => {
@@ -146,4 +147,37 @@ test("#540 T-486: reused root PID with zero taskkill exit has REQUESTED, never v
   assert.equal(result, "requested");
   assert.notEqual(result, "verified");
   assert.notEqual(oldOwnedShell.incarnation, unrelatedReplacement.incarnation);
+});
+
+test("#540 T-625: zero taskkill exit performs no descendant readback and cannot confirm stop", async () => {
+  const ownedGrandchild = { pid: 17307, incarnation: "child-1", alive: true };
+  const fixture = makeFixture({ event: "close", exitCode: 0 }, false);
+  const result = await fixture.terminate(17306);
+  assert.equal(result, "requested");
+  assert.equal(fixture.checkedPids.length, 0,
+    "the existing zero-exit path does not even query the root, much less its grandchild");
+  assert.equal(ownedGrandchild.alive, true);
+  assert.ok(!fixture.checkedPids.includes(ownedGrandchild.pid),
+    "no descendant-incarnation readback was available in this source contract");
+  assert.equal(fixture.commands.length, 1);
+});
+
+test("#540 T-626: access-denied while root is gone does not imply grandchild stopped", async () => {
+  const ownedGrandchild = { pid: 17309, alive: true };
+  const fixture = makeFixture({ event: "error", message: "Access is denied" }, false);
+  assert.equal(await fixture.terminate(17308), "unconfirmed");
+  assert.deepEqual(fixture.checkedPids, [17308], "only numeric parent liveness was probed");
+  assert.equal(ownedGrandchild.alive, true);
+});
+
+test("#540 T-626: access-denied with live root fails closed and leaves grandchild unverified", async () => {
+  const ownedGrandchild = { pid: 17311, alive: true };
+  const fixture = makeFixture({ event: "error", message: "Access is denied" }, true);
+  await assert.rejects(fixture.terminate(17310), (error: unknown) => {
+    assert.equal((error as { code?: string }).code, "PROCESS_TREE_TERMINATION_UNCONFIRMED");
+    assert.match((error as Error).message, /Access is denied/);
+    return true;
+  });
+  assert.deepEqual(fixture.checkedPids, [17310]);
+  assert.equal(ownedGrandchild.alive, true);
 });
