@@ -225,6 +225,9 @@ export async function startPrivilegedBroker(
         // admission. The default Broker process has no external CAS provider.
         effectAdmissionConfigured: options.effectAdmission !== undefined ||
           options.localOwnerAdmission !== undefined,
+        // A separate authenticated declaration. An old external CAS fixture
+        // cannot be treated as locally enrolled merely because it is READY.
+        localOwnerAdmissionConfigured: options.localOwnerAdmission !== undefined,
       }));
       return;
     }
