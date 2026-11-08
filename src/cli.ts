@@ -264,7 +264,7 @@ async function main(): Promise<void> {
   if (command === 'privileged-broker') {
     const action = process.argv[3] ?? 'run';
     if (action === 'run') {
-      await runPrivilegedBroker();
+      await runPrivilegedBroker(process.env, process.argv.slice(4));
     } else {
       await runPrivilegedBrokerLifecycleCommand(
         process.argv.slice(3),
