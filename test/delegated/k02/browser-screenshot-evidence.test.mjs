@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { auditBrowserScreenshot } from './browser-screenshot-evidence.mjs';
+import { auditBrowserScreenshot, auditIndependentScreenshotCaptures } from './browser-screenshot-evidence.mjs';
 
 const SHA = 'b5a3f8840517d65ecbd6a018699c4c8bdde09987';
 // Public tiny 1x1 PNG fixture. It is deliberately NOT a real viewport capture.
@@ -92,5 +92,40 @@ test('even self-consistent tiny fixture is REVIEW_REQUIRED and never PASS', () =
     const outcome = evaluate(dir, evidence);
     assert.equal(outcome.status, 'REVIEW_REQUIRED');
     assert.match(outcome.reason, /authenticity unverified/);
+  });
+});
+
+test('same screenshot digest reused under another capture ID is not independent proof', () => {
+  withFixture(({ dir, evidence }) => {
+    const checks = auditIndependentScreenshotCaptures({ expectedSha: SHA, evidenceDir: dir,
+      captures: [
+        { evidence: { ...evidence, captureId: 'attempt-001' }, targetCssWidth: 1 },
+        { evidence: { ...evidence, captureId: 'attempt-002' }, targetCssWidth: 1 },
+      ] });
+    assert.deepEqual(checks.map(x => x.status), ['REVIEW_REQUIRED', 'REPLAY_UNVERIFIED']);
+    assert.match(checks[1].reason, /identical PNG digest/);
+  });
+});
+
+test('same capture identity or missing identity never proves two hosted runs', () => {
+  withFixture(({ dir, evidence }) => {
+    const same = auditIndependentScreenshotCaptures({ expectedSha: SHA, evidenceDir: dir,
+      captures: [
+        { evidence: { ...evidence, captureId: 'same-id' }, targetCssWidth: 1 },
+        { evidence: { ...evidence, captureId: 'same-id' }, targetCssWidth: 1 },
+        { evidence: { ...evidence }, targetCssWidth: 1 },
+      ] });
+    assert.deepEqual(same.map(x => x.status), ['REVIEW_REQUIRED', 'REPLAY_UNVERIFIED', 'UNKNOWN']);
+  });
+});
+
+test('a forged second digest stays FAIL, not independent capture evidence', () => {
+  withFixture(({ dir, evidence }) => {
+    const checks = auditIndependentScreenshotCaptures({ expectedSha: SHA, evidenceDir: dir,
+      captures: [
+        { evidence: { ...evidence, captureId: 'a' }, targetCssWidth: 1 },
+        { evidence: { ...evidence, captureId: 'b', screenshotSha256: '0'.repeat(64) }, targetCssWidth: 1 },
+      ] });
+    assert.deepEqual(checks.map(x => x.status), ['REVIEW_REQUIRED', 'FAIL']);
   });
 });
