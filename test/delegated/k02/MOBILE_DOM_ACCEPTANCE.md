@@ -13,7 +13,8 @@ Her görünümde `window.nexowireK02Measure()` çıktısı, `innerWidth`,
 `document.documentElement.scrollWidth`, `overflowIds`,
 `unknownVisible`, `deviceNameWrap` ve `focusTarget` alanlarını raporlar.
 `horizontalPageOverflow=true`, `overflowIds` dolu veya
-`unknownVisible=false` kabul değil; ekran görüntüsü ve tarayıcı sürümüyle
+`unknownVisible=false`, `recoveryActionsVisible=false` veya
+`offscreenRecoveryIds` dolu kabul değil; ekran görüntüsü ve tarayıcı sürümüyle
 yan yana değerlendirilmelidir. Kaynak statik regresyonu:
 
 ```sh
