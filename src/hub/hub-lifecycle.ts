@@ -48,6 +48,7 @@ const SAFE_ENV_NAMES = [
   'NEXOWIRE_HTTP_HOST',
   'NEXOWIRE_HTTP_PORT',
   'NEXOWIRE_HTTP_ALLOWED_HOSTS',
+  'NEXOWIRE_AGENT_REMOTE_AUTH_ONLY',
   'NEXOWIRE_SKILLS_DIR',
   'NEXOWIRE_CONTROL_PLANE_URL',
   'NEXOWIRE_CONTROL_PLANE_AUTH_TIMEOUT_MS',
@@ -227,6 +228,21 @@ export function buildHubLauncher(
     lines.push('$env:' + name + '=' + psLiteral(value));
   }
 
+  // A scheduled AtLogOn invocation bypasses the TypeScript install/start
+  // preflight. Recheck the protected SYSTEM task before Node is ever spawned.
+  // Enumerating scheduled tasks with ErrorAction Stop is fail closed.
+  lines.push(
+    "$env:PSModulePath='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules'",
+    "Import-Module -Name 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules\\ScheduledTasks\\ScheduledTasks.psd1' -ErrorAction Stop",
+    "$bootTasks=@(Get-ScheduledTask -ErrorAction Stop | Where-Object { $_.TaskName -eq 'Nexowire Hub Boot' -and $_.TaskPath -eq '\\' })",
+    "if($bootTasks.Count -gt 1){throw 'HUB_BOOT_TASK_AMBIGUOUS'}",
+    "if($bootTasks.Count -eq 1){",
+    "  $boot=$bootTasks[0]",
+    "  $bootSid=[string]$boot.Principal.UserId",
+    "  if($bootSid -eq 'SYSTEM'){$bootSid='S-1-5-18'}elseif($bootSid -ne 'S-1-5-18'){try{$bootSid=([Security.Principal.NTAccount]$bootSid).Translate([Security.Principal.SecurityIdentifier]).Value}catch{throw 'HUB_BOOT_PRINCIPAL_UNVERIFIED'}}",
+    "  if($bootSid -ne 'S-1-5-18' -or [string]$boot.State -ne 'Disabled'){throw 'HUB_BOOT_CONCURRENT_OWNER'}",
+    "}",
+  );
   lines.push(
     '& ' +
       psLiteral(rt.executable) +
@@ -333,12 +349,16 @@ export function legacyStackSupervisorBlocksHubLifecycle(
 
 export type HubHandoffBlocker =
   | 'LEGACY_STACK_SUPERVISOR_RUNNING'
-  | 'UNOWNED_HUB_LISTENER';
+  | 'UNOWNED_HUB_LISTENER'
+  | 'SYSTEM_HUB_BOOT_ENABLED'
+  | 'HUB_BOOT_PRINCIPAL_UNVERIFIED';
 
 export function hubHandoffBlockers(input: {
   legacyStackTaskState: string | null;
   standaloneHubTaskState: string | null;
   listenerPid: number | null;
+  bootTaskState?: string | null;
+  bootTaskPrincipalSid?: string | null;
 }): HubHandoffBlocker[] {
   const blockers: HubHandoffBlocker[] = [];
   if (legacyStackSupervisorBlocksHubLifecycle(input.legacyStackTaskState)) {
@@ -353,7 +373,46 @@ export function hubHandoffBlockers(input: {
   ) {
     blockers.push('UNOWNED_HUB_LISTENER');
   }
+  if (input.bootTaskState !== null && input.bootTaskState !== undefined) {
+    // A Ready SYSTEM task is a next-reboot owner; never race the user Hub.
+    if (input.bootTaskPrincipalSid !== 'S-1-5-18') blockers.push('HUB_BOOT_PRINCIPAL_UNVERIFIED');
+    if (input.bootTaskState.trim().toLowerCase() !== 'disabled') blockers.push('SYSTEM_HUB_BOOT_ENABLED');
+  }
   return blockers;
+}
+
+export interface HubBootRepairEvidence {
+  target: 'disposable-windows-vm' | 'production-host';
+  bootPrincipalSid: string | null;
+  originalTaskXmlHash: string | null;
+  sealedBackupTaskXmlHash: string | null;
+  originalTaskActionPrincipalTriggersVerified: boolean;
+  originalLauncherBackupVerified: boolean;
+  rollbackCredentialsVerified: boolean;
+  replacementPublisherVerified: boolean;
+  replacementSignedDigestVerified: boolean;
+  agentBrokerCompatibilityVerified: boolean;
+  userHubDisabled: boolean;
+  noUnownedHubListener: boolean;
+}
+/** Read-only evidence evaluation. It never grants authority to mutate a task. */
+export function assessHubBootRepairPreflight(e: HubBootRepairEvidence): {
+  eligibleForManualLabReview: boolean; blockers: string[]; mutationAuthorized: false;
+} {
+  const blockers: string[] = [], digest=/^[a-f0-9]{64}$/i;
+  if(e.target!=='disposable-windows-vm')blockers.push('HUB_BOOT_NON_DISPOSABLE_TARGET');
+  if(e.bootPrincipalSid!=='S-1-5-18')blockers.push('HUB_BOOT_FOREIGN_PRINCIPAL');
+  if(!e.originalTaskXmlHash||!e.sealedBackupTaskXmlHash||
+    !digest.test(e.originalTaskXmlHash)||!digest.test(e.sealedBackupTaskXmlHash)||
+    e.originalTaskXmlHash.toUpperCase()!==e.sealedBackupTaskXmlHash.toUpperCase()||
+    !e.originalTaskActionPrincipalTriggersVerified||!e.originalLauncherBackupVerified)
+      blockers.push('HUB_BOOT_BACKUP_UNVERIFIED');
+  if(!e.rollbackCredentialsVerified)blockers.push('HUB_BOOT_CREDENTIAL_ROLLBACK_UNKNOWN');
+  if(!e.replacementPublisherVerified||!e.replacementSignedDigestVerified)
+    blockers.push('HUB_BOOT_REPLACEMENT_UNTRUSTED');
+  if(!e.agentBrokerCompatibilityVerified)blockers.push('HUB_BOOT_VERSION_UNVERIFIED');
+  if(!e.userHubDisabled||!e.noUnownedHubListener)blockers.push('HUB_BOOT_CONCURRENT_OWNER');
+  return {eligibleForManualLabReview:blockers.length===0,blockers,mutationAuthorized:false};
 }
 
 function configuredHubPort(env: NodeJS.ProcessEnv): number {
@@ -372,6 +431,8 @@ export async function inspectLegacyStackHubSupervisor(
 ): Promise<{
   legacyStackTaskState: string | null;
   standaloneHubTaskState: string | null;
+  systemHubBootTaskState: string | null;
+  systemHubBootPrincipalSid: string | null;
   hubPort: number;
   hubListenerPid: number | null;
   blockers: HubHandoffBlocker[];
@@ -385,6 +446,8 @@ export async function inspectLegacyStackHubSupervisor(
     state: string | null;
     standaloneState: string | null;
     listenerPid: number | null;
+    bootState: string | null;
+    bootSid: string | null;
   }>(
     [
       "$ErrorActionPreference='Stop'",
@@ -392,11 +455,14 @@ export async function inspectLegacyStackHubSupervisor(
       "$legacy=$tasks | Where-Object { $_.TaskName -eq 'Nexowire Stack' -and $_.TaskPath -eq '\\' } | Select-Object -First 1",
       "$standaloneName=if($env:NEXOWIRE_HUB_TASK_NAME){$env:NEXOWIRE_HUB_TASK_NAME}else{'Nexowire Hub'}",
       "$standalone=$tasks | Where-Object { $_.TaskName -eq $standaloneName -and $_.TaskPath -eq '\\' } | Select-Object -First 1",
+      "$boot=$tasks | Where-Object { $_.TaskName -eq 'Nexowire Hub Boot' -and $_.TaskPath -eq '\\' } | Select-Object -First 1",
+      "$bootSid=$null;$bootState=$null",
+      "if($boot){$bootState=[string]$boot.State;$bootSid=[string]$boot.Principal.UserId;if($bootSid -eq 'SYSTEM'){$bootSid='S-1-5-18'}elseif($bootSid -ne 'S-1-5-18'){try{$bootSid=([Security.Principal.NTAccount]$bootSid).Translate([Security.Principal.SecurityIdentifier]).Value}catch{$bootSid='UNVERIFIED'}}}",
       "$portNumber=[int]$env:NEXOWIRE_HUB_PREFLIGHT_PORT",
       "$listeners=@(Get-NetTCPConnection -State Listen -ErrorAction Stop | Where-Object { $_.LocalPort -eq $portNumber })",
       "if($listeners.Count -gt 1 -and @($listeners | Select-Object -ExpandProperty OwningProcess -Unique).Count -ne 1){ throw 'MULTIPLE_HUB_PORT_OWNERS' }",
       "$pidValue=if($listeners.Count){[int]$listeners[0].OwningProcess}else{$null}",
-      "[pscustomobject]@{state=if($legacy){[string]$legacy.State}else{$null};standaloneState=if($standalone){[string]$standalone.State}else{$null};listenerPid=$pidValue} | ConvertTo-Json -Compress",
+      "[pscustomobject]@{state=if($legacy){[string]$legacy.State}else{$null};standaloneState=if($standalone){[string]$standalone.State}else{$null};listenerPid=$pidValue;bootState=$bootState;bootSid=$bootSid} | ConvertTo-Json -Compress",
     ].join('\n'),
     {
       ...env,
@@ -411,10 +477,14 @@ export async function inspectLegacyStackHubSupervisor(
     legacyStackTaskState: found.state,
     standaloneHubTaskState: found.standaloneState,
     listenerPid: found.listenerPid,
+    bootTaskState: found.bootState,
+    bootTaskPrincipalSid: found.bootSid,
   });
   return {
     legacyStackTaskState: found.state,
     standaloneHubTaskState: found.standaloneState,
+    systemHubBootTaskState: found.bootState,
+    systemHubBootPrincipalSid: found.bootSid,
     hubPort: port,
     hubListenerPid: found.listenerPid,
     blockers,
@@ -548,7 +618,7 @@ export async function installHubLifecycle(
       "$action=New-ScheduledTaskAction -Execute 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe' -Argument $argument",
       '$trigger=New-ScheduledTaskTrigger -AtLogOn -User $user',
       '$principal=New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited',
-      '$settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -MultipleInstances IgnoreNew',
+      '$settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -MultipleInstances IgnoreNew',
       "Register-ScheduledTask -TaskName $name -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description 'Nexowire first-party Hub' -Force | Out-Null",
       'if ($restartRequired) {',
       '  Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue',

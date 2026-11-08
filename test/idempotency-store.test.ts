@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import {
   IdempotencyStore,
   IdempotencyStoreError,
@@ -91,10 +92,7 @@ test('idempotency store persists metadata without payloads and blocks key reuse'
       data: { secret: 'memory-only-result' },
     });
 
-    const persisted = await fs.readFile(
-      path.join(root, 'idempotency-records.json'),
-      'utf8',
-    );
+    const persisted = await fs.readFile(path.join(root, 'idempotency-records.sqlite'));
     assert.equal(persisted.includes('super-secret-payload'), false);
     assert.equal(persisted.includes('memory-only-result'), false);
 
@@ -182,36 +180,37 @@ test('concurrent initialization does not admit conflicting idempotency key befor
     );
     await loading;
     assert.equal((await resumed.get('historical-key'))?.fingerprint, 'a'.repeat(64));
-    const disk = JSON.parse(await fs.readFile(
-      path.join(root, 'idempotency-records.json'), 'utf8',
-    )) as {records: Array<{key:string;fingerprint:string}>};
-    assert.equal(disk.records.find((record) => record.key === 'historical-key')
-      ?.fingerprint, 'a'.repeat(64));
+    const db = new DatabaseSync(path.join(root, 'idempotency-records.sqlite'));
+    try {
+      const stored = db.prepare(
+        'SELECT fingerprint FROM idempotency_records WHERE key=?',
+      ).get('historical-key') as { fingerprint: string } | undefined;
+      assert.equal(stored?.fingerprint, 'a'.repeat(64));
+    } finally { db.close(); }
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
 });
 
-test('failed disk persistence does not leave an uncommitted in-progress key', async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexowire-idempotency-disk-fail-'));
-  const temp = path.join(root, 'idempotency-records.json.tmp');
+test('failed SQLite reservation does not create a key and a later valid reservation survives', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexowire-idempotency-sqlite-fail-'));
   try {
     const store = new IdempotencyStore(root);
     await store.initialize();
-    await fs.mkdir(temp);
-    const request = {
-      key: 'recoverable-write',
-      fingerprint: 'c'.repeat(64),
-      capability: 'files.write',
-      targetId: 'device-1',
-    };
-    await assert.rejects(() => store.begin(request));
+    const db = new DatabaseSync(path.join(root, 'idempotency-records.sqlite'));
+    try {
+      db.exec(`CREATE TRIGGER deny_one BEFORE INSERT ON idempotency_records
+        WHEN NEW.key='recoverable-write'
+        BEGIN SELECT RAISE(ABORT, 'INJECTED_SQLITE_RESERVATION_FAILURE'); END;`);
+    } finally { db.close(); }
+    const request = {key: 'recoverable-write',fingerprint:'c'.repeat(64),
+      capability:'files.write',targetId:'device-1'};
+    await assert.rejects(() => store.begin(request), /INJECTED_SQLITE_RESERVATION_FAILURE/);
     assert.equal(await store.get(request.key), undefined);
-    await fs.rmdir(temp);
-    const retry = await store.begin(request);
-    assert.equal(retry.created, true);
-    assert.equal((await store.get(request.key))?.status, 'in_progress');
-  } finally {
-    await fs.rm(root, { recursive: true, force: true });
-  }
+    const reopenedDb = new DatabaseSync(path.join(root, 'idempotency-records.sqlite'));
+    try { reopenedDb.exec('DROP TRIGGER deny_one'); } finally { reopenedDb.close(); }
+    const accepted = await store.begin(request);
+    assert.equal(accepted.created,true);
+    assert.equal((await store.get(request.key))?.status,'in_progress');
+  } finally { await fs.rm(root, { recursive: true, force: true }); }
 });

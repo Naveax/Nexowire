@@ -352,8 +352,16 @@ if($null -ne $userTask){
     $registeredSid=(New-Object System.Security.Principal.NTAccount($registeredSid)).Translate([System.Security.Principal.SecurityIdentifier]).Value
   } catch { }
   $currentSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+  # Older Nexowire Hub installers registered the *limited user task* with
+  # Execute='powershell.exe'. Accept that exact historical spelling ONLY
+  # with the first-party description and exact current-owner launcher/SID.
+  # The protected SYSTEM Boot task above still requires its absolute shell.
+  $userExe=([string]$userActions[0].Execute).Trim('"')
+  $canonicalUserExe=$userExe -ieq $expectedExe
+  $legacyUserExe=($userExe -ceq 'powershell.exe') -and
+    ([string]$userTask.Description -ceq 'Nexowire first-party Hub')
   if($userActions.Count -ne 1 -or
-     ([string]$userActions[0].Execute).Trim('"') -ine $expectedExe -or
+     (-not $canonicalUserExe -and -not $legacyUserExe) -or
      [string]$userActions[0].Arguments -cne $expectedUserArgs -or
      $registeredSid -ne $currentSid -or
      [string]$userTask.Principal.LogonType -cne 'Interactive' -or
@@ -362,6 +370,22 @@ if($null -ne $userTask){
   }
 }
 `;
+
+/**
+ * Status-only inspection. Recognized first-party limited-user Hub tasks use
+ * the same identity guard as install/uninstall, including historical
+ * powershell.exe launchers. Foreign user/Boot task identities remain errors;
+ * only a foreign user task without a Boot installation is reportable.
+ */
+export const hubBootStatusIdentityInspection=[
+  '$userTaskIdentityError=$null',
+  'try {',
+  hubBootRegisteredTaskIdentityGuard,
+  '} catch {',
+  "  if($null -ne $bootTask -or [string]$_.Exception.Message -cne 'HUB_USER_TASK_IDENTITY_MISMATCH'){throw}",
+  "  $userTaskIdentityError='HUB_USER_TASK_IDENTITY_MISMATCH'",
+  '}',
+].join('\n');
 
 /** Roll back only an exact task registered by this installer invocation. */
 export const hubBootRollbackTaskOwnershipGuard=String.raw`
@@ -567,9 +591,13 @@ export async function hubBootLifecycleStatus(
       '$user=$env:NEXOWIRE_HUB_TASK_NAME',
       '$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue',
       '$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
-      hubBootRegisteredTaskIdentityGuard,
+      // Status is read-only. A legacy user Hub task can still run with a
+      // noncanonical executable path when no SYSTEM Boot task exists.
+      // Report the mismatch instead of making boot-status unusable; keep the
+      // strict identity gate unchanged for boot-install and boot-uninstall.
+      hubBootStatusIdentityInspection,
       "$bootState=if($bootTask){([string]$bootTask.State).ToLowerInvariant()}else{'not-installed'}",
-      "$userState=if($userTask){([string]$userTask.State).ToLowerInvariant()}else{'not-installed'}",
+      "$userState=if($userTaskIdentityError){'identity-mismatch'}elseif($userTask){([string]$userTask.State).ToLowerInvariant()}else{'not-installed'}",
       '[pscustomobject]@{installed=($null-ne$bootTask);state=$bootState;userTaskState=$userState}|ConvertTo-Json -Compress',
     ].join('\n'),
     taskEnv(options),
@@ -868,6 +896,92 @@ export async function uninstallHubBootLifecycle(
   };
 }
 
+export interface WindowsRebootAgentTaskEvidence {
+  installed: boolean;
+  systemIdentity: boolean;
+  bootTrigger: boolean;
+  interactiveOnly: boolean;
+}
+
+export interface WindowsUnattendedRebootEvidence {
+  systemHubInstalled: boolean;
+  agent: WindowsRebootAgentTaskEvidence;
+  autoAdminLogon: boolean;
+}
+
+export type WindowsRebootBlocker =
+  | 'SYSTEM_HUB_BOOT_NOT_INSTALLED'
+  | 'NATIVE_AGENT_NOT_INSTALLED'
+  | 'NATIVE_AGENT_LOGON_ONLY'
+  | 'NATIVE_AGENT_PRELOGIN_IDENTITY_UNVERIFIED'
+  | 'PRELOGIN_REMOTE_RECOVERY_NOT_VERIFIED';
+
+/**
+ * Task Scheduler configuration is NOT remote recovery evidence. In particular
+ * an interactive logon task cannot bring the Agent online at the sign-in
+ * screen. Never certify an unattended reboot solely from task metadata.
+ */
+export function assessWindowsUnattendedRebootReadiness(
+  evidence: WindowsUnattendedRebootEvidence,
+): WindowsUnattendedRebootEvidence & {
+  startupTopologyReady: boolean;
+  remoteRebootAccepted: false;
+  blockers: WindowsRebootBlocker[];
+} {
+  const blockers:WindowsRebootBlocker[]=[];
+  if(!evidence.systemHubInstalled)
+    blockers.push('SYSTEM_HUB_BOOT_NOT_INSTALLED');
+  if(!evidence.agent.installed) {
+    blockers.push('NATIVE_AGENT_NOT_INSTALLED');
+  } else if(evidence.agent.interactiveOnly || !evidence.agent.bootTrigger) {
+    blockers.push('NATIVE_AGENT_LOGON_ONLY');
+  } else if(!evidence.agent.systemIdentity) {
+    blockers.push('NATIVE_AGENT_PRELOGIN_IDENTITY_UNVERIFIED');
+  }
+  const startupTopologyReady=blockers.length===0;
+  // Physical pre-login/off-network reconnect, credential availability and
+  // rollback must be observed after the first controlled boot. A scheduler
+  // declaration and AutoAdminLogon alone cannot establish that fact.
+  blockers.push('PRELOGIN_REMOTE_RECOVERY_NOT_VERIFIED');
+  return {...evidence,startupTopologyReady,remoteRebootAccepted:false,blockers};
+}
+
+/**
+ * Strictly read-only Windows reboot preflight. No services, tasks, credentials,
+ * Winlogon settings, UAC or desktop state are modified.
+ */
+export async function inspectWindowsUnattendedRebootReadiness(
+  options:HubBootLifecycleOptions={},
+):Promise<ReturnType<typeof assessWindowsUnattendedRebootReadiness>> {
+  const boot=await hubBootLifecycleStatus(options);
+  const probe=await runPowerShellJson<{
+    agent:WindowsRebootAgentTaskEvidence;
+    autoAdminLogon:boolean;
+  }>([
+    "$ErrorActionPreference='Stop'",
+    "$task=Get-ScheduledTask -TaskName 'Nexowire Native Agent' -TaskPath '\\' -ErrorAction SilentlyContinue",
+    "$agentPresent=($null -ne $task)",
+    "$systemIdentity=$false",
+    "$bootTrigger=$false",
+    "$interactiveOnly=$false",
+    "if($agentPresent){",
+    "  $account=([string]$task.Principal.UserId).ToUpperInvariant()",
+    "  $logon=[string]$task.Principal.LogonType",
+    "  $systemIdentity=(($account -eq 'S-1-5-18' -or $account -eq 'SYSTEM' -or $account -eq 'NT AUTHORITY\\SYSTEM') -and $logon -eq 'ServiceAccount')",
+    "  $bootTrigger=@($task.Triggers | Where-Object { $_.CimClass.CimClassName -eq 'MSFT_TaskBootTrigger' }).Count -gt 0",
+    "  $interactiveOnly=($logon -eq 'Interactive')",
+    "}",
+    "$winlogon=Get-ItemProperty -LiteralPath 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon' -ErrorAction Stop",
+    "$auto=([string]$winlogon.AutoAdminLogon -eq '1')",
+    "[pscustomobject]@{agent=[pscustomobject]@{installed=$agentPresent;systemIdentity=$systemIdentity;bootTrigger=$bootTrigger;interactiveOnly=$interactiveOnly};autoAdminLogon=$auto}|ConvertTo-Json -Depth 4 -Compress",
+  ].join('\n'),taskEnv(options));
+  return assessWindowsUnattendedRebootReadiness({
+    systemHubInstalled:boot.installed,
+    agent:probe.agent,
+    autoAdminLogon:probe.autoAdminLogon,
+  });
+}
+
 export async function runHubBootLifecycleCommand(
   args: readonly string[],
   env: NodeJS.ProcessEnv = process.env,
@@ -886,13 +1000,17 @@ export async function runHubBootLifecycleCommand(
       result =
         await hubBootLifecycleStatus(options);
       break;
+    case 'reboot-readiness':
+      result =
+        await inspectWindowsUnattendedRebootReadiness(options);
+      break;
     case 'boot-uninstall':
       result =
         await uninstallHubBootLifecycle(options);
       break;
     default:
       throw new Error(
-        'Usage: nexowire hub [boot-install|boot-status|boot-uninstall]',
+        'Usage: nexowire hub [boot-install|boot-status|reboot-readiness|boot-uninstall]',
       );
   }
   process.stdout.write(

@@ -439,9 +439,13 @@ async function main(): Promise<void> {
     await new Promise<void>((resolve) => {
       server.close(() => resolve());
     });
+    // WScript returns before its hidden Node child releases node.exe on Windows.
+    // Retry transient image-file locks, but still fail on persistent cleanup errors.
     await fs.rm(tempRoot, {
       recursive: true,
       force: true,
+      maxRetries: 12,
+      retryDelay: 100,
     });
   }
 }

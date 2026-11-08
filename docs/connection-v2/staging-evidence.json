@@ -1,0 +1,1032 @@
+{
+  "schema": "connection-v2-staging-evidence/v1",
+  "captured_at": "2026-11-04",
+  "candidate_version": "1.0.8-connection-v2-rc.0+939b4d6",
+  "verdict": "NO_GO",
+  "main_parent": "939b4d6beecf996f2750c736c5d4b4beb7b64488",
+  "main_tree": "46f30e68c3df6984a27c2b65b52a6e6687a8f325",
+  "source_heads": {
+    "1003": "f1e5a5e4cadad8a276f7193932caf05f84196044",
+    "1044": "b7c39dbdade38a0a1cf3a69299b1d9677cf0a5e9",
+    "1074": "6b00db5bb24e537a6d1c494b3459080a8af3f943",
+    "1075": "05a99388c377caa0781fb5a2c257ea1f9b92e5df",
+    "1077": "b0bdfbced25364ad26473c24bb23f9d5cf249805",
+    "1081": "a28995c25b5575636c929b09d1f6e7c4d9b33e5c",
+    "1083": "20d4252eb10223a2c134aa25bba5107ed6a884f9",
+    "1084": "f4f80a76a186e84433ae4be6aed829a21d990a0c"
+  },
+  "source_files": 71,
+  "matrix_rows": 79,
+  "matrix_status": {
+    "MERGED_MAIN_SECURITY_REVIEW_REQUIRED": 4,
+    "EXACT_BLOB": 54,
+    "EVOLVED_SOURCE_SEMANTIC_REVIEW_REQUIRED": 21
+  },
+  "source_candidate_manifest_blob": "b00a6e3ff5d803575b3093c642c9d994c958b2be",
+  "candidate_tree_sha": "CREATED_AFTER_EVIDENCE_BLOB",
+  "git": {
+    "github_compare_merge_base": "OBSERVED",
+    "git_cherry": "NOT_RUN",
+    "git_patch_id_stable": "NOT_RUN",
+    "git_merge_tree": "NOT_RUN"
+  },
+  "previous_runs": [
+    {
+      "pr": 1074,
+      "sha": "82c596d93829ec402777fa2f856f1b2f45153df0",
+      "run_id": 41812040060,
+      "conclusion": "failure"
+    },
+    {
+      "pr": 1077,
+      "sha": "c1dd252180404e6afbe9527ed34b00c720cf5e41",
+      "run_id": 41812885695,
+      "conclusion": "failure"
+    },
+    {
+      "pr": 1081,
+      "sha": "fe40994b56d4b4ec1388b224fc22d8007a351d83",
+      "run_id": 41821338857,
+      "conclusion": "success",
+      "suite": "relay_qa_4_of_4"
+    }
+  ],
+  "acceptance": {
+    "candidate_exact_head_ci": "NOT_RUN_NEW_SHA",
+    "adversarial_negatives": "NOT_RUN_NEW_SHA",
+    "windows_task_reboot": "SOURCE_INCLUDED_DISPOSABLE_VM_NOT_RUN",
+    "mcp_offnetwork_oauth_readonly": "NOT_RUN",
+    "owner_device_wss_binding": "NOT_RUN",
+    "revocation_inflight": "NOT_RUN",
+    "lost_ack_no_replay": "V2_07_SYNTHETIC_PASS_CLEAN10_CROSS_RUNBOOK_ORACLE_NOT_RUN",
+    "two_pc_read_only": "NOT_RUN",
+    "wss_101": "NOT_RUN",
+    "transfer_1gib": "NOT_RUN",
+    "soak_24hours": "NOT_RUN",
+    "provider_cost_quota": "NOT_RUN"
+  },
+  "future_sources": [],
+  "production_modified": false,
+  "billing_changed": false,
+  "source_branches_modified": false,
+  "main_merged": false,
+  "integration_scope": "SEVEN_SOURCE_CANDIDATE_NOT_APPROVED",
+  "previous_candidate_ci": {
+    "sha": "c09ad208dfc34b18a6d91b2cb00a635939df2159",
+    "run_id": 41826788848,
+    "conclusion": "failure",
+    "success_jobs": [
+      "test(22)",
+      "test(24)",
+      "wsl2-live",
+      "security-operational-live",
+      "macos-agent-lifecycle-live",
+      "linux-native-live"
+    ],
+    "failed_jobs": [
+      {
+        "name": "browser-live",
+        "job_id": 126563449512,
+        "exit_code": 1,
+        "failed_assertions": [
+          "CLEAN-13 Windows credential custody",
+          "CLEAN-13 official-image native guard",
+          "OAuth doctor readiness",
+          "Windows task descendant cleanup"
+        ]
+      }
+    ],
+    "relay_qa": {
+      "run_id": 41826788911,
+      "conclusion": "success",
+      "pass": 4,
+      "total": 4
+    },
+    "security_negative_oracle": "NOT_RUN_IN_PRIOR_GENERAL_NODE_JOBS"
+  },
+  "live_current_agent_read_only": {
+    "date": "2026-11-04",
+    "status": "PASS_EXISTING_AGENT_ONLY",
+    "v2_oauth_verified": false,
+    "devices": [
+      {
+        "name": "NAVEAX",
+        "id": "adc90bbb-9576-4b4c-b76a-600e5572ad7d",
+        "online": true,
+        "version": "1.0.8"
+      },
+      {
+        "name": "WORK-PC",
+        "id": "aeaa5295-0aa8-4742-bf0c-2a6340dcf187",
+        "online": true,
+        "version": "1.0.8"
+      }
+    ]
+  },
+  "current_native_agent_read_only_status": {
+    "date": "2026-11-04",
+    "status": "PASS_EXISTING_AGENT_ONLY",
+    "v2_oauth_verified": false,
+    "devices": [
+      {
+        "name": "NAVEAX",
+        "id": "adc90bbb-9576-4b4c-b76a-600e5572ad7d",
+        "online": true,
+        "version": "1.0.8"
+      },
+      {
+        "name": "WORK-PC",
+        "id": "aeaa5295-0aa8-4742-bf0c-2a6340dcf187",
+        "online": true,
+        "version": "1.0.8"
+      }
+    ]
+  },
+  "release_gate_clarification": "Existing native Agent read-only connectivity is not an authenticated Connection v2 two-PC acceptance result",
+  "prior_candidate_ci_metadata_error": {
+    "sha": "524497acee4d2078828019eb99ff4ad5d8b418df",
+    "run_id": 41829279333,
+    "issue": "source preservation expected old ci.yml blob; full CI not reached",
+    "second_issue": "two_pc_read_only incorrectly held CURRENT_AGENT_ONLY_V2_NOT_RUN rather than NOT_RUN",
+    "resolved_in_next_candidate": true
+  },
+  "source_refreshes": [
+    {
+      "pr": 1084,
+      "old_sha": "84cfcaa19095f3210e92ffc22d7ca3dce3d8dd13",
+      "new_sha": "b9312a456b0feafede4b4f3c9bd53e108f5af5c6",
+      "files": [
+        "src/mcp/cloudflare-connection-lifecycle.ts",
+        "test/cloudflare-connection-lifecycle.test.ts"
+      ],
+      "reason": "Windows lifecycle owner latest source edits; release remains NO_GO"
+    },
+    {
+      "pr": 1084,
+      "old_sha": "b9312a456b0feafede4b4f3c9bd53e108f5af5c6",
+      "new_sha": "385109b87c22ae677ba06f517b7872b732b142dc",
+      "source_paths": [
+        "docs/connection-v2/windows-recovery-acceptance.md",
+        "src/mcp/cloudflare-connection-lifecycle.ts",
+        "test/cloudflare-connection-lifecycle.test.ts",
+        "test/connection-v2-windows-recovery.test.ts"
+      ],
+      "status": "SOURCE_BLOBS_INTEGRATED",
+      "github_hosted_20_cycles": "NOT_RUN_AT_THIS_SHA",
+      "reboot": "NOT_RUN"
+    },
+    {
+      "pr": 1084,
+      "old_sha": "385109b87c22ae677ba06f517b7872b732b142dc",
+      "new_sha": "bf913cb1a8ca3c40b25bb9a69d1bc1833f384744",
+      "changed": [
+        "docs/connection-v2/windows-recovery-acceptance.md",
+        "src/mcp/cloudflare-connection-lifecycle.ts",
+        "test/cloudflare-connection-lifecycle.test.ts"
+      ],
+      "source_branch_modified": false,
+      "release_gate": "NO_GO"
+    },
+    {
+      "pr": 1084,
+      "old_sha": "bf913cb1a8ca3c40b25bb9a69d1bc1833f384744",
+      "new_sha": "03e8507c2d6b18742a6a337356f3d5bb19da6f22",
+      "changed_files": [
+        "src/mcp/cloudflare-connection-lifecycle.ts"
+      ],
+      "reason": "Fixed-token PowerShell failure diagnostics only",
+      "source_pr_direct_writes": false
+    },
+    {
+      "pr": 1003,
+      "old_sha": "95d9f9e431ad5a9c46adde1ecf716f84d60d8455",
+      "new_sha": "65e702e01dd03eebe8e3804e85c5852dc698321f",
+      "changed_files": [
+        "docs/connection-v2/v2-03-mcp-oauth-acceptance.md",
+        "scripts/verify-connection-v2-03-staging.ts",
+        "src/mcp/cloudflare-connection-doctor.ts",
+        "test/cloudflare-agent-upgrade.test.ts",
+        "test/v2-03-authenticated-mcp-acceptance.test.ts",
+        "test/v2-03-ingress-doctor-bridge.test.ts"
+      ],
+      "state": "frozen_snapshot_not_release_authorization"
+    },
+    {
+      "pr": 1044,
+      "old_sha": "d38b30fec77cce5c9b5e29c491b11f8fe6806bef",
+      "new_sha": "48704c908636383d63e6284082f167f1909124d0",
+      "changed_files": [
+        "docs/connection-v2/adversarial-evidence.md",
+        "test/v206-round2-dispatch-reason.test.ts",
+        "test/v206-round2-windows-native-reason.test.ts"
+      ],
+      "state": "frozen_snapshot_not_release_authorization"
+    },
+    {
+      "pr": 1074,
+      "old_sha": "5997a6d7ae43c34170016eb0963718ee35bf4a15",
+      "new_sha": "6b00db5bb24e537a6d1c494b3459080a8af3f943",
+      "changed_files": [
+        "src/hub/control-plane-network-policy.ts",
+        "test/clean14-network-security.test.ts",
+        "test/clean14-wss-tls-negative.test.ts"
+      ],
+      "state": "frozen_snapshot_not_release_authorization"
+    },
+    {
+      "pr": 1077,
+      "old_sha": "67fa411c6aa6135aeeac93f7197b5fd46c804884",
+      "new_sha": "384c05276d2c0116ee13f7b70d6709cdb478f887",
+      "changed_files": [
+        "src/mcp/cloudflare-binary-trust.ts",
+        "src/mcp/cloudflare-credential-custody.ts",
+        "src/mcp/local-first-cloudflare.ts",
+        "test/clean13-cloudflared-windows-custody.test.ts",
+        "test/local-first-cloudflare.test.ts"
+      ],
+      "state": "frozen_snapshot_not_release_authorization"
+    },
+    {
+      "pr": 1081,
+      "old_sha": "707db9728c883d1bb027788793f4cc072768f325",
+      "new_sha": "6f98ae554d2befdee8c5cf483ae4306e468f2c92",
+      "changed_files": [
+        "docs/CONNECTION_V2_RELAY_RESOURCE_BUDGETS_20261104.md",
+        "src/relay/config.ts",
+        "src/relay/server.ts",
+        "test/relay-resource-budgets.test.ts"
+      ],
+      "state": "frozen_snapshot_not_release_authorization"
+    },
+    {
+      "pr": 1083,
+      "old_sha": "4d8e7b359d572a6ee4cf22fd02ad9ee7ed81808e",
+      "new_sha": "136627e161872f534dfc30242e59223b378dce09",
+      "changed_files": [
+        "src/agent/native-agent.ts",
+        "src/core/agent-broker.ts",
+        "test/v2-07/round2-revocation.test.ts",
+        "test/v2-07/round2-transport-fixtures.test.ts"
+      ],
+      "state": "frozen_snapshot_not_release_authorization"
+    },
+    {
+      "pr": 1084,
+      "old_sha": "03e8507c2d6b18742a6a337356f3d5bb19da6f22",
+      "new_sha": "188f5bfedeafd8c326eae523d05f0d1718704ce4",
+      "changed_files": [
+        "docs/connection-v2/windows-recovery-acceptance.md",
+        "src/hub/hub-lifecycle.ts",
+        "src/mcp/cloudflare-connection-lifecycle.ts",
+        "test/cloudflare-connection-lifecycle.test.ts",
+        "test/connection-v2-windows-hub-rollback.test.ts"
+      ],
+      "state": "frozen_snapshot_not_release_authorization"
+    },
+    {
+      "pr": 1003,
+      "old_sha": "65e702e01dd03eebe8e3804e85c5852dc698321f",
+      "new_sha": "17b699084ad90cc929db83b5942eed812e80cd83",
+      "changed_files": [
+        "src/mcp/cloudflare-connection-doctor.ts",
+        "test/v2-03-authenticated-mcp-acceptance.test.ts"
+      ],
+      "source_branches_written": false
+    },
+    {
+      "pr": 1081,
+      "old_sha": "6f98ae554d2befdee8c5cf483ae4306e468f2c92",
+      "new_sha": "a28995c25b5575636c929b09d1f6e7c4d9b33e5c",
+      "changed_files": [
+        "docs/CONNECTION_V2_RELAY_RESOURCE_BUDGETS_20261104.md",
+        "src/relay/server.ts",
+        "test/relay-resource-budgets.test.ts"
+      ],
+      "source_branches_written": false
+    },
+    {
+      "pr": 1084,
+      "old_sha": "188f5bfedeafd8c326eae523d05f0d1718704ce4",
+      "new_sha": "f4f80a76a186e84433ae4be6aed829a21d990a0c",
+      "changed_files": [
+        "docs/connection-v2/windows-recovery-acceptance.md",
+        "src/hub/hub-lifecycle.ts",
+        "test/cloudflare-connection-lifecycle.test.ts"
+      ],
+      "source_branches_written": false
+    },
+    {
+      "pr": 1003,
+      "old_sha": "17b699084ad90cc929db83b5942eed812e80cd83",
+      "new_sha": "f1e5a5e4cadad8a276f7193932caf05f84196044",
+      "changed_files": [
+        "src/mcp/http.ts",
+        "src/mcp/local-first-ingress.ts",
+        "test/cloudflare-agent-upgrade.test.ts",
+        "docs/connection-v2/v2-03-mcp-oauth-acceptance.md",
+        "test/v2-03-mandatory-remote-authorization.test.ts"
+      ],
+      "source_branch_modified": false,
+      "release_gate": "DRAFT_NO_GO",
+      "notes": "Mandatory remote-only strict broker, owner/device/epoch/lease binding and tests. Legacy backend deviceId-only rejected; atomic revocation/send remains unresolved."
+    }
+  ],
+  "integrated_negative_ci": {
+    "linux": {
+      "job": "test",
+      "matrix_node_versions": [
+        22,
+        24
+      ],
+      "status": "PENDING_NEXT_HEAD"
+    },
+    "windows": {
+      "job": "connection-v2-negative-windows",
+      "matrix_node_versions": [
+        22,
+        24
+      ],
+      "status": "PENDING_NEXT_HEAD"
+    },
+    "windows_original": {
+      "job": "browser-live",
+      "node_version": 24,
+      "status": "PENDING_NEXT_HEAD"
+    },
+    "fail_closed": true,
+    "clean10_windows": {
+      "job": "connection-v2-clean10-windows",
+      "node_versions": [
+        22,
+        24
+      ],
+      "status": "NOT_RUN"
+    },
+    "clean10_linux": {
+      "test_glob": "test/clean-10/*.test.ts",
+      "node_versions": [
+        22,
+        24
+      ],
+      "status": "NOT_RUN"
+    }
+  },
+  "previous_candidate_ci_browser_stage": {
+    "sha": "aa4fc209ac4fd8486bf4dd68b65238a9f0584994",
+    "run_id": 41830183272,
+    "job_id": 126575061350,
+    "status": "FAILURE",
+    "blocker": "sequential Windows negative gate failed before original browser-live Cloudflared tests, now separated"
+  },
+  "candidate_only_security_change": {
+    "status": "UNVALIDATED_OWNER_REVIEW_REQUIRED",
+    "files": [
+      "src/mcp/http.ts",
+      "src/hub/agent-websocket.ts",
+      "src/core/agent-broker.ts"
+    ],
+    "implemented": [
+      "Strict Broker attestation required before public Hub listen",
+      "Remote Agent HTTP 101 rejects missing or legacy device-only identity grant",
+      "Bound owner/device/epoch/expiry verifier required per WebSocket mutation",
+      "Revoked, expired and callback-unavailable authority fails closed"
+    ],
+    "remaining": [
+      "Authoritative backend currently returns legacy deviceId-only; public remote admission intentionally denied",
+      "Final revocation versus socket send race lacks atomic effect fence",
+      "External OAuth and production two-device tests NOT_RUN"
+    ]
+  },
+  "latest_adversarial_evidence": {
+    "sha": "89d9c336e8a6587069f32a4ea00befbb649692ca",
+    "ci": 41834121454,
+    "linux_node24": {
+      "job": 126588539754,
+      "status": "success",
+      "negative_cases": "60/60_PASS"
+    },
+    "linux_node22": {
+      "job": 126588540068,
+      "status": "success"
+    },
+    "windows_node22": {
+      "job": 126588540209,
+      "status": "failure",
+      "remaining": "AI11 P1-B publisher"
+    },
+    "windows_node24": {
+      "job": 126588540133,
+      "status": "failure",
+      "remaining": "AI11 P1-B publisher"
+    },
+    "relay": {
+      "run": 41834121413,
+      "status": "success",
+      "jobs": "4/4"
+    },
+    "current_release": "NO_GO"
+  },
+  "windows_disposable_vm_evidence": {
+    "sha": "e9e598dbf689cb4e063ce5b5d4ce430ef7e58804",
+    "run": 41833352347,
+    "job": 126585876171,
+    "cycles_pass": 20,
+    "cycles_total": 20,
+    "pid_create_time_parent_child_grandchild": true,
+    "cleanup": "PASS",
+    "reboot": "NOT_RUN",
+    "rollback": "NOT_RUN",
+    "cloudflared_windows_security": "FAIL"
+  },
+  "native_git_dag_evidence": {
+    "status": "NEW_EXACT_SHA_NOT_RUN",
+    "workflow_job": "connection-v2-native-git-dag",
+    "checkout": "EXACT_HEAD_FULL_HISTORY",
+    "commands": [
+      "git merge-base",
+      "git cherry -v",
+      "git patch-id --stable",
+      "git merge-tree --write-tree --messages",
+      "git rev-parse"
+    ],
+    "artifact": "connection-v2-native-git-dag.json",
+    "source_matrix_rows": 78,
+    "prior_sha": "e3384c89001f49ca1a525ff04639752b23f35c6a",
+    "prior_run": 41835856330,
+    "prior_job": 126594742469,
+    "prior_exit": 0,
+    "prior_merge_tree_exit": 0,
+    "prior_git_cherry_entries": 110,
+    "prior_patch_id_exit": 0,
+    "prior_source_blobs": 54,
+    "prior_candidate_blobs": 54,
+    "clean10_merge_tree": "NOT_RUN",
+    "matrix_rows": 78
+  },
+  "last_completed_candidate": {
+    "sha": "06a3d58fa0c7b98764b2aaaa9cb5a6d16651dffb",
+    "base_main": "939b4d6beecf996f2750c736c5d4b4beb7b64488",
+    "ci": {
+      "run_id": 41836378207,
+      "status": "completed",
+      "conclusion": "failure",
+      "failed_job": "browser-live",
+      "failed_job_id": 126596782011,
+      "failed_test_count": 4,
+      "names": [
+        "CLEAN-13 P1-D Windows exact SID/inherited ACE/parent replacement",
+        "CLEAN-13 P1-B Windows official image native custodian",
+        "Hosted disposable Windows foreign Scheduled Task action refusal token",
+        "Checksum/tunnel credential identity test expectation superseded by earlier publisher fail-closed guard"
+      ]
+    },
+    "git_dag": {
+      "run_id": 41836378207,
+      "job_id": 126596782124,
+      "conclusion": "success",
+      "merge_tree_exit": 0,
+      "git_patch_id_exit": 0,
+      "git_cherry_entries": 111,
+      "source_blobs_pass": 54,
+      "candidate_blobs_pass": 54
+    },
+    "relay": {
+      "run_id": 41836378051,
+      "conclusion": "success",
+      "matrix_jobs_success": 4
+    },
+    "release_readiness": {
+      "run_id": 41836378072,
+      "conclusion": "success",
+      "note": "Packaging/build readiness is not security authorization"
+    }
+  },
+  "loopback_authenticated_wss_load": {
+    "status": "PASS_LOOPBACK_ONLY",
+    "source_sha": "06a3d58fa0c7b98764b2aaaa9cb5a6d16651dffb",
+    "bench_samples": {
+      "ubuntu-node22": {
+        "run_id": 41836378051,
+        "job_id": 126596238699,
+        "environment": {
+          "platform": "linux",
+          "arch": "x64",
+          "node": "v22.23.4",
+          "runner": "GitHub Actions 1000215493"
+        },
+        "source_sha": "06a3d58fa0c7b98764b2aaaa9cb5a6d16651dffb",
+        "metrics_classification": "WHOLE_PROCESS_LOOPBACK_ONLY_NOT_PROVIDER_EGRESS",
+        "samples": [
+          {
+            "attempted": 101,
+            "admitted": 101,
+            "acks": 101,
+            "refused_503": 0,
+            "p95_completion_ms": 12.257,
+            "p99_completion_ms": 12.259,
+            "peak_process_rss_bytes": 149348352,
+            "cpu_one_core_percent": 112.27,
+            "application_bytes": 27665,
+            "verified_file_bytes": 0,
+            "gigabyte_transfer": "NOT_RUN"
+          },
+          {
+            "attempted": 128,
+            "admitted": 128,
+            "acks": 128,
+            "refused_503": 0,
+            "p95_completion_ms": 14.632,
+            "p99_completion_ms": 14.668,
+            "peak_process_rss_bytes": 170840064,
+            "cpu_one_core_percent": 118.67,
+            "application_bytes": 35090,
+            "verified_file_bytes": 0,
+            "gigabyte_transfer": "NOT_RUN"
+          },
+          {
+            "attempted": 129,
+            "admitted": 128,
+            "acks": 128,
+            "refused_503": 1,
+            "p95_completion_ms": 13.013,
+            "p99_completion_ms": 13.041,
+            "peak_process_rss_bytes": 172335104,
+            "cpu_one_core_percent": 124.08,
+            "application_bytes": 35090,
+            "verified_file_bytes": 0,
+            "gigabyte_transfer": "NOT_RUN"
+          },
+          {
+            "attempted": 256,
+            "admitted": 128,
+            "acks": 128,
+            "refused_503": 128,
+            "p95_completion_ms": 11.591,
+            "p99_completion_ms": 11.607,
+            "peak_process_rss_bytes": 184373248,
+            "cpu_one_core_percent": 115.78,
+            "application_bytes": 35090,
+            "verified_file_bytes": 0,
+            "gigabyte_transfer": "NOT_RUN"
+          }
+        ]
+      },
+      "ubuntu-node24": {
+        "run_id": 41836378051,
+        "job_id": 126596238157,
+        "environment": {
+          "platform": "linux",
+          "arch": "x64",
+          "node": "v24.22.2",
+          "runner": "GitHub Actions 1000215492"
+        },
+        "source_sha": "06a3d58fa0c7b98764b2aaaa9cb5a6d16651dffb",
+        "metrics_classification": "WHOLE_PROCESS_LOOPBACK_ONLY_NOT_PROVIDER_EGRESS",
+        "samples": [
+          {
+            "attempted": 101,
+            "admitted": 101,
+            "acks": 101,
+            "refused_503": 0,
+            "p95_completion_ms": 7.646,
+            "p99_completion_ms": 7.655,
+            "peak_process_rss_bytes": 152612864,
+            "cpu_one_core_percent": 113.32,
+            "application_bytes": 27665,
+            "verified_file_bytes": 0,
+            "gigabyte_transfer": "NOT_RUN"
+          },
+          {
+            "attempted": 128,
+            "admitted": 128,
+            "acks": 128,
+            "refused_503": 0,
+            "p95_completion_ms": 9.786,
+            "p99_completion_ms": 9.799,
+            "peak_process_rss_bytes": 160497664,
+            "cpu_one_core_percent": 122.88,
+            "application_bytes": 35090,
+            "verified_file_bytes": 0,
+            "gigabyte_transfer": "NOT_RUN"
+          },
+          {
+            "attempted": 129,
+            "admitted": 128,
+            "acks": 128,
+            "refused_503": 1,
+            "p95_completion_ms": 12.254,
+            "p99_completion_ms": 12.262,
+            "peak_process_rss_bytes": 171905024,
+            "cpu_one_core_percent": 114.53,
+            "application_bytes": 35090,
+            "verified_file_bytes": 0,
+            "gigabyte_transfer": "NOT_RUN"
+          },
+          {
+            "attempted": 256,
+            "admitted": 128,
+            "acks": 128,
+            "refused_503": 128,
+            "p95_completion_ms": 10.401,
+            "p99_completion_ms": 10.445,
+            "peak_process_rss_bytes": 190455808,
+            "cpu_one_core_percent": 116.23,
+            "application_bytes": 35090,
+            "verified_file_bytes": 0,
+            "gigabyte_transfer": "NOT_RUN"
+          }
+        ]
+      },
+      "windows-node22": {
+        "run_id": 41836378051,
+        "job_id": 126596238586,
+        "environment": {
+          "platform": "win32",
+          "arch": "x64",
+          "node": "v22.23.4",
+          "runner": "GitHub Actions 1000215494"
+        },
+        "source_sha": "06a3d58fa0c7b98764b2aaaa9cb5a6d16651dffb",
+        "metrics_classification": "WHOLE_PROCESS_LOOPBACK_ONLY_NOT_PROVIDER_EGRESS",
+        "samples": [
+          {
+            "attempted": 101,
+            "admitted": 101,
+            "acks": 101,
+            "refused_503": 0,
+            "p95_completion_ms": 11.167,
+            "p99_completion_ms": 11.196,
+            "peak_process_rss_bytes": 120221696,
+            "cpu_one_core_percent": 109.87,
+            "application_bytes": 27665,
+            "verified_file_bytes": 0,
+            "gigabyte_transfer": "NOT_RUN"
+          },
+          {
+            "attempted": 128,
+            "admitted": 128,
+            "acks": 128,
+            "refused_503": 0,
+            "p95_completion_ms": 14.599,
+            "p99_completion_ms": 14.613,
+            "peak_process_rss_bytes": 140402688,
+            "cpu_one_core_percent": 105.67,
+            "application_bytes": 35090,
+            "verified_file_bytes": 0,
+            "gigabyte_transfer": "NOT_RUN"
+          },
+          {
+            "attempted": 129,
+            "admitted": 128,
+            "acks": 128,
+            "refused_503": 1,
+            "p95_completion_ms": 12.807,
+            "p99_completion_ms": 12.819,
+            "peak_process_rss_bytes": 140247040,
+            "cpu_one_core_percent": 138.26,
+            "application_bytes": 35090,
+            "verified_file_bytes": 0,
+            "gigabyte_transfer": "NOT_RUN"
+          },
+          {
+            "attempted": 256,
+            "admitted": 128,
+            "acks": 128,
+            "refused_503": 128,
+            "p95_completion_ms": 14.469,
+            "p99_completion_ms": 14.48,
+            "peak_process_rss_bytes": 160022528,
+            "cpu_one_core_percent": 102.06,
+            "application_bytes": 35090,
+            "verified_file_bytes": 0,
+            "gigabyte_transfer": "NOT_RUN"
+          }
+        ]
+      },
+      "windows-node24": {
+        "run_id": 41836378051,
+        "job_id": 126596238471,
+        "environment": {
+          "platform": "win32",
+          "arch": "x64",
+          "node": "v24.22.2",
+          "runner": "GitHub Actions 1000215495"
+        },
+        "source_sha": "06a3d58fa0c7b98764b2aaaa9cb5a6d16651dffb",
+        "metrics_classification": "WHOLE_PROCESS_LOOPBACK_ONLY_NOT_PROVIDER_EGRESS",
+        "samples": [
+          {
+            "attempted": 101,
+            "admitted": 101,
+            "acks": 101,
+            "refused_503": 0,
+            "p95_completion_ms": 12.658,
+            "p99_completion_ms": 12.722,
+            "peak_process_rss_bytes": 129867776,
+            "cpu_one_core_percent": 118.1,
+            "application_bytes": 27665,
+            "verified_file_bytes": 0,
+            "gigabyte_transfer": "NOT_RUN"
+          },
+          {
+            "attempted": 128,
+            "admitted": 128,
+            "acks": 128,
+            "refused_503": 0,
+            "p95_completion_ms": 13.211,
+            "p99_completion_ms": 13.219,
+            "peak_process_rss_bytes": 144510976,
+            "cpu_one_core_percent": 106.38,
+            "application_bytes": 35090,
+            "verified_file_bytes": 0,
+            "gigabyte_transfer": "NOT_RUN"
+          },
+          {
+            "attempted": 129,
+            "admitted": 128,
+            "acks": 128,
+            "refused_503": 1,
+            "p95_completion_ms": 14.061,
+            "p99_completion_ms": 14.068,
+            "peak_process_rss_bytes": 149688320,
+            "cpu_one_core_percent": 110.65,
+            "application_bytes": 35090,
+            "verified_file_bytes": 0,
+            "gigabyte_transfer": "NOT_RUN"
+          },
+          {
+            "attempted": 256,
+            "admitted": 128,
+            "acks": 128,
+            "refused_503": 128,
+            "p95_completion_ms": 18.08,
+            "p99_completion_ms": 18.086,
+            "peak_process_rss_bytes": 176656384,
+            "cpu_one_core_percent": 112.25,
+            "application_bytes": 35090,
+            "verified_file_bytes": 0,
+            "gigabyte_transfer": "NOT_RUN"
+          }
+        ]
+      }
+    },
+    "server_only_memory": "NOT_MEASURED",
+    "real_provider_egress": "NOT_RUN",
+    "real_off_network_101_authenticated_wss": "NOT_RUN",
+    "verified_transfer_1gib": "NOT_RUN",
+    "soak_24h": "NOT_RUN",
+    "provider_cost": "NOT_RUN",
+    "provider_hard_stop": "NOT_RUN"
+  },
+  "source_refresh_exact_head_ci": "PENDING",
+  "release_gate_decision": "NO_GO",
+  "p1b_windows_signer_diagnostic": {
+    "status": "NOT_RUN_ON_NEW_EXACT_SHA",
+    "run_id": null,
+    "job_id": null,
+    "property": "NEXOWIRE_P1B_WINDOWS_SIGNATURE_DIAGNOSTIC",
+    "fields": [
+      "status",
+      "signerPresent",
+      "signerSubjectMatchesCloudflare",
+      "independentlyPinnedSha256",
+      "nativeHandleBoundCustodian"
+    ],
+    "note": "Observation only. Does not relax publisher verification or alter original negative test assertions.",
+    "sensitive_values_printed": false
+  },
+  "integration_clean10_parent": "3fe8a64517f0213151e7f3f154d4fed0bbff08a2",
+  "clean10_integration": {
+    "source_pr": 1075,
+    "source_sha": "05a99388c377caa0781fb5a2c257ea1f9b92e5df",
+    "source_paths": 9,
+    "source_git_blobs_exact": 9,
+    "semantics": "CLEAN-10 mutations preserve same operationId across MCP error/idempotency responses",
+    "runbook_duplicate_mutation": "MUST_PASS_NEGATIVE_ORACLE_BEFORE_GO",
+    "historical_qa18_synthetic_pass_means_safe": false,
+    "red_assertion": "test/clean-10/runbook-unknown-acceptance-red.test.ts",
+    "source_ci": "NO_MATCHING_CI_RUN",
+    "candidate_ci": "NOT_RUN"
+  },
+  "authoritative_release_gate": {
+    "version": "ROUND2",
+    "decision": "NO_GO",
+    "source_prs": [
+      1003,
+      1044,
+      1074,
+      1075,
+      1077,
+      1081,
+      1083,
+      1084
+    ],
+    "source_rows": 78,
+    "exact_blobs": 64,
+    "merged_rows": 4,
+    "evolved_rows": 10,
+    "owner_approvals": "NOT_RECEIVED",
+    "true_offnetwork_mcp": "NOT_RUN",
+    "provider_cost": "NOT_RUN",
+    "full_ci": "NOT_RUN_NEW_SHA",
+    "production_authorized": false
+  },
+  "integration_round2": {
+    "source_heads": {
+      "1003": "17b699084ad90cc929db83b5942eed812e80cd83",
+      "1044": "48704c908636383d63e6284082f167f1909124d0",
+      "1074": "6b00db5bb24e537a6d1c494b3459080a8af3f943",
+      "1075": "05a99388c377caa0781fb5a2c257ea1f9b92e5df",
+      "1077": "384c05276d2c0116ee13f7b70d6709cdb478f887",
+      "1081": "a28995c25b5575636c929b09d1f6e7c4d9b33e5c",
+      "1083": "136627e161872f534dfc30242e59223b378dce09",
+      "1084": "f4f80a76a186e84433ae4be6aed829a21d990a0c"
+    },
+    "source_rows": 73,
+    "unique_source_paths": 65,
+    "security_review": "PENDING",
+    "offnetwork_oauth": "NOT_RUN",
+    "windows_p1b_p1d": "NOT_ACCEPTED",
+    "clean10_cross_runbook": "NOT_RUN",
+    "two_pc_v2": "NOT_RUN",
+    "reboot_rollback": "NOT_RUN",
+    "provider_egress_cost": "NOT_RUN",
+    "soak_24h": "NOT_RUN",
+    "previous_exact_sha": "5c2155f259798f71f352482c4cddc87b3e156b0e",
+    "previous_ci": {
+      "run_id": 41853910953,
+      "status": "IN_PROGRESS_AT_OBSERVATION",
+      "native_dag": {
+        "job_id": 126657229931,
+        "exit_code": 0,
+        "source_blobs": "73/73",
+        "candidate_blobs": "73/73",
+        "cherry_entries": 148
+      },
+      "clean10_windows22": {
+        "job_id": 126657230114,
+        "conclusion": "failure"
+      },
+      "clean10_windows24": {
+        "job_id": 126657229916,
+        "conclusion": "failure"
+      },
+      "round2_windows22": {
+        "job_id": 126657230093,
+        "conclusion": "failure"
+      },
+      "round2_windows24": {
+        "job_id": 126657230145,
+        "conclusion": "failure"
+      },
+      "browser_live": {
+        "job_id": 126657230375,
+        "status": "IN_PROGRESS"
+      }
+    },
+    "relay": {
+      "run_id": 41853910766,
+      "success": 4,
+      "total": 4
+    },
+    "mandatory_clean10_no_replay": "FAILURE_PREVIOUS_SHA",
+    "windows_round2_p1b_p1d": "FAILURE_PREVIOUS_SHA",
+    "full_ci": "NOT_RUN_NEW_SHA"
+  },
+  "live_source_heads_round3": {
+    "1003": "17b699084ad90cc929db83b5942eed812e80cd83",
+    "1044": "e431f6854e743982475fc513295881ed16a7fe92",
+    "1074": "6b00db5bb24e537a6d1c494b3459080a8af3f943",
+    "1075": "05a99388c377caa0781fb5a2c257ea1f9b92e5df",
+    "1077": "31fc77e7076ca9be255e71059478b0dec3a6e299",
+    "1081": "a28995c25b5575636c929b09d1f6e7c4d9b33e5c",
+    "1083": "2b2a1b7e4199705a78a4a8ca4d19e6aca7d7cca3",
+    "1084": "f4f80a76a186e84433ae4be6aed829a21d990a0c"
+  },
+  "round3_clean10": {
+    "baseline_head": "206615686c249a11c10498d1b809d87789ef69ad",
+    "pending_exact_head": "NOT_PUSHED_AT_DOC_AUTHORING",
+    "critical_problem": "MUTATION_STATE_UNKNOWN downgraded to FAILED and cloned runbook bypassed per-ID graph",
+    "mitigation": "O_EXCL owner/device-scoped semantic fingerprint reservation before dispatch; durable UNKNOWN; authenticated intent verifier contract",
+    "original_clean10_test_sha": "720565cf8821f9ceea9e5ca6101c0213558a1c09",
+    "same_payload_cloned_id": "PENDING_EXACT_HEAD_CI",
+    "restart_concurrency_corruption": "PENDING_EXACT_HEAD_CI",
+    "windows_qa02": "BUILD_JOB_HELPER_BEFORE_TEST",
+    "windows_job_owner_executable_missing_prior_error": "WINDOWS_JOB_HELPER_UNAVAILABLE",
+    "historical_qa18": "unsafe positive oracle strengthened into safe regression",
+    "source_frozen_heads": {
+      "1003": "17b699084ad90cc929db83b5942eed812e80cd83",
+      "1044": "48704c908636383d63e6284082f167f1909124d0",
+      "1074": "6b00db5bb24e537a6d1c494b3459080a8af3f943",
+      "1075": "05a99388c377caa0781fb5a2c257ea1f9b92e5df",
+      "1077": "384c05276d2c0116ee13f7b70d6709cdb478f887",
+      "1081": "a28995c25b5575636c929b09d1f6e7c4d9b33e5c",
+      "1083": "136627e161872f534dfc30242e59223b378dce09",
+      "1084": "f4f80a76a186e84433ae4be6aed829a21d990a0c"
+    },
+    "source_live_diffs": "1044/1077/1083 HEADS MOVED; not yet integrated; source preservation checks pinned original SHA",
+    "source_owner_signoff": "PENDING",
+    "production_owner_receipt_provider": "NOT_WIRED",
+    "windows_journal_sid_dacl_acceptance": "NOT_RUN",
+    "physical_staging": "NOT_RUN",
+    "final_decision": "NO_GO"
+  },
+  "round4_security_sources": {
+    "base_sha": "ebc8029d15a948a4e3a0003df1301e6b21f47a77",
+    "source_heads": {
+      "1044": "b7c39dbdade38a0a1cf3a69299b1d9677cf0a5e9",
+      "1077": "b0bdfbced25364ad26473c24bb23f9d5cf249805",
+      "1083": "20d4252eb10223a2c134aa25bba5107ed6a884f9"
+    },
+    "source_new_paths": [
+      "native/windows-cloudflared-image-probe.c",
+      "scripts/build-windows-cloudflared-image-probe.ps1",
+      "test/clean13-cloudflared-windows-image-probe.test.ts",
+      "docs/security/CLEAN13_WINDOWS_PRODUCTION_LAUNCH_R4.md",
+      "scripts/audit-clean13-windows-launch-readiness.ps1"
+    ],
+    "source_negative_original_names_preserved": {
+      "1044": 6,
+      "1077": 3,
+      "1083": 7
+    },
+    "source_negative_new_cases": {
+      "1044": 1,
+      "1077": 1,
+      "1083": 3
+    },
+    "public_agent_require_strict": true,
+    "native_probe": "DISPOSABLE_CI_ONLY_CREATE_SUSPENDED_NEVER_RESUMED",
+    "official_win32_sha_pinned": "4d2490e74082c5d48dbfedaf92576fa5bd1702379ab88eb7faa0cfbe8dc891b6",
+    "source_pr1077_ci_run": 41989954395,
+    "source_pr1077_ci_conclusion": "FAILURE",
+    "prior_candidate": {
+      "sha": "ebc8029d15a948a4e3a0003df1301e6b21f47a77",
+      "ci": 41991273960,
+      "result": "FAILURE",
+      "browser_live_job": 127123830970,
+      "result_detail": "P1-D credential custody RED",
+      "clean10_node22": "PASS",
+      "clean10_node24": "PASS",
+      "relay_run": 41991273873,
+      "relay_result": "SUCCESS_4_OF_4",
+      "release_readiness": 41991273889,
+      "release_readiness_result": "SUCCESS",
+      "git_dag_job": 127123831304,
+      "source_blobs_pass": 73,
+      "candidate_blobs_pass": 73
+    },
+    "new_exact_sha": "PENDING_CANDIDATE_COMMIT",
+    "new_exact_ci": "NOT_RUN",
+    "p1b_windows_production_launcher": "NOT_APPROVED",
+    "p1d_positive_fixture": "PENDING_EXACT_SHA_WINDOWS_RUN",
+    "semantic_owner_reviews": "PENDING",
+    "off_network": "NOT_RUN",
+    "reboot_rollback": "NOT_RUN",
+    "provider_quota_cost": "NOT_RUN",
+    "final_decision": "NO_GO",
+    "production_launch_architecture": "ARCHITECTURE_ONLY_WDAC_UMCI_AND_SIGNED_LAUNCHER_NOT_IMPLEMENTED",
+    "read_only_inspector": "INTEGRATED_IN_DISPOSABLE_WINDOWS_CI",
+    "native_winverifytrust_held_source": "INTEGRATED_TEST_ONLY",
+    "p1b_windows_launch_authorization": "NO_GO"
+  },
+  "ai05_combined_candidate": {
+    "main_sha": "939b4d6beecf996f2750c736c5d4b4beb7b64488",
+    "core_sha": "6241b05a798b8dc684ab8a9caf762896fbf1f3f0",
+    "connection_sha": "44e7b3424c578515b70abdfe68b6a101cc0b2e5a",
+    "cloudflared_security_sha": "f49fbc070cd27a8c6b4c1d3f576484f95a3f14a8",
+    "combined_files": [
+      ".github/workflows/ci.yml",
+      "src/agent/native-agent.ts"
+    ],
+    "security_refreshed": [
+      "native/windows-cloudflared-image-probe.c",
+      "test/clean13-cloudflared-windows-image-probe.test.ts"
+    ],
+    "source_matrix_candidate_rows_updated": 5,
+    "exact_sha_ci": "PENDING",
+    "ai06": "PENDING",
+    "production": "NO_GO",
+    "physical_devices_touched": false
+  },
+  "ai05_round2": {
+    "frozen_sources": {
+      "PR1088": "2d2b9e7dd946c91f1ff63d50feab953ef47b464e",
+      "PR1087": "7a580104def439e217fe1facb27334c78c29f3e7",
+      "PR1086": "1b85b2c25d1822e10269bd49188bd667fd225408",
+      "PR1067": "bcfe563cc1ea7f884263c113ad269c1e8f6bcd6e",
+      "PR1077": "6f98aa94b5bc1a217576666317039254ee7e1c09"
+    },
+    "previous_head": "37fc9163e2b7ccd93600ee23b63f19d4e44ddb77",
+    "migration_sequence": [
+      "0020",
+      "0021",
+      "0022"
+    ],
+    "production": "NO_GO",
+    "physical_deploy": false,
+    "external_atomic_authority": "MISSING",
+    "signed_json_only_rollback_guard": "MISSING",
+    "new_ci": "NOT_RUN"
+  }
+}

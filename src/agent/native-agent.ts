@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { executeTrustedNativeMutation, type TrustedNativeMutationProvider } from './native-atomic-effect-admission.js';
+import {setTimeout as sleep} from 'node:timers/promises';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -22,16 +24,26 @@ import {
   fingerprintAgentRequest,
 } from './request-cache.js';
 import { AgentOperationJournal } from './operation-journal.js';
+import {verifyAgentJournalWal} from './operation-journal-wal.js';
+import {RemoteMutationCasClient,MutationCasError} from './remote-mutation-cas.js';
 import { PrivilegedBrokerClient } from './privileged-broker-client.js';
 import { loadOrCreatePrivilegedBrokerToken } from '../security/privileged-broker-secret.js';
-import { resolveProtectedSingleSecret } from '../security/protected-secret-files.js';
+import { resolveProtectedSingleSecret,inspectProtectedSecretFile } from '../security/protected-secret-files.js';
+import {verifyWindowsPrivateAcl} from '../security/windows-programdata-acl.js';
+import {assertWindowsPrivilegedRuntimeTrusted,assertNoPrivilegedNodeStartupFlags} from '../security/windows-privileged-runtime-trust.js';
 import { optionalPlatformSecretSync } from '../security/platform-secret-store.js';
 import { NEXOWIRE_VERSION } from '../version.js';
 import { acquireNativeAgentSingleton } from './native-agent-singleton.js';
-import {createWindowsCoreConsoleAdmission} from './windows-core-console-provider.js';
+import {createWindowsCoreConsoleAdmission, type NativeCoreConsentAuthority} from './windows-core-console-provider.js';
 import {revokePhysicalConsoleGrant} from './windows-console-grant.js';
 import {initializeNativeAgentState} from './native-agent-startup-diagnostic.js';
-import {verifyAgentJournalWal} from './operation-journal-wal.js';
+import {
+  getWindowsPreloginAgentMode,
+  assertWindowsPreloginStartupConfiguration,
+  filterWindowsPreloginCapabilities,
+  preloginBootstrapAllowsCapability,
+} from './windows-prelogin-bootstrap.js';
+
 
 export interface AgentIdentity {
   id: string;
@@ -147,9 +159,78 @@ export function parseHubEndpoints(
     if (seen.has(normalized)) continue;
     seen.add(normalized);
     endpoints.push(normalized);
+    if (endpoints.length > 8) {
+      throw new Error('At most eight distinct Hub endpoints are allowed.');
+    }
   }
 
   return endpoints;
+}
+
+
+/**
+ * Retry policy is for the transport ONLY. A new WebSocket never authorizes a
+ * previously dispatched mutation, and 60-second session revalidation cannot
+ * replace dispatch-time authorization.
+ */
+export type HubReconnectFailure = {
+  httpStatus?: number;
+  wsCloseCode?: number;
+  errorCode?: string;
+};
+export interface HubReconnectDecision {
+  retryable: boolean;
+  minimumDelayMs: number;
+  reason: 'transient' | 'overloaded' | 'reauthorization_required' | 'protocol_rejected';
+}
+/** Parse the exact ws HTTP upgrade rejection used by the runtime reconnect loop. */
+export function parseHubHandshakeStatus(errorMessage:string): number | undefined {
+  const match=/Unexpected server response:\s*(\d{3})/i.exec(errorMessage);
+  return match ? Number(match[1]) : undefined;
+}
+
+export function classifyHubReconnectFailure(input: HubReconnectFailure): HubReconnectDecision {
+  const status = input.httpStatus;
+  if (status === 401 || status === 403) {
+    return {retryable: false, minimumDelayMs: 0, reason: 'reauthorization_required'};
+  }
+  if (status === 429) {
+    return {retryable: true, minimumDelayMs: 5_000, reason: 'overloaded'};
+  }
+  if (status !== undefined && status >= 400 && status < 500) {
+    return {retryable: false, minimumDelayMs: 0, reason: 'protocol_rejected'};
+  }
+  if (input.wsCloseCode === 1008 || input.wsCloseCode === 4001) {
+    return {retryable: false, minimumDelayMs: 0, reason: 'reauthorization_required'};
+  }
+  if ([1002, 1003, 1007, 1009].includes(input.wsCloseCode ?? -1)) {
+    return {retryable: false, minimumDelayMs: 0, reason: 'protocol_rejected'};
+  }
+  if (input.errorCode && [
+    'ERR_TLS_CERT_ALTNAME_INVALID', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+    'DEPTH_ZERO_SELF_SIGNED_CERT', 'CERT_HAS_EXPIRED',
+  ].includes(input.errorCode)) {
+    return {retryable: false, minimumDelayMs: 0, reason: 'protocol_rejected'};
+  }
+  if (input.wsCloseCode === 1013 || status === 503) {
+    return {retryable: true, minimumDelayMs: 5_000, reason: 'overloaded'};
+  }
+  // 1006/1011, 5xx, DNS loss, route changes and TCP half-open can recover.
+  return {retryable: true, minimumDelayMs: 0, reason: 'transient'};
+}
+
+/** Eight short failures maximum per burst; then a 30s cooldown, not a spin. */
+export function boundHubRetryWait(input: {
+  scheduledMs: number;
+  consecutiveFailures: number;
+  minimumDelayMs?: number;
+}): number {
+  const requested = Math.max(
+    input.scheduledMs,
+    input.minimumDelayMs ?? 0,
+    input.consecutiveFailures >= 8 ? 30_000 : 0,
+  );
+  return Math.min(30_000, Math.max(250, Math.ceil(requested)));
 }
 
 export interface NextHubAttempt {
@@ -213,9 +294,22 @@ export function planNextHubAttempt(input: {
   };
 }
 
-function privilegeMode(
+export async function resolveNativeAgentPrivilegeMode(
   env: NodeJS.ProcessEnv,
-): 'direct' | 'broker' {
+  platform: NodeJS.Platform = process.platform,
+  probe: () => Promise<{ready:boolean}> = async () => {
+    const {probePrivilegedBrokerHealth} = await import('./privileged-broker-lifecycle.js');
+    return probePrivilegedBrokerHealth({env});
+  },
+): Promise<'direct' | 'broker'> {
+  // Older installed launchers predate the installer setting Broker mode for
+  // CORE. Discover the already installed/authenticated Broker at startup too;
+  // do not require an Agent reinstall or create a Broker/token during discovery.
+  if (env.NEXOWIRE_PRIVILEGE_MODE === undefined && platform === 'win32' &&
+      env.NEXOWIRE_CORE_AUTHORITY_URL?.trim()) {
+    try { if ((await probe()).ready === true) return 'broker'; }
+    catch { /* Optional CORE discovery must not prevent the Agent connecting. */ }
+  }
   const raw =
     env.NEXOWIRE_PRIVILEGE_MODE?.trim().toLowerCase() ??
     'direct';
@@ -352,7 +446,27 @@ export async function capabilitiesForAgent(
 
 export async function runNativeAgent(
   env: NodeJS.ProcessEnv = process.env,
+  trustedNativeMutationProvider?: TrustedNativeMutationProvider,
+  trustedCoreConsentProvider?: NativeCoreConsentAuthority,
 ): Promise<never> {
+  const preloginBootstrap=getWindowsPreloginAgentMode(env);
+  if(preloginBootstrap){
+    // No user-writable code, owner DPAPI, identity creation, or journal I/O
+    // may precede the privileged bootstrap's independent trust verification.
+    const scope=assertWindowsPreloginStartupConfiguration(env);
+    assertNoPrivilegedNodeStartupFlags(process.execArgv);
+    assertWindowsPrivilegedRuntimeTrusted({
+      executable:process.execPath,cliEntrypoint:process.argv[1]??'',env,
+    });
+    for(const trusted of [
+      path.win32.dirname(scope.root),scope.root,scope.stateRoot,
+      scope.identityFile,scope.tokenFile,
+    ]) verifyWindowsPrivateAcl(trusted);
+    const tokenEnvelope=inspectProtectedSecretFile(scope.tokenFile);
+    if(tokenEnvelope.protection!=='windows-dpapi-local-machine'||
+       tokenEnvelope.purpose!=='agent-bearer-token')
+      throw new Error('PRELOGIN_AGENT_MACHINE_DPAPI_REQUIRED');
+  }
   const identity = await loadOrCreateAgentIdentity(env);
   const instanceId = randomUUID();
   const hubEndpoints = parseHubEndpoints(env);
@@ -369,21 +483,48 @@ export async function runNativeAgent(
     env.NEXOWIRE_RUNBOOK_STATE_FILE?.trim() ||
     path.join(os.homedir(), '.nexowire', 'runbooks.json');
   const socketHeartbeatMs = heartbeatMs(env);
-  const activePrivilegeMode = privilegeMode(env);
-  const privilegedBroker = await privilegedBrokerFromEnv(
-    env,
-    activePrivilegeMode,
-  );
+  // A SYSTEM pre-login transport is restricted to machine status. It must
+  // never resolve the owner Broker or infer CORE authorization from its token.
+  const activePrivilegeMode = preloginBootstrap
+    ? 'broker' as const
+    : await resolveNativeAgentPrivilegeMode(env);
+  const privilegedBroker = preloginBootstrap
+    ? undefined
+    : await privilegedBrokerFromEnv(env,activePrivilegeMode);
   const requestCache = new AgentRequestCache<AgentResponse>();
-  const operationJournalFile=env.NEXOWIRE_AGENT_OPERATION_JOURNAL_FILE?.trim() ||
+  // Fail closed: an independently provisioned, rollback-independent authority
+  // is mandatory for native mutating agents. Never auto-create one from a
+  // potentially rolled-back journal. Operator must attest legacy migration.
+  const authorityFile=env.NEXOWIRE_AGENT_JOURNAL_AUTHORITY_FILE?.trim();
+  const authorityId=env.NEXOWIRE_AGENT_JOURNAL_AUTHORITY_ID?.trim();
+  const authorityGeneration=env.NEXOWIRE_AGENT_JOURNAL_AUTHORITY_GENERATION?.trim();
+  // A local SQLite authority may remain for migration/test compatibility,
+  // but it is NOT an anti-rollback trust root: both local DBs can roll back.
+  const localAuthority=authorityFile&&authorityId&&authorityGeneration
+    ? {file:authorityFile,authorityId,generation:authorityGeneration}
+    : undefined;
+  const operationJournalFile = env.NEXOWIRE_AGENT_OPERATION_JOURNAL_FILE?.trim() ||
     path.join(os.homedir(), '.nexowire', 'agent-operations.sqlite');
-  const operationJournal = new AgentOperationJournal(operationJournalFile);
-  const advertisedCapabilities = await capabilitiesForAgent(
-    process.platform,
-    env,
+  const operationJournal = new AgentOperationJournal(
+    operationJournalFile,
+    localAuthority?{authority:localAuthority}:{},
+  );
+  // Do not throw on missing CAS while bootstrapping: read-only diagnosis
+  // remains available. Every mutating request MUST first reserve via CAS.
+  const casEndpoint=env.NEXOWIRE_AGENT_RESERVATION_CAS_URL?.trim();
+  const casToken=env.NEXOWIRE_AGENT_RESERVATION_CAS_TOKEN?.trim();
+  const casAuthorityId=env.NEXOWIRE_AGENT_RESERVATION_CAS_AUTHORITY_ID?.trim();
+  const casEpoch=env.NEXOWIRE_AGENT_RESERVATION_CAS_EPOCH?.trim();
+  const remoteCas=casEndpoint&&casToken&&casAuthorityId&&casEpoch
+    ? new RemoteMutationCasClient({endpoint:casEndpoint,token:casToken,
+        authorityId:casAuthorityId,epoch:casEpoch,deviceId:identity.id})
+    : undefined;
+  const advertisedCapabilities = filterWindowsPreloginCapabilities(
+    await capabilitiesForAgent(process.platform,env),preloginBootstrap,
   );
 
   let stopped = false;
+  const shutdown = new AbortController();
   let currentSocket: WebSocket | undefined;
   const emitAgentEvent = (topic: string, data: unknown): void => {
     if (!currentSocket || currentSocket.readyState !== WebSocket.OPEN) return;
@@ -411,7 +552,11 @@ export async function runNativeAgent(
     },
   });
   const taskGraphs = new TaskGraphStore({ stateFile: taskGraphStateFile });
-  const runbooks = new RunbookStore({ stateFile: runbookStateFile });
+  const runbooks = new RunbookStore({
+    stateFile:runbookStateFile,
+    ownerId:os.userInfo().username,
+    deviceId:identity.id,
+  });
   // Acquire before initializing persisted worker/task state. Two installed
   // launchers using the same Windows user/device identity must never both
   // attach to the Hub or mutate the same state files.
@@ -425,6 +570,8 @@ export async function runNativeAgent(
         // Read-only connectivity must not claim mutation journal ownership.
         // The first mutation still requires begin() to verify/claim the owner
         // before markDispatched() and before any executor is called.
+        // Startup validates existing WAL without mutating recovery history.
+        // Journal initialization remains behind the trusted remote CAS reserve.
         verifyAgentJournalWal(operationJournalFile),
       ]);
       const failed = initialized.find(result => result.status === 'rejected');
@@ -432,7 +579,11 @@ export async function runNativeAgent(
       // Optional local authority construction is also part of initialization.
       // A failed constructor must not leave a live singleton and a ready marker.
       return await createWindowsCoreConsoleAdmission({deviceId:identity.id,
-        credential:token,broker:privilegedBroker,env});
+        credential:token,broker:privilegedBroker,env,
+        // A protected native Windows approval service must be injected by the
+        // trusted process composition root, never selected by a tool payload
+        // or self-proclaimed Agent environment flag.
+        trustedNativeConsent:trustedCoreConsentProvider});
     } catch (error) {
       try { operationJournal.close(); } catch { /* Preserve the original failure. */ }
       await singletonLock?.close();
@@ -452,10 +603,12 @@ export async function runNativeAgent(
   progressWatchdogTimer.unref();
   let reconnectDelay = 1_000;
   let endpointIndex = 0;
+  let consecutiveFailures = 0;
 
   const stop = (): void => {
     coreConsole.close();
     stopped = true;
+    shutdown.abort();
     clearInterval(progressWatchdogTimer);
     currentSocket?.close(1001, 'Agent shutting down');
     void processes.shutdown();
@@ -469,6 +622,9 @@ export async function runNativeAgent(
     const socket = new WebSocket(hubUrl, headers ? { headers } : undefined);
     currentSocket = socket;
     let openedAt: number | undefined;
+    let closeCode: number | undefined;
+    let httpStatus: number | undefined;
+    let transportErrorCode: string | undefined;
 
     await new Promise<void>((resolve) => {
       const requestLifetime = new AbortController();
@@ -530,9 +686,11 @@ export async function runNativeAgent(
         if (!greeted) return;
 
         socket.on('message', async (raw) => {
+          // Seal the exact incoming bytes before any authorization await.
+          const exactRequestFrame = raw.toString();
           let decoded: unknown;
           try {
-            decoded = JSON.parse(raw.toString());
+            decoded = JSON.parse(exactRequestFrame);
           } catch {
             return;
           }
@@ -547,7 +705,16 @@ export async function runNativeAgent(
               request.data.input,
               request.data.accessMode,
             );
-            response = await requestCache.run(
+            // Pre-login SYSTEM has no owner desktop. Deny even forged or
+            // hidden Hub requests BEFORE cache, CAS, journal, or executor.
+            response = preloginBootstrap &&
+              !preloginBootstrapAllowsCapability(request.data.capability)
+              ? {
+                  type:'response',requestId:request.data.requestId,ok:false,
+                  error:{code:'AGENT_PRELOGIN_CAPABILITY_UNAVAILABLE',
+                    message:'The pre-login transport accepts only bounded machine status. Sign in for owner capabilities.'},
+                }
+              : await requestCache.run(
               request.data.requestId,
               fingerprint,
               async () => {
@@ -556,6 +723,25 @@ export async function runNativeAgent(
                 // reconnect/restart cannot silently repeat a shell or write.
                 const mutation = !isReadOnlyCapability(request.data.capability);
                 if (mutation) {
+                  if(!remoteCas){
+                    throw new MutationCasError('CAS_CONFIGURATION_REQUIRED',
+                      'Remote mutation reservation unavailable; read-only access remains enabled.');
+                  }
+                  // This server stores authoritative IDs OUTSIDE the Agent's
+                  // journal+SQLite rollback domain. Network ambiguity or
+                  // service failure means NO dispatch, never blind replay.
+                  const reserved=await remoteCas.reserve(
+                    request.data.requestId,fingerprint,request.data.capability);
+                  if(!reserved.created){
+                    return {
+                      type:'response' as const,requestId:request.data.requestId,
+                      ok:false,error:{
+                        code:'AGENT_OPERATION_ALREADY_RECORDED',
+                        message:'Trusted CAS already recorded this request ID; no replay.',
+                        details:{requestId:request.data.requestId},
+                      },
+                    };
+                  }
                   const begun = await operationJournal.begin(
                     request.data.requestId,
                     fingerprint,
@@ -563,6 +749,7 @@ export async function runNativeAgent(
                   );
                   // OS incarnation readback can await a native helper. A lost
                   // socket during that wait must never admit a late mutation.
+                  // A disconnect during async OS process readback denies execution.
                   requestLifetime.signal.throwIfAborted();
                   if (!begun.created) {
                     return {
@@ -590,7 +777,7 @@ export async function runNativeAgent(
                 }
                 let outcome: AgentResponse;
                 try {
-                  const data = await executeCapability(
+                  const execute = () => executeCapability(
                     request.data.capability,
                     request.data.input,
                     policy,
@@ -610,6 +797,21 @@ export async function runNativeAgent(
                         : {}),
                     },
                   );
+                  // The local CAS/journal is NOT a substitute for authoritative
+                  // owner/device epoch + native one-time effect admission.
+                  // Opt-in mode refuses effects when the independently trusted
+                  // authority is unavailable; do not infer a grant from the wire.
+                  const data = mutation &&
+                    env.NEXOWIRE_AGENT_REQUIRE_ATOMIC_EFFECT_ADMISSION === '1'
+                    ? await executeTrustedNativeMutation({
+                        provider: trustedNativeMutationProvider,
+                        deviceId: identity.id,
+                        requestId: request.data.requestId,
+                        capability: request.data.capability,
+                        exactFrame: exactRequestFrame,
+                        signal: requestLifetime.signal,
+                      }, execute)
+                    : await execute();
                   outcome = {
                     type: 'response',
                     requestId: request.data.requestId,
@@ -703,12 +905,34 @@ export async function runNativeAgent(
         });
       });
 
-      socket.once('close', finish);
-      socket.once('error', finish);
+      socket.once('close', (code) => { closeCode = code; finish(); });
+      socket.once('error', (error: Error & {code?: string}) => {
+        transportErrorCode = error.code;
+        httpStatus = parseHubHandshakeStatus(error.message);
+        finish();
+      });
     });
 
     currentSocket = undefined;
     if (stopped) break;
+
+    const retry = classifyHubReconnectFailure({
+      ...(httpStatus !== undefined ? {httpStatus} : {}),
+      ...(closeCode !== undefined ? {wsCloseCode: closeCode} : {}),
+      ...(transportErrorCode ? {errorCode: transportErrorCode} : {}),
+    });
+    if (!retry.retryable) {
+      stopped = true;
+      shutdown.abort();
+      clearInterval(progressWatchdogTimer);
+      coreConsole.close();
+      try { await processes.shutdown(); }
+      finally {
+        operationJournal.close();
+        await singletonLock?.close();
+      }
+      throw new Error('Hub reconnect denied: ' + retry.reason + '. Manual remediation required.');
+    }
 
     const connectedMs =
       openedAt === undefined ? 0 : Date.now() - openedAt;
@@ -720,9 +944,18 @@ export async function runNativeAgent(
     });
     endpointIndex = plan.endpointIndex;
     reconnectDelay = plan.nextBackoffMs;
-    await new Promise((resolve) =>
-      setTimeout(resolve, plan.waitMs),
-    );
+    consecutiveFailures = plan.stableConnection ? 0 : consecutiveFailures + 1;
+    const waitMs = boundHubRetryWait({
+      scheduledMs: plan.waitMs,
+      minimumDelayMs: retry.minimumDelayMs,
+      consecutiveFailures,
+    });
+    try {
+      await sleep(waitMs, undefined, {signal: shutdown.signal});
+    } catch {
+      // An operator shutdown interrupts a long reconnect cooldown immediately.
+      if (!shutdown.signal.aborted) throw new Error('Reconnect delay failed.');
+    }
   }
 
   process.exit(0);

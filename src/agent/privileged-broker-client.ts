@@ -48,6 +48,8 @@ export class PrivilegedBrokerClient {
     reachable: boolean;
     elevated: boolean;
     version: string | null;
+    /** null when the Broker is unavailable or has not advertised this field. */
+    effectAdmissionConfigured?: boolean | null;
   }> {
     const controller = new AbortController();
     const timer = setTimeout(
@@ -70,12 +72,14 @@ export class PrivilegedBrokerClient {
           reachable: false,
           elevated: false,
           version: null,
+          effectAdmissionConfigured: null,
         };
       }
       const body = await response.json() as {
         ok?: boolean;
         elevated?: boolean;
         version?: unknown;
+        effectAdmissionConfigured?: unknown;
       };
       return {
         reachable: body.ok === true,
@@ -87,12 +91,17 @@ export class PrivilegedBrokerClient {
           typeof body.version === 'string'
             ? body.version
             : null,
+        effectAdmissionConfigured:
+          body.ok === true && typeof body.effectAdmissionConfigured === 'boolean'
+            ? body.effectAdmissionConfigured
+            : null,
       };
     } catch {
       return {
         reachable: false,
         elevated: false,
         version: null,
+        effectAdmissionConfigured: null,
       };
     } finally {
       clearTimeout(timer);
@@ -102,6 +111,8 @@ export class PrivilegedBrokerClient {
   async execute(
     capability: string,
     input: unknown,
+    /** Existing stable Agent operation UUID. Never manufacture a retry UUID here. */
+    operationId?: string,
   ): Promise<unknown> {
     if (privilegeRequirement(capability, input) !== 'elevated') {
       throw new PrivilegedBrokerError(
@@ -126,7 +137,10 @@ export class PrivilegedBrokerClient {
             authorization: 'Bearer ' + this.token,
             'content-type': 'application/json',
           },
-          body: JSON.stringify({ capability, input }),
+          body: JSON.stringify({
+            capability, input,
+            ...(operationId === undefined ? {} : {operation_id: operationId}),
+          }),
           signal: controller.signal,
         },
       );

@@ -19,6 +19,7 @@ test('native-agent launcher persists only safe configuration references', () => 
     NEXOWIRE_AGENT_TOKEN_DPAPI_FILE:
       "C:\\Users\\User\\Nexowire O'Brien\\agent.dpapi.json",
     NEXOWIRE_PRIVILEGE_MODE: 'broker',
+    NEXOWIRE_CORE_APPROVAL_MODE: 'local-owner',
   };
 
   const persisted = persistedNativeAgentEnvironment(env);
@@ -34,6 +35,7 @@ test('native-agent launcher persists only safe configuration references', () => 
 
   assert.match(launcher, /NEXOWIRE_HUB_WS_URL/);
   assert.match(launcher, /NEXOWIRE_AGENT_TOKEN_DPAPI_FILE/);
+  assert.match(launcher, /NEXOWIRE_CORE_APPROVAL_MODE/);
   assert.match(launcher, /O''Brien/);
   assert.match(launcher, /'agent' 'run'/);
   assert.equal(launcher.includes('NEXOWIRE_AGENT_TOKEN='), false);

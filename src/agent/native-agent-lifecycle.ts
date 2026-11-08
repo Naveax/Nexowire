@@ -45,6 +45,8 @@ const PERSISTED_ENV_NAMES = [
   'NEXOWIRE_HUB_WS_URL',
   'NEXOWIRE_HUB_WS_URLS',
   'NEXOWIRE_DEVICE_NAME',
+  'NEXOWIRE_WINDOWS_PRELOGIN_AGENT',
+  'NEXOWIRE_AGENT_IDENTITY_FILE',
   'NEXOWIRE_ALLOWED_ROOTS',
   'NEXOWIRE_STATE_DIR',
   'NEXOWIRE_PROCESS_STATE_FILE',
@@ -55,6 +57,7 @@ const PERSISTED_ENV_NAMES = [
   'NEXOWIRE_AGENT_HEARTBEAT_MS',
   'NEXOWIRE_AGENT_TOKEN_FILE',
   'NEXOWIRE_CORE_AUTHORITY_URL',
+  'NEXOWIRE_CORE_APPROVAL_MODE',
   'NEXOWIRE_AGENT_TOKEN_DPAPI_FILE',
   'NEXOWIRE_AGENT_TOKEN_PLATFORM_NAME',
   'NEXOWIRE_PRIVILEGE_MODE',
@@ -93,6 +96,8 @@ export interface NativeAgentLifecycleOptions {
   windowsTaskName?: string;
   /** Fixed, bundled native Job guardian; used for installed Windows task only. */
   windowsTaskJobOwnerPath?: string;
+  /** Only for protected pre-login Agent: keep Job status markers in machine-owned state, not installation root. */
+  windowsTaskJobStatusDir?: string;
   linuxUnitName?: string;
   macLabel?: string;
   uid?: number;
@@ -308,11 +313,16 @@ export function buildNativeAgentLauncher(
       if (!path.win32.isAbsolute(options.windowsTaskJobOwnerPath)) {
         throw new Error('NATIVE_AGENT_TASK_JOB_HELPER_PATH_UNCONFIRMED');
       }
+      const statusDir=options.windowsTaskJobStatusDir;
+      if(statusDir && (!path.win32.isAbsolute(statusDir) ||
+          statusDir.startsWith('\\\\') || statusDir.startsWith('\\\\?\\'))){
+        throw new Error('NATIVE_AGENT_TASK_JOB_STATUS_PATH_UNTRUSTED');
+      }
       lines.push(
         '# NEXOWIRE_AGENT_TASK_JOB_GUARD_V1',
         '$jobHelper=' + psLiteral(options.windowsTaskJobOwnerPath),
         "if (-not (Test-Path -LiteralPath $jobHelper -PathType Leaf)) { throw 'NATIVE_AGENT_TASK_JOB_HELPER_UNAVAILABLE' }",
-        "$jobMarker=Join-Path $PSScriptRoot ('agent-job-'+[guid]::NewGuid().ToString('N')+'.status')",
+        "$jobMarker=Join-Path " + (statusDir?psLiteral(statusDir):'$PSScriptRoot') + " ('agent-job-'+[guid]::NewGuid().ToString('N')+'.status')",
         '& $jobHelper ' +
           "'--status' $jobMarker '--cwd' '-' '--parent' ([string]$PID) '--' " +
           [rt.executable, ...rt.args].map(psLiteral).join(' '),
@@ -1410,12 +1420,39 @@ export async function nativeAgentLifecycleStatus(
   return await macStatus(options);
 }
 
+/**
+ * When an owner deliberately configures physical CORE on Windows, never
+ * silently install a direct-mode Agent that cannot even attach its already
+ * installed elevated Broker. A ready, independently authenticated Broker can
+ * supply the default broker *mode*, not a CORE grant or physical consent.
+ * No local/remote tool payload or untrusted environment can supply approval.
+ */
+export async function prepareWindowsCoreAgentInstallEnvironment(
+  env: NodeJS.ProcessEnv,
+  brokerHealth: () => Promise<{ready:boolean;status:string}> = async()=>{
+    const {probePrivilegedBrokerHealth}=await import('./privileged-broker-lifecycle.js');
+    return probePrivilegedBrokerHealth({env});
+  },
+): Promise<NodeJS.ProcessEnv> {
+  if(!env.NEXOWIRE_CORE_AUTHORITY_URL?.trim())return env;
+  const requested=env.NEXOWIRE_PRIVILEGE_MODE?.trim().toLowerCase();
+  if(requested==='direct')throw new Error('CORE_BROKER_MODE_REQUIRED');
+  if(requested && requested!=='broker')throw new Error('CORE_BROKER_MODE_INVALID');
+  const report=await brokerHealth();
+  if(report.ready!==true)throw new Error('CORE_BROKER_NOT_READY_'+
+    report.status.replace(/[^A-Z_]/g,'').slice(0,40));
+  return requested==='broker'?env:{...env,NEXOWIRE_PRIVILEGE_MODE:'broker'};
+}
+
 export async function installNativeAgentLifecycle(
   options: NativeAgentLifecycleOptions = {},
 ): Promise<NativeAgentLifecycleStatus> {
   persistedNativeAgentEnvironment(options.env ?? process.env);
   const platform = platformOf(options);
-  if (platform === 'win32') return await installWindows(options);
+  if (platform === 'win32') {
+    const prepared=await prepareWindowsCoreAgentInstallEnvironment(options.env ?? process.env);
+    return await installWindows({...options,env:prepared});
+  }
   if (platform === 'linux') return await installLinux(options);
   return await installMac(options);
 }

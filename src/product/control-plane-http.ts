@@ -365,6 +365,27 @@ export function createControlPlaneHttpHandler(
 
       if (
         request.method === 'POST' &&
+        path === '/api/v1/me/devices/remote-authority/revoke'
+      ) {
+        if (request.headers.get('x-nexowire-confirm') !== 'remote-authority-revoke-v1')
+          return json(400, {error: 'REMOTE_AUTHORITY_REVOKE_CONFIRMATION_REQUIRED'});
+        const body = await readJsonObject(request);
+        return json(200, await service.revokeDeviceRemoteAuthorization(
+          identity, stringField(body, 'deviceId'),
+        ));
+      }
+
+      if (
+        request.method === 'POST' &&
+        path === '/api/v1/me/remote-authority/revoke-all'
+      ) {
+        if (request.headers.get('x-nexowire-confirm') !== 'remote-authority-revoke-all-v1')
+          return json(400, {error: 'REMOTE_AUTHORITY_OWNER_REVOKE_CONFIRMATION_REQUIRED'});
+        return json(200, await service.revokeOwnerRemoteAuthorizations(identity));
+      }
+
+      if (
+        request.method === 'POST' &&
         path === '/api/v1/me/devices/root-mode'
       ) {
         const body = await readJsonObject(request);

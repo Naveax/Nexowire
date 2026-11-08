@@ -6,7 +6,12 @@ import path from 'node:path';
 import * as z from 'zod';
 import { NEXOWIRE_VERSION } from '../version.js';
 import type { PrivilegedBrokerClient } from '../agent/privileged-broker-client.js';
+import {
+  PrivateLifecycleLockError,
+  withPrivateDesktopProcessLock,
+} from '../agent/windows-private-desktop-lock.js';
 import {renderWindowsAgentStartupGuard} from './windows-agent-startup.js';
+import {renderWindowsHubSqliteReaderGuard} from './windows-hub-sqlite-guard.js';
 
 const REPOSITORY = 'Naveax/Nexowire';
 const LATEST_RELEASE_URL =
@@ -65,12 +70,28 @@ export interface UpdateCheckResult {
   release: ReleaseInfo;
 }
 
+/**
+ * Pending before cutover means the machine-side version is NOT yet verified.
+ * A missing Broker is unknown, not proof that installed machine components
+ * already match the staged user runtime. The Windows helper independently
+ * recomputes the final pending flag from installed machine tasks.
+ */
+export function machineComponentsPendingBeforeCutover(
+  targetVersion: string,
+  probe: {reachable:boolean; elevated:boolean; version:string|null} | null,
+): boolean {
+  return !probe || !probe.reachable || !probe.elevated ||
+    probe.version !== targetVersion;
+}
+
 export interface LiveUpdateOptions {
   env?: NodeJS.ProcessEnv;
   fetchImpl?: typeof fetch;
   localAppData?: string;
   tempDir?: string;
   privilegedBroker?: PrivilegedBrokerClient;
+  /** Existing stable request UUID, forwarded to the Broker's independent effect CAS. */
+  operationId?: string;
   /** Automatic mode refuses a partial user-only cutover if the machine Broker is unavailable. */
   requireMachineUpdate?: boolean;
 }
@@ -146,6 +167,101 @@ function statePath(options: LiveUpdateOptions): string {
   return path.join(updateRoot(options), 'status.json');
 }
 
+// Release discovery is observational. Never share a writable file with the
+// cutover/rollback state machine, including when that state is idle.
+function releaseCheckPath(options: LiveUpdateOptions): string {
+  return path.join(updateRoot(options), 'latest-release.json');
+}
+
+function machineReconciliationPath(options: LiveUpdateOptions): string {
+  return path.join(updateRoot(options), 'machine-reconciled.json');
+}
+
+const ReleaseCheckCacheSchema = z.object({
+  schemaVersion: z.literal(1),
+  latestVersion: z.string().regex(/^\d+\.\d+\.\d+$/),
+  checkedAt: z.string(),
+});
+
+const MachineReconciliationSchema = z.object({
+  schemaVersion: z.literal(1),
+  buildId: z.string(),
+  targetVersion: z.string(),
+  targetRoot: z.string(),
+  succeededUpdatedAt: z.string(),
+});
+
+function sameSuccessfulCutover(
+  state: LiveUpdateState,
+  marker: z.infer<typeof MachineReconciliationSchema>,
+): boolean {
+  return state.state === 'succeeded' && state.machineComponentsPending &&
+    state.buildId === marker.buildId &&
+    state.targetVersion === marker.targetVersion &&
+    state.targetRoot === marker.targetRoot &&
+    state.updatedAt === marker.succeededUpdatedAt;
+}
+
+async function cachedMachineReconciliation(options: LiveUpdateOptions):
+  Promise<z.infer<typeof MachineReconciliationSchema> | null> {
+  try {
+    const raw = await fs.readFile(machineReconciliationPath(options), 'utf8');
+    const result = MachineReconciliationSchema.safeParse(JSON.parse(raw.replace(/^\uFEFF/, '')));
+    return result.success ? result.data : null;
+  } catch {
+    // Supplemental reconciliation is not a source of executable authority.
+    return null;
+  }
+}
+
+async function cachedLatestVersion(options: LiveUpdateOptions): Promise<string | null> {
+  try {
+    const raw = await fs.readFile(releaseCheckPath(options), 'utf8');
+    const cached = ReleaseCheckCacheSchema.safeParse(JSON.parse(raw.replace(/^\uFEFF/, '')));
+    return cached.success ? cached.data.latestVersion : null;
+  } catch {
+    // Optional display metadata must never make durable cutover state unreadable.
+    return null;
+  }
+}
+
+async function writeMachineReconciliation(
+  options: LiveUpdateOptions,
+  state: LiveUpdateState,
+): Promise<void> {
+  if (state.state !== 'succeeded' || !state.machineComponentsPending ||
+      !state.buildId || !state.targetVersion || !state.targetRoot) return;
+  const file = machineReconciliationPath(options);
+  const temporary = file + '.tmp-' + randomUUID();
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  try {
+    await fs.writeFile(temporary, JSON.stringify({
+      schemaVersion: 1, buildId: state.buildId,
+      targetVersion: state.targetVersion, targetRoot: state.targetRoot,
+      succeededUpdatedAt: state.updatedAt,
+    }, null, 2) + '\n', 'utf8');
+    await fs.rename(temporary, file);
+  } catch (error) {
+    await fs.rm(temporary, { force: true }).catch(() => {});
+    throw error;
+  }
+}
+
+async function writeReleaseCheckCache(options: LiveUpdateOptions, version: string): Promise<void> {
+  const file = releaseCheckPath(options);
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  const temporary = file + '.tmp-' + randomUUID();
+  try {
+    await fs.writeFile(temporary, JSON.stringify({
+      schemaVersion: 1, latestVersion: safeVersion(version), checkedAt: isoNow(),
+    }, null, 2) + '\n', 'utf8');
+    await fs.rename(temporary, file);
+  } catch (error) {
+    await fs.rm(temporary, { force: true }).catch(() => {});
+    throw error;
+  }
+}
+
 function versionsRoot(options: LiveUpdateOptions): string {
   return path.join(localAppData(options), 'Nexowire', 'versions');
 }
@@ -169,8 +285,8 @@ async function writeState(
   await fs.rename(temporary, file);
 }
 
-export async function readLiveUpdateState(
-  options: LiveUpdateOptions = {},
+async function readPersistedLiveUpdateState(
+  options: LiveUpdateOptions,
 ): Promise<LiveUpdateState> {
   try {
     return UpdateStateSchema.parse(
@@ -199,6 +315,23 @@ export async function readLiveUpdateState(
     }
     throw error;
   }
+}
+
+export async function readLiveUpdateState(
+  options: LiveUpdateOptions = {},
+): Promise<LiveUpdateState> {
+  const state = await readPersistedLiveUpdateState(options);
+  if (state.state === 'idle') {
+    const latestVersion = await cachedLatestVersion(options);
+    return latestVersion ? { ...state, targetVersion: latestVersion } : state;
+  }
+  if (state.state === 'succeeded' && state.machineComponentsPending) {
+    const marker = await cachedMachineReconciliation(options);
+    if (marker && sameSuccessfulCutover(state, marker)) {
+      return { ...state, machineComponentsPending: false };
+    }
+  }
+  return state;
 }
 
 async function fetchChecked(
@@ -232,17 +365,9 @@ export async function checkLiveUpdate(
   options: LiveUpdateOptions = {},
 ): Promise<UpdateCheckResult> {
   const fetchImpl = options.fetchImpl ?? fetch;
-  await writeState(options, {
-    schemaVersion: 1,
-    state: 'checking',
-    currentVersion: NEXOWIRE_VERSION,
-    targetVersion: null,
-    buildId: null,
-    targetRoot: null,
-    machineComponentsPending: false,
-    updatedAt: isoNow(),
-    error: null,
-  });
+  // A release metadata query is not a runtime cutover. Do not overwrite the
+  // durable update status with "checking" before an awaited HTTP request:
+  // a live Windows helper may be recording a cutover or rollback.
   const response = await fetchChecked(LATEST_RELEASE_URL, fetchImpl);
   const body = await response.json() as {
     tag_name?: unknown;
@@ -268,17 +393,9 @@ export async function checkLiveUpdate(
       compareReleaseVersions(NEXOWIRE_VERSION, version) < 0,
     release,
   };
-  await writeState(options, {
-    schemaVersion: 1,
-    state: 'idle',
-    currentVersion: NEXOWIRE_VERSION,
-    targetVersion: version,
-    buildId: null,
-    targetRoot: null,
-    machineComponentsPending: false,
-    updatedAt: isoNow(),
-    error: null,
-  });
+  // Independent cache write: no release check can replace a cutover or
+  // rollback status even if another process updates it between awaits.
+  await writeReleaseCheckCache(options, version);
   return result;
 }
 
@@ -489,6 +606,8 @@ export function renderWindowsCutoverScript(input: {
     '$StatusFile=' + psLiteral(statusFile),
     '$AgentLauncher=' + psLiteral(agentLauncher),
     '$HubLauncher=' + psLiteral(hubLauncher),
+    '$HubDefaultStateDir=' + psLiteral(path.join(home, '.nexowire', 'hub')),
+    '$HubPreviousRuntime=$null',
     '$AutoLauncher=' + psLiteral(path.join(home, '.nexowire', 'auto-update', 'launch.ps1')),
     '$AgentTask=\'Nexowire Native Agent\'',
     '$HubTask=\'Nexowire Hub\'',
@@ -525,6 +644,14 @@ export function renderWindowsCutoverScript(input: {
     String.raw`    if($replacement -match '\$env:NEXOWIRE_UPDATE_STARTUP_NONCE\s*='){throw 'UPDATE_AGENT_NONCE_CONFIG_UNSUPPORTED'}`,
     String.raw`    $replacement='$env:NEXOWIRE_UPDATE_STARTUP_NONCE='''+$StartupNonce+"'"+[Environment]::NewLine+$replacement`,
     '  }',
+    '  if($file -eq $HubLauncher){',
+    '    if($text.Contains($literalNewRoot)){$script:HubPreviousRuntime=$NewRoot}',
+    '    else {',
+    '      $old=[regex]::Match($text,$pattern,[Text.RegularExpressions.RegexOptions]::IgnoreCase)',
+    '      if(-not $old.Success){throw "UPDATE_HUB_PRIOR_RUNTIME_UNKNOWN"}',
+    '      $script:HubPreviousRuntime=$old.Value',
+    '    }',
+    '  }',
     '  if($replacement -ceq $text){return}',
     '  $backup=$file+\'.update-rollback.\'+$StartupNonce',
     '  Copy-Item -LiteralPath $file -Destination $backup -Force',
@@ -544,6 +671,7 @@ export function renderWindowsCutoverScript(input: {
     'function Task-Enabled([string]$name){$task=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue;return ($null -ne $task) -and ([string]$task.State -ne "Disabled")}',
     'function Wait-Port([int]$port,[int]$seconds){$until=(Get-Date).AddSeconds($seconds);while((Get-Date)-lt $until){if(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue){return $true};Start-Sleep -Milliseconds 500};return $false}',
     ...renderWindowsAgentStartupGuard(),
+    ...renderWindowsHubSqliteReaderGuard(),
     'Start-Sleep -Seconds 2',
     "$HubBootTask='Nexowire Hub Boot'",
     '$hubBootInstalled=Task-Exists $HubBootTask',
@@ -556,6 +684,9 @@ export function renderWindowsCutoverScript(input: {
     '    $AgentStartupDiagnostic=Get-AgentStartupDiagnosticPath',
     '  }',
     '  if($hadHub -and -not (Test-Path -LiteralPath $HubLauncher -PathType Leaf)){throw \'UPDATE_HUB_LAUNCHER_MISSING\'}',
+    // The durable SQLite ledger may already contain effects absent from JSON.
+    // Deny incompatible target BEFORE stopping either running component.
+    '  if($hadHub){Assert-HubSqliteReader $NewRoot}',
     '  $CutoverStarted=$true',
     '  if($hadAgent){Stop-ScheduledTask -TaskName $AgentTask -ErrorAction Stop}',
     '  if($hadHub){Stop-ScheduledTask -TaskName $HubTask -ErrorAction Stop}',
@@ -576,7 +707,10 @@ export function renderWindowsCutoverScript(input: {
     '  if($hadHub){try {Stop-ScheduledTask -TaskName $HubTask -ErrorAction Stop} catch {$rollbackErrors.Add("HUB_STOP: "+$_.Exception.Message)}}',
     '  if($rollbackErrors.Count -eq 0){try {Restore-Launchers} catch {$rollbackErrors.Add("LAUNCHER_RESTORE: "+$_.Exception.Message)}}',
     '  if($rollbackErrors.Count -eq 0){',
-    '    if($hadHub){try {Start-ScheduledTask -TaskName $HubTask -ErrorAction Stop} catch {$rollbackErrors.Add("HUB_RESTART: "+$_.Exception.Message)}}',
+    // A failed new Hub may have CREATED SQLite after the initial preflight.
+    // Never relaunch a restored JSON-only Hub into that new durable journal.
+    '    if($hadHub){try {Assert-HubSqliteReader $HubPreviousRuntime} catch {$rollbackErrors.Add("HUB_SQLITE_ROLLBACK: "+$_.Exception.Message)}}',
+    '    if($hadHub -and $rollbackErrors.Count -eq 0){try {Start-ScheduledTask -TaskName $HubTask -ErrorAction Stop} catch {$rollbackErrors.Add("HUB_RESTART: "+$_.Exception.Message)}}',
     '    if($hadAgent){try {Start-ScheduledTask -TaskName $AgentTask -ErrorAction Stop} catch {$rollbackErrors.Add("AGENT_RESTART: "+$_.Exception.Message)}}',
     '  }',
     '  if($rollbackErrors.Count -gt 0){Write-State \'rollback_failed\' ($message+"; "+($rollbackErrors -join "; ")) $false; exit 2}',
@@ -597,8 +731,8 @@ export async function writeWindowsCutoverScript(
   await fs.writeFile(file, '\uFEFF' + renderWindowsCutoverScript(input), 'utf8');
 }
 
-export async function applyLatestLiveUpdate(
-  options: LiveUpdateOptions = {},
+async function applyLatestLiveUpdateUnlocked(
+  options: LiveUpdateOptions,
 ): Promise<{
   scheduled: boolean;
   currentVersion: string;
@@ -606,6 +740,13 @@ export async function applyLatestLiveUpdate(
   buildId?: string;
   targetRoot?: string;
 }> {
+  // An already staged operation may be running in a detached PowerShell
+  // helper. Do not schedule another cutover into the same durable status
+  // file, even when the current agent still reports its previous version.
+  const existing = await readPersistedLiveUpdateState(options);
+  if (existing.state === 'staging' || existing.state === 'cutover_scheduled') {
+    throw new Error('Windows update already in progress: ' + existing.state);
+  }
   const check = await checkLiveUpdate(options);
   if (!check.updateAvailable) {
     return {
@@ -621,13 +762,19 @@ export async function applyLatestLiveUpdate(
   }
   try {
     const staged = await stageWindowsRelease(check.release, options);
-    let machineComponentsPending = false;
+    // Do not report machine components as current before Broker readback.
+    let machineComponentsPending = machineComponentsPendingBeforeCutover(
+      check.latestVersion, null,
+    );
     const broker = options.privilegedBroker;
     if (!broker && options.requireMachineUpdate) {
       throw new Error('Automatic update deferred: elevated Broker not provided.');
     }
     if (broker) {
       const probe = await broker.probe();
+      machineComponentsPending = machineComponentsPendingBeforeCutover(
+        check.latestVersion, probe,
+      );
       if (
         probe.reachable &&
         probe.elevated &&
@@ -641,6 +788,7 @@ export async function applyLatestLiveUpdate(
               version: check.latestVersion,
               buildId: staged.buildId,
             },
+            options.operationId,
           );
           if (
             options.requireMachineUpdate &&
@@ -738,6 +886,29 @@ export async function applyLatestLiveUpdate(
   }
 }
 
+/** Serialize manual and automatic update application across Node processes. */
+export async function applyLatestLiveUpdate(
+  options: LiveUpdateOptions = {},
+): ReturnType<typeof applyLatestLiveUpdateUnlocked> {
+  try {
+    // Reuse the proven atomic directory/owner lock with dead-PID recovery.
+    // The update-specific root isolates it from desktop lifecycle operations.
+    // The lock is held through the detached helper's successful scheduling;
+    // the durable cutover_scheduled marker then prevents later admission.
+    return await withPrivateDesktopProcessLock(
+      updateRoot(options),
+      () => applyLatestLiveUpdateUnlocked(options),
+      { timeoutMs: 600, staleMs: 30_000 },
+    );
+  } catch (error) {
+    if (error instanceof PrivateLifecycleLockError &&
+        error.code === 'PRIVATE_DESKTOP_LIFECYCLE_LOCK_BUSY') {
+      throw new Error('Windows update already in progress: concurrent apply owner.');
+    }
+    throw error;
+  }
+}
+
 export async function executeLiveUpdateCapability(
   capability: string,
   input: unknown,
@@ -753,7 +924,11 @@ export async function executeLiveUpdateCapability(
   switch (capability) {
     case 'nexowire.update.status': {
       let state = await readLiveUpdateState(options);
+      // A Broker version match cannot complete an unfinished user cutover.
+      // Only the cutover helper can make a terminal success claim; status may
+      // reconcile the machine-component flag after that success is persisted.
       if (
+        state.state === 'succeeded' &&
         state.machineComponentsPending &&
         state.targetVersion &&
         options.privilegedBroker
@@ -765,12 +940,11 @@ export async function executeLiveUpdateCapability(
           probe.elevated &&
           probe.version === state.targetVersion
         ) {
-          state = {
-            ...state,
-            machineComponentsPending: false,
-            updatedAt: isoNow(),
-          };
-          await writeState(options, state);
+          // A read-only status query cannot replace a concurrent Windows
+          // cutover with its earlier snapshot. Cache the exact verified
+          // success identity separately, then reread the current state.
+          await writeMachineReconciliation(options, state);
+          state = await readLiveUpdateState(options);
         }
       }
       return { data: state };

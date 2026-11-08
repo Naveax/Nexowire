@@ -5,6 +5,7 @@ import path from 'node:path';
 import * as z from 'zod';
 import {verifyAgentJournalWal} from './operation-journal-wal.js';
 import {readJournalOwnerProcess} from './journal-owner-process.js';
+import {JournalAuthority,JournalAuthorityError,type AuthorityConfig} from './operation-journal-authority.js';
 
 const Fingerprint=z.string().regex(/^[a-f0-9]{64}$/);
 const Rec=z.object({
@@ -54,9 +55,9 @@ type DbRow={
  * The native-agent process MUST hold its singleton lock. A STARTED mutation
  * cannot be rolled back by this journal and is never retried automatically.
  */
-// Availability-only, per-process initialization sequencing. This is NOT an OS
-// lock, an owner receipt, or proof that a foreign live process has stopped.
-// Mutation permission still comes exclusively from the SQLite owner/CAS fence.
+// Same-process, per-normalized-path preflight sequencing from merged #1009.
+// Availability only: this does not replace the independent JournalAuthority,
+// OS PID-incarnation checks, or the SQLite BEGIN IMMEDIATE mutation fence.
 const journalInitializationTails=new Map<string,Promise<void>>();
 
 export class AgentOperationJournal{
@@ -66,9 +67,11 @@ export class AgentOperationJournal{
   private readonly maxRecords:number|undefined;
   private readonly now:()=>Date;
   private readonly leaseId=randomUUID();
+  private readonly authority?:JournalAuthority;
   private readonly maxPageGrowth:number|undefined;
   constructor(private readonly file:string, options:{
-    maxRecords?:number;now?:()=>Date;maxPageGrowth?:number
+    maxRecords?:number;now?:()=>Date;maxPageGrowth?:number;
+    authority?:AuthorityConfig
   }={}){
     if(!path.isAbsolute(file))throw new Error('Agent journal path must be absolute');
     if(options.maxRecords!==undefined && (!Number.isSafeInteger(options.maxRecords) ||
@@ -81,6 +84,12 @@ export class AgentOperationJournal{
       throw new Error('Journal test page-growth limit invalid');
     }
     this.maxRecords=options.maxRecords;
+    if(options.authority&&path.resolve(path.dirname(options.authority.file)).toLowerCase()===
+       path.resolve(path.dirname(file)).toLowerCase()){
+      throw new JournalAuthorityError('AGENT_AUTHORITY_COLOCATED',
+        'Anti-replay authority may not share the journal backup directory.');
+    }
+    this.authority=options.authority?new JournalAuthority(options.authority):undefined;
     this.maxPageGrowth=options.maxPageGrowth;
     this.now=options.now??(()=>new Date());
   }
@@ -152,6 +161,10 @@ export class AgentOperationJournal{
     try{await this.loading}finally{this.loading=undefined}
   }
   private async initializeUncontended():Promise<void>{
+    // Require independently trusted authority before database preflight.
+    // A failed stage must close that authority, never grant a lease.
+    await this.authority?.initialize();
+    try{
       await fs.mkdir(path.dirname(this.file),{recursive:true});
       try{
         const current=await fs.lstat(this.file);
@@ -209,6 +222,11 @@ export class AgentOperationJournal{
         db.exec('CREATE TABLE IF NOT EXISTS agent_operation_owner ('+
           'id INTEGER PRIMARY KEY CHECK(id=1),pid INTEGER NOT NULL,'+
           'nonce TEXT NOT NULL)');
+        if(this.authority){
+          db.exec('CREATE TABLE IF NOT EXISTS agent_operation_authority_binding ('+
+            'id INTEGER PRIMARY KEY CHECK(id=1),authority_id TEXT NOT NULL,'+
+            'generation TEXT NOT NULL,last_sequence INTEGER NOT NULL)');
+        }
         const integrity=db.prepare('PRAGMA quick_check').get() as
           {quick_check:string}|undefined;
         if(integrity?.quick_check!=='ok'){
@@ -229,6 +247,24 @@ export class AgentOperationJournal{
         // BEGIN IMMEDIATE serializes independent connections/processes.
         // Never misclassify another live process's in-flight request.
         this.transaction(db,()=>{
+          if(this.authority){
+            const binding=this.binding(db);
+            const latest=this.authority.head();
+            if(!binding){
+              const rows=db.prepare('SELECT ('+
+                '(SELECT COUNT(*) FROM agent_operation_journal)+'+
+                '(SELECT COUNT(*) FROM agent_operation_archive)) AS count')
+                .get() as {count:number};
+              if(rows.count!==0||latest!==0)throw new JournalAuthorityError(
+                'AGENT_AUTHORITY_MIGRATION_REQUIRED',
+                'Non-empty journal or authority needs independently verified migration.');
+              const {authorityId,generation}=this.authority.config;
+              db.prepare('INSERT INTO agent_operation_authority_binding VALUES(1,?,?,0)')
+                .run(authorityId,generation);
+            }else{
+              this.guardAuthority(db);
+            }
+          }
           const previous=db.prepare('SELECT pid,nonce,process_identity FROM agent_operation_owner WHERE id=1')
             .get() as Owner|undefined;
           if(JSON.stringify(previous)!==JSON.stringify(before))throw new AgentOperationJournalError(
@@ -270,8 +306,25 @@ export class AgentOperationJournal{
         this.db=db;
         this.loaded=true;
       }catch(e){
-        db.close();throw e;
+        db.close();this.authority?.close();throw e;
       }
+    }catch(e){this.authority?.close();throw e;}
+  }
+  private binding(db:DatabaseSync):{authority_id:string;generation:string;last_sequence:number}|undefined{
+    return db.prepare('SELECT authority_id,generation,last_sequence '+
+      'FROM agent_operation_authority_binding WHERE id=1').get() as
+      {authority_id:string;generation:string;last_sequence:number}|undefined;
+  }
+  private guardAuthority(db:DatabaseSync):number{
+    if(!this.authority)return 0;
+    const b=this.binding(db);
+    const c=this.authority.config;
+    if(!b||b.authority_id!==c.authorityId||b.generation!==c.generation ||
+       b.last_sequence!==this.authority.head()){
+      throw new JournalAuthorityError('AGENT_AUTHORITY_ROLLBACK_DETECTED',
+        'Journal and independently maintained monotonic reservation epoch differ.');
+    }
+    return b.last_sequence;
   }
   private transaction<T>(db:DatabaseSync,fn:()=>T):T{
     db.exec('BEGIN IMMEDIATE');
@@ -297,9 +350,24 @@ export class AgentOperationJournal{
     Fingerprint.parse(fingerprint);
     z.string().min(1).max(128).parse(capability);
     const db=this.sql();
+    // Reserve at the independent authority FIRST. If Agent crashes between
+    // commits, the orphaned ID is unavailable and journal epoch fails closed.
+    const before=this.guardAuthority(db);
+    const authorityReservation=this.authority?.reserve(requestId,fingerprint,capability);
     return this.transaction(db,()=>{
+      if(this.authority){
+        const b=this.binding(db);
+        if(!b||b.last_sequence!==before||
+           this.authority.head()!==(authorityReservation!.created?
+             authorityReservation!.sequence:before)){
+          throw new JournalAuthorityError('AGENT_AUTHORITY_ROLLBACK_DETECTED',
+            'Authority epoch changed during reservation.');
+        }
+      }
       const old=this.read(db,requestId);
       if(old){
+        if(this.authority&&authorityReservation?.created)throw new JournalAuthorityError(
+          'AGENT_AUTHORITY_ROLLBACK_DETECTED','Journal references missing authority reservation.');
         if(old.fingerprint!==fingerprint||old.capability!==capability){
           throw new AgentOperationJournalError(
             'AGENT_JOURNAL_REQUEST_MISMATCH',
@@ -309,6 +377,9 @@ export class AgentOperationJournal{
         }
         return {created:false,record:old};
       }
+      if(this.authority&&!authorityReservation?.created)throw new JournalAuthorityError(
+        'AGENT_AUTHORITY_ROLLBACK_DETECTED',
+        'Historical authority reservation missing from journal; replay denied.');
       if(this.maxRecords!==undefined){
         const row=db.prepare('SELECT COUNT(*) AS count FROM agent_operation_journal')
           .get() as {count:number};
@@ -323,6 +394,10 @@ export class AgentOperationJournal{
         '(request_id,fingerprint,capability,status,created_at,updated_at) '+
         "VALUES(?,?,?,'in_progress',?,?)",
       ).run(requestId,fingerprint,capability,stamp,stamp);
+      if(this.authority){
+        db.prepare('UPDATE agent_operation_authority_binding SET last_sequence=? WHERE id=1')
+          .run(authorityReservation!.sequence);
+      }
       return {created:true,record:this.read(db,requestId)!};
     });
   }
@@ -332,6 +407,7 @@ export class AgentOperationJournal{
     Fingerprint.parse(fingerprint);
     const db=this.sql();
     return this.transaction(db,()=>{
+      this.guardAuthority(db);
       const updated=db.prepare(
         'UPDATE agent_operation_journal SET dispatched_at=? '+
         "WHERE request_id=? AND fingerprint=? AND status='in_progress' "+
@@ -372,6 +448,7 @@ export class AgentOperationJournal{
     if(expectedFingerprint!==undefined)Fingerprint.parse(expectedFingerprint);
     const db=this.sql();
     return this.transaction(db,()=>{
+      this.guardAuthority(db);
       const previous=this.read(db,requestId);
       if(!previous||previous.status!=='in_progress'||
          (expectedFingerprint!==undefined &&
@@ -437,6 +514,7 @@ export class AgentOperationJournal{
       });
     }finally{
       this.db.close();
+      this.authority?.close();
       this.db=undefined;
       this.loaded=false;
     }
