@@ -10,9 +10,9 @@ import {
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const current = readSnapshot(root);
 
-test('T-419: exact-HEAD green CI does not prove invocation of either new K05 MJS suite', () => {
+test('T-419: exact-HEAD green CI does not prove invocation of four new K05 MJS suites', () => {
   const result = inspectCiDiscovery(current.workflow, current.packageText);
-  assert.equal(result.length, 2);
+  assert.equal(result.length, 4);
   assert.ok(result.every((x) => !x.discovered && !x.explicitlyInvoked && !x.npmIncludesMjs));
   for (const old of ['test/delegated/k05/audit-html.test.mjs', 'test/delegated/k05/dynamic-id-contract.test.mjs']) {
     assert.ok(inspectCiDiscovery(current.workflow, current.packageText, [old])[0].discovered, old);
@@ -24,6 +24,41 @@ test('T-419: explicit invocation or real MJS npm glob is needed; text in comment
   assert.ok(!inspectCiDiscovery(`# ${target}\nrun: npm test`, current.packageText, [target])[0].discovered);
   assert.ok(inspectCiDiscovery(`- run: node --test ${target}`, current.packageText, [target])[0].discovered);
   assert.ok(inspectCiDiscovery('run: npm test', JSON.stringify({scripts:{test:'node --test test/**/*.test.mjs'}}), [target])[0].discovered);
+});
+
+test('P007: echo, grep, labels and non-executed npm script never prove hosted K05 coverage', () => {
+  const target = 'test/delegated/k05/audit-p006-ui.test.mjs';
+  for (const workflow of [
+    `- name: node --test ${target}\n  run: echo not-running`,
+    `- run: echo ${target}`,
+    `- run: grep ${target} report.txt`,
+    `- run: echo node --test ${target}`,
+    `- run: node --test test/some-other.test.mjs && echo ${target}`,
+    `- run: |\n    # node --test ${target}\n    echo ignored`,
+  ]) assert.equal(inspectCiDiscovery(workflow, current.packageText, [target])[0].discovered, false, workflow);
+  const npmScript = JSON.stringify({scripts:{test:`echo node --test ${target}`}});
+  assert.equal(inspectCiDiscovery('run: npm test', npmScript, [target])[0].discovered, false);
+  assert.equal(inspectCiDiscovery('run: echo ignored', JSON.stringify({scripts:{test:`node --test ${target}`}}), [target])[0].discovered, false);
+});
+
+test('P007: folded and literal YAML node --test commands discover only actually named K05 suites', () => {
+  const target = 'test/delegated/k05/audit-p006-ui.test.mjs';
+  const other = 'test/delegated/k05/audit-owner-web.test.mjs';
+  const folded = `- run: >-\n    node --test --import tsx\n    ${target}`;
+  const literal = ['- run: |', '    node --test \\', `      ${target} \\`,
+    `      ${other}`, '    echo done'].join('\n');
+  const results = inspectCiDiscovery(folded, current.packageText, [target,other]);
+  assert.equal(results[0].discovered, true);
+  assert.equal(results[1].discovered, false);
+  assert.ok(inspectCiDiscovery(literal, current.packageText, [target,other]).every((x) => x.discovered));
+});
+
+test('P007: generic K05 baseline invocation cannot be claimed as four new nested MJS tests', () => {
+  const result = inspectCiDiscovery(current.workflow, current.packageText);
+  assert.deepEqual(result.map((x) => x.discovered), [false,false,false,false]);
+  const old = inspectCiDiscovery(current.workflow, current.packageText,
+    ['test/delegated/k05/audit-html.test.mjs','test/delegated/k05/dynamic-id-contract.test.mjs']);
+  assert.ok(old.every((x) => x.explicitlyInvoked));
 });
 
 test('T-420: actual 401/403 denied admin overview is displayed as Offline, with an error alert visible', async () => {

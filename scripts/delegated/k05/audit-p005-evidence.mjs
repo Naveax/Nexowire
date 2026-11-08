@@ -9,34 +9,72 @@ import vm from 'node:vm';
 export const K05_NEW_TESTS = Object.freeze([
   'test/delegated/k05/audit-owner-web.test.mjs',    // PR #1115
   'test/delegated/k05/verify-ui-test-provenance.test.mjs', // PR #1122
+  'test/delegated/k05/audit-p005-evidence.test.mjs', // PR #1132
+  'test/delegated/k05/audit-p006-ui.test.mjs',       // PR #1146 / D-138
 ]);
 
-export function inspectCiDiscovery(workflow, packageText, paths = K05_NEW_TESTS) {
-  const pkg = JSON.parse(packageText);
-  const npmTest = String(pkg.scripts?.test ?? '');
-  // Only action step `run:` bodies count; comments, step labels and env cannot prove invocation.
+function runCommands(workflow) {
+  // A conservative subset of workflow YAML: only actual step run bodies.
+  // Folded YAML is a single command; literal blocks have shell commands and
+  // continuation lines. Step names, comments, env and echo are not evidence.
   const lines = workflow.split('\n');
-  const executable = [];
+  const commands = [];
   for (let i = 0; i < lines.length; i++) {
     const start = /^(\s*)(?:-\s+)?run:\s*(.*)$/.exec(lines[i]);
     if (!start) continue;
     const indent = start[1].length;
-    if (start[2] !== '|') executable.push(start[2]);
+    const body = start[2].trim();
+    const folded = /^>-?$/.test(body);
+    const literal = /^\|-?$/.test(body);
+    const fragments = [];
+    if (!folded && !literal && body && !body.startsWith('#')) fragments.push(body);
     for (let j = i + 1; j < lines.length; j++) {
       if (!lines[j].trim()) continue;
       const childIndent = /^\s*/.exec(lines[j])[0].length;
       if (childIndent <= indent) break;
-      if (!/^\s*#/.test(lines[j])) executable.push(lines[j]);
+      if (!/^\s*#/.test(lines[j])) fragments.push(lines[j].trim());
+    }
+    if (folded || (!folded && !literal)) {
+      commands.push(fragments.join(' '));
+    } else {
+      let pending = '';
+      for (const line of fragments) {
+        const continuing = /\\\s*$/.test(line);
+        pending += (pending ? ' ' : '') + line.replace(/\\\s*$/, '').trim();
+        if (!continuing) {
+          commands.push(pending);
+          pending = '';
+        }
+      }
+      if (pending) commands.push(pending);
     }
   }
-  const commands = executable.join('\n');
-  // Current `npm test` only selects TS; do not infer .mjs discovery from `npm run check`.
-  const npmIncludesMjs = /(?:\*\*\/\*|\.test\.mjs)/.test(npmTest) && !/\.test\.ts\b/.test(npmTest);
+  return commands;
+}
+
+function nodeTestInvokesPath(command, path) {
+  const match = /(?:^|[;&|])\s*node\s+--test\b([^;&|]*)/.exec(command);
+  if (!match) return false;
+  const args = match[1].trim().split(/\s+/).map((s) => s.replace(/^['"]|['"]$/g, ''));
+  return args.some((arg) => arg === path ||
+    (arg.endsWith('/*.test.mjs') && path.startsWith(arg.slice(0, -'*.test.mjs'.length)) &&
+      !path.slice(arg.slice(0, -'*.test.mjs'.length).length).includes('/')) ||
+    (arg === 'test/**/*.test.mjs' && path.startsWith('test/') && path.endsWith('.test.mjs')));
+}
+
+export function inspectCiDiscovery(workflow, packageText, paths = K05_NEW_TESTS) {
+  const pkg = JSON.parse(packageText);
+  const npmTest = String(pkg.scripts?.test ?? '');
+  const executable = runCommands(workflow);
+  const invokedNpm = executable.some((x) => /^npm\s+(?:test|run\s+test)\b/.test(x)) ||
+    (executable.some((x) => /^npm\s+run\s+check\b/.test(x)) && /\bnpm\s+test\b/.test(pkg.scripts?.check ?? ''));
+  // `echo node --test ...` and file paths mentioned in workflow labels do not execute tests.
   return paths.map((path) => ({
     path,
-    explicitlyInvoked: commands.includes(path),
-    npmIncludesMjs,
-    discovered: commands.includes(path) || npmIncludesMjs,
+    explicitlyInvoked: executable.some((cmd) => nodeTestInvokesPath(cmd, path)),
+    npmIncludesMjs: invokedNpm && nodeTestInvokesPath(npmTest, path),
+    discovered: executable.some((cmd) => nodeTestInvokesPath(cmd, path)) ||
+      (invokedNpm && nodeTestInvokesPath(npmTest, path)),
   }));
 }
 
