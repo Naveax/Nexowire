@@ -22,6 +22,16 @@ görsel ölçümün tamamlandığını ileri sürmez.
 node --test --test-reporter=tap test/delegated/k02/browser-screenshot-evidence.test.mjs
 ```
 
+CI owner'ının kolayca çağırabileceği açık (otomatik keşfe güvenmeyen) komut:
+
+```sh
+node test/delegated/k02/run-screenshot-evidence.mjs
+```
+
+Bu alt komut gerçek TAP'te sıfır skipped/TODO/fail, test sayısı pozitif ve
+tam pass sayısı ister. Onun GitHub job içine eklenmiş olması **henüz
+kanıtlanmadı**; yerel çalışması hosted PASS değildir.
+
 Negatif eşikler:
 
 | Gözlem | Rapor |
@@ -37,6 +47,12 @@ Son satır **PASS değildir**: unsigned PNG + JSON kendi başına gerçek hosted
 runner kimliği ve ekran görüntüsünün özgünlüğünü ispatlamaz. GitHub exact-HEAD
 job/artefact bağlantısı, tarayıcı logu, viewport ve ekran görüntüsü owner
 tarafından ayrıca kontrol edilmeden #485/#539 ve T-406 tamamlanmış sayılmaz.
+
+P006 T-543: `auditIndependentScreenshotCaptures` aynı PNG SHA-256'sını
+farklı capture ID'lerinde tekrar görürse ikinci sonucu
+`REPLAY_UNVERIFIED` yapar. Aynı capture ID'nin yeniden kullanılması da
+ayrı kanıt sayılmaz. Farklı hashlerin de gerçek tarayıcıya ait olduğu
+ispatlanmış değildir; geçerli tek kayıt `REVIEW_REQUIRED` düzeyindedir.
 
 Bu paket yalnız `test/delegated/k02/**` içindedir; Ömer'in tarayıcı, CORE,
 Windows, CI veya yayın dosyalarına dokunulmadı.
