@@ -20,6 +20,7 @@ function validate(data) {
   for (const pr of data.prs) {
     if (!Number.isSafeInteger(pr.number) || seen.has(pr.number) || !exact(pr.head) || !exact(pr.originalHead) || !exact(pr.base)) throw Error('Invalid or duplicate source PR');
     seen.add(pr.number);
+    if (pr.state !== 'open' || pr.draft !== true) throw Error(`#${pr.number} is not an open Draft; refresh the 31-PR listing`);
     if (!Array.isArray(pr.files) || pr.files.some(file => !file.path || !exact(file.blob))) throw Error(`#${pr.number} incomplete file evidence`);
   }
   for (const owner of data.owners) {

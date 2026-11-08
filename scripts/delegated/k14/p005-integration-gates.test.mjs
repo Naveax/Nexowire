@@ -108,6 +108,13 @@ test('duplicate PR numbers or partial 31-PR pages fail closed',()=>{
   assert.throws(()=>audit(other),/duplicate source PR/);
 });
 
+test('closed or ready-for-review PR is not silently retained in a Draft-only snapshot',()=>{
+  const closed=mutate();pr(closed,1117).state='closed';
+  assert.throws(()=>audit(closed),/not an open Draft/);
+  const ready=mutate();pr(ready,1123).draft=false;
+  assert.throws(()=>audit(ready),/not an open Draft/);
+});
+
 test('positive explicit-CI-only source still requires owner review and is never mergeReady',()=>{
   const fixture=mutate();const p=pr(fixture,1107);
   p.files=p.files.filter(f=>f.path==='test/delegated/k18/s5-report-contract.test.ts');
