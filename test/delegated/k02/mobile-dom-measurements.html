@@ -27,6 +27,10 @@
     <section class="error-panel" id="error-panel" role="alert">
       <h2>Hata bilgisi</h2>
       <p id="error-message">Geri dönüş doğrulanmadı: https://invalid.example.test/operation/ÇOK_UZUN_İŞLEM_KİMLİĞİ_9999999999999999999999999999999999999999999999999999</p>
+      <div class="error-actions" role="group" aria-label="Kurtarma eylemleri">
+        <button id="retry-error" class="secondary">Bağlantıyı yeniden deneyerek kurtarma işlemini başlat</button>
+        <a id="support-action" class="secondary" href="#measurement-output">Destek ve işlem kanıtlarını incele</a>
+      </div>
     </section>
     <section class="device-list" id="devices" aria-label="Cihazlar">
       <article class="device"><div class="device-header"><span class="device-name">🖥️ Kullanıcı cihazı</span><span class="status">UNKNOWN — operasyon sonucu bekleniyor</span></div></article>
@@ -37,7 +41,7 @@
   </main>
   <script>
     (() => {
-      const identifiers = ['device-name', 'status-title', 'status-text', 'error-message', 'retry'];
+      const identifiers = ['device-name', 'status-title', 'status-text', 'error-message', 'retry', 'retry-error', 'support-action'];
       const visible = (el) => {
         const style = getComputedStyle(el);
         const rect = el.getBoundingClientRect();
@@ -50,11 +54,18 @@
           .map((el) => el.id);
         const status = document.getElementById('status-text');
         const title = document.getElementById('status-title');
+        const recovery = ['retry-error', 'support-action'].map((id) => document.getElementById(id));
+        const offscreenRecoveryIds = recovery.filter((el) => {
+          const rect = el.getBoundingClientRect();
+          return rect.left < 0 || rect.right > innerWidth || !visible(el);
+        }).map((el) => el.id);
         const result = {
           viewport: innerWidth,
           documentScrollWidth: document.documentElement.scrollWidth,
           horizontalPageOverflow: document.documentElement.scrollWidth > innerWidth + 1,
           overflowIds: overflow,
+          offscreenRecoveryIds,
+          recoveryActionsVisible: offscreenRecoveryIds.length === 0,
           unknownVisible: visible(status) && visible(title) &&
             status.textContent.includes('UNKNOWN') && title.textContent.includes('UNKNOWN') &&
             !title.textContent.includes('Başarılı'),
