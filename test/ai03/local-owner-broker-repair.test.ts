@@ -55,7 +55,7 @@ test('P0 local owner admission reserves once, checks fresh state twice and denie
   });
   await gate.authorizeOnce(id1);
   assert.deepEqual(events,['read','reserve','read']);
-  await assert.rejects(gate.authorizeOnce(id1),/EEXIST/);
+  await assert.rejects(gate.authorizeOnce(id1),/BROKER_LOCAL_OWNER_OPERATION_ALREADY_RECORDED/);
   active=false;
   await assert.rejects(gate.authorizeOnce(id2),/BROKER_LOCAL_OWNER_NOT_ACTIVE/);
   assert.equal(reserved.has(id2),false);
