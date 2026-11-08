@@ -44,6 +44,22 @@ test('hosted OAuth, local loopback and self-host Funnel are distinct URL familie
   assert.match(funnel, /https:\/\/<tailscale-dns-name>\/mcp/);
   assert.match(funnel, /bearer credential/i);
   assert.doesNotMatch(funnel, /Hosted OAuth/);
+
+  const hostedIsSafe = (row) =>
+    /advertised MCP.*resource.*Hosted OAuth/.test(row) &&
+    !/(?:localhost|127\.0\.0\.1|control-panel URL as server)/i.test(row);
+  assert.equal(hostedIsSafe(hosted), true);
+  assert.equal(hostedIsSafe(hosted + ' Use http://localhost:43110/mcp as server.'), false);
+  const install = await read('docs/INSTALL_WINDOWS.md');
+  assert.match(install, /oauth-protected-resource/);
+  assert.match(install, /Giriş panelinin adresine kendin `\/mcp` ekleyip tahmin etme/);
+  assert.match(install, /panel veya `localhost` adresini kullanma/);
+
+  const examples = section(doc, '### Connector address examples (source and trust boundary)');
+  assert.match(examples, /http:\/\/127\.0\.0\.1:<port>\/mcp.*Reject for remote ChatGPT/);
+  assert.match(examples, /unknown\.example\/mcp.*Reject as unverified/);
+  assert.match(examples, /actual non-null `mcpUrl` returned by the owner's `node connector`/);
+  assert.match(examples, /If `mcpUrl` is null.*NOT_RUN\/FAILED/);
 });
 
 test('platform descriptions do not present unverified Linux/macOS as Windows bootstrap', async () => {
@@ -58,6 +74,28 @@ test('platform descriptions do not present unverified Linux/macOS as Windows boo
   }
   const src = await read('src/self-host-bootstrap.ts');
   assert.match(src, /if \(process\.platform !== 'win32'\)/);
+
+  const optional = section(doc, '### Core setup versus optional environment tools');
+  assert.match(optional, /Hosted Windows end user.*No source checkout, Node\/npm, Tailscale, WSL, CUDA or Ollama prerequisite/);
+  assert.match(optional, /Developer source checkout.*Node\.js 22\+/);
+  assert.match(optional, /Tailscale \*\*only\*\* if requesting Funnel/);
+  assert.match(optional, /Python, WSL, USB, CUDA, Ollama, Hyper-V/);
+  assert.match(optional, /Missing optional tools are warnings unless the operator explicitly requires them/);
+  const doctor = await read('docs/environment-doctor.md');
+  assert.match(doctor, /unavailable optional tools are warnings/);
+  assert.match(doctor, /physicalAcceptance.*NOT_TESTED/);
+
+  const firstRun = section(doc, '## One-command Windows bootstrap (changes local state)');
+  const commands = [...firstRun.matchAll(/^nexowire node bootstrap[^\n]+$/gm)].map((m) => m[0]);
+  assert.equal(commands[0], 'nexowire node bootstrap --device-name work-pc',
+    'Ordinary local bootstrap must not silently opt in to public Funnel exposure');
+  assert.equal(commands[1], 'nexowire node bootstrap --device-name work-pc --tailscale-funnel');
+  assert.match(firstRun, /owner's informed approval/);
+  const bootstrap = await read('src/self-host-bootstrap.ts');
+  assert.match(bootstrap, /if \(arg === '--tailscale-funnel'\) \{\s*options\.tailscaleFunnel = true/);
+  const preflight = section(doc, '### Core setup versus optional environment tools');
+  assert.match(preflight, /node --import tsx scripts\/run-environment-doctor\.ts --tool=node:22/);
+  assert.match(preflight, /NOT_TESTED.*physical USB, phone, gamepad or VM acceptance/);
 });
 
 test('disconnection recovery is diagnostic-only and secret reveal stays separate', async () => {
@@ -76,6 +114,26 @@ test('disconnection recovery is diagnostic-only and secret reveal stays separate
     'node status', 'hub status', 'agent doctor', 'tailscale status',
   ]);
   assert.doesNotMatch(status, /^nexowire (?:node connector|node bootstrap|onboard bootstrap|tailscale funnel)$/m);
+  const cli = await read('src/cli.ts');
+  for (const route of ['node', 'hub', 'agent', 'tailscale']) {
+    assert.match(cli, new RegExp(`command === '${route}'`));
+  }
+  for (const handler of [
+    'runSelfHostedNodeCommand',
+    'runHubLifecycleCommand',
+    'runNativeAgentEnrollmentCommand',
+    'runTailscaleCommand',
+  ]) assert.ok(cli.includes(handler), `Missing CLI diagnostic handler: ${handler}`);
+  assert.match(cli, /action === 'doctor'/);
+
+  const support = section(doc, '### A safe support report after a failed local connection');
+  for (const label of ['Hub health', 'Agent connection', 'Funnel ingress', 'remote MCP authentication']) {
+    assert.ok(support.includes(label), `Missing failure layer: ${label}`);
+  }
+  assert.match(support, /\[REDACTED\]/);
+  assert.match(support, /raw `node connector` output must never appear/);
+  assert.match(support, /If the relevant observation was not collected, use \*\*NOT_RUN\*\*/);
+  assert.match(support, /new `onboard bootstrap --force` rotates credentials and is not a pairing recovery step/);
 });
 
 test('risk categories explicitly separate credential reveal, issuance and exposure', async () => {
@@ -90,6 +148,29 @@ test('risk categories explicitly separate credential reveal, issuance and exposu
   const diagnostic = row('node status');
   assert.match(diagnostic ?? '', /Diagnostic/);
   assert.doesNotMatch(diagnostic ?? '', /token values|Reveals secret|Issues credentials/i);
+
+  const consent = section(doc, '## Operator confirmation before side effects');
+  for (const sideEffect of [
+    'node bootstrap', 'onboard bootstrap', 'node connector',
+    'tailscale funnel', 'onboard bootstrap --force',
+  ]) {
+    assert.ok(consent.includes(`${'\u0060'}${sideEffect}${'\u0060'}`), `Unlabeled operator action: ${sideEffect}`);
+  }
+  assert.match(consent, /deliberate, informed decision/);
+  assert.match(consent, /NOT_RUN/);
+  assert.match(consent, /do \*\*not\*\* grant admin\/CORE approval, automate elevation or authorize deployment/);
+
+  const recoveryGuide = section(doc, '## Recover the right flow before retrying');
+  assert.match(recoveryGuide, /BAĞLANIYOR….*TEKRAR DENE/);
+  assert.match(recoveryGuide, /onboard bootstrap --force.*not authenticated device health/);
+  assert.match(recoveryGuide, /failed check as \*\*FAIL\*\*.*unattempted check as \*\*NOT_RUN\*\*/);
+  assert.doesNotMatch(recoveryGuide, /Run `nexowire node connector` to debug/);
+
+  const platformConsent = section(doc, '## Platform ownership and explicit consent');
+  assert.match(platformConsent, /same Windows user.*Scheduled Tasks and CurrentUser DPAPI/);
+  assert.match(platformConsent, /Windows `node bootstrap` path is rejected/);
+  assert.match(platformConsent, /Do not switch to an Administrator identity/);
+  assert.match(platformConsent, /missing owner approval means the side-effecting command stays \*\*NOT_RUN\*\*/);
 });
 
 test('credential examples use protected-source references, not real inline values', async () => {
@@ -103,6 +184,23 @@ test('credential examples use protected-source references, not real inline value
   ]) assert.ok(docs.includes(name));
   assert.doesNotMatch(docs, /\bnwx1\.(?:agent|mcp)\.[A-Za-z0-9_-]{16,}/);
   assert.doesNotMatch(docs, /\bNEXOWIRE_[A-Z_]*(?:TOKEN|SECRET|KEY)\s*=\s*[^\s<]{12,}/);
+
+  const evidence = section(await read('docs/DEPLOYMENT_ONBOARDING.md'), '## Reporting incomplete evidence');
+  assert.match(evidence, /Source-only PASS.*not proof of a deployed device/);
+  assert.match(evidence, /NOT_RUN.*not exercised/);
+  assert.match(evidence, /UNKNOWN.*inconclusive/);
+  assert.match(evidence, /action_required.*not a test PASS/);
+  assert.match(evidence, /clean-user installation, pairing and remote MCP checks still require a real Windows acceptance run/);
+
+  const layers = section(await read('docs/SELF_HOST.md'), '### Do not collapse browser, task and remote evidence');
+  for (const label of [
+    'Windows installer finished', 'Scheduled Task says `Running`',
+    '`node status` reports local Hub health', 'Browser shows **BAĞLANIYOR…**',
+    'Remote client reports MCP connected',
+  ]) assert.ok(layers.includes(label), `Missing false-success boundary: ${label}`);
+  assert.match(layers, /No proof.*Hub\/Agent or account pairing/);
+  assert.match(layers, /No proof.*native Agent health or authenticated remote MCP execution/);
+  assert.match(layers, /Require the actual per-layer checks/);
 });
 
 test('cross-guide links and target heading anchors are valid offline', async () => {
