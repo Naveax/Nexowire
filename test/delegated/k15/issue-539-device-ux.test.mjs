@@ -13,6 +13,7 @@ const appSource = readFileSync(
 );
 const hasDeviceLabelFix = /const deviceLabel = device\.name \+ ' · cihaz '/.test(appSource);
 const hasLoadingReset = /function resetDashboardPresentation\(/.test(appSource);
+const hasDashboard403Policy = /if \(response\.status === 403\)/.test(appSource);
 const mcpSource = readFileSync(new URL('../../../src/mcp/create-server.ts', import.meta.url), 'utf8');
 const bootstrapStart = appSource.indexOf("$('folder-filter').addEventListener('change'");
 assert.ok(bootstrapStart > 0, 'UI bootstrap boundary must remain identifiable');
@@ -407,6 +408,36 @@ test('T-621/#485: successful account response with zero paired devices needs a r
     'account login success alone must not look like completed device pairing');
   assert.match(h.id('connection-pill').textContent, /cihaz|eşleş/i,
     'give an actionable account-vs-device distinction');
+});
+
+test('D-086/#539: 403 authorization denial must not masquerade as a transport outage', {
+  todo: !hasDashboard403Policy && 'main and #1068 lack a dashboard-specific 403 permission message',
+}, async () => {
+  const h = harness();
+  h.render(snapshot([device({id: 'previously-visible'})]));
+  h.setFetch(async () => ({ok: false, status: 403}));
+  await h.load();
+  assert.equal(h.id('devices-count').textContent, '—');
+  assert.equal(h.cards().some(card => card.dataset.deviceId === 'previously-visible'), false);
+  assert.match(h.id('device-list-status').textContent, /yetki|erişim|izin/i,
+    'denied permission should not be reported solely as a network error');
+  assert.doesNotMatch(h.id('connection-pill').textContent, /Bağlantı hatası/);
+});
+
+test('D-089/#539: retry after 403 restores only a fresh empty-device snapshot', {
+  todo: !hasLoadingReset && 'main still lacks explicit stale-card presentation invalidation',
+}, async () => {
+  const h = harness();
+  h.render(snapshot([device({id: 'private-from-prior-session'})]));
+  h.setFetch(async () => ({ok: false, status: 403}));
+  await h.load();
+  h.setFetch(async () => ({ok: true, status: 200, json: async () => snapshot([])}));
+  await h.load();
+  assert.equal(h.id('error-panel').classList.contains('hidden'), true);
+  assert.equal(h.id('devices-count').textContent, '0');
+  assert.deepEqual(h.cards().filter(card => card.dataset.deviceId), []);
+  assert.match(h.id('device-list-status').textContent, /Henüz bağlı cihaz yok/);
+  assert.equal(h.id('connect-device').disabled, false);
 });
 
 test('T-343/#539: device platform and Unicode name remain literal text, never HTML', () => {
