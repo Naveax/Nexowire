@@ -32,6 +32,16 @@ Bu alt komut gerçek TAP'te sıfır skipped/TODO/fail, test sayısı pozitif ve
 tam pass sayısı ister. Onun GitHub job içine eklenmiş olması **henüz
 kanıtlanmadı**; yerel çalışması hosted PASS değildir.
 
+## PR sadeleştirmesi / D-008
+
+K02 [#1126](https://github.com/Naveax/Nexowire/pull/1126) içindeki
+platforma göre `NOT_RUN`/`FAIL` ayrımı ile bu PR'ın PNG kanıt kontrolü
+**farklı hataları** yakalar; iki modülün testleri korunarak mevcut #1138
+dalına kopyalanmıştır. Açık TAP runner artık ikisini birlikte çalıştırır.
+Bu yalnız kaynak taşımasıdır; ayrı #1126 PR'ının kapatılması/owner kabulü
+ŞEF koordinasyonu gerektirir. CI'nin yeni MJS yollarını seçtiği yine
+kanıtlanmamıştır.
+
 Negatif eşikler:
 
 | Gözlem | Rapor |
