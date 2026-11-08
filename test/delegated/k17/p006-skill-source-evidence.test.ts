@@ -92,6 +92,29 @@ test('T-632: KNOWN OPEN GAP — direct registry load follows an external symlink
   });
 });
 
+test('D-097: KNOWN OPEN GAP — a regular skill directory can contain a symlinked SKILL.md', {
+  skip: process.platform === 'win32' ? 'Windows file symlink privileges are not established' : false,
+}, async () => {
+  await withCatalog(async (root) => {
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'nexowire-k17-p007-outside-'));
+    try {
+      const skillDir = path.join(root, 'linked-manifest');
+      await fs.mkdir(skillDir);
+      await fs.writeFile(path.join(outside, 'SKILL.md'), source('linked-manifest'));
+      await fs.symlink(path.join(outside, 'SKILL.md'), path.join(skillDir, 'SKILL.md'));
+
+      const registry = new SkillRegistry(root);
+      const loaded = await registry.load('linked-manifest');
+      assert.equal(loaded.manifest.name, 'linked-manifest',
+        'Reproduced outside read: this is not a passing containment assertion');
+      assert.deepEqual((await registry.validate()).valid.map((skill) => skill.name), ['linked-manifest'],
+        'Current validation accepts a symlinked manifest; owner guard is still missing');
+    } finally {
+      await fs.rm(outside, { recursive: true, force: true });
+    }
+  });
+});
+
 test('T-633: platform source admission is separate from a physically executed install command', () => {
   const windowsOnly = parseSkillManifest(source('fixture', ['platforms: win32']));
   const linuxResult = evaluateSkillManifest(windowsOnly, { platform: 'linux' });
