@@ -63,7 +63,23 @@ function invokesNodePath(commands, path) {
   });
 }
 
-export function auditHostedBrowserEvidence({ workflow, targetSha, runSha, jobs }) {
+export function inspectBrowserLiveTarget(source) {
+  if (typeof source !== 'string' || !source.trim()) {
+    return { target: 'UNINSPECTED', screenshotAssertions: 'UNKNOWN', pageDimensions: 'UNKNOWN' };
+  }
+  const fixture = /createServer\(/.test(source) && /server\.listen\(0,\s*['"]127\.0\.0\.1['"]/.test(source) &&
+    /res\.end\(/.test(source) && /initialUrl:\s*url/.test(source) &&
+    /http:\/\/127\.0\.0\.1:/.test(source);
+  const k10AppPage = /web\/(?:connect|admin|index)\.html|\bconnect\.html\b/.test(source);
+  const target = fixture && !k10AppPage ? 'EPHEMERAL_LOOPBACK_HTML_FIXTURE'
+    : fixture && k10AppPage ? 'MIXED_TARGETS_REVIEW_REQUIRED' : 'UNKNOWN_NOT_K10_PROVEN';
+  const screenshotAssertions = /manager\.screenshot\(/.test(source) && /manager\.visualVerify\(/.test(source) &&
+    /screenshot\.sha256/.test(source) ? 'SOURCE_ASSERTIONS_PRESENT' : 'NOT_PROVEN';
+  const pageDimensions = /width:\s*800\b/.test(source) && /height:\s*600\b/.test(source) ? '800x600_SOURCE' : 'UNKNOWN';
+  return { target, screenshotAssertions, pageDimensions };
+}
+
+export function auditHostedBrowserEvidence({ workflow, targetSha, runSha, jobs, browserTestSource, captureManifest }) {
   const browser = runCommands(jobSection(workflow, 'browser-live'));
   const testJob = runCommands(jobSection(workflow, 'test'));
   const checks = {
@@ -80,8 +96,13 @@ export function auditHostedBrowserEvidence({ workflow, targetSha, runSha, jobs }
   const matchingHead = acceptedSha && observedSha && targetSha === runSha;
   const browserJob = Array.isArray(jobs) ? jobs.find((job) => job?.name === 'browser-live') : null;
   const browserJobSucceeded = browserJob?.status === 'completed' && browserJob?.conclusion === 'success';
+  const browserTarget = inspectBrowserLiveTarget(browserTestSource);
+  const syntheticManifest = captureManifest?.evidenceKind === 'LOCAL_FILE_DOM_FIXTURE_NO_NETWORK';
+  const falsePairingClaim = syntheticManifest && [captureManifest?.realPairing, captureManifest?.windowsDeviceAcceptance]
+    .some((value) => value === 'PASS' || value === 'VERIFIED');
   const reason = !acceptedSha || !observedSha ? 'MISSING_EXACT_SHA'
     : !matchingHead ? 'STALE_RUN_SHA'
+    : falsePairingClaim ? 'SYNTHETIC_FIXTURE_CLAIMS_LIVE_ACCEPTANCE'
     : !checks.browserJobConfigured ? 'BROWSER_JOB_MISSING'
     : !browserJobSucceeded ? 'BROWSER_JOB_NOT_SUCCESSFUL'
     : !checks.threeStateCaptureListed ? 'THREE_STATE_CAPTURE_NOT_IN_WORKFLOW'
@@ -91,8 +112,12 @@ export function auditHostedBrowserEvidence({ workflow, targetSha, runSha, jobs }
     targetSha: acceptedSha ? targetSha : null,
     runSha: observedSha ? runSha : null,
     checks,
+    browserTarget,
+    captureEvidence: { kind: syntheticManifest ? 'OFFLINE_SYNTHETIC' : 'NOT_PROVIDED',
+      liveAcceptanceClaimRejected: falsePairingClaim },
     browserJob: browserJob ? { name: 'browser-live', status: browserJob.status, conclusion: browserJob.conclusion } : null,
-    status: reason === 'STALE_RUN_SHA' ? 'FAIL_STALE_SHA' : 'NOT_RUN',
+    status: reason === 'STALE_RUN_SHA' ? 'FAIL_STALE_SHA'
+      : falsePairingClaim ? 'FAIL_FALSE_LIVE_CLAIM' : 'NOT_RUN',
     reason,
     realThreeStateScreenshots: 'NOT_VERIFIED',
     livePairing: 'NOT_RUN',

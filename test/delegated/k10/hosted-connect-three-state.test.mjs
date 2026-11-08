@@ -66,6 +66,17 @@ test('#485 T-450: missing browser package retains NOT_RUN with zero screenshots'
     checkoutSha: sha, playwrightModule: 'nexowire-fixture-nonexistent-playwright-k10', viewports: tiny });
   assert.equal(report.status, 'NOT_RUN');
   assert.deepEqual(report.screenshots, []);
+  assert.deepEqual(report.requestedViewports.map((s) => s.width), [1]);
+});
+
+test('#539 T-592: missing browser preserves all requested 320/375/768/1024 widths as NOT_RUN', async (t) => {
+  const dir = fixture(t);
+  const viewports = [320, 375, 768, 1024].map((width) => ({ name: `w${width}`, width, height: 800 }));
+  const report = await captureHostedConnectFixtures({ outputDir: join(dir, 'output'), sourceSha: sha,
+    checkoutSha: sha, playwrightModule: 'nexowire-fixture-no-browser-320', viewports });
+  assert.equal(report.status, 'NOT_RUN');
+  assert.deepEqual(report.requestedViewports.map((s) => s.width), [320, 375, 768, 1024]);
+  assert.deepEqual(report.screenshots, []);
 });
 
 test('#485 T-450: three distinct synthetic renders hash successfully but never prove device pairing', async (t) => {

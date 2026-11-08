@@ -14,6 +14,11 @@ import { VIEWPORTS } from './offline-web-smoke.mjs';
 
 const STATES = ['loading', 'error', 'success'];
 const SHA = /^[a-f0-9]{40}$/;
+const ACCEPTANCE_VIEWPORTS = Object.freeze([
+  { name: 'small-mobile', width: 320, height: 720 },
+  ...VIEWPORTS,
+  { name: 'small-desktop', width: 1024, height: 768 },
+]);
 
 function actualCheckoutSha() {
   try {
@@ -57,21 +62,22 @@ function setSyntheticState(state) {
   get('connect-pill').className = 'pill muted';
 }
 
-export async function captureHostedConnectFixtures({ outputDir, sourceSha, checkoutSha = actualCheckoutSha(), playwrightModule = 'playwright', viewports = VIEWPORTS }) {
+export async function captureHostedConnectFixtures({ outputDir, sourceSha, checkoutSha = actualCheckoutSha(), playwrightModule = 'playwright', viewports = ACCEPTANCE_VIEWPORTS }) {
   const screenshots = [];
-  if (!SHA.test(sourceSha ?? '')) return { status: 'NOT_RUN', reason: 'valid source SHA is required', screenshots };
-  if (checkoutSha !== sourceSha) return { status: 'NOT_RUN', reason: 'source SHA differs from checked-out commit', screenshots };
+  const requestedViewports = viewports.map((viewport) => ({ name: viewport.name, width: viewport.width, height: viewport.height }));
+  if (!SHA.test(sourceSha ?? '')) return { status: 'NOT_RUN', reason: 'valid source SHA is required', screenshots, requestedViewports };
+  if (checkoutSha !== sourceSha) return { status: 'NOT_RUN', reason: 'source SHA differs from checked-out commit', screenshots, requestedViewports };
   let chromium;
   try { ({ chromium } = await import(playwrightModule)); }
-  catch { return { status: 'NOT_RUN', reason: 'Playwright module unavailable', screenshots }; }
+  catch { return { status: 'NOT_RUN', reason: 'Playwright module unavailable', screenshots, requestedViewports }; }
   let browser;
   try { browser = await chromium.launch({ headless: true }); }
-  catch { return { status: 'NOT_RUN', reason: 'Browser launch failed (details redacted)', screenshots }; }
+  catch { return { status: 'NOT_RUN', reason: 'Browser launch failed (details redacted)', screenshots, requestedViewports }; }
   const webDir = resolve(dirname(fileURLToPath(import.meta.url)), '../../../web');
   try { mkdirSync(outputDir, { recursive: true }); }
   catch {
     await browser.close().catch(() => {});
-    return { status: 'NOT_RUN', reason: 'Output directory unavailable', screenshots };
+    return { status: 'NOT_RUN', reason: 'Output directory unavailable', screenshots, requestedViewports };
   }
   let failed = false;
   const digests = new Set();
@@ -112,7 +118,7 @@ export async function captureHostedConnectFixtures({ outputDir, sourceSha, check
     await browser.close().catch(() => {});
   }
   return { status: failed ? 'FAIL' : 'PARTIAL_STATIC_FIXTURE', sourceSha,
-    evidenceKind: 'LOCAL_FILE_DOM_FIXTURE_NO_NETWORK', screenshots,
+    evidenceKind: 'LOCAL_FILE_DOM_FIXTURE_NO_NETWORK', screenshots, requestedViewports,
     realPairing: 'NOT_RUN', browserOriginIndependent: 'NOT_VERIFIED', keyboardNavigation: 'NOT_RUN',
     windowsDeviceAcceptance: 'NOT_RUN' };
 }

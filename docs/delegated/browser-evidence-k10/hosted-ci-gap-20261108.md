@@ -12,6 +12,18 @@ executes `test/browser-live.test.ts` and Windows/Agent lifecycle checks, **not**
 `scripts/delegated/k10/browser-visual-smoke.mjs`, the three-state screenshot
 capture, or an authenticated pairing/keyboard/screenshot test of `web/connect`.
 
+Detailed source + run inspection (P006 T-589): `test/browser-live.test.ts`
+blob `c8896a5d3e9c9533c06b0225f25e8675df522ba9` is unchanged between
+`main@b5a3f884` and `main@52d452f7`. It starts a temporary loopback HTTP
+server returning an inline page with `#name` input, `#go` button and
+`#status` element, then launches **real headless Edge at 800×600** via
+`BrowserManager`. It fills, clicks, visually verifies `#status`, and checks
+in-memory PNG screenshot bytes/dimensions/SHA-256. [PR #1142 exact-head job
+128712328389](https://github.com/Naveax/Nexowire/actions/runs/42474389141)
+ran this **one browser test successfully** on Windows. That is valid real
+Edge/BrowserManager coverage of an **ephemeral sample page**, not proof that
+the Nexowire `web/connect.html` onboarding page rendered or paired a device.
+
 The two `test (22/24)` jobs' `Verify K10 offline web shell and QA24 integration
 DAG` step explicitly runs `offline-web-smoke.test.mjs`, the old pool inventory,
 and `qa-24-integration-dag.test.ts`. It **does not** run the new
@@ -29,14 +41,18 @@ proof they executed.
 - `hosted-connect-three-state.mjs` is an **opt-in** Playwright-compatible
   static fixture runner: it loads `web/connect.html` locally, blocks HTTP(S),
   blocks `connect.js` to avoid real APIs, refuses file/symlink escapes, and
-  renders three **synthetically labelled** layout states at the 375/768/1440
-  viewport matrix. It hashes output PNGs, checks decoded pixels/dimensions,
+  renders three **synthetically labelled** layout states at the
+  320/375/768/1024/1440 viewport matrix. It hashes output PNGs, checks decoded pixels/dimensions,
   rejects repeated image content, a supplied SHA unlike `git rev-parse HEAD`,
   and horizontal overflow. It cannot create
   an authenticated success state or test the real device/keyboard behavior.
 - No Playwright version/browser is bundled or silently downloaded. On a runner
   without Playwright, script returns `NOT_RUN` with exit 2. Actual optional
   capture remains **NOT_RUN** until a properly equipped runner runs it.
+- A synthetic fixture manifest claiming live pairing or Windows acceptance
+  is rejected as `FAIL_FALSE_LIVE_CLAIM`; even 7/7 successful unrelated CI
+  jobs cannot override missing exact K10 invocation/screenshots. Requested
+  viewport widths remain listed when the browser is unavailable.
 
 Reproducible local commands:
 
