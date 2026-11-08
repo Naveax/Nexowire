@@ -91,3 +91,31 @@ Distinct work: #1030 owns parser/case-collision metadata improvements; #1113 sca
 5. Keep task-sandbox, capability/admission and real OS integration behind [#1080](https://github.com/Naveax/Nexowire/pull/1080)/#1096 protected ownership. Exact-SHA hosted test discovery and actual Windows/Linux/macOS acceptance remain independent gates.
 
 P007 local run: `node --import tsx --test test/delegated/k17/p006-skill-source-evidence.test.ts test/skills.test.ts test/shipped-skills.test.ts` **19/19 PASS**, containing the two explicit open-bug reproductions. New exact HEAD hosted and physical checks must be recorded separately, never inherited from previous SHA.
+
+## 9 Kasım takip — doğrulama/okuma arası hedef değiştirme tekrarı
+
+Additional deterministic, harmless temporary-filesystem reproduction: create an ordinary in-root
+`swapped-manifest/SKILL.md`, validate it successfully, then replace *only that manifest file*
+with a link to a harmless outside Markdown containing an `EXTERNAL_READ_MARKER`.
+`SkillRegistry.read('swapped-manifest')` currently returns that marker. This is a distinct
+**check-then-read identity gap**, not proof of an exploit racing inside one `load()` call.
+It demonstrates why an earlier `validate()` result alone must not authorize a later
+read. The test is deliberately marked `KNOWN OPEN GAP`; its passing result reports
+successful reproduction **rather than a containment fix**. Owner must still supply
+the appropriate race/handle-identity control and real Windows/macOS/installed checks.
+The prior 19/19 result above is historical; current-HEAD test count must be recorded
+with the new exact commit and execution evidence.
+
+Local focused replay on the updated source (Linux Node, no live Agent/Hub):
+
+```sh
+node --import tsx --test test/delegated/k17/p006-skill-source-evidence.test.ts test/skills.test.ts test/shipped-skills.test.ts
+# 20/20 PASS; three passing cases explicitly demonstrate OPEN filesystem gaps
+npm run typecheck  # PASS
+npm run build      # PASS
+```
+
+New exact-HEAD hosted CI is **NOT_VERIFIED** until its own run/job evidence is
+collected. The new K17 nested test is not explicitly invoked in upstream main
+CI's known callsites; generic success must never be borrowed. Windows/macOS
+real devices and within-a-single-read attacker race remain **NOT_RUN**.
