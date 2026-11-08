@@ -20,6 +20,12 @@ Boş bir PC’ye önce Node/npm kurman gerekmez.
 Önceki `../installers/Nexowire-Setup.cmd` dosyası v1.0.7'ye sabitlenmiş,
 denetlenebilir tarihsel arşivdir; **yeni kurulum için kullanma**.
 [Arşiv kaynağı ve hash bilgisi](../installers/README.md).
+**Bağlantı sayfası sürüm farkı:** `/connect.html` üzerindeki **Windows
+kurucusunu aç** düğmesi, güncel kaynakta hâlâ eski `v1.0.7` arşiv dosyasına
+giden sabitlenmiş bağlantıyı kullanıyor. Yeni kurulumda o düğmeyi takip
+etme; **bu sayfanın başındaki resmî v1.0.8 GitHub Releases indirmesini** ve
+aşağıdaki checksum kontrolünü esas al. Web düğmesinin düzeltilmesi ayrı
+arayüz sahibi incelemesini bekliyor; düzelmiş gibi varsayma.
 Resmî v1.0.8 setup SHA-256:
 `8f39a1954eb22131ed516d32acfad1fe17e3ccb9766eda3883b90595a9135694`.
 Bu checksum, yayıncı imzası veya CORE fiziksel yetki kanıtı değildir.
@@ -29,6 +35,8 @@ kanıtı ayrıca [#269'un kabul koşullarında](https://github.com/Naveax/Nexowi
 aranır. Paketteki Node çalıştırıcısının imzası da Nexowire kurucusunun
 imzası yerine geçmez. İmza ve temiz Windows kurulumu bağımsız
 doğrulanmadan "imzalı Nexowire yükleyicisi hazır" sonucu çıkarma.
+Native yardımcı kurucunun Nexowire yayıncı imzası doğrulanmadıysa
+SmartScreen uyarısını geçerek kurucuyu güvenli veya kabul edilmiş sayma.
 
 GitHub **Code → Download ZIP** kaynak kodu indirir ve bu kurulumun yerine geçmez.
 `nexowire-*.tgz` geliştirici paketidir. Ayrı Broker yardımcı ZIP’i ilk kurulum
@@ -43,7 +51,8 @@ indirildiyse Windows `(1)` ekleyebilir; dosya adını değiştirerek kaynağın�
 doğrulamış olmazsın. Kaynak/uzantı şüpheliyse resmî yayın bağlantısından tekrar
 indir; başka bir kaynaktan gelen `.cmd` dosyasını çalıştırma.
 
-İstersen indirdiğin kurucunun bütünlüğünü Windows PowerShell'de
+Normal indirme ve dosyaya çift tıklama için CMD, terminal veya yeni PowerShell
+kurulumu gerekmez. İstersen indirdiğin kurucunun bütünlüğünü Windows PowerShell'de
 `Get-FileHash` ile kontrol et. Dosya normal **İndirilenler** konumundaysa
 şu salt-okunur komutu kullanabilirsin:
 
@@ -217,6 +226,10 @@ veya OAuth akışı hata verirse Nexowire hizmeti tarafında destek gerekir.
 tekrar çalıştırmak bu sorunları güvenli biçimde çözmez.
 
 ### Oluştur / BAĞLA başarısızsa: hızlı karar ağacı
+
+Önce **hangi ekranın** hata verdiğini seç: indirme/kurulum → cihaz BAĞLA →
+TEKRAR DENE → ChatGPT Oluştur → `devices_list`. Bir aşamanın başarılı
+görünmesi sonraki aşamanın tamamlandığını kanıtlamaz.
 
 1. **Yalnız indir/kur ekranı mı var, cihaz adı yok mu?** Bu ekran eşleme
    onayı değildir. Önce kurucunun tamamlandığını kontrol et; Başlat → Nexowire

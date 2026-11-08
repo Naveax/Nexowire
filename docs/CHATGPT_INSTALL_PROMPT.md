@@ -22,7 +22,9 @@ Yapılacak sıra:
    README'de gösterilen SHA-256 ile dosyayı doğrulamama yardımcı ol; hash'i
    yayıncı imzası veya güvenlik onayı gibi sunma. Depodaki
    installers/Nexowire-Setup.cmd önceki v1.0.7'nin arşiv kurucusudur;
-   yeni kurulum için onu indirtme.
+   yeni kurulum için onu indirtme. /connect.html sayfasındaki Windows
+   indirme düğmesi de güncel kaynakta eski v1.0.7 arşivine bağlı;
+   düğme yerine yukarıdaki resmî v1.0.8 GitHub Releases adresini kullan.
    Kaynak ZIP’ini veya geliştirici .tgz paketini ilk kurulum gibi kullanma.
    Paket kendi Node çalıştırıcısını getirir; önceden npm/Node kurdurma.
    İndirilen dosyanın gerçek uzantısı .cmd olmalı, .cmd.txt olmamalı.
