@@ -6,11 +6,13 @@ import { fileURLToPath } from 'node:url';
 import { auditFixedCountGate, auditDynamicTapSummary, auditRequiredCiPaths,
   findClosingKeywords, auditIssueLifecycle,
   auditHostedAcceptance } from '../../../scripts/delegated/k20/p006-ci-issue-gate.mjs';
-import { auditP006Board, auditPrCohort, auditCrossWorkerPoolClaims } from
+import { auditP006Board, auditPrCohort, auditCrossWorkerPoolClaims, auditCurrentPrInventory } from
   '../../../scripts/delegated/k20/p006-board-pr-audit.mjs';
 
 const snapshot = JSON.parse(readFileSync(
   new URL('../../../docs/delegated/maintenance-k20/P006_EVIDENCE_SNAPSHOT_20261108.json', import.meta.url)));
+const p007 = JSON.parse(readFileSync(
+  new URL('../../../docs/delegated/maintenance-k20/P007_59PR_LIVE_SNAPSHOT_20261108.json', import.meta.url)));
 const workflow = readFileSync(new URL('../../../.github/workflows/ci.yml', import.meta.url), 'utf8');
 const tap = n => `# tests ${n}\n# pass ${n}\n# fail 0\n# skipped 0\n# todo 0\n`;
 const prior = { head: snapshot.upstreamMain, runHead: snapshot.upstreamMain,
@@ -174,6 +176,32 @@ test('T-652: incomplete/duplicated PR page, missing SHA or unexpected lifecycle 
     x.number === 1141 ? {...x,draft:false} : x));
   assert.deepEqual(notDraft.irregular,[1141]);
   assert.equal(notDraft.complete,false);
+});
+
+test('D-139: 59 current Draft PRs expose 17 stale board HEADs and 4 different CI states', () => {
+  const r = auditCurrentPrInventory(p007.prs);
+  assert.equal(r.complete,true);
+  assert.equal(r.observed,59);
+  assert.equal(r.headDrift.length,17);
+  assert.equal(r.runDrift.length,17);
+  assert.deepEqual(r.counts, { success:46,failure:5,action_required:6,in_progress:2,other:0 });
+  assert.equal(r.sourceInventoryStale,true);
+  assert.equal(r.hostedTestDiscovery,'NOT_VERIFIED');
+  assert.equal(r.accepted,false);
+});
+
+test('D-139: changed SHA with prior success run cannot be accepted; incomplete/duplicate rejects', () => {
+  const one = p007.prs.find(x=>x.number===1152);
+  assert.notEqual(one.recordedSha,one.liveSha);
+  assert.notEqual(Number(one.oldRun),one.liveRun.id);
+  const s = auditCurrentPrInventory([one],1);
+  assert.deepEqual(s.headDrift,[1152]);
+  assert.deepEqual(s.runDrift,[1152]);
+  assert.equal(s.accepted,false);
+  assert.equal(auditCurrentPrInventory(p007.prs.slice(0,58)).complete,false);
+  assert.throws(()=>auditCurrentPrInventory([one,one],2),/duplicate/i);
+  assert.throws(()=>auditCurrentPrInventory([{...one,liveRun:{...one.liveRun,id:0}}],1),/invalid/i);
+  assert.throws(()=>auditCurrentPrInventory([{...one,liveRun:{...one.liveRun,status:'queued',conclusion:'success'}}],1),/invalid/i);
 });
 
 const SHA = snapshot.upstreamMain;

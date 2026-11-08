@@ -83,3 +83,38 @@ export function auditCrossWorkerPoolClaims(statusFiles) {
   return { workersScanned: statusFiles.length, distinctPoolTasks: claims.size,
     shared, duplicateCreditAfterTieBreak: 0, creditVerifiedByStatusTextOnly: true };
 }
+
+/** Detects a stale team PR inventory without promoting any generic CI result to acceptance. */
+export function auditCurrentPrInventory(entries, expectedCount = 59) {
+  if (!Array.isArray(entries) || !Number.isSafeInteger(expectedCount) || expectedCount < 1)
+    throw new TypeError('Current PR inventory and count required');
+  const seen = new Set();
+  const headDrift = [];
+  const runDrift = [];
+  const counts = { success: 0, failure: 0, action_required: 0, in_progress: 0, other: 0 };
+  for (const x of entries) {
+    if (!Number.isSafeInteger(x?.number) || x.number < 1 || seen.has(x.number) ||
+        !SHA.test(x.recordedSha ?? '') || !SHA.test(x.liveSha ?? '') ||
+        x.prState !== 'open' || x.draft !== true || x.merged !== false ||
+        typeof x.owner !== 'string' || !/^K\d{2}$/.test(x.owner)) {
+      throw new TypeError('Duplicate, invalid or non-Draft PR in source inventory');
+    }
+    seen.add(x.number);
+    const run = x.liveRun;
+    if (!run || !Number.isSafeInteger(run.id) || run.id < 1 ||
+        !['completed','queued','in_progress'].includes(run.status) ||
+        !['success','failure','action_required',null].includes(run.conclusion) ||
+        (run.status !== 'completed' && run.conclusion !== null)) {
+      throw new TypeError(`Invalid current CI run for PR #${x.number}`);
+    }
+    if (x.recordedSha !== x.liveSha) headDrift.push(x.number);
+    if (x.oldRun !== null && (!/^\d+$/.test(x.oldRun) || +x.oldRun !== run.id))
+      runDrift.push(x.number);
+    const kind = run.conclusion === null ? run.status : run.conclusion;
+    if (Object.hasOwn(counts,kind)) counts[kind]++;
+    else counts.other++;
+  }
+  return { observed: entries.length, expectedCount, complete: entries.length === expectedCount,
+    headDrift, runDrift, counts, sourceInventoryStale: headDrift.length > 0,
+    hostedTestDiscovery: 'NOT_VERIFIED', accepted: false };
+}
