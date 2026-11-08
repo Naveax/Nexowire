@@ -19,6 +19,8 @@ source-level outcomes:
 | `taskkill` exit 128 | Original root exited but numeric PID **reused**; owned grandchild alive | `PROCESS_TREE_TERMINATION_UNCONFIRMED`; PID-only liveness never proves original identity (#540 T-486) |
 | `taskkill` exit null | Original root exited, owned grandchild alive | `treeCleanup=unconfirmed`; missing exit status is not a confirmed stop (#540 T-486) |
 | `taskkill` exit zero | Original root exited, numeric PID now belongs to unrelated process | `treeCleanup=requested` **not** verified; this fixture does not signal/kill live PIDs (#540 T-486) |
+| `taskkill` never emits `close`/`error` | Root still alive at simulated 10-second timeout | Cancel the **fake** taskkill child once; `PROCESS_TREE_TERMINATION_UNCONFIRMED`, no automatic retry or inferred child exit |
+| `taskkill` never emits `close`/`error` | Root already gone; owned grandchild remains alive | Cancel the fake taskkill child once; `treeCleanup=unconfirmed`, grandchild survival remains unverified |
 
 ## Real Work-PC acceptance required by #540
 
@@ -100,3 +102,14 @@ process exit, and independent descendant-exit evidence to #540. If any owned
 descendant remains, identity is ambiguous, or a case is not run, keep that gate
 `FAIL`/`UNKNOWN`/`NOT_RUN`. Do not close #540 or claim installed-device
 resolution from K16's Linux/VM fixtures or from a successful `taskkill` request.
+
+### 2026-11-09 — bounded taskkill timeout negative regression
+
+The two new K16 VM cases deliberately suppress *both* `error` and `close`,
+then fast-forward only the function's **mock timer**. For live-root timeout,
+the expected result is explicit unconfirmed termination; for gone-root timeout,
+the result is `unconfirmed`, **not** a verified tree stop. Both require exactly
+one cancellation of the fake taskkill child, one root-only PID probe, and no
+retry. This tests real private source control flow without waiting ten seconds
+or launching an OS process. Exact descendant-incarnation readback remains an
+owner/real-Windows acceptance requirement.
