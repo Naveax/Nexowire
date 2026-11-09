@@ -17,6 +17,43 @@ const SQLITE_COMPANIONS=new Set(['idempotency-records.sqlite-wal',
 const WORKSPACE=/^workspace-[0-9a-f]{64}\.json$/;
 const LEGACY_BACKUP=/^idempotency-records\.json\.pre-sqlite-[0-9]+$/;
 
+/** A saved PID is only occupancy evidence, never proof of writer incarnation. */
+export type WriterPidPresence='occupied'|'not-found'|'unverified';
+export type WriterRecordStatus='valid'|'missing'|'invalid';
+
+export function inspectRecordedHubWriterReadOnly(db:DatabaseSync):{
+  pid:number|null;
+  presence:WriterPidPresence;
+  recordStatus:WriterRecordStatus;
+  hostMatchesLocal:boolean|null;
+  incarnationRecorded:boolean;
+}{
+  const unknown={pid:null,presence:'unverified' as const,
+    recordStatus:'missing' as const,hostMatchesLocal:null,incarnationRecorded:false};
+  const table=db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='idempotency_meta'").get();
+  if(!table)return unknown;
+  const row=db.prepare("SELECT value FROM idempotency_meta WHERE key='hub_writer'").get() as
+    {value:unknown}|undefined;
+  if(row===undefined)return unknown;
+  let value:unknown;
+  try{value=JSON.parse(String(row.value));}
+  catch{return {...unknown,recordStatus:'invalid'};}
+  if(!value||typeof value!=='object'||Array.isArray(value))
+    return {...unknown,recordStatus:'invalid'};
+  const candidate=value as Record<string,unknown>;
+  const {host,pid,incarnation}=candidate;
+  if(typeof host!=='string'||!host||typeof pid!=='number'||
+     !Number.isSafeInteger(pid)||pid<1||typeof incarnation!=='string'||!incarnation)
+    return {...unknown,recordStatus:'invalid'};
+  let presence:WriterPidPresence='unverified';
+  try{process.kill(pid,0);presence='occupied';}
+  catch(error){
+    if((error as NodeJS.ErrnoException).code==='ESRCH')presence='not-found';
+  }
+  return {pid,presence,recordStatus:'valid',
+    hostMatchesLocal:host===os.hostname(),incarnationRecorded:true};
+}
+
 export interface LegacyHubStateInventory {
   mode:'READ_ONLY';
   sourceRoot:string;
@@ -30,6 +67,11 @@ export interface LegacyHubStateInventory {
   nestedRecoveryBackupsPresent:boolean;
   sqliteRecords:number|null;
   sqliteQuickCheck:string|null;
+  /** A matching live PID does not prove process incarnation or quiescence. */
+  sqliteWriterPid:number|null;
+  sqliteWriterPidPresence:WriterPidPresence;
+  sqliteWriterRecordStatus:WriterRecordStatus;
+  sqliteWriterHostMatchesLocal:boolean|null;
   readyForSystemCutover:false;
   blockers:string[];
 }
@@ -72,11 +114,16 @@ export async function scanLegacyHubStateReadOnly(
   }
   const dbName=path.join(sourceRoot,'idempotency-records.sqlite');
   let quick:string|null=null,records:number|null=null;
+  let writer:{pid:number|null;presence:WriterPidPresence;
+    recordStatus:WriterRecordStatus;hostMatchesLocal:boolean|null}={
+      pid:null,presence:'unverified',recordStatus:'missing',hostMatchesLocal:null,
+    };
   if(!required.has('idempotency-records.sqlite')&&!links.includes('idempotency-records.sqlite')){
     const db=new DatabaseSync(dbName,{readOnly:true});
     try{
       quick=(db.prepare('PRAGMA quick_check').get() as {quick_check:string}).quick_check;
       records=(db.prepare('SELECT COUNT(*) AS n FROM idempotency_records').get() as {n:number}).n;
+      writer=inspectRecordedHubWriterReadOnly(db);
     }finally{db.close();}
   }
   const blockers=['OFFLINE_WRITER_QUIESCE_NOT_VERIFIED',
@@ -87,6 +134,10 @@ export async function scanLegacyHubStateReadOnly(
   if(unexpected.length>0)blockers.push('UNRECOGNIZED_STATE_CONTENT');
   if(links.length>0)blockers.push('STATE_LINK_OR_HARDLINK_UNTRUSTED');
   if(quick!=='ok')blockers.push('SQLITE_QUICK_CHECK_NOT_OK');
+  if(writer.presence==='occupied')blockers.push('RECORDED_SQLITE_WRITER_PID_OCCUPIED');
+  if(writer.recordStatus!=='valid'||writer.presence==='unverified')
+    blockers.push('SQLITE_WRITER_IDENTITY_UNVERIFIED');
+  if(writer.hostMatchesLocal===false)blockers.push('SQLITE_WRITER_HOST_MISMATCH');
   return {
     mode:'READ_ONLY',sourceRoot,
     intendedSystemRoot:SYSTEM_HUB_STATE_PATH,
@@ -97,6 +148,10 @@ export async function scanLegacyHubStateReadOnly(
     rejectedLinkOrSpecialEntries:links.sort(),
     nestedRecoveryBackupsPresent:backupDirectory,
     sqliteRecords:records,sqliteQuickCheck:quick,
+    sqliteWriterPid:writer.pid,
+    sqliteWriterPidPresence:writer.presence,
+    sqliteWriterRecordStatus:writer.recordStatus,
+    sqliteWriterHostMatchesLocal:writer.hostMatchesLocal,
     readyForSystemCutover:false,blockers,
   };
 }

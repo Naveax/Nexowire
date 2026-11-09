@@ -5,7 +5,29 @@ import {createHash} from 'node:crypto';
 import {promises as fs} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {scanLegacyHubStateReadOnly} from '../scripts/ai04-system-state-inventory.js';
+import {scanLegacyHubStateReadOnly,inspectRecordedHubWriterReadOnly} from '../scripts/ai04-system-state-inventory.js';
+
+test('read-only SQLite writer witness classifies occupied, missing and forged owners',()=>{
+  const db=new DatabaseSync(':memory:');
+  try{
+    db.exec('CREATE TABLE idempotency_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL)');
+    const insert=db.prepare('INSERT INTO idempotency_meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value');
+    assert.equal(inspectRecordedHubWriterReadOnly(db).recordStatus,'missing');
+    insert.run('hub_writer',JSON.stringify({host:os.hostname(),pid:process.pid,incarnation:'synthetic'}));
+    const occupied=inspectRecordedHubWriterReadOnly(db);
+    assert.equal(occupied.pid,process.pid);
+    assert.equal(occupied.presence,'occupied');
+    assert.equal(occupied.hostMatchesLocal,true);
+    assert.equal(occupied.incarnationRecorded,true);
+    insert.run('hub_writer',JSON.stringify({host:'not-this-host',pid:process.pid,incarnation:'synthetic'}));
+    assert.equal(inspectRecordedHubWriterReadOnly(db).hostMatchesLocal,false);
+    insert.run('hub_writer','{invalid json');
+    const invalid=inspectRecordedHubWriterReadOnly(db);
+    assert.equal(invalid.recordStatus,'invalid');
+    assert.equal(invalid.presence,'unverified');
+    assert.equal(invalid.pid,null);
+  }finally{db.close()}
+});
 
 test('SYSTEM Hub source inventory rejects noncanonical, relative or remote state paths',async()=>{
   for(const input of ['', 'relative/state', 'C:\\Users\\Owner\\..\\Owner\\hub',
@@ -29,6 +51,9 @@ test('AI-04 reads all fixture state without writes, retains honest P0 blockers',
   try{
     db.exec('CREATE TABLE idempotency_records(key TEXT PRIMARY KEY);');
     db.prepare('INSERT INTO idempotency_records(key) VALUES(?)').run('fixture-record');
+    db.exec('CREATE TABLE idempotency_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL)');
+    db.prepare('INSERT INTO idempotency_meta(key,value) VALUES(?,?)').run('hub_writer',
+      JSON.stringify({host:os.hostname(),pid:process.pid,incarnation:'fixture'}));
   }finally{db.close();}
   await fs.writeFile(path.join(root,'workspace-'+('a'.repeat(64))+'.json'),'{}');
   await fs.mkdir(path.join(root,'ai04-recovery-backups'));
@@ -40,6 +65,11 @@ test('AI-04 reads all fixture state without writes, retains honest P0 blockers',
   assert.equal(report.mode,'READ_ONLY');
   assert.equal(report.sqliteRecords,1);
   assert.equal(report.sqliteQuickCheck,'ok');
+  assert.equal(report.sqliteWriterPid,process.pid);
+  assert.equal(report.sqliteWriterPidPresence,'occupied');
+  assert.equal(report.sqliteWriterRecordStatus,'valid');
+  assert.equal(report.sqliteWriterHostMatchesLocal,true);
+  assert.ok(report.blockers.includes('RECORDED_SQLITE_WRITER_PID_OCCUPIED'));
   assert.equal(report.rootFileCount,6);
   assert.equal(report.workspaceFileCount,1);
   assert.equal(report.requiredFilesMissing.length,0);
