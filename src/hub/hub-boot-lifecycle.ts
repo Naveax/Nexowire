@@ -585,6 +585,33 @@ async function writeManifest(
   );
 }
 
+/**
+ * A task hidden by Task Scheduler ACL may appear absent via Get-ScheduledTask.
+ * COM distinguishes E_ACCESSDENIED 0x80070005 from true absence 0x80070002
+ * without interpreting localized diagnostic text or changing task state.
+ */
+export const hubBootTaskVisibilityProbe=String.raw`
+$bootVisibility='not-installed'
+if($null -eq $bootTask){
+  try {
+    $scheduleService=New-Object -ComObject 'Schedule.Service' -ErrorAction Stop
+    $scheduleService.Connect()
+    $rootTaskFolder=$scheduleService.GetFolder('\')
+    $lookedUpTask=$rootTaskFolder.GetTask($boot)
+    $bootVisibility=if($null -ne $lookedUpTask){'identity-unverified'}else{'visibility-unverified'}
+  }catch {
+    $hresult=[int]$_.Exception.HResult
+    if($hresult -eq -2147024894){
+      $bootVisibility='not-installed'
+    }elseif($hresult -eq -2147024891){
+      $bootVisibility='access-denied'
+    }else{
+      $bootVisibility='visibility-unverified'
+    }
+  }
+}
+`;
+
 export async function hubBootLifecycleStatus(
   options: HubBootLifecycleOptions = {},
 ): Promise<HubBootLifecycleStatus> {
@@ -605,13 +632,14 @@ export async function hubBootLifecycleStatus(
       '$boot=$env:NEXOWIRE_HUB_BOOT_TASK_NAME',
       '$user=$env:NEXOWIRE_HUB_TASK_NAME',
       '$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue',
+      hubBootTaskVisibilityProbe,
       '$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
       // Status is read-only. A legacy user Hub task can still run with a
       // noncanonical executable path when no SYSTEM Boot task exists.
       // Report the mismatch instead of making boot-status unusable; keep the
       // strict identity gate unchanged for boot-install and boot-uninstall.
       hubBootStatusIdentityInspection,
-      "$bootState=if($bootTask){([string]$bootTask.State).ToLowerInvariant()}else{'not-installed'}",
+      '$bootState=if($bootTask){([string]$bootTask.State).ToLowerInvariant()}else{$bootVisibility}',
       "$userState=if($userTaskIdentityError){'identity-mismatch'}elseif($userTask){([string]$userTask.State).ToLowerInvariant()}else{'not-installed'}",
       '[pscustomobject]@{installed=($null-ne$bootTask);state=$bootState;userTaskState=$userState}|ConvertTo-Json -Compress',
     ].join('\n'),
@@ -973,12 +1001,14 @@ export interface WindowsRebootAgentTaskEvidence {
 
 export interface WindowsUnattendedRebootEvidence {
   systemHubInstalled: boolean;
+  systemHubTaskState?: string;
   agent: WindowsRebootAgentTaskEvidence;
   autoAdminLogon: boolean;
 }
 
 export type WindowsRebootBlocker =
   | 'SYSTEM_HUB_BOOT_NOT_INSTALLED'
+  | 'SYSTEM_HUB_BOOT_VISIBILITY_UNVERIFIED'
   | 'NATIVE_AGENT_NOT_INSTALLED'
   | 'NATIVE_AGENT_LOGON_ONLY'
   | 'NATIVE_AGENT_PRELOGIN_IDENTITY_UNVERIFIED'
@@ -997,8 +1027,11 @@ export function assessWindowsUnattendedRebootReadiness(
   blockers: WindowsRebootBlocker[];
 } {
   const blockers:WindowsRebootBlocker[]=[];
-  if(!evidence.systemHubInstalled)
-    blockers.push('SYSTEM_HUB_BOOT_NOT_INSTALLED');
+  if(!evidence.systemHubInstalled){
+    blockers.push(evidence.systemHubTaskState && evidence.systemHubTaskState!=='not-installed'
+      ? 'SYSTEM_HUB_BOOT_VISIBILITY_UNVERIFIED'
+      : 'SYSTEM_HUB_BOOT_NOT_INSTALLED');
+  }
   if(!evidence.agent.installed) {
     blockers.push('NATIVE_AGENT_NOT_INSTALLED');
   } else if(evidence.agent.interactiveOnly || !evidence.agent.bootTrigger) {
@@ -1045,6 +1078,7 @@ export async function inspectWindowsUnattendedRebootReadiness(
   ].join('\n'),taskEnv(options));
   return assessWindowsUnattendedRebootReadiness({
     systemHubInstalled:boot.installed,
+    systemHubTaskState:boot.state,
     agent:probe.agent,
     autoAdminLogon:probe.autoAdminLogon,
   });
