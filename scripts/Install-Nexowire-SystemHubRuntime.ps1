@@ -87,7 +87,15 @@ if(-not (Test-Path -LiteralPath $node -PathType Leaf)){
     $issues.Add('SIGNED_NODE_UNVERIFIED')
   }
 }
-if(Test-Path -LiteralPath $target){$issues.Add('TARGET_ALREADY_EXISTS')}
+# A private SYSTEM runtime can be invisible to the interactive caller.
+# Report unknown access as a blocking plan condition; never infer absence.
+try {
+  if(Test-Path -LiteralPath $target -ErrorAction Stop){
+    $issues.Add('TARGET_ALREADY_EXISTS')
+  }
+}catch {
+  $issues.Add('TARGET_EXISTENCE_UNVERIFIED')
+}
 $tree=$null
 if([string]::IsNullOrWhiteSpace($SourceDirectory)){
   $issues.Add('SOURCE_DIRECTORY_REQUIRED')
