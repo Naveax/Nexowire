@@ -75,6 +75,38 @@ test('snapshot proof equality detects changed, removed or additional state files
     ['ai04-recovery-backups/backup-1.json','audit.jsonl']);
 });
 
+test('snapshot rejects a previously hashed audit file changed while hashing later files',{
+  skip:!windows,
+},async(t)=>{
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'nwx-ai04-crossfile-'));
+  t.after(()=>fs.rm(root,{recursive:true,force:true}));
+  await fixture(root);
+  await assert.rejects(()=>captureLegacyHubStateSnapshotProof(root,{
+    afterFileHashed:async(rel)=>{
+      if(rel==='devices.json'){
+        await fs.appendFile(path.join(root,'audit.jsonl'),'late-write\\n');
+      }
+    },
+  }),/AI04_CROSS_FILE_CHANGED_DURING_HASH/);
+});
+
+test('snapshot rejects SQLite row committed after its journal was hashed',{
+  skip:!windows,
+},async(t)=>{
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'nwx-ai04-sqlite-race-'));
+  t.after(()=>fs.rm(root,{recursive:true,force:true}));
+  await fixture(root);
+  await assert.rejects(()=>captureLegacyHubStateSnapshotProof(root,{
+    afterFileHashed:async(rel)=>{
+      if(rel==='idempotency-records.sqlite'){
+        const db=new DatabaseSync(path.join(root,'idempotency-records.sqlite'));
+        try{db.prepare('INSERT INTO idempotency_records(key) VALUES(?)').run('late-record')}
+        finally{db.close()}
+      }
+    },
+  }),/AI04_SQLITE_OR_STATE_CHANGED_DURING_HASH/);
+});
+
 test('snapshot proof rejects linked or unrecognized entries before hashing',{
   skip:!windows,
 },async(t)=>{
