@@ -967,8 +967,10 @@ export async function uninstallHubBootLifecycle(
       '$expectedLegacyState='+psLiteral(installedManifest.userTaskPreviousState),
       '$port='+String(installedManifest.port),
       "$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue",
+      hubBootTaskVisibilityProbe,
       "$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue",
       hubBootRegisteredTaskIdentityGuard,
+      hubBootInstallTaskAbsenceGuard,
       '$removed=$false',
       'if($bootTask){',
       '  Stop-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue',
@@ -993,6 +995,17 @@ export async function uninstallHubBootLifecycle(
     ].join('\n'),
     taskEnv(options),
   );
+  // A task recreated during uninstall may still depend on this launcher.
+  // Independently prove absence again before deleting the protected root.
+  await runPowerShellJson<{ok:true}>([
+    "$ErrorActionPreference='Stop'",
+    '$boot=$env:NEXOWIRE_HUB_BOOT_TASK_NAME',
+    "$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue",
+    hubBootTaskVisibilityProbe,
+    "if($null -ne $bootTask){throw 'HUB_BOOT_TASK_REAPPEARED_BEFORE_REMOVAL'}",
+    hubBootInstallTaskAbsenceGuard,
+    '[pscustomobject]@{ok=$true}|ConvertTo-Json -Compress',
+  ].join('\n'),taskEnv(options));
   // Another process may have changed the parent or managed root while
   // Task Scheduler was operating. Recheck before recursive deletion.
   verifyWindowsPrivateAcl(parent);
