@@ -90,6 +90,14 @@ test('Windows setup is non-admin, versioned, and checksum-pinned', () => {
   assert.match(setup, /System\.Security\.Cryptography\.SHA256/);
   assert.match(setup, /System\.IO\.Compression\.ZipFile/);
   assert.match(setup, /System\.Net\.WebClient/);
+  assert.match(setup, /NX_LOCAL_ZIP=%~dp0Nexowire-Windows-x64\.zip/);
+  const localSource=setup.indexOf('Test-Path -LiteralPath $env:NX_LOCAL_ZIP');
+  const copy=setup.indexOf('[System.IO.File]::Copy($env:NX_LOCAL_ZIP');
+  const remote=setup.indexOf('$web.DownloadFile($env:NX_PAYLOAD_URL');
+  const sha=setup.indexOf('$sha.ComputeHash($stream)');
+  assert.ok(localSource>0 && copy>localSource && remote>copy && sha>remote,
+    'Sibling ZIP must be selected before remote fallback and hash verified after copy');
+  assert.match(setup,/matching ZIP beside Nexowire-Setup\.cmd/);
   assert.doesNotMatch(
     setup,
     /Get-FileHash|Expand-Archive|Invoke-WebRequest/,
