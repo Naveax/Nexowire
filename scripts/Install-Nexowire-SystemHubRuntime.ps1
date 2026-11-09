@@ -69,7 +69,7 @@ function Assert-PrivateTree([string]$root){
     }
     foreach($ace in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){
       if($ace.AccessControlType -eq 'Allow' -and
-         ($ace.FileSystemRights -band $writeMask) -ne 0 -and
+         ([int64]$ace.FileSystemRights -band $writeMask) -ne 0 -and
          -not $allow.ContainsKey($ace.IdentityReference.Value)){
         throw 'AI01_TARGET_WRITABLE_BY_UNTRUSTED_ACCOUNT'
       }

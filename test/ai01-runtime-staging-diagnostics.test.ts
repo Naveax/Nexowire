@@ -39,6 +39,27 @@ test('AI-01 installer emits precise stage failure without changing fail-closed t
   assert.match(source,/taskChanged=\$false;sqliteChanged=\$false/);
 });
 
+test('AI-01 ACL verifier casts FileSystemRights before Int64 bitmask (real Windows PowerShell 5.1)',{
+  skip:!win,
+},()=>{
+  assert.match(source,/\(\[int64\]\$ace\.FileSystemRights -band \$writeMask\)/);
+  assert.doesNotMatch(source,/\(\$ace\.FileSystemRights -band \$writeMask\)/);
+  const command=[
+    "$ErrorActionPreference='Stop'",
+    "$acl=Get-Acl -LiteralPath $env:TEMP",
+    "$mask=[int64]0x40000000 -bor [int64]0x10000000 -bor [int64]0x10000 -bor [int64]0x40000 -bor [int64]0x80000 -bor [int64]2 -bor [int64]4",
+    "$rules=@($acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]))",
+    "if($rules.Count -lt 1){throw 'NO_ACL_RULES'}",
+    "$count=0;foreach($ace in $rules){$v=([int64]$ace.FileSystemRights -band $mask);if($v -ne 0){$count++}}",
+    "Write-Output ('ACL_INT64_CAST_PASS='+$count)",
+  ].join('; ');
+  const result=spawnSync(shell,['-NoProfile','-NonInteractive','-Command',command],{
+    encoding:'utf8',windowsHide:true,timeout:15000,
+  });
+  assert.equal(result.status,0,result.stderr+' '+result.stdout);
+  assert.match(result.stdout,/ACL_INT64_CAST_PASS=\d+/);
+});
+
 test('AI-01 runtime powershell 5.1 source parses without running installer',{
   skip:!win,
 },()=>{
