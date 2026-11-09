@@ -612,6 +612,16 @@ if($null -eq $bootTask){
 }
 `;
 
+/**
+ * An installer must prove absence, not merely fail to see a protected task.
+ * Status calls may display 'access-denied'; all mutation paths fail closed.
+ */
+export const hubBootInstallTaskAbsenceGuard=String.raw`
+if($null -eq $bootTask -and $bootVisibility -cne 'not-installed'){
+  throw 'HUB_BOOT_EXISTING_TASK_VISIBILITY_UNVERIFIED'
+}
+`;
+
 export async function hubBootLifecycleStatus(
   options: HubBootLifecycleOptions = {},
 ): Promise<HubBootLifecycleStatus> {
@@ -691,8 +701,10 @@ export async function installHubBootLifecycle(
     '$boot=$env:NEXOWIRE_HUB_BOOT_TASK_NAME',
     '$user=$env:NEXOWIRE_HUB_TASK_NAME',
     "$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue",
+    hubBootTaskVisibilityProbe,
     "$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue",
     hubBootRegisteredTaskIdentityGuard,
+    hubBootInstallTaskAbsenceGuard,
     // Upgrading a preexisting SYSTEM Boot task requires a separately
     // backed-up owner-approved migration; do not overwrite it in place.
     "if($null -ne $bootTask){throw 'HUB_BOOT_EXISTING_TASK_INSTALL_DENIED'}",
@@ -834,8 +846,10 @@ export async function installHubBootLifecycle(
         "$principal=New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest",
         '$settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -MultipleInstances IgnoreNew',
         "$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue",
+        hubBootTaskVisibilityProbe,
         "$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue",
         hubBootRegisteredTaskIdentityGuard,
+        hubBootInstallTaskAbsenceGuard,
         "if($null -ne $bootTask){throw 'HUB_BOOT_EXISTING_TASK_INSTALL_DENIED'}",
         "$actualLegacyState=if($userTask){[string]$userTask.State}else{'NotInstalled'}",
         "if($actualLegacyState -cne $expectedLegacyState){throw 'HUB_USER_TASK_STATE_RACE'}",
@@ -880,8 +894,10 @@ export async function installHubBootLifecycle(
             '$marker='+psLiteral(installMarker),
             '$expectedLegacyState='+psLiteral(taskPreflight.legacyState),
             "$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue",
+            hubBootTaskVisibilityProbe,
             "$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue",
             hubBootRegisteredTaskIdentityGuard,
+            hubBootInstallTaskAbsenceGuard,
             hubBootRollbackTaskOwnershipGuard,
             'if($bootTask){',
             '  Stop-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue',
