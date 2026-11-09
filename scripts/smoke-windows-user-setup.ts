@@ -29,10 +29,11 @@ function parseArgs(args: readonly string[]): {
   profile: 'ascii' | 'unicode';
   downloadSource: 'fixture' | 'github';
   scenario: 'install' | 'checksum-mismatch';
+  publicSourceSha: string | undefined;
 } {
   for (let index = 0; index < args.length; index++) {
     const arg = args[index]!;
-    if (['--bundle-dir', '--profile', '--download-source', '--scenario'].includes(arg)) {
+    if (['--bundle-dir', '--profile', '--download-source', '--scenario', '--public-source-sha'].includes(arg)) {
       index++;
       if (index >= args.length) fail(arg + ' requires a value.');
       continue;
@@ -47,6 +48,10 @@ function parseArgs(args: readonly string[]): {
   const scenario = argValue(args, '--scenario') ?? 'install';
   if (scenario !== 'install' && scenario !== 'checksum-mismatch') fail('Invalid smoke scenario.');
   if (scenario === 'checksum-mismatch' && downloadSource !== 'fixture') fail('Checksum fault injection requires the isolated fixture.');
+  const publicSourceSha = argValue(args, '--public-source-sha');
+  if (downloadSource === 'github' && !/^[a-f0-9]{40}$/.test(publicSourceSha ?? '')) {
+    fail('Public bootstrap smoke requires an immutable exact GitHub commit SHA.');
+  }
   return {
     bundleDir: path.resolve(
       argValue(args, '--bundle-dir') ?? 'release-windows',
@@ -54,6 +59,7 @@ function parseArgs(args: readonly string[]): {
     profile,
     downloadSource,
     scenario,
+    publicSourceSha,
   };
 }
 
@@ -119,7 +125,7 @@ async function main(): Promise<void> {
     fail('Windows setup smoke must run on Windows.');
   }
 
-  const { bundleDir, profile: profileKind, downloadSource, scenario } = parseArgs(process.argv.slice(2));
+  const { bundleDir, profile: profileKind, downloadSource, scenario, publicSourceSha } = parseArgs(process.argv.slice(2));
   const payload = path.join(
     bundleDir,
     'Nexowire-Windows-x64.zip',
@@ -236,7 +242,10 @@ async function main(): Promise<void> {
         ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
           "$ErrorActionPreference='Stop'; $web=New-Object System.Net.WebClient; try { $web.DownloadFile($env:NEXOWIRE_SMOKE_SETUP_URL, $env:NEXOWIRE_SMOKE_SETUP_FILE) } finally { $web.Dispose() }"],
         { cwd: tempRoot, env: { ...cleanEnv,
-          NEXOWIRE_SMOKE_SETUP_URL: 'https://raw.githubusercontent.com/Naveax/Nexowire/96315d5dd4986fffbd24a96859309271d2a88ffe/installers/Nexowire-Setup.cmd',
+          // Resolve exactly the commit whose checked-in setup is under test.
+          // An older immutable source URL mismatches whenever the bootstrap
+          // changes while the old published release remains unchanged.
+          NEXOWIRE_SMOKE_SETUP_URL: 'https://raw.githubusercontent.com/Naveax/Nexowire/' + publicSourceSha + '/installers/Nexowire-Setup.cmd',
           NEXOWIRE_SMOKE_SETUP_FILE: downloadedSetup,
         } },
       );
