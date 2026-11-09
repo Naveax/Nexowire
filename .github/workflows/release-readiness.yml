@@ -131,7 +131,7 @@ jobs:
           $stable = Join-Path $env:RUNNER_TEMP 'nexowire-published-v1.0.7'
           Copy-Item -LiteralPath installers/Nexowire-Setup.cmd -Destination $stable -Force
           Copy-Item -LiteralPath installers/SHA256SUMS-Windows -Destination $stable -Force
-          node --import tsx scripts/smoke-windows-user-setup.ts --bundle-dir $stable --download-source github
+          node --import tsx scripts/smoke-windows-user-setup.ts --bundle-dir $stable --download-source github --public-source-sha "${{ github.event.pull_request.head.sha || github.sha }}"
           if ($LASTEXITCODE -ne 0) { throw 'Repository bootstrap Unicode clean-profile setup failed.' }
       - name: Upload Windows user bundle
         if: runner.os == 'Windows'
