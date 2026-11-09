@@ -36,6 +36,7 @@ test('AI-01 installer emits precise stage failure without changing fail-closed t
   assert.match(source,/\(\$stageItem\.Attributes -band \[IO\.FileAttributes\]::ReparsePoint\) -eq 0/);
   assert.match(source,/AI01_ADMINISTRATOR_TOKEN_REQUIRED/);
   assert.match(source,/AI01_TARGET_RACE/);
+  assert.match(source,/TARGET_EXISTENCE_UNVERIFIED/);
   assert.match(source,/taskChanged=\$false;sqliteChanged=\$false/);
 });
 
