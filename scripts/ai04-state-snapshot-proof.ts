@@ -39,7 +39,7 @@ function cmp(a:string,b:string):number{return a<b?-1:a>b?1:0;}
 function stableStat(a:BigIntStats,b:BigIntStats):boolean{
   return a.dev===b.dev&&a.ino===b.ino&&a.size===b.size&&
     a.mtimeNs===b.mtimeNs&&a.ctimeNs===b.ctimeNs&&
-    a.nlink===b.nlink;
+    a.nlink===b.nlink&&a.mode===b.mode;
 }
 
 /** Bound data reads, reject hardlinks/reparse points and detect replacement. */
@@ -86,6 +86,7 @@ function onlyValidRelativeName(name:string):void{
  */
 export async function captureLegacyHubStateSnapshotProof(
   root:string,
+  hooks:Readonly<{afterFileHashed?:(relativePath:string)=>Promise<void>}>={},
 ):Promise<StateSnapshotProof>{
   const inventory=await scanLegacyHubStateReadOnly(root);
   const blocking=new Set(['REQUIRED_STATE_FILE_MISSING',
@@ -95,6 +96,9 @@ export async function captureLegacyHubStateSnapshotProof(
      inventory.sqliteQuickCheck!=='ok'||inventory.sqliteRecords===null){
     throw new Error('AI04_STATE_INVENTORY_UNTRUSTED');
   }
+  const rootBefore=await fs.lstat(root,{bigint:true});
+  if(!rootBefore.isDirectory()||rootBefore.isSymbolicLink())
+    throw new Error('AI04_STATE_DIRECTORY_CHANGED_DURING_HASH');
   const items=await fs.readdir(root,{withFileTypes:true});
   const relative:string[]=[];
   let topLevelCount=0;
@@ -126,6 +130,16 @@ export async function captureLegacyHubStateSnapshotProof(
     throw new Error('AI04_STATE_FILE_SET_CHANGED');
   }
   const seen=new Set<string>();
+  // A file can change *after* it was hashed but before later files finish.
+  // Record the identity of the whole set first and recheck it at the end.
+  const beforeFiles=new Map<string,BigIntStats>();
+  for(const rel of relative){
+    const file=path.join(root,...rel.split('/'));
+    const stat=await fs.lstat(file,{bigint:true});
+    if(!stat.isFile()||stat.isSymbolicLink()||stat.nlink!==1n)
+      throw new Error('AI04_SOURCE_FILE_NOT_PLAIN');
+    beforeFiles.set(rel,stat);
+  }
   const files:StateSnapshotFile[]=[];
   let totalBytes=0;
   for(const rel of relative.sort(cmp)){
@@ -136,6 +150,7 @@ export async function captureLegacyHubStateSnapshotProof(
     const hashed=await hashStableRegularFile(full);
     totalBytes+=hashed.bytes;
     files.push({relativePath:rel,...hashed});
+    await hooks.afterFileHashed?.(rel);
   }
   // Compare root contents again after hashing to reject concurrent insert/delete.
   const finalNames=(await fs.readdir(root)).sort(cmp);
@@ -149,6 +164,20 @@ export async function captureLegacyHubStateSnapshotProof(
       throw new Error('AI04_RECOVERY_DIRECTORY_CHANGED_DURING_HASH');
     }
   }
+  const endInventory=await scanLegacyHubStateReadOnly(root);
+  if(endInventory.sqliteQuickCheck!=='ok'||
+     endInventory.sqliteRecords!==inventory.sqliteRecords||
+     endInventory.rootFileCount!==inventory.rootFileCount){
+    throw new Error('AI04_SQLITE_OR_STATE_CHANGED_DURING_HASH');
+  }
+  for(const [rel,before] of beforeFiles){
+    const after=await fs.lstat(path.join(root,...rel.split('/')),{bigint:true});
+    if(!stableStat(before,after)||!after.isFile()||after.isSymbolicLink())
+      throw new Error('AI04_CROSS_FILE_CHANGED_DURING_HASH');
+  }
+  const rootAfter=await fs.lstat(root,{bigint:true});
+  if(!stableStat(rootBefore,rootAfter)||!rootAfter.isDirectory()||rootAfter.isSymbolicLink())
+    throw new Error('AI04_STATE_DIRECTORY_CHANGED_DURING_HASH');
   const digest=createHash('sha256');
   for(const file of files){
     digest.update(file.relativePath+'\0'+file.bytes+'\0'+file.sha256+'\n','utf8');
