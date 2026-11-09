@@ -123,23 +123,56 @@ $principal=New-Object Security.Principal.WindowsPrincipal($id)
 if(-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){
   throw 'AI01_ADMINISTRATOR_TOKEN_REQUIRED'
 }
-if(Test-Path -LiteralPath $parent){
-  $parentItem=Get-Item -LiteralPath $parent -Force
-  if(($parentItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw 'AI01_PARENT_REPARSE_POINT'}
-}else{
-  New-Item -ItemType Directory -Path $parent -ErrorAction Stop | Out-Null
-}
-# A writable or user-owned parent makes an otherwise private staged tree replaceable.
-Assert-PrivateTree $parent
-$staging=Join-Path $parent ('.ai01-stage-'+[guid]::NewGuid().ToString('N'))
+# Preserve the exact first failing phase on a real administrator install.
+# The previous aggregate child exit code made the Work-PC failure opaque.
+$phase='CHECK_PARENT'
+$staging=$null
 try {
+  if(Test-Path -LiteralPath $parent){
+    $parentItem=Get-Item -LiteralPath $parent -Force
+    if(($parentItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw 'AI01_PARENT_REPARSE_POINT'}
+  }else{
+    New-Item -ItemType Directory -Path $parent -ErrorAction Stop | Out-Null
+    $phase='SET_NEW_PARENT_DACL'
+    # This is a newly created empty root. Strip inherited ACEs rather than
+    # relaxing the private-tree validator for Creator Owner / Users entries.
+    & 'C:\Windows\System32\icacls.exe' $parent '/inheritance:r' '/grant:r' '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' | Out-Null
+    if($LASTEXITCODE -ne 0){throw 'AI01_NEW_PARENT_DACL_FAILED'}
+    $phase='PIN_NEW_PARENT_OWNER'
+    # Freshly created protected parents must never retain the interactive
+    # administrator's SID as owner. Never take ownership of existing roots.
+    & 'C:\Windows\System32\icacls.exe' $parent '/setowner' '*S-1-5-32-544' | Out-Null
+    if($LASTEXITCODE -ne 0){throw 'AI01_NEW_PARENT_OWNER_PIN_FAILED'}
+  }
+  $phase='VERIFY_PARENT_ACL'
+  # An untrusted parent makes even a properly ACL'd subtree replaceable.
+  Assert-PrivateTree $parent
+
+  $phase='CREATE_PRIVATE_STAGE'
+  $staging=Join-Path $parent ('.ai01-stage-'+[guid]::NewGuid().ToString('N'))
   New-Item -ItemType Directory -Path $staging -ErrorAction Stop | Out-Null
+
+  $phase='SET_PRIVATE_STAGE_DACL'
   & 'C:\Windows\System32\icacls.exe' $staging '/inheritance:r' '/grant:r' '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' | Out-Null
   if($LASTEXITCODE -ne 0){throw 'AI01_STAGE_DACL_FAILED'}
+
+  $phase='COPY_RUNTIME'
   Get-ChildItem -LiteralPath $tree.root -Force | Copy-Item -Destination $staging -Recurse -Force -ErrorAction Stop
+
+  $phase='VERIFY_STAGED_HASH'
   $copied=Get-RuntimeTree $staging
   if($copied.digest -cne $tree.digest){throw 'AI01_STAGE_HASH_MISMATCH'}
+
+  $phase='PIN_STAGED_OWNER'
+  # The copy can create new files owned by the elevated *user*, not the
+  # Administrators group. Set owner only inside the verified private stage.
+  & 'C:\Windows\System32\icacls.exe' $staging '/setowner' '*S-1-5-32-544' '/T' | Out-Null
+  if($LASTEXITCODE -ne 0){throw 'AI01_STAGE_OWNER_PIN_FAILED'}
+
+  $phase='VERIFY_STAGED_ACL'
   Assert-PrivateTree $staging
+
+  $phase='PROMOTE_RUNTIME'
   if(Test-Path -LiteralPath $target){throw 'AI01_TARGET_RACE'}
   Move-Item -LiteralPath $staging -Destination $target -ErrorAction Stop
   [pscustomobject]@{
@@ -148,8 +181,14 @@ try {
     treeSha256=$copied.digest;taskChanged=$false;sqliteChanged=$false
   }|ConvertTo-Json -Depth 4
 }catch{
-  if(Test-Path -LiteralPath $staging){
-    Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction SilentlyContinue
+  $reason=$_.Exception.Message
+  # Do not recursively clean a stage that became a junction/reparse point.
+  if($null -ne $staging -and (Test-Path -LiteralPath $staging)){
+    $stageItem=Get-Item -LiteralPath $staging -Force -ErrorAction SilentlyContinue
+    if($null -ne $stageItem -and
+       ($stageItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0){
+      Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction SilentlyContinue
+    }
   }
-  throw
+  throw ('AI01_INSTALL_PHASE_'+$phase+': '+$reason)
 }
