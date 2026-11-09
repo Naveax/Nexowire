@@ -57,6 +57,19 @@ export function protectedHubTaskShellEnvironment(input:NodeJS.ProcessEnv):NodeJS
 }
 
 const PROTECTED_HUB_BOOT_ROOT='C:\\ProgramData\\Nexowire\\hub-boot';
+const PROTECTED_SYSTEM_HUB_STATE_ROOT='C:\\ProgramData\\Nexowire\\hub-state';
+
+/**
+ * SYSTEM Hub may never inherit the interactive user's writable SQLite state
+ * tree. A separate, protected offline migration must precede activation.
+ * This is a hard release gate, not a fallback to the user's existing data.
+ */
+export function assertProtectedSystemHubStateRoot(value:string|undefined):string {
+  if(value!==PROTECTED_SYSTEM_HUB_STATE_ROOT){
+    throw new Error('HUB_BOOT_SYSTEM_STATE_MIGRATION_REQUIRED');
+  }
+  return PROTECTED_SYSTEM_HUB_STATE_ROOT;
+}
 
 /**
  * A SYSTEM task lifecycle may only create or recursively delete its exact
@@ -672,6 +685,13 @@ export async function installHubBootLifecycle(
     );
   // Reject malformed configuration before protected directory creation,
   // machine DPAPI sealing or launcher replacement.
+  // An elevated SYSTEM Hub must not execute against the old user-writable
+  // state directory. Require a separately migrated, ACL-protected state root
+  // before reading CurrentUser secrets or making any task changes.
+  const protectedStateRoot=assertProtectedSystemHubStateRoot(sourceEnv.NEXOWIRE_STATE_DIR);
+  verifyWindowsPrivateAcl(path.win32.dirname(protectedStateRoot));
+  verifyWindowsPrivateAcl(protectedStateRoot);
+  verifyWindowsPrivateAcl(path.win32.join(protectedStateRoot,'idempotency-records.sqlite'));
   const rawPort=sourceEnv.NEXOWIRE_HTTP_PORT??'43110';
   const port=Number(rawPort);
   if(!Number.isInteger(port)||port<1||port>65_535){
