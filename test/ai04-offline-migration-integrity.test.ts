@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
-import {promises as fs} from 'node:fs';
+import {promises as fs,readFileSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -27,6 +27,31 @@ async function fixture(root:string):Promise<void>{
     db.prepare('INSERT INTO idempotency_records(key) VALUES(?)').run('fixture');
   }finally{db.close()}
 }
+
+test('protected destination audit checks outer ancestors before and after file ACL and byte verification',()=>{
+  const src=readFileSync(new URL('../scripts/ai04-offline-migration-integrity.ts',import.meta.url),'utf8');
+  const begin=src.indexOf('export async function auditProtectedSystemHubCopyReadOnly(');
+  assert.ok(begin>=0);
+  const audit=src.slice(begin);
+  const gates=[
+    "verifyWindowsStackOuterAncestorAcl('C:\\\\');",
+    "verifyWindowsStackOuterAncestorAcl('C:\\\\ProgramData');",
+    'verifyWindowsPrivateAcl(path.win32.dirname(target));',
+    'verifyWindowsPrivateAcl(target);',
+    'for(const file of aclTargets)verifyWindowsPrivateAcl(file);',
+    "verifyWindowsStackOuterAncestorAcl('C:\\\\');",
+    "verifyWindowsStackOuterAncestorAcl('C:\\\\ProgramData');",
+    'verifyWindowsPrivateAcl(path.win32.dirname(target));',
+    'verifyWindowsPrivateAcl(target);',
+    'const after=await compareOfflineHubStateCopyReadOnly(source,target);',
+  ];
+  let previous=-1;
+  for(const gate of gates){
+    const at=audit.indexOf(gate,previous+1);
+    assert.ok(at>previous,'Missing or reordered ACL/bytes boundary: '+gate);
+    previous=at;
+  }
+});
 
 test('offline source and destination fingerprints match but never certify SYSTEM cutover',{
   skip:!windows,
