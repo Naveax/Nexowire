@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   auditProtectedSystemHubCopyReadOnly,
+  assertStableOfflineCopyAcrossAudit,
   compareOfflineHubStateCopyReadOnly,
   protectedStateAclTargets,
 } from '../scripts/ai04-offline-migration-integrity.js';
@@ -51,6 +52,46 @@ test('protected destination audit checks outer ancestors before and after file A
     assert.ok(at>previous,'Missing or reordered ACL/bytes boundary: '+gate);
     previous=at;
   }
+});
+
+test('two matching source/destination passes still reject a common change between scans',{
+  skip:!windows,
+},async(t)=>{
+  const parent=await fs.mkdtemp(path.join(os.tmpdir(),'nwx-ai04-cross-pass-'));
+  t.after(()=>fs.rm(parent,{recursive:true,force:true}));
+  const source=path.join(parent,'source'),target=path.join(parent,'target');
+  await fixture(source);
+  await fs.cp(source,target,{recursive:true});
+  const originalSource=await captureLegacyHubStateSnapshotProof(source);
+  const originalTarget=await captureLegacyHubStateSnapshotProof(target);
+  assert.doesNotThrow(()=>assertStableOfflineCopyAcrossAudit(
+    originalSource,originalTarget,originalSource,originalTarget,
+  ));
+  const updatedAudit='{"event":"changed-between-pass-pairs"}\\n';
+  await fs.writeFile(path.join(source,'audit.jsonl'),updatedAudit);
+  await fs.writeFile(path.join(target,'audit.jsonl'),updatedAudit);
+  const finalSource=await captureLegacyHubStateSnapshotProof(source);
+  const finalTarget=await captureLegacyHubStateSnapshotProof(target);
+  assert.equal(finalSource.treeSha256,finalTarget.treeSha256);
+  assert.notEqual(finalSource.treeSha256,originalSource.treeSha256);
+  assert.throws(()=>assertStableOfflineCopyAcrossAudit(
+    originalSource,originalTarget,finalSource,finalTarget,
+  ),/AI04_MIGRATED_CONTENT_CHANGED_ACROSS_AUDIT_PASSES/);
+  assert.throws(()=>assertStableOfflineCopyAcrossAudit(
+    originalSource,originalTarget,finalSource,originalTarget,
+  ),/AI04_MIGRATED_CONTENT_CHANGED_ACROSS_AUDIT_PASSES/);
+});
+
+test('physical protected audit checks cross-pass SHA trees before claiming even read-only completion',()=>{
+  const sourceText=readFileSync(new URL('../scripts/ai04-offline-migration-integrity.ts',import.meta.url),'utf8');
+  const start=sourceText.indexOf('export async function auditProtectedSystemHubCopyReadOnly(');
+  const audit=sourceText.slice(start);
+  const baseline=audit.indexOf('const baselineSource=await captureLegacyHubStateSnapshotProof(source)');
+  const initial=audit.indexOf('const before=await compareOfflineHubStateCopyReadOnly(source,target)');
+  const final=audit.indexOf('const finalSource=await captureLegacyHubStateSnapshotProof(source)');
+  const guard=audit.indexOf('assertStableOfflineCopyAcrossAudit(');
+  const owner=audit.indexOf('const writerAfter=await scanLegacyHubStateReadOnly(source)');
+  assert.ok(baseline>=0&&baseline<initial&&initial<final&&final<guard&&guard<owner);
 });
 
 test('offline source and destination fingerprints match but never certify SYSTEM cutover',{

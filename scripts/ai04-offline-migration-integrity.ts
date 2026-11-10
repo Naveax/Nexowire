@@ -110,6 +110,29 @@ export async function compareOfflineHubStateCopyReadOnly(
 }
 
 /**
+ * A pair of equal scans can hide a change where source and target are updated
+ * together between passes. Pin each complete tree across the ACL audit too.
+ * This only verifies stability, not user/SYSTEM writer quiescence or GO.
+ */
+export function assertStableOfflineCopyAcrossAudit(
+  beforeSource:StateSnapshotProof,
+  beforeDestination:StateSnapshotProof,
+  afterSource:StateSnapshotProof,
+  afterDestination:StateSnapshotProof,
+):void{
+  const fingerprint=(proof:StateSnapshotProof)=>[
+    proof.treeSha256,proof.fileCount,proof.totalBytes,
+    proof.workspaceFileCount,proof.sqliteRecords,
+  ].join(':');
+  const source=fingerprint(beforeSource);
+  const target=fingerprint(beforeDestination);
+  if(source!==target||source!==fingerprint(afterSource)||
+     target!==fingerprint(afterDestination)){
+    throw new Error('AI04_MIGRATED_CONTENT_CHANGED_ACROSS_AUDIT_PASSES');
+  }
+}
+
+/**
  * Physical preflight: refuse observed/unknown writer occupancy, then verify
  * every destination ACL. Even PASS only proves content and ACL at this instant.
  * A separate trusted quiescence, machine DPAPI and reboot acceptance is needed.
@@ -135,6 +158,8 @@ export async function auditProtectedSystemHubCopyReadOnly(
   verifyWindowsStackOuterAncestorAcl('C:\\ProgramData');
   verifyWindowsPrivateAcl(path.win32.dirname(target));
   verifyWindowsPrivateAcl(target);
+  const baselineSource=await captureLegacyHubStateSnapshotProof(source);
+  const baselineDestination=await captureLegacyHubStateSnapshotProof(target);
   const before=await compareOfflineHubStateCopyReadOnly(source,target);
   if(!before.contentIdentical)throw new Error('AI04_MIGRATED_CONTENT_DIFFERENT');
   // Recheck every nested backup and SQLite/WAL/file, not only the root ACL.
@@ -161,6 +186,11 @@ export async function auditProtectedSystemHubCopyReadOnly(
      after.destinationFileCount!==before.destinationFileCount){
     throw new Error('AI04_MIGRATED_CONTENT_CHANGED_DURING_ACL_AUDIT');
   }
+  const finalSource=await captureLegacyHubStateSnapshotProof(source);
+  const finalDestination=await captureLegacyHubStateSnapshotProof(target);
+  assertStableOfflineCopyAcrossAudit(
+    baselineSource,baselineDestination,finalSource,finalDestination,
+  );
   const writerAfter=await scanLegacyHubStateReadOnly(source);
   if(writerAfter.sqliteWriterPidPresence!=='not-found'||
      writerAfter.sqliteWriterRecordStatus!=='valid'||
