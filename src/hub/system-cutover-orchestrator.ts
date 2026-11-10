@@ -1,0 +1,47 @@
+/**
+ * Reversible transition driver. All side effects are supplied by the Windows
+ * adapter; an armed recovery path must exist before the old writer is stopped.
+ */
+export interface SystemCutoverOperations {
+  preflight():Promise<void>;
+  armRecovery():Promise<void>;
+  quiesceLegacy():Promise<void>;
+  copyProtectedState():Promise<void>;
+  issueReceipt():Promise<void>;
+  installSystemHub():Promise<void>;
+  verifySystemHub():Promise<void>;
+  commit():Promise<void>;
+  rollback():Promise<void>;
+}
+export type SystemCutoverStep =
+  'preflight'|'arm-recovery'|'quiesce-legacy'|'copy-protected-state'|
+  'issue-receipt'|'install-system-hub'|'verify-system-hub'|'commit';
+export class SystemCutoverFailed extends Error {
+  constructor(readonly failedStep:SystemCutoverStep,readonly rollbackFailed:boolean,readonly cause:unknown){
+    super('SYSTEM_HUB_CUTOVER_FAILED_'+failedStep.toUpperCase().replaceAll('-','_')+
+      (rollbackFailed?'_ROLLBACK_FAILED':'_ROLLED_BACK'));
+    this.name='SystemCutoverFailed';
+  }
+}
+export async function runRecoverableSystemHubCutover(
+  ops:SystemCutoverOperations,
+):Promise<{booted:true;rollbackArmed:true;physicalRebootAccepted:false}>{
+  await ops.preflight();
+  let step:SystemCutoverStep='arm-recovery';
+  try{
+    await ops.armRecovery();
+    step='quiesce-legacy'; await ops.quiesceLegacy();
+    step='copy-protected-state'; await ops.copyProtectedState();
+    step='issue-receipt'; await ops.issueReceipt();
+    step='install-system-hub'; await ops.installSystemHub();
+    step='verify-system-hub'; await ops.verifySystemHub();
+    step='commit'; await ops.commit();
+  }catch(error){
+    try{await ops.rollback()}catch(rollbackError){
+      throw new SystemCutoverFailed(step,true,new AggregateError(
+        [error,rollbackError],'SYSTEM_HUB_CUTOVER_AND_ROLLBACK_FAILED'));
+    }
+    throw new SystemCutoverFailed(step,false,error);
+  }
+  return {booted:true,rollbackArmed:true,physicalRebootAccepted:false};
+}

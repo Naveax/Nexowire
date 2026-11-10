@@ -139,6 +139,8 @@ export interface HubBootLifecycleOptions
   extends HubLifecycleOptions {
   bootTaskName?: string;
   programDataDir?: string;
+  /** Protected cutover journal binds rollback to this exact task instance. */
+  cutoverInstallMarker?: string;
 }
 
 function assertWindows(): void {
@@ -684,6 +686,11 @@ export async function installHubBootLifecycle(
 ): Promise<HubBootLifecycleStatus> {
   assertElevated();
   assertCanonicalHubBootTaskNames(options);
+  const installMarker=options.cutoverInstallMarker??
+    'Nexowire pre-logon Hub install '+randomUUID();
+  if(!/^Nexowire pre-logon Hub install [0-9a-f-]{36}$/.test(installMarker)){
+    throw new Error('HUB_BOOT_INSTALL_MARKER_UNTRUSTED');
+  }
   const protectedBootRoot=pathsFor(options).root;
   assertProtectedHubBootRoot(protectedBootRoot);
   verifyHubBootSharedAncestorTrust();
@@ -844,7 +851,6 @@ export async function installHubBootLifecycle(
   const envForTask = taskEnv(options);
   // An exclusive ephemeral task marker prevents a failed install from
   // unregistering another process's same-name task during rollback.
-  const installMarker='Nexowire pre-logon Hub install '+randomUUID();
   let switched = false;
   try {
     // The PowerShell transaction can modify the user task before a later
