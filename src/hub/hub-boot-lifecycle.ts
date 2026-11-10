@@ -6,6 +6,7 @@ import path from 'node:path';
 import * as z from 'zod';
 import { isWindowsProcessElevated } from '../agent/privileged-broker.js';
 import { hardenWindowsProgramDataAcl, verifyWindowsPrivateAcl } from '../security/windows-programdata-acl.js';
+import { verifyWindowsStackOuterAncestorAcl } from '../security/windows-programdata-acl.js';
 import {assertWindowsLocalTcpListenerOwnedByPid} from '../security/windows-local-listener-owner.js';
 import {
   assertNoPrivilegedNodeStartupFlags,
@@ -82,6 +83,15 @@ export function assertProtectedHubBootRoot(value:string):void {
      path.win32.resolve(value).toLowerCase()!==PROTECTED_HUB_BOOT_ROOT.toLowerCase()){
     throw new Error('HUB_BOOT_UNTRUSTED_PROTECTED_ROOT');
   }
+}
+
+/** Read-only trust boundary for privileged ProgramData lifecycle mutations. */
+export function verifyHubBootSharedAncestorTrust():void {
+  if(process.platform!=='win32')throw new Error('HUB_BOOT_WINDOWS_ONLY');
+  // Shared Windows ancestors can permit unrelated sibling creation but may
+  // not grant untrusted replacement, delete, ownership or DACL rights.
+  verifyWindowsStackOuterAncestorAcl('C:\\');
+  verifyWindowsStackOuterAncestorAcl('C:\\ProgramData');
 }
 
 /** Preflight: never recursively delete unknown or linked objects. */
@@ -675,6 +685,7 @@ export async function installHubBootLifecycle(
   assertCanonicalHubBootTaskNames(options);
   const protectedBootRoot=pathsFor(options).root;
   assertProtectedHubBootRoot(protectedBootRoot);
+  verifyHubBootSharedAncestorTrust();
   // A protected Hub Boot child is not safe if an untrusted account can
   // rename or replace its parent. Check owner, write/delete/DACL rights and
   // reparse status before reading any user or machine DPAPI credentials.
@@ -808,8 +819,10 @@ export async function installHubBootLifecycle(
     );
 
     hardenProgramDataAcl(p.root);
+    verifyHubBootSharedAncestorTrust();
   } catch (stageError) {
     try {
+      verifyHubBootSharedAncestorTrust();
       verifyWindowsPrivateAcl(path.win32.dirname(p.root));
       await assertHubBootRootSafeToRemove(p.root);
       verifyWindowsPrivateAcl(p.root);
@@ -919,6 +932,7 @@ export async function installHubBootLifecycle(
     // preserve evidence instead of destroying a potentially live source.
     if(taskRollbackFailure===null){
       try {
+        verifyHubBootSharedAncestorTrust();
         verifyWindowsPrivateAcl(path.win32.dirname(p.root));
         await assertHubBootRootSafeToRemove(p.root);
         verifyWindowsPrivateAcl(p.root);
@@ -947,6 +961,8 @@ export async function uninstallHubBootLifecycle(
   // The managed root can be replaced through a writable/junction parent.
   // Fail closed before any SYSTEM task removal or user Hub restoration.
   const parent=path.win32.dirname(p.root);
+  assertProtectedHubBootRoot(p.root);
+  verifyHubBootSharedAncestorTrust();
   verifyWindowsPrivateAcl(parent);
   await assertHubBootRootSafeToRemove(p.root);
   verifyWindowsPrivateAcl(p.root);
@@ -1008,6 +1024,7 @@ export async function uninstallHubBootLifecycle(
   ].join('\n'),taskEnv(options));
   // Another process may have changed the parent or managed root while
   // Task Scheduler was operating. Recheck before recursive deletion.
+  verifyHubBootSharedAncestorTrust();
   verifyWindowsPrivateAcl(parent);
   await assertHubBootRootSafeToRemove(p.root);
   await fs.rm(p.root, {
