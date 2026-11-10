@@ -35,7 +35,7 @@ source,source_sha,path_or_gate,source_blob_sha,candidate_blob_sha,classification
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","native/windows-core-webauthn-approval.c","a27041ecc8700736c0ed1ddfb28007565df4cd43","a27041ecc8700736c0ed1ddfb28007565df4cd43","EXACT_SOURCE_BLOB","EXACT_GIT_SHA"
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","native/windows-job-owner.c","d70ba0c25eb67dba4d237d1401da1d7f79bd5d78","d70ba0c25eb67dba4d237d1401da1d7f79bd5d78","EXACT_SOURCE_BLOB","EXACT_GIT_SHA"
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","package-lock.json","c8b1ec49ad79f478609a5aae5d4fd455861c4e5e","c8b1ec49ad79f478609a5aae5d4fd455861c4e5e","EXACT_SOURCE_BLOB","EXACT_GIT_SHA"
-"CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","package.json","5329b763dc82a2b80e344284819e44b99039e481","5329b763dc82a2b80e344284819e44b99039e481","EXACT_SOURCE_BLOB","EXACT_GIT_SHA"
+"CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","package.json","5329b763dc82a2b80e344284819e44b99039e481","49a14da9b457ce72c099e9841f23248e2a9142f5","EVOLVED","REVIEWED_CUTOVER_BUNDLE_EXPANSION"
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","scripts/audit-windows-job-helper-trust.ps1","a81f65e4d6ed2072b21442cb62a9490c418c879b","a81f65e4d6ed2072b21442cb62a9490c418c879b","EXACT_SOURCE_BLOB","EXACT_GIT_SHA"
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","scripts/build-windows-appcontainer-probe-p07.ps1","8e41bcb999b245d31b719a8a4398f731bf2a734c","8e41bcb999b245d31b719a8a4398f731bf2a734c","EXACT_SOURCE_BLOB","EXACT_GIT_SHA"
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","scripts/build-windows-core-session-readback.ps1","5ed09bf8bd4fc8ec79c221ccf834cca0d5efa4fe","5ed09bf8bd4fc8ec79c221ccf834cca0d5efa4fe","EXACT_SOURCE_BLOB","EXACT_GIT_SHA"
