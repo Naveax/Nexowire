@@ -37,7 +37,9 @@ test('failed staging removes only its own ACL-verified root and install rollback
   const stage=install.indexOf('} catch (stageError) {',create);
   const verify=install.indexOf('await assertHubBootRootSafeToRemove(p.root)',stage);
   const remove=install.indexOf('await fs.rm(p.root,{recursive:true,force:true})',verify);
-  const commit=install.indexOf('const installMarker',remove);
+  const markerValidation=install.indexOf('const installMarker');
+  const commit=install.indexOf('let switched = false;',remove);
+  assert.ok(markerValidation>=0 && markerValidation<create);
   assert.ok(create>=0 && create<stage && stage<verify && verify<remove && remove<commit);
   assert.match(install,/HUB_BOOT_STAGE_CLEANUP_FAILED/);
   assert.match(install,/expectedLegacyState -ne 'Disabled' -and \$expectedLegacyState -ne 'NotInstalled'/);
