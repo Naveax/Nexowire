@@ -5,7 +5,10 @@
  */
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {verifyWindowsPrivateAcl} from '../src/security/windows-programdata-acl.js';
+import {
+  verifyWindowsPrivateAcl,
+  verifyWindowsStackOuterAncestorAcl,
+} from '../src/security/windows-programdata-acl.js';
 import {
   captureLegacyHubStateSnapshotProof,
   compareLegacyHubStateSnapshotProofs,
@@ -125,6 +128,11 @@ export async function auditProtectedSystemHubCopyReadOnly(
      inventory.sqliteWriterHostMatchesLocal!==true){
     throw new Error('AI04_WRITER_QUIESCENCE_UNVERIFIED');
   }
+  // Private Nexowire ACLs are not enough if C:\\ or ProgramData can be
+  // replaced, retargeted, or have their owner/DACL changed by an untrusted SID.
+  // Shared ancestors may allow unrelated sibling creation, but not replacement.
+  verifyWindowsStackOuterAncestorAcl('C:\\');
+  verifyWindowsStackOuterAncestorAcl('C:\\ProgramData');
   verifyWindowsPrivateAcl(path.win32.dirname(target));
   verifyWindowsPrivateAcl(target);
   const before=await compareOfflineHubStateCopyReadOnly(source,target);
@@ -140,6 +148,12 @@ export async function auditProtectedSystemHubCopyReadOnly(
     if(!aclTargets.includes(backupDir))aclTargets.push(backupDir);
   }
   for(const file of aclTargets)verifyWindowsPrivateAcl(file);
+  // Recheck the trusted ancestors after the entire multi-file inspection.
+  // A private file result alone does not prove its containing tree stayed safe.
+  verifyWindowsStackOuterAncestorAcl('C:\\');
+  verifyWindowsStackOuterAncestorAcl('C:\\ProgramData');
+  verifyWindowsPrivateAcl(path.win32.dirname(target));
+  verifyWindowsPrivateAcl(target);
   const after=await compareOfflineHubStateCopyReadOnly(source,target);
   if(!after.contentIdentical||
      after.sourceSqliteRecords!==before.sourceSqliteRecords||
