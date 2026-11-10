@@ -40,7 +40,7 @@ export function createSystemCutoverReceiptFromProof(
     receipt,source.root,source,target,
   );
 }
-function assertLegacyHubPortNotListening(port:number):void{
+export function assertLegacyHubPortNotListening(port:number):void{
   if(!Number.isInteger(port)||port<1||port>65535)
     throw new Error('AI04_LEGACY_HUB_PORT_INVALID');
   const code=[

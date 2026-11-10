@@ -43,6 +43,52 @@ export function calculateProtectedMigrationDiskBudget(
     sufficient:freeBytes>=required,readyForSystemCutover:false};
 }
 
+/**
+ * Inventory's regularFileBytes covers only root files. Recovery backups can
+ * exceed the SQLite size, so include every nested backup byte in the disk
+ * reserve without relying on a mutable user-provided file count.
+ */
+export async function recoveryBackupBytesReadOnly(sourceRoot:string):Promise<bigint>{
+  const source=canonicalWindowsRoot(sourceRoot);
+  const recovery=path.win32.join(source,'ai04-recovery-backups');
+  let before;
+  try{before=await fs.lstat(recovery,{bigint:true})}
+  catch(error){
+    if((error as NodeJS.ErrnoException).code==='ENOENT')return 0n;
+    throw error;
+  }
+  if(!before.isDirectory()||before.isSymbolicLink())
+    throw new Error('AI04_RECOVERY_BACKUP_DIRECTORY_UNTRUSTED');
+  const names=await fs.readdir(recovery,{withFileTypes:true});
+  const seen=new Set<string>();
+  let bytes=0n;
+  for(const entry of names){
+    const name=entry.name;
+    if(!name||name==='.'||name==='..'||name.length>240||
+       name.includes('/')||name.includes('\\')||name.includes(':')||
+       name.includes('\0')||seen.has(name.toLowerCase())||
+       !entry.isFile()||entry.isSymbolicLink()){
+      throw new Error('AI04_RECOVERY_BACKUP_NAME_OR_TYPE_UNTRUSTED');
+    }
+    seen.add(name.toLowerCase());
+    const stat=await fs.lstat(path.win32.join(recovery,name),{bigint:true});
+    if(!stat.isFile()||stat.isSymbolicLink()||stat.nlink!==1n||
+       stat.size>4n*1024n*1024n*1024n)
+      throw new Error('AI04_RECOVERY_BACKUP_FILE_UNTRUSTED');
+    bytes+=stat.size;
+  }
+  const after=await fs.lstat(recovery,{bigint:true});
+  const finalNames=(await fs.readdir(recovery)).sort();
+  if(!after.isDirectory()||after.isSymbolicLink()||
+     after.dev!==before.dev||after.ino!==before.ino||
+     after.mtimeNs!==before.mtimeNs||
+     JSON.stringify(finalNames)!==
+       JSON.stringify(names.map(entry=>entry.name).sort())){
+    throw new Error('AI04_RECOVERY_BACKUPS_CHANGED_DURING_BUDGET');
+  }
+  return bytes;
+}
+
 export async function inspectProtectedMigrationDiskBudgetReadOnly(sourceRoot:string):Promise<
   ReturnType<typeof calculateProtectedMigrationDiskBudget>
 >{
@@ -51,11 +97,12 @@ export async function inspectProtectedMigrationDiskBudgetReadOnly(sourceRoot:str
   const inventory=await scanLegacyHubStateReadOnly(source);
   if(!Number.isSafeInteger(inventory.regularFileBytes)||inventory.regularFileBytes<0)
     throw new Error('AI04_STATE_SIZE_UNVERIFIED');
+  const backupBytes=await recoveryBackupBytesReadOnly(source);
   // SYSTEM destination is fixed on C:. Never use source's OneDrive volume as
   // a proxy for destination capacity; inspect Windows ProgramData directly.
   const stats=await fs.statfs('C:\\ProgramData',{bigint:true});
   return calculateProtectedMigrationDiskBudget(
-    stats.bavail*stats.bsize,BigInt(inventory.regularFileBytes),
+    stats.bavail*stats.bsize,BigInt(inventory.regularFileBytes)+backupBytes,
   );
 }
 

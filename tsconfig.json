@@ -20,6 +20,7 @@
     "src/**/*.ts",
     "test/**/*.ts",
     "scripts/run-environment-doctor.ts",
-    "scripts/ai04-issue-system-state-receipt.ts"
+    "scripts/ai04-issue-system-state-receipt.ts",
+    "scripts/ai04-prepare-system-hub-state-copy.ts"
   ]
 }
