@@ -8,6 +8,7 @@ import { isWindowsProcessElevated } from '../agent/privileged-broker.js';
 import { hardenWindowsProgramDataAcl, verifyWindowsPrivateAcl } from '../security/windows-programdata-acl.js';
 import { verifyWindowsStackOuterAncestorAcl } from '../security/windows-programdata-acl.js';
 import {assertWindowsLocalTcpListenerOwnedByPid} from '../security/windows-local-listener-owner.js';
+import {verifyProtectedSystemHubCutoverReadOnly} from './system-hub-state-cutover.js';
 import {
   assertNoPrivilegedNodeStartupFlags,
   assertWindowsPrivilegedRuntimeTrusted,
@@ -736,10 +737,13 @@ export async function installHubBootLifecycle(
     );
   // Reject malformed configuration before protected directory creation,
   // machine DPAPI sealing or launcher replacement.
-  // An elevated SYSTEM Hub must not execute against the old user-writable
-  // state directory. Require a separately migrated, ACL-protected state root
-  // before reading CurrentUser secrets or making any task changes.
-  const protectedStateRoot=assertProtectedSystemHubStateRoot(sourceEnv.NEXOWIRE_STATE_DIR);
+  // Keep the original interactive Hub launcher untouched for rollback.
+  // The SYSTEM task can use only a separately migrated ProgramData copy whose
+  // private receipt binds both old and new state trees, checked read-only.
+  // Missing/invalid receipts fail before any current-user DPAPI secret unseal.
+  const protectedStateRoot=assertProtectedSystemHubStateRoot(
+    await verifyProtectedSystemHubCutoverReadOnly(sourceEnv.NEXOWIRE_STATE_DIR??''),
+  );
   verifyWindowsPrivateAcl(path.win32.dirname(protectedStateRoot));
   verifyWindowsPrivateAcl(protectedStateRoot);
   verifyWindowsPrivateAcl(path.win32.join(protectedStateRoot,'idempotency-records.sqlite'));
@@ -801,6 +805,8 @@ export async function installHubBootLifecycle(
 
     const env: NodeJS.ProcessEnv = {
       ...sourceEnv,
+      // Never carry the original user's writable state path into SYSTEM.
+      NEXOWIRE_STATE_DIR:protectedStateRoot,
       NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_DPAPI_FILE:
         p.secret,
     };
