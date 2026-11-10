@@ -7,6 +7,7 @@ import path from 'node:path';
 import {
   calculateProtectedMigrationDiskBudget,
   inspectProtectedMigrationDiskBudgetReadOnly,
+  recoveryBackupBytesReadOnly,
 } from '../scripts/ai04-offline-migration-integrity.js';
 
 const gib=1024n*1024n*1024n;
@@ -28,6 +29,39 @@ test('disk budget protects 4 GiB system/SQLite reserve plus two whole state copi
     /AI04_DISK_BUDGET_INPUT_INVALID/);
   assert.throws(()=>calculateProtectedMigrationDiskBudget(1n,-1n),
     /AI04_DISK_BUDGET_INPUT_INVALID/);
+});
+
+test('disk preflight includes every nested recovery backup byte and rejects hardlinks',{
+  skip:!windows,
+},async(t)=>{
+  const parent=await fs.mkdtemp(path.join(os.tmpdir(),'nwx-ai04-recovery-budget-'));
+  t.after(()=>fs.rm(parent,{recursive:true,force:true}));
+  const source=path.join(parent,'source');
+  await fs.mkdir(source);
+  for(const [name,content] of Object.entries({
+    'audit.jsonl':'{"fixture":true}\n',
+    'credentials.json':'{"records":[]}',
+    'devices.json':'{"devices":[]}',
+    'idempotency-records.json':'{}',
+  }))await fs.writeFile(path.join(source,name),content);
+  const db=new DatabaseSync(path.join(source,'idempotency-records.sqlite'));
+  try{db.exec('CREATE TABLE idempotency_records(key TEXT PRIMARY KEY)')}
+  finally{db.close()}
+  const before=await inspectProtectedMigrationDiskBudgetReadOnly(source);
+  const dir=path.join(source,'ai04-recovery-backups');
+  await fs.mkdir(dir);
+  const backup=path.join(dir,'large-recovery.json');
+  const backupBytes=1024*1024;
+  await fs.writeFile(backup,Buffer.alloc(backupBytes,7));
+  assert.equal(await recoveryBackupBytesReadOnly(source),BigInt(backupBytes));
+  const after=await inspectProtectedMigrationDiskBudgetReadOnly(source);
+  assert.equal(
+    BigInt(after.requiredBytes)-BigInt(before.requiredBytes),
+    2n*BigInt(backupBytes),
+  );
+  await fs.link(backup,path.join(dir,'alias-hardlink.json'));
+  await assert.rejects(()=>recoveryBackupBytesReadOnly(source),
+    /AI04_RECOVERY_BACKUP_FILE_UNTRUSTED/);
 });
 
 test('physical protected audit refuses insufficient disk before reading destination snapshots',()=>{
