@@ -102,6 +102,28 @@ export async function captureHubStateDigestReadOnly(
   const initial=await fs.lstat(root,{bigint:true});
   if(!initial.isDirectory()||initial.isSymbolicLink())
     throw new Error('HUB_BOOT_STATE_ROOT_NOT_DIRECTORY');
+  // SQLite can refresh its -shm metadata when a read-only connection opens
+  // against a committed WAL. Probe integrity BEFORE freezing file metadata;
+  // otherwise our own verifier would appear to be a concurrent writer.
+  const sqlite=path.win32.join(root,'idempotency-records.sqlite');
+  const sqliteStat=await fs.lstat(sqlite,{bigint:true});
+  if(!sqliteStat.isFile()||sqliteStat.isSymbolicLink()||sqliteStat.nlink!==1n)
+    throw new Error('HUB_BOOT_STATE_FILE_UNTRUSTED');
+  if(verifyProtectedFiles)verifyWindowsPrivateAcl(sqlite);
+  const db=new DatabaseSync(sqlite,{readOnly:true});
+  let sqliteRecords:number;
+  try{
+    const check=db.prepare('PRAGMA quick_check').get() as {quick_check?:unknown};
+    if(check?.quick_check!=='ok')throw new Error('HUB_BOOT_SQLITE_QUICK_CHECK_FAILED');
+    const row=db.prepare('SELECT COUNT(*) AS n FROM idempotency_records').get() as {n?:unknown};
+    if(typeof row?.n!=='number'||!Number.isSafeInteger(row.n))
+      throw new Error('HUB_BOOT_SQLITE_COUNT_UNTRUSTED');
+    sqliteRecords=row.n;
+  }finally{db.close()}
+  // Baseline after the read-only SQLite connection is closed.
+  const baseline=await fs.lstat(root,{bigint:true});
+  if(!baseline.isDirectory()||baseline.isSymbolicLink())
+    throw new Error('HUB_BOOT_STATE_ROOT_NOT_DIRECTORY');
   const items=await fs.readdir(root,{withFileTypes:true});
   const original=items.map(x=>x.name).sort(cmp);
   let initialRecoveryNames:string[]|null=null;
@@ -151,24 +173,22 @@ export async function captureHubStateDigestReadOnly(
   }
   const tree=createHash('sha256');
   let totalBytes=0;
+  let durableFileCount=0;
   for(const rel of paths.sort(cmp)){
     const full=path.win32.join(root,...rel.split('/'));
     if(verifyProtectedFiles)verifyWindowsPrivateAcl(full);
     const file=await hashPlain(full);
+    // SQLite's -shm is a rebuildable WAL-index cache, not committed journal
+    // data. Opening a read-only SQLite connection can legitimately rewrite
+    // this file, independently in source and destination. Check its file
+    // identity/ACL and mutation stability above, but exclude its bytes and
+    // optional presence from the *durable* receipt content fingerprint.
+    // The main .sqlite and committed .sqlite-wal remain strictly SHA-bound.
+    if(rel==='idempotency-records.sqlite-shm')continue;
     totalBytes+=file.bytes;
+    durableFileCount++;
     tree.update(rel+'\0'+file.bytes+'\0'+file.sha256+'\n','utf8');
   }
-  const sqlite=path.win32.join(root,'idempotency-records.sqlite');
-  const db=new DatabaseSync(sqlite,{readOnly:true});
-  let sqliteRecords:number;
-  try{
-    const check=db.prepare('PRAGMA quick_check').get() as {quick_check?:unknown};
-    if(check?.quick_check!=='ok')throw new Error('HUB_BOOT_SQLITE_QUICK_CHECK_FAILED');
-    const row=db.prepare('SELECT COUNT(*) AS n FROM idempotency_records').get() as {n?:unknown};
-    if(typeof row?.n!=='number'||!Number.isSafeInteger(row.n))
-      throw new Error('HUB_BOOT_SQLITE_COUNT_UNTRUSTED');
-    sqliteRecords=row.n;
-  }finally{db.close()}
   const current=(await fs.readdir(root)).sort(cmp);
   if(JSON.stringify(current)!==JSON.stringify(original))
     throw new Error('HUB_BOOT_STATE_MEMBERSHIP_CHANGED');
@@ -182,11 +202,11 @@ export async function captureHubStateDigestReadOnly(
     if(!stable(before,after))throw new Error('HUB_BOOT_STATE_CHANGED_DURING_HASH');
   }
   const final=await fs.lstat(root,{bigint:true});
-  if(!stable(initial,final))throw new Error('HUB_BOOT_STATE_ROOT_CHANGED');
+  if(!stable(baseline,final))throw new Error('HUB_BOOT_STATE_ROOT_CHANGED');
   if(verifyProtectedFiles&&recoveryDirectoryPresent)
     verifyWindowsPrivateAcl(path.win32.join(root,'ai04-recovery-backups'));
   return {
-    root,treeSha256:tree.digest('hex'),fileCount:paths.length,
+    root,treeSha256:tree.digest('hex'),fileCount:durableFileCount,
     totalBytes,sqliteRecords,recoveryDirectoryPresent,
   };
 }

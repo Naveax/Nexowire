@@ -138,7 +138,10 @@ export async function captureLegacyHubStateSnapshotProof(
     const stat=await fs.lstat(file,{bigint:true});
     if(!stat.isFile()||stat.isSymbolicLink()||stat.nlink!==1n)
       throw new Error('AI04_SOURCE_FILE_NOT_PLAIN');
-    beforeFiles.set(rel,stat);
+    // SQLite's -shm WAL index is rebuildable shared-memory cache. A read-only
+    // quick_check can rewrite its metadata; it is not a persistent journal
+    // and must not invalidate a correct offline durable-state comparison.
+    if(rel!=='idempotency-records.sqlite-shm')beforeFiles.set(rel,stat);
   }
   const files:StateSnapshotFile[]=[];
   let totalBytes=0;
@@ -146,6 +149,10 @@ export async function captureLegacyHubStateSnapshotProof(
     const folded=rel.toLowerCase();
     if(seen.has(folded))throw new Error('AI04_DUPLICATE_CASEFOLDED_STATE_NAME');
     seen.add(folded);
+    // Keep cache presence/type in the directory allowlist and link checks,
+    // but exclude volatile -shm bytes from the durable tree fingerprint.
+    // Committed .sqlite-wal rows remain SHA-256 checked, never ignored.
+    if(rel==='idempotency-records.sqlite-shm')continue;
     const full=path.join(root,...rel.split('/'));
     const hashed=await hashStableRegularFile(full);
     totalBytes+=hashed.bytes;

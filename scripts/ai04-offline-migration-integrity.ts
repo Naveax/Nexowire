@@ -205,6 +205,17 @@ export async function auditProtectedSystemHubCopyReadOnly(
     const backupDir=path.win32.join(target,'ai04-recovery-backups');
     if(!aclTargets.includes(backupDir))aclTargets.push(backupDir);
   }
+  // -shm is an ephemeral SQLite WAL-index cache and excluded from the
+  // durable SHA tree, but an existing file still MUST have a trusted ACL.
+  const shm=path.win32.join(target,'idempotency-records.sqlite-shm');
+  try{
+    const stat=await fs.lstat(shm);
+    if(!stat.isFile()||stat.isSymbolicLink()||stat.nlink!==1)
+      throw new Error('AI04_SQLITE_SHM_FILE_UNTRUSTED');
+    aclTargets.push(shm);
+  }catch(error){
+    if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;
+  }
   for(const file of aclTargets)verifyWindowsPrivateAcl(file);
   // Recheck the trusted ancestors after the entire multi-file inspection.
   // A private file result alone does not prove its containing tree stayed safe.

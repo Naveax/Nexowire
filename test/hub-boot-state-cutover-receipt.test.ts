@@ -146,6 +146,52 @@ test('source and target full-state digest matches independent AI-04 snapshot and
     /HUB_BOOT_MIGRATION_RECEIPT_CONTENT_MISMATCH/);
 });
 
+test('receipt digest admits committed WAL rows and nested recovery backups in a matching fixture',{
+  skip:!windows,
+},async(t)=>{
+  const parent=await fs.mkdtemp(path.join(os.tmpdir(),'nwx-receipt-wal-'));
+  t.after(()=>fs.rm(parent,{recursive:true,force:true}));
+  const source=path.join(parent,'source'),destination=path.join(parent,'destination');
+  await createState(source);
+  const db=new DatabaseSync(path.join(source,'idempotency-records.sqlite'));
+  try{
+    const mode=db.prepare('PRAGMA journal_mode=WAL').get() as {journal_mode:string};
+    assert.equal(mode.journal_mode.toLowerCase(),'wal');
+    db.prepare('INSERT INTO idempotency_records(key) VALUES(?)').run('wal-committed-row');
+    const names=await fs.readdir(source);
+    assert.ok(names.includes('idempotency-records.sqlite-wal'));
+    assert.ok(names.includes('idempotency-records.sqlite-shm'));
+    await fs.cp(source,destination,{recursive:true});
+    const original=await captureHubStateDigestReadOnly(source);
+    const copied=await captureHubStateDigestReadOnly(destination);
+    assert.equal(original.sqliteRecords,2);
+    assert.equal(copied.sqliteRecords,2);
+    assert.equal(original.treeSha256,copied.treeSha256);
+    assert.equal(original.recoveryDirectoryPresent,true);
+    const independent=await captureLegacyHubStateSnapshotProof(destination);
+    assert.equal(independent.sqliteRecords,2);
+    assert.ok(independent.files.some(x=>x.relativePath==='idempotency-records.sqlite-wal'));
+    // -shm is a volatile rebuildable WAL-index cache. The receipt deliberately
+    // pins the persistent database and WAL, not cache bytes modified by reads.
+    assert.equal(original.fileCount,copied.fileCount);
+    const receipt=createSystemCutoverReceiptFromProof(
+      original,{...copied,root:SYSTEM_STATE_ROOT},
+    );
+    assert.equal(receipt.sqliteRecords,2);
+    assert.equal(receipt.recoveryDirectoryPresent,true);
+    // Cache contents may differ, but even an appended uncommitted WAL suffix
+    // must change the persistent receipt hash or fail SQLite validation.
+    const copiedWal=path.join(destination,'idempotency-records.sqlite-wal');
+    await fs.appendFile(copiedWal,Buffer.from([0xaa,0xbb,0xcc]));
+    try{
+      const changed=await captureHubStateDigestReadOnly(destination);
+      assert.notEqual(changed.treeSha256,copied.treeSha256);
+    }catch(error){
+      assert.match(String(error),/SQLite|HUB_BOOT_/i);
+    }
+  }finally{db.close()}
+});
+
 test('snapshot fails closed on added unknown file and hardlinked state',{
   skip:!windows,
 },async(t)=>{
