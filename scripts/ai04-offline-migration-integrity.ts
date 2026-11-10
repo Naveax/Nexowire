@@ -3,6 +3,7 @@
  * Comparing bytes is NOT a transfer, quiescence receipt, DPAPI conversion,
  * rollback acceptance or authorization to install a SYSTEM task.
  */
+import {promises as fs} from 'node:fs';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {
@@ -26,6 +27,36 @@ function canonicalWindowsRoot(root:string):string{
     throw new Error('AI04_MIGRATION_ROOT_NONCANONICAL');
   }
   return path.win32.normalize(root);
+}
+
+const MIGRATION_DISK_RESERVE_BYTES=4n*1024n*1024n*1024n;
+
+/** A conservative pre-copy estimate, not proof the volume will remain stable. */
+export function calculateProtectedMigrationDiskBudget(
+  freeBytes:bigint,sourceStateBytes:bigint,
+):{availableBytes:string;requiredBytes:string;sufficient:boolean;readyForSystemCutover:false}{
+  if(freeBytes<0n||sourceStateBytes<0n)throw new Error('AI04_DISK_BUDGET_INPUT_INVALID');
+  // Keep a 4 GiB OS/SQLite reserve and room for two full state trees (copy +
+  // rollback/staging). The eventual migrator must independently recheck space.
+  const required=MIGRATION_DISK_RESERVE_BYTES+2n*sourceStateBytes;
+  return {availableBytes:freeBytes.toString(),requiredBytes:required.toString(),
+    sufficient:freeBytes>=required,readyForSystemCutover:false};
+}
+
+export async function inspectProtectedMigrationDiskBudgetReadOnly(sourceRoot:string):Promise<
+  ReturnType<typeof calculateProtectedMigrationDiskBudget>
+>{
+  if(process.platform!=='win32')throw new Error('AI04_WINDOWS_ONLY');
+  const source=canonicalWindowsRoot(sourceRoot);
+  const inventory=await scanLegacyHubStateReadOnly(source);
+  if(!Number.isSafeInteger(inventory.regularFileBytes)||inventory.regularFileBytes<0)
+    throw new Error('AI04_STATE_SIZE_UNVERIFIED');
+  // SYSTEM destination is fixed on C:. Never use source's OneDrive volume as
+  // a proxy for destination capacity; inspect Windows ProgramData directly.
+  const stats=await fs.statfs('C:\\ProgramData',{bigint:true});
+  return calculateProtectedMigrationDiskBudget(
+    stats.bavail*stats.bsize,BigInt(inventory.regularFileBytes),
+  );
 }
 
 /** Strictly derived from the allowlisted, fingerprinted file inventory. */
@@ -158,6 +189,8 @@ export async function auditProtectedSystemHubCopyReadOnly(
   verifyWindowsStackOuterAncestorAcl('C:\\ProgramData');
   verifyWindowsPrivateAcl(path.win32.dirname(target));
   verifyWindowsPrivateAcl(target);
+  const budget=await inspectProtectedMigrationDiskBudgetReadOnly(source);
+  if(!budget.sufficient)throw new Error('AI04_PROTECTED_TARGET_DISK_SPACE_INSUFFICIENT');
   const baselineSource=await captureLegacyHubStateSnapshotProof(source);
   const baselineDestination=await captureLegacyHubStateSnapshotProof(target);
   const before=await compareOfflineHubStateCopyReadOnly(source,target);
@@ -191,6 +224,8 @@ export async function auditProtectedSystemHubCopyReadOnly(
   assertStableOfflineCopyAcrossAudit(
     baselineSource,baselineDestination,finalSource,finalDestination,
   );
+  const finalBudget=await inspectProtectedMigrationDiskBudgetReadOnly(source);
+  if(!finalBudget.sufficient)throw new Error('AI04_PROTECTED_TARGET_DISK_SPACE_INSUFFICIENT');
   const writerAfter=await scanLegacyHubStateReadOnly(source);
   if(writerAfter.sqliteWriterPidPresence!=='not-found'||
      writerAfter.sqliteWriterRecordStatus!=='valid'||
