@@ -35,3 +35,9 @@ The post-health state is now `AWAITING_PHYSICAL_ACCEPTANCE`, recovery remains ar
 - Unit tests and Windows PowerShell mocked failure injection are **synthetic PASS**, not physical PASS.
 - Physical test rows stay BLOCKED or NOT_RUN until exact-session evidence exists.
 - Draft PR #1160 and issue #1161 remain open and production remains NO-GO.
+
+## Provisional recovery scheduling (source-only proof)
+
+The independent recovery task is not disarmed merely because the new SYSTEM Hub reports HTTP 200. While the journal phase is `AWAITING_PHYSICAL_ACCEPTANCE`, its 15-minute recurring trigger and startup trigger inspect the canonical marker-bound Boot task, the current listening process's actual SYSTEM SID (`S-1-5-18`) and the bounded Hub `/health` response. A verified healthy provisional SYSTEM Hub is **left running** without task mutation. A foreign listener is rejected without stop/unregister; a missing or unhealthy Hub falls through to the existing exact ownership, source-target equality and write-fenced rollback procedure. The 15-minute recurrence is bounded to 365 days; this is **not** a finalization or physical acceptance mechanism.
+
+All tests for healthy provisional boot, startup listener delay, foreign PID owner and late diverging writes are synthetic mocks. The device must still receive real authorized Task Scheduler backup and restore proof, production SYSTEM DPAPI attestation, broker effect admission, and physical rollback/reboot tests. Do not mistake the timer guard for live Windows acceptance.

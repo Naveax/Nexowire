@@ -121,6 +121,32 @@ export const SYSTEM_HUB_RECOVERY_PS=[
   "  $expected='-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"C:\\ProgramData\\Nexowire\\hub-boot\\launch.ps1\"'",
   "  if($act.Count -ne 1 -or [string]$act[0].Execute -cne 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe' -or [string]$act[0].Arguments -cne $expected){throw 'AI04_RECOVERY_BOOT_ACTION_UNTRUSTED'}",
   "}",
+  // A provisional, correctly owned healthy SYSTEM Hub must not be torn down
+  // by the 15-minute recovery trigger or the concurrent startup trigger.
+  // Timeout or uncertain identity falls through to the existing safe recovery.
+  "if([string]$journal.phase -ceq 'AWAITING_PHYSICAL_ACCEPTANCE'){",
+  "  if(-not $boot){throw 'AI07_PROVISIONAL_SYSTEM_TASK_MISSING'}",
+  "  $until=(Get-Date).AddSeconds(45)",
+  "  do {",
+  "    $listeners=@(Get-NetTCPConnection -State Listen -ErrorAction Stop | Where-Object LocalPort -eq $port)",
+  "    if($listeners.Count -gt 1){throw 'AI07_PROVISIONAL_PORT_AMBIGUOUS'}",
+  "    if($listeners.Count -eq 1){",
+  "      $proc=Get-CimInstance Win32_Process -Filter ('ProcessId='+[int]$listeners[0].OwningProcess) -ErrorAction Stop",
+  "      if(-not $proc){throw 'AI07_PROVISIONAL_PORT_PROCESS_MISSING'}",
+  "      $sidResult=Invoke-CimMethod -InputObject $proc -MethodName GetOwnerSid -ErrorAction Stop",
+  "      if([string]$sidResult.Sid -cne 'S-1-5-18'){throw 'AI07_PROVISIONAL_PORT_OWNER_UNTRUSTED'}",
+  "      $liveBoot=Get-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\\' -ErrorAction Stop",
+  "      if([string]$liveBoot.Description -cne [string]$journal.marker -or [string]$liveBoot.Principal.UserId -notin @('SYSTEM','S-1-5-18')){throw 'AI07_PROVISIONAL_TASK_CHANGED'}",
+  "      if([string]$liveBoot.State -ceq 'Running'){",
+  "        try {",
+  "          $health=Invoke-WebRequest -Uri ('http://127.0.0.1:'+$port+'/health') -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop",
+  "          if([int]$health.StatusCode -eq 200){return}",
+  "        } catch {}",
+  "      }",
+  "    }",
+  "    Start-Sleep -Milliseconds 500",
+  "  } while((Get-Date) -lt $until)",
+  "}",
   // Keep the exact owned SYSTEM task registered until state equality is established.
   // An unacknowledged SYSTEM write must not trigger an implicit fallback.
 
@@ -262,7 +288,7 @@ export async function controlledSystemHubCutover(
         "$execute="+psLiteral(POWERSHELL),
         "$action=New-ScheduledTaskAction -Execute $execute -Argument ('-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"'+$script+'\"')",
         "$startup=New-ScheduledTaskTrigger -AtStartup",
-        "$timeout=New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(15)",
+        "$timeout=New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(15) -RepetitionInterval (New-TimeSpan -Minutes 15) -RepetitionDuration (New-TimeSpan -Days 365)",
         "$principal=New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest",
         "$settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 5)",
         "Register-ScheduledTask -TaskName "+psLiteral(TASK)+" -TaskPath '\\' -Action $action -Trigger @($startup,$timeout) -Principal $principal -Settings $settings -ErrorAction Stop|Out-Null",

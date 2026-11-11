@@ -52,6 +52,10 @@ function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-
       'function Start-ScheduledTask { [CmdletBinding()] param([string]$TaskName,[string]$TaskPath); $script:resumeCount++ }',
       'function Unregister-ScheduledTask { [CmdletBinding()] param([string]$TaskName,[string]$TaskPath,[switch]$Confirm); $script:removeCount++ }',
       'function Get-NetTCPConnection { [CmdletBinding()] param([string]$State); return @() }',
+      ...(phase==='AWAITING_PHYSICAL_ACCEPTANCE'?[
+        'function Start-Sleep { [CmdletBinding()] param([int]$Milliseconds) }',
+        'function Get-Date { [CmdletBinding()] param();$script:dateCalls++;return [datetime]::UtcNow.AddMinutes($script:dateCalls) }',
+      ]:[]),
       'foreach($name in @("Get-ScheduledTask","Stop-ScheduledTask","Start-ScheduledTask","Unregister-ScheduledTask","Get-NetTCPConnection")){'+
         'if((Get-Command $name -ErrorAction Stop).CommandType -ne "Function"){throw "AI04_FIXTURE_UNSAFE_COMMAND"}}',
       '$body=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('+
