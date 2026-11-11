@@ -120,16 +120,15 @@ export const SYSTEM_HUB_RECOVERY_PS=[
   "  $act=@($boot.Actions)",
   "  $expected='-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"C:\\ProgramData\\Nexowire\\hub-boot\\launch.ps1\"'",
   "  if($act.Count -ne 1 -or [string]$act[0].Execute -cne 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe' -or [string]$act[0].Arguments -cne $expected){throw 'AI04_RECOVERY_BOOT_ACTION_UNTRUSTED'}",
-  "  Stop-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\\' -ErrorAction SilentlyContinue",
-  "  $until=(Get-Date).AddSeconds(20)",
-  "  do { $owners=@(Get-NetTCPConnection -State Listen -ErrorAction Stop | Where-Object LocalPort -eq $port); if($owners.Count -eq 0){break}; Start-Sleep -Milliseconds 250 } while((Get-Date) -lt $until)",
-  "  if($owners.Count -gt 0){throw 'AI04_RECOVERY_SYSTEM_PORT_STILL_OWNED'}",
   "}",
   // Keep the exact owned SYSTEM task registered until state equality is established.
   // An unacknowledged SYSTEM write must not trigger an implicit fallback.
 
   "$target='C:\\ProgramData\\Nexowire\\hub-state'",
-  "if(Test-Path -LiteralPath $target){",
+  // Guard the active SYSTEM writer before any stop, and after shutdown.
+  "$validateState = {",
+  "  if($boot -and -not (Test-Path -LiteralPath $target -PathType Container)){throw 'AI04_RECOVERY_SYSTEM_TARGET_MISSING'}",
+  "  if(Test-Path -LiteralPath $target){",
   "  $source=[string]$journal.sourceRoot",
   "  if(-not (Test-Path -LiteralPath $source -PathType Container)){throw 'AI04_RECOVERY_SOURCE_MISSING'}",
   "  foreach($dir in @($source,$target)){",
@@ -150,7 +149,20 @@ export const SYSTEM_HUB_RECOVERY_PS=[
   "  if($maps[0].Count -ne $maps[1].Count){throw 'AI04_ROLLBACK_UNRECONCILED_SYSTEM_WRITES'}",
   "  foreach($name in $maps[0].Keys){if(-not $maps[1].ContainsKey($name) -or $maps[0][$name] -cne $maps[1][$name]){throw 'AI04_ROLLBACK_UNRECONCILED_SYSTEM_WRITES'}}",
   "}",
+  "}",
+  "& $validateState",
   "if($boot){",
+  "  Stop-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\\' -ErrorAction Stop",
+  "  $until=(Get-Date).AddSeconds(20)",
+  "  do { $owners=@(Get-NetTCPConnection -State Listen -ErrorAction Stop | Where-Object LocalPort -eq $port); if($owners.Count -eq 0){break}; Start-Sleep -Milliseconds 250 } while((Get-Date) -lt $until)",
+  "  if($owners.Count -gt 0){throw 'AI04_RECOVERY_SYSTEM_PORT_STILL_OWNED'}",
+  // A late shutdown write is not consent to discard SYSTEM data.
+  // Restore availability using only the already owner-verified task.
+  "  try{& $validateState}catch{",
+  "    $divergence=$_",
+  "    try{Start-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\\' -ErrorAction Stop}catch{throw 'AI04_RECOVERY_SYSTEM_RESUME_FAILED'}",
+  "    throw $divergence",
+  "  }",
   "  $current=Get-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\\' -ErrorAction Stop",
   "  if([string]$current.Description -cne [string]$journal.marker -or [string]$current.Principal.UserId -notin @('SYSTEM','S-1-5-18')){throw 'AI04_RECOVERY_BOOT_REPLACED'}",
   "  Unregister-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\\' -Confirm:$false",
@@ -330,6 +342,11 @@ export async function controlledSystemHubCutover(
         return;
       }
       runRollbackScript();
+      // PowerShell may exit successfully for a previously COMPLETE cutover.
+      // Do not report a rollback unless the durable journal confirms one.
+      const restored=JSON.parse(await fs.readFile(JOURNAL,'utf8')) as {phase?:unknown};
+      if(restored.phase!=='ROLLED_BACK')
+        throw new Error('AI04_ROLLBACK_DURABLE_CONFIRMATION_MISSING');
     },
   });
 }
