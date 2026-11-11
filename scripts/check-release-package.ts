@@ -68,6 +68,12 @@ assert.equal(
 assert.equal(packageJson.bin?.nexowire, 'dist/src/cli.js');
 assert.deepEqual(packageJson.files, [
   'dist/src',
+  'dist/scripts/ai04-controlled-system-hub-cutover.js',
+  'dist/scripts/ai04-prepare-system-hub-state-copy.js',
+  'dist/scripts/ai04-issue-system-state-receipt.js',
+  'dist/scripts/ai04-offline-migration-integrity.js',
+  'dist/scripts/ai04-state-snapshot-proof.js',
+  'dist/scripts/ai04-system-state-inventory.js',
   'skills',
   'README.md',
 ]);
