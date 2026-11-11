@@ -65,6 +65,8 @@
     "dist/scripts/ai04-offline-migration-integrity.js",
     "dist/scripts/ai04-state-snapshot-proof.js",
     "dist/scripts/ai04-system-state-inventory.js",
+    "scripts/Resolve-Nexowire-LegacySystemHubTask.ps1",
+    "scripts/ai03-system-dpapi-acceptance.ps1",
     "skills",
     "README.md"
   ]
