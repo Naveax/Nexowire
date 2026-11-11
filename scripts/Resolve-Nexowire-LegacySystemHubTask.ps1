@@ -168,7 +168,7 @@ function Get-RuntimeHashes([string]$root) {
   $null=Assert-PlainPath $root $true
   $files=@()
   foreach($item in @(Get-ChildItem -LiteralPath $root -Force -Recurse -ErrorAction Stop)){
-    $null=Assert-PlainPath $item.FullName
+    $null=Assert-PlainPath $item.FullName $true
     if($item.PSIsContainer){continue}
     if($item.FullName.Substring($root.Length+1) -match '(^|\\)\.\.($|\\)'){
       throw 'AI01_RECONCILE_TRAVERSAL_DENIED'
