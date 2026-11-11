@@ -9,7 +9,7 @@ import {SYSTEM_HUB_RECOVERY_PS} from '../scripts/ai04-controlled-system-hub-cuto
 const psQuote=(value:string):string=>"'"+value.replaceAll("'","''")+"'";
 const powershell='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
 
-function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-write'):void{
+function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-write',phase:'SYSTEM_STARTED'|'AWAITING_PHYSICAL_ACCEPTANCE'='SYSTEM_STARTED'):void{
   const temp=mkdtempSync(path.join(os.tmpdir(),'ai04-fi-'));
   try{
     const source=path.join(temp,'legacy');
@@ -22,7 +22,7 @@ function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-
     writeFileSync(targetFile,mode==='pre-stop'?'new-system-data':'legacy-state','utf8');
     const marker='synthetic-owner-marker';
     const journal={version:1,host:process.env.COMPUTERNAME??os.hostname(),
-      phase:'SYSTEM_STARTED',marker,port:43110,sourceRoot:source,
+      phase,marker,port:43110,sourceRoot:source,
       originalUserPrincipal:'EXAMPLE\\test',createdAt:new Date().toISOString()};
     const journalFile=path.join(recovery,'journal.json');
     writeFileSync(journalFile,JSON.stringify(journal),'utf8');
@@ -75,7 +75,7 @@ function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-
     assert.equal(readFileSync(sourceFile,'utf8'),'legacy-state');
     assert.equal(readFileSync(targetFile,'utf8'),
       mode==='pre-stop'?'new-system-data':'late-system-write');
-    assert.equal(JSON.parse(readFileSync(journalFile,'utf8')).phase,'SYSTEM_STARTED');
+    assert.equal(JSON.parse(readFileSync(journalFile,'utf8')).phase,phase);
   }finally{rmSync(temp,{recursive:true,force:true})}
 }
 
@@ -86,4 +86,9 @@ test('synthetic SYSTEM writes before recovery preserve the active task',
 test('synthetic SYSTEM shutdown writes trigger task resume, never legacy fallback',
   {skip:process.platform!=='win32'},()=>{
     executeIsolatedRecoveryFailureInjection('late-shutdown-write');
+  });
+
+test('provisional SYSTEM Hub with divergent writes never returns to legacy',
+  {skip:process.platform!=='win32'},()=>{
+    executeIsolatedRecoveryFailureInjection('pre-stop','AWAITING_PHYSICAL_ACCEPTANCE');
   });

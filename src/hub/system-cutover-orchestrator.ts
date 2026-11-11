@@ -2,6 +2,18 @@
  * Reversible transition driver. All side effects are supplied by the Windows
  * adapter; an armed recovery path must exist before the old writer is stopped.
  */
+/**
+ * A healthy SYSTEM PID and HTTP 200 are a provisional deployment, not
+ * physical cutover acceptance. Keep the independent rollback task armed.
+ */
+export function postHealthSystemHubDisposition():{
+  journalPhase:'AWAITING_PHYSICAL_ACCEPTANCE';
+  retainRecoveryTask:true;
+  physicalRebootAccepted:false;
+}{
+  return {journalPhase:'AWAITING_PHYSICAL_ACCEPTANCE',
+    retainRecoveryTask:true,physicalRebootAccepted:false};
+}
 export interface SystemCutoverOperations {
   preflight():Promise<void>;
   armRecovery():Promise<void>;
@@ -25,7 +37,7 @@ export class SystemCutoverFailed extends Error {
 }
 export async function runRecoverableSystemHubCutover(
   ops:SystemCutoverOperations,
-):Promise<{booted:true;rollbackArmed:true;physicalRebootAccepted:false}>{
+):Promise<{booted:true;rollbackArmed:true;physicalRebootAccepted:false;pendingPhysicalAcceptance:true}>{
   await ops.preflight();
   let step:SystemCutoverStep='arm-recovery';
   try{
@@ -43,5 +55,5 @@ export async function runRecoverableSystemHubCutover(
     }
     throw new SystemCutoverFailed(step,false,error);
   }
-  return {booted:true,rollbackArmed:true,physicalRebootAccepted:false};
+  return {booted:true,rollbackArmed:true,physicalRebootAccepted:false,pendingPhysicalAcceptance:true};
 }

@@ -23,7 +23,7 @@ import {
   assertCanonicalHubStateSourcePath,assertNoSourceWriterReadOnly,
   SYSTEM_STATE_ROOT,SYSTEM_CUTOVER_RECEIPT,
 } from '../src/hub/system-hub-state-cutover.js';
-import {runRecoverableSystemHubCutover} from '../src/hub/system-cutover-orchestrator.js';
+import {postHealthSystemHubDisposition,runRecoverableSystemHubCutover} from '../src/hub/system-cutover-orchestrator.js';
 import {
   prepareProtectedOfflineSystemHubStateCopy,assertInteractiveHubTaskDisabledReadOnly,
 } from './ai04-prepare-system-hub-state-copy.js';
@@ -206,7 +206,7 @@ function runRollbackScript():void{
 }
 export async function controlledSystemHubCutover(
   trustedCli:string,
-):Promise<{booted:true;rollbackArmed:true;physicalRebootAccepted:false}>{
+):Promise<{booted:true;rollbackArmed:true;physicalRebootAccepted:false;pendingPhysicalAcceptance:true}>{
   ensureElevated();
   const marker='Nexowire pre-logon Hub install '+randomUUID();
   const journal:Journal={
@@ -332,9 +332,14 @@ export async function controlledSystemHubCutover(
       await advance(journal,'HEALTHY');
     },
     async commit(){
-      await advance(journal,'COMPLETE');
-      try{runPS("Disable-ScheduledTask -TaskName "+psLiteral(TASK)+" -TaskPath '\\' -ErrorAction Stop | Out-Null")}
-      catch{/* Task remains inert since journal is COMPLETE. Preserve evidence. */}
+      // A healthy SYSTEM PID and HTTP 200 are NOT sufficient for physical
+      // acceptance. Never disarm recovery on this incomplete evidence.
+      const disposition=postHealthSystemHubDisposition();
+      if(!disposition.retainRecoveryTask||disposition.physicalRebootAccepted)
+        throw new Error('AI07_UNSAFE_CUTOVER_FINALIZATION');
+      await advance(journal,disposition.journalPhase);
+      // Keep rollback task, journal, legacy launcher and state intact until
+      // independent DPAPI, SQLite, CORE, Broker and reboot acceptance.
     },
     async rollback(){
       try{await fs.lstat(RECOVERY)}catch{
