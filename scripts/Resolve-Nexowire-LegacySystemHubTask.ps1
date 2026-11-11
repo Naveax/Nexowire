@@ -96,9 +96,30 @@ function Assert-ToolTrusted {
   }
   throw 'AI01_RECONCILE_TRUSTED_INSTALLED_TOOL_REQUIRED'
 }
+function Assert-OuterAncestor([string]$ancestor) {
+  $null=Assert-PlainPath $ancestor
+  $acl=Get-Acl -LiteralPath $ancestor -ErrorAction Stop
+  $owner=$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
+  $trustedOwners=@($trustedSids)+@('S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464')
+  if($owner -notin $trustedOwners){throw 'AI01_RECONCILE_OUTER_ANCESTOR_OWNER_UNTRUSTED'}
+  $replaceMask=[int64][Security.AccessControl.FileSystemRights]::Delete -bor
+    [int64][Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles -bor
+    [int64][Security.AccessControl.FileSystemRights]::ChangePermissions -bor
+    [int64][Security.AccessControl.FileSystemRights]::TakeOwnership
+  foreach($rule in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){
+    $sid=$rule.IdentityReference.Value
+    if($sid -in $trustedOwners -or $rule.AccessControlType -ne 'Allow'){continue}
+    if(($rule.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly) -ne 0){
+      continue
+    }
+    if(([int64]$rule.FileSystemRights -band $replaceMask) -ne 0){
+      throw 'AI01_RECONCILE_OUTER_ANCESTOR_REPLACE_ACL_UNTRUSTED'
+    }
+  }
+}
 function Assert-PrivateAncestors {
-  $null=Assert-PlainPath 'C:\'
-  $null=Assert-PlainPath 'C:\ProgramData'
+  Assert-OuterAncestor 'C:\'
+  Assert-OuterAncestor 'C:\ProgramData'
   $parent='C:\ProgramData\Nexowire'
   $null=Assert-PlainPath $parent $true
   if(-not (Get-Acl -LiteralPath $parent -ErrorAction Stop).AreAccessRulesProtected){
