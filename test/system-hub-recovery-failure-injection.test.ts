@@ -70,9 +70,14 @@ function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-
       'if($failure -notmatch "AI04_ROLLBACK_UNRECONCILED_SYSTEM_WRITES"){throw ("AI04_WRONG_REJECTION: "+$failure)}',
       'Write-Output ("AI04_SIMULATED_REJECTION "+$failure)',
     ];
+    // EncodedCommand can exceed the Windows CreateProcess command-line limit
+    // as the real recovery script grows. Keep the *same* isolated fixture
+    // contents but execute from a disposable file instead.
+    const fixtureScript=path.join(temp,'run-isolated-recovery.ps1');
+    writeFileSync(fixtureScript,setup.join('\r\n'),'utf8');
     const result=spawnSync(powershell,
-      ['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',
-        Buffer.from(setup.join('\r\n'),'utf16le').toString('base64')],
+      ['-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass',
+        '-File',fixtureScript],
       {encoding:'utf8',windowsHide:true,timeout:15000,maxBuffer:512*1024});
     assert.equal(result.status,0,result.stderr+'\n'+result.stdout);
     assert.match(result.stdout,/AI04_SIMULATED_REJECTION/);
