@@ -13,14 +13,14 @@ const positive = value => Number.isSafeInteger(value) && value > 0;
 export function auditDynamicTapSummary(tap) {
   if (typeof tap !== 'string') throw new TypeError('TAP text required');
   const normalized = tap.replace(/^\d{4}-\d{2}-\d{2}T[^\s]+\s+/gm, '');
-  const values = Object.fromEntries(['tests','pass','fail','skipped','todo'].map(name => {
+  const values = Object.fromEntries(['tests','pass','fail','cancelled','skipped','todo'].map(name => {
     const all = [...normalized.matchAll(new RegExp(`^# ${name} (\\d+)$`, 'gm'))];
     return [name, all.length === 1 ? Number(all[0][1]) : null];
   }));
   const complete = Object.values(values).every(Number.isSafeInteger);
   return { verdict: !complete ? 'UNTRUSTED_OR_INCOMPLETE_TAP' :
     values.tests > 0 && values.pass === values.tests && values.fail === 0 &&
-    values.skipped === 0 && values.todo === 0 ? 'DYNAMIC_COUNT_VALID' : 'RED_TAP',
+    values.cancelled === 0 && values.skipped === 0 && values.todo === 0 ? 'DYNAMIC_COUNT_VALID' : 'RED_TAP',
   values, ownerAcceptance: false };
 }
 
