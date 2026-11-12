@@ -160,3 +160,37 @@ test('#485: missing expected SHA never promotes a browser job to PASS', () => {
   assert.equal(result.status, 'NOT_RUN');
   assert.equal(result.reason, 'MISSING_EXACT_SHA');
 });
+
+test('#1006 R-057: redirect destinations never impersonate selected K10 tests or capture', () => {
+  const workflow = [
+    'jobs:', '  test:', '    steps:', '      - run: |',
+    '          node --test test/unrelated.test.mjs > test/delegated/k10/issue-browser-negative.test.mjs',
+    '          node --test test/unrelated.test.mjs 2>>test/delegated/k10/issue-evidence-contract.test.mjs',
+    '  browser-live:', '    steps:', '      - run: |',
+    '          node scripts/unrelated.mjs > scripts/delegated/k10/hosted-connect-three-state.mjs',
+  ].join('\n');
+  const report = auditHostedBrowserEvidence({ workflow, targetSha: head, runSha: head,
+    jobs: successfulBrowserJob });
+  assert.equal(report.checks.issueNegativesListed, false);
+  assert.equal(report.checks.pngContractListed, false);
+  assert.equal(report.checks.threeStateCaptureListed, false);
+  assert.equal(report.status, 'NOT_RUN');
+  assert.equal(report.reason, 'THREE_STATE_CAPTURE_NOT_IN_WORKFLOW');
+});
+
+test('#1006 R-057: real K10 invocations remain detectable with unrelated shell redirects', () => {
+  const workflow = [
+    'jobs:', '  test:', '    steps:', '      - run: |',
+    '          node --test test/delegated/k10/issue-browser-negative.test.mjs > report.tap',
+    '          node --test 2> err.log test/delegated/k10/issue-evidence-contract.test.mjs',
+    '  browser-live:', '    steps:',
+    '      - run: node scripts/delegated/k10/hosted-connect-three-state.mjs > report.json',
+  ].join('\n');
+  const report = auditHostedBrowserEvidence({ workflow, targetSha: head, runSha: head,
+    jobs: successfulBrowserJob });
+  assert.equal(report.checks.issueNegativesListed, true);
+  assert.equal(report.checks.pngContractListed, true);
+  assert.equal(report.checks.threeStateCaptureListed, true);
+  assert.equal(report.status, 'NOT_RUN');
+  assert.equal(report.reason, 'CAPTURE_ARTIFACTS_NOT_PROVIDED');
+});

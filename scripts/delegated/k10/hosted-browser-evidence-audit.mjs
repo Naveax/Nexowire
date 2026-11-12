@@ -67,9 +67,13 @@ function invokesNodePath(commands, path) {
       // not proof that its test file has been selected by `node --test`.
       if (/(?:^|\s)(?:-e|--eval|-p|--print)(?:\s|=)/.test(text)) return false;
       if (path.includes('.test.') && !/(?:^|\s)--test(?:\s|=|$)/.test(text)) return false;
-      const index = text.indexOf(path);
-      return index >= 0 && !/[\w./-]/.test(text[index - 1] ?? ' ') &&
-        !/[\w./-]/.test(text[index + path.length] ?? ' ');
+      // Shell redirection targets are output/input files, not test arguments.
+      // Dropping them prevents a redirected file named like a K10 test from
+      // being mistaken for an actually selected suite or capture runner.
+      const argumentsOnly = text.replace(/(?:\d*>>?|\d*<<?|&>)\s*(?:"[^"]*"|'[^']*'|[^\s;|&<>]+)/g, ' ');
+      const index = argumentsOnly.indexOf(path);
+      return index >= 0 && !/[\w./-]/.test(argumentsOnly[index - 1] ?? ' ') &&
+        !/[\w./-]/.test(argumentsOnly[index + path.length] ?? ' ');
     });
   });
 }
