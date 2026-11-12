@@ -73,7 +73,12 @@ try {
   $taskState = [string]$task.State
   try {
     $taskInfo = Get-ScheduledTaskInfo -TaskName 'Nexowire Privileged Broker' -ErrorAction Stop
-    $taskLastResult = [int]$taskInfo.LastTaskResult
+    # Windows ScheduledTasks exposes LastTaskResult as UInt32. HRESULT
+    # 0x800710E0 is above Int32.MaxValue: [int] throws and our compatibility
+    # report silently loses the result. Keep the complete unsigned value.
+    if ($null -ne $taskInfo.LastTaskResult) {
+      $taskLastResult = [long]$taskInfo.LastTaskResult
+    }
   } catch { }
 } catch { }
 
