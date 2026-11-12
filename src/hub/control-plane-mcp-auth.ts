@@ -131,8 +131,14 @@ export class ControlPlaneMcpClient {
       { accessToken: token },
       true,
     );
+    // Only an explicit boolean false means a rejected user token. A
+    // malformed successful verifier RPC is an upstream contract failure,
+    // never a reason to tell the user to reauthorize.
+    if (typeof body.authenticated !== 'boolean') {
+      throw new ControlPlaneMcpVerifierUnavailableError();
+    }
+    if (!body.authenticated) return undefined;
     if (
-      body.authenticated !== true ||
       typeof body.accountId !== 'string' ||
       !body.accountId.trim() ||
       !['user', 'operator', 'admin'].includes(
@@ -286,13 +292,15 @@ export class ControlPlaneMcpClient {
         return {};
       }
       const value = await response.json();
-      return (
-        typeof value === 'object' &&
-        value !== null &&
-        !Array.isArray(value)
-      )
-        ? value as Record<string, unknown>
-        : {};
+      if (
+        typeof value !== 'object' ||
+        value === null ||
+        Array.isArray(value)
+      ) {
+        if (requireVerifier) throw new ControlPlaneMcpVerifierUnavailableError();
+        return {};
+      }
+      return value as Record<string, unknown>;
     } catch {
       // A service-token rejection, transport timeout or upstream 5xx cannot
       // establish that the *user's* access token is invalid. Keep secrets,
