@@ -110,3 +110,28 @@ test('offline markdown lists all 59 PRs and preserves 404/NOT_VERIFIED caveats',
   assert.match(report,/NOT_VERIFIED/);
   assert.match(report,/NO MERGE/);
 });
+
+test('missing logs never prove direct root cause',()=>{
+  for(const value of [undefined, null, '', 'NOT_RUN']) {
+    const failed=structuredClone(fresh.wslInvestigation.failed);
+    if(value===undefined) delete failed.jobLog;
+    else failed.jobLog=value;
+    assert.equal(stageTriage(failed,fresh.wslInvestigation.control).directRootCauseLogAvailable,false);
+  }
+});
+
+test('an incomplete downstream job list cannot prove WSL installation hung',()=>{
+  const failed=structuredClone(fresh.wslInvestigation.failed);
+  failed.steps=failed.steps.filter(s=>!['Run npm ci','Run npm run typecheck','Verify Nexowire wsl.exec against real WSL2'].includes(s.name));
+  const r=stageTriage(failed,fresh.wslInvestigation.control);
+  assert.equal(r.downstreamWereNotRun,false);
+  assert.equal(r.inference,'WSL_FAILURE_STAGE_UNKNOWN');
+});
+
+test('a downstream step with missing conclusion cannot be treated as pending/NOT_RUN',()=>{
+  const failed=structuredClone(fresh.wslInvestigation.failed);
+  failed.steps.find(s=>s.name==='Run npm ci').conclusion='failure';
+  const r=stageTriage(failed,fresh.wslInvestigation.control);
+  assert.equal(r.downstreamWereNotRun,false);
+  assert.equal(r.inference,'WSL_FAILURE_STAGE_UNKNOWN');
+});
