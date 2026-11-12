@@ -106,11 +106,40 @@ function taskShell(script:string):unknown{
   catch{throw new Error('PRELOGIN_AGENT_TASK_RESULT_INVALID')}
 }
 
+/**
+ * A missing PowerShell task readback is not proof that a protected task is
+ * absent. Only Scheduler COM GetTask with exact HRESULT 0x80070002 is.
+ * Returned states other than not-installed MUST block task mutations.
+ */
+export const PRELOGIN_AGENT_TASK_VISIBILITY_PS=String.raw`
+function Resolve-PreloginTaskVisibility([scriptblock]$lookup,[string]$taskName){
+  if($taskName -cne 'Nexowire Prelogin Agent'){throw 'PRELOGIN_AGENT_TASK_NAME_UNTRUSTED'}
+  $registered=$null
+  try{$registered=& $lookup $taskName}catch{
+    $err=$_.Exception
+    while($null -ne $err.InnerException){$err=$err.InnerException}
+    if([int]$err.HResult -eq -2147024894){return 'not-installed'}
+    if([int]$err.HResult -eq -2147024891){return 'access-denied'}
+    return 'visibility-unverified'
+  }
+  if($null -ne $registered){return 'identity-unverified'}
+  return 'visibility-unverified'
+}
+function Read-PreloginTaskVisibility {
+  $service=New-Object -ComObject 'Schedule.Service' -ErrorAction Stop
+  $service.Connect()
+  $folder=$service.GetFolder('\')
+  Resolve-PreloginTaskVisibility {param($name) $folder.GetTask($name)} 'Nexowire Prelogin Agent'
+}
+`;
+
 interface TaskProbe {installed:boolean;state:string;identityVerified:boolean;hubBoot:boolean;description:string;ownerAgentTaskState:string}
 function queryTaskState():TaskProbe{
   const data=taskShell([
     "$ErrorActionPreference='Stop'",
     "$t=Get-ScheduledTask -TaskPath '\\' -TaskName "+ps(TASK)+" -ErrorAction SilentlyContinue",
+    PRELOGIN_AGENT_TASK_VISIBILITY_PS,
+    "$visibility=if($t){'found'}else{Read-PreloginTaskVisibility}",
     "$h=Get-ScheduledTask -TaskPath '\\' -TaskName "+ps(HUB_TASK)+" -ErrorAction SilentlyContinue",
     "$owner=Get-ScheduledTask -TaskPath '\\' -TaskName 'Nexowire Native Agent' -ErrorAction SilentlyContinue",
     "$verified=$false",
@@ -123,7 +152,7 @@ function queryTaskState():TaskProbe{
     "  $desc=([string]$t.Description).StartsWith("+ps(MARKER_PREFIX)+")",
     "  $verified=($system -and $boot -and $action -and $desc -and ([string]$t.Principal.LogonType -eq 'ServiceAccount') -and ([string]$t.Principal.RunLevel -eq 'Highest'))",
     "}",
-    "[pscustomobject]@{installed=($null-ne$t);state=$(if($t){[string]$t.State}else{'not-installed'});identityVerified=$verified;hubBoot=($null-ne$h);description=$(if($t){[string]$t.Description}else{''});ownerAgentTaskState=$(if($owner){[string]$owner.State}else{'not-installed'})} | ConvertTo-Json -Compress",
+    "[pscustomobject]@{installed=($null-ne$t);state=$(if($t){[string]$t.State}else{$visibility});identityVerified=$verified;hubBoot=($null-ne$h);description=$(if($t){[string]$t.Description}else{''});ownerAgentTaskState=$(if($owner){[string]$owner.State}else{'not-installed'})} | ConvertTo-Json -Compress",
   ].join('\n')) as Partial<TaskProbe>;
   if(typeof data.installed!=='boolean'||typeof data.state!=='string'||
       typeof data.identityVerified!=='boolean'||typeof data.hubBoot!=='boolean'||
@@ -235,6 +264,7 @@ export async function stageSystemAgentPrelogin():Promise<SystemAgentPreloginStat
   await verifyHelper(plan);
   const task=queryTaskState();
   if(task.installed)throw new Error('PRELOGIN_AGENT_TASK_ALREADY_EXISTS');
+  if(task.state!=='not-installed')throw new Error('PRELOGIN_AGENT_TASK_VISIBILITY_UNVERIFIED');
   if(await fs.lstat(plan.root).then(()=>true).catch(e=>{
     if((e as NodeJS.ErrnoException).code==='ENOENT')return false;
     throw e;
@@ -265,7 +295,11 @@ export async function stageSystemAgentPrelogin():Promise<SystemAgentPreloginStat
     await assertOwnedStage(plan);
     return await systemAgentPreloginStatus();
   }catch(error){
-    if(created&&!queryTaskState().installed){
+    if(created){
+      let absenceProven=false;
+      try{absenceProven=queryTaskState().state==='not-installed'}catch{/* Preserve stage for manual reconciliation. */}
+      if(!absenceProven)
+        throw new AggregateError([error],'PRELOGIN_AGENT_STAGING_NEEDS_MANUAL_RECOVERY');
       try{await assertSafeStageCleanup(plan)}catch{
         throw new AggregateError([error],'PRELOGIN_AGENT_STAGING_NEEDS_MANUAL_RECOVERY');
       }
@@ -293,6 +327,7 @@ export async function installStagedSystemAgentPrelogin():Promise<SystemAgentPrel
   await verifyHelper(plan);
   const before=queryTaskState();
   if(before.installed)throw new Error('PRELOGIN_AGENT_EXISTING_TASK_INSTALL_DENIED');
+  if(before.state!=='not-installed')throw new Error('PRELOGIN_AGENT_TASK_VISIBILITY_UNVERIFIED');
   const hub=await hubBootLifecycleStatus();
   if(!hub.installed||!['ready','running'].includes(hub.state))
     throw new Error('PRELOGIN_AGENT_TRUSTED_SYSTEM_HUB_BOOT_REQUIRED');
@@ -304,6 +339,9 @@ export async function installStagedSystemAgentPrelogin():Promise<SystemAgentPrel
       "$name="+ps(plan.taskName),
       "$task=Get-ScheduledTask -TaskPath '\\' -TaskName $name -ErrorAction SilentlyContinue",
       "if($task){throw 'PRELOGIN_AGENT_TASK_ALREADY_EXISTS'}",
+      PRELOGIN_AGENT_TASK_VISIBILITY_PS,
+      "$visibility=Read-PreloginTaskVisibility",
+      "if($visibility -cne 'not-installed'){throw 'PRELOGIN_AGENT_TASK_VISIBILITY_UNVERIFIED'}",
       "$action=New-ScheduledTaskAction -Execute "+ps(POWERSHELL)+" -Argument "+ps(args),
       "$trigger=New-ScheduledTaskTrigger -AtStartup",
       "$principal=New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest",
@@ -323,6 +361,8 @@ export async function installStagedSystemAgentPrelogin():Promise<SystemAgentPrel
     try{observed=queryTaskState()}catch(probeError){
       throw new AggregateError([error,probeError],'PRELOGIN_AGENT_TASK_INSTALL_STATE_UNKNOWN');
     }
+    if(!observed.installed&&observed.state!=='not-installed')
+      throw new AggregateError([error],'PRELOGIN_AGENT_TASK_INSTALL_STATE_UNKNOWN');
     if(observed.installed){
       if(!observed.identityVerified||observed.description!==manifest.marker)
         throw new AggregateError([error],'PRELOGIN_AGENT_FOREIGN_TASK_PRESERVED');
@@ -345,7 +385,10 @@ export async function uninstallSystemAgentPrelogin():Promise<SystemAgentPrelogin
   const plan=planSystemAgentPrelogin(process.execPath,process.argv[1]??'');
   ensureRuntime(plan);
   const task=queryTaskState();
-  if(!task.installed)return await systemAgentPreloginStatus();
+  if(!task.installed){
+    if(task.state!=='not-installed')throw new Error('PRELOGIN_AGENT_TASK_VISIBILITY_UNVERIFIED');
+    return await systemAgentPreloginStatus();
+  }
   if(!task.identityVerified)throw new Error('PRELOGIN_AGENT_FOREIGN_TASK_UNINSTALL_DENIED');
   const manifest=await assertOwnedStage(plan);
   if(task.description!==manifest.marker)
@@ -366,9 +409,12 @@ export async function uninstallSystemAgentPrelogin():Promise<SystemAgentPrelogin
     "Unregister-ScheduledTask -TaskPath '\\' -TaskName $name -Confirm:$false -ErrorAction Stop",
     "$after=Get-ScheduledTask -TaskPath '\\' -TaskName $name -ErrorAction SilentlyContinue",
     "if($after){throw 'PRELOGIN_AGENT_UNREGISTER_READBACK_FAILED'}",
+    PRELOGIN_AGENT_TASK_VISIBILITY_PS,
+    "$visibility=Read-PreloginTaskVisibility",
+    "if($visibility -cne 'not-installed'){throw 'PRELOGIN_AGENT_UNREGISTER_READBACK_UNVERIFIED'}",
     "[pscustomobject]@{unregistered=$true}|ConvertTo-Json -Compress",
   ].join('\n')) as {unregistered?:unknown};
-  if(result.unregistered!==true||queryTaskState().installed)
+  if(result.unregistered!==true||queryTaskState().state!=='not-installed')
     throw new Error('PRELOGIN_AGENT_TASK_UNINSTALL_UNCONFIRMED');
   return await systemAgentPreloginStatus();
 }
