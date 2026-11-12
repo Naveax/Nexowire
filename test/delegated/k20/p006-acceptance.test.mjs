@@ -61,9 +61,9 @@ test('D-117: dynamic owner TAP count survives 41/48/50/52/55 drift while rejecti
 test('R-117: cancelled TAP and missing or duplicate cancellation footers fail closed', () => {
   assert.equal(auditDynamicTapSummary(tap(78)).verdict, 'DYNAMIC_COUNT_VALID');
   assert.equal(auditDynamicTapSummary(tap(78).replace('# cancelled 0', '# cancelled 1')).verdict, 'RED_TAP');
-  assert.equal(auditDynamicTapSummary(tap(78).replace('# cancelled 0\\n', '')).verdict, 'UNTRUSTED_OR_INCOMPLETE_TAP');
-  assert.equal(auditDynamicTapSummary(`${tap(78)}# cancelled 0\\n`).verdict, 'UNTRUSTED_OR_INCOMPLETE_TAP');
-  assert.equal(auditDynamicTapSummary(tap(78).replaceAll('\\n', '\\r\\n')).verdict, 'DYNAMIC_COUNT_VALID');
+  assert.equal(auditDynamicTapSummary(tap(78).replace('# cancelled 0\n', '')).verdict, 'UNTRUSTED_OR_INCOMPLETE_TAP');
+  assert.equal(auditDynamicTapSummary(`${tap(78)}# cancelled 0\n`).verdict, 'UNTRUSTED_OR_INCOMPLETE_TAP');
+  assert.equal(auditDynamicTapSummary(tap(78).replaceAll('\n', '\r\n')).verdict, 'DYNAMIC_COUNT_VALID');
 });
 
 test('D-119: owner-ready --tap CLI returns zero on positive 55/55 fixture without fixed 41 pin', () => {
