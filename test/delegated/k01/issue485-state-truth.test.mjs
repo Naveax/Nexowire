@@ -392,6 +392,41 @@ test('T-536 #539: rate-limit message is RED on owner but GREEN in minimal in-mem
   assert.equal(serviceDown.get('error-message').textContent, 'Bağlantı hazırlanamadı.');
 });
 
+test('R-001 #539: malformed Retry-After values do not become a misleading wait hint', async () => {
+  // Only the in-memory UI candidate is exercised here; production #1068 is still RED.
+  // Existing T-536 checks that a valid Retry-After: 15 is displayed.
+  const proposed = candidateSource(
+    "        throw new Error('Bağlantı hazırlanamadı.');",
+    `        if (pairing.status === 429) {
+          const seconds = Number(pairing.headers.get('retry-after'));
+          const wait = Number.isInteger(seconds) && seconds > 0 && seconds <= 3600
+            ? seconds + ' saniye bekle.' : 'Biraz bekle.';
+          throw new Error('Çok fazla bağlantı isteği. ' + wait);
+        }
+        throw new Error('Bağlantı hazırlanamadı.');`,
+  );
+  for (const [label, retryAfter] of [
+    ['missing', null],
+    ['negative', '-30'],
+    ['zero', '0'],
+    ['fractional', '1.5'],
+    ['out-of-range', '99999999'],
+    ['untrusted text', 'wait-' + 'x'.repeat(150)],
+  ]) {
+    const responseOptions = { status: 429 };
+    if (retryAfter !== null) responseOptions.headers = { 'Retry-After': retryAfter };
+    const f = await boot({
+      query: search(), source: proposed,
+      pairing: async () => Response.json({ error: 'RATE_LIMITED' }, responseOptions),
+    });
+    await f.get('approve').dispatch('click');
+    assert.equal(f.navigations.length, 0, label);
+    assert.equal(f.get('connect-pill').textContent, 'Hata', label);
+    assert.equal(f.get('error-message').textContent,
+      'Çok fazla bağlantı isteği. Biraz bekle.', label);
+  }
+});
+
 test('T-537 #485: installer CTA is pinned to 1.0.7 rather than mislabelled as latest 1.0.8', async () => {
   const f = await boot();
   assert.match(f.get('download-installer').href,
