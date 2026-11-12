@@ -74,7 +74,9 @@ export function classifyHostedEvidence({
   if (!Number.isSafeInteger(runId) || runId <= 0 ||
     runStatus !== 'completed' || runConclusion !== 'success' ||
     !Array.isArray(jobs) || jobs.length === 0 || totalJobs !== jobs.length ||
-    jobs.some(job => job.run_id !== runId || job.status !== 'completed' || job.conclusion !== 'success')) {
+    jobs.some(job => job.run_id !== runId || job.status !== 'completed' || job.conclusion !== 'success') ||
+    jobs.some(job => !Number.isSafeInteger(job.id) || job.id <= 0) ||
+    new Set(jobs.map(job => job.id)).size !== jobs.length) {
     return { ...base, reason: 'JOB_NOT_SUCCESS' };
   }
   if (!Array.isArray(selectedFiles) || !selectedFiles.length || !Array.isArray(observedFiles) ||

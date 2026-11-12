@@ -89,6 +89,20 @@ test('selected-file proof must bind to real job, checkout SHA and passing result
   }
 });
 
+test('duplicate or invalid job IDs cannot reuse Node 22 evidence for Node 24', () => {
+  const duplicate = proof();
+  duplicate.jobs[1].id = duplicate.jobs[0].id;
+  duplicate.observedFileProofs = duplicate.observedFileProofs.slice(0, 1);
+  assert.equal(classifyHostedEvidence(duplicate).reason, 'JOB_NOT_SUCCESS');
+  assert.equal(classifyHostedEvidence(duplicate).selected_test_execution, 'NOT_PROVEN');
+
+  for (const id of [undefined, 0, -1, 1.5]) {
+    const invalid = proof();
+    invalid.jobs[1].id = id;
+    assert.equal(classifyHostedEvidence(invalid).reason, 'JOB_NOT_SUCCESS');
+  }
+});
+
 test('actual selected test path plus matching PR run HEAD supports hosted execution, not physical', () => {
   const result = classifyHostedEvidence(proof());
   assert.equal(result.required_pr_ci, 'PASS');
