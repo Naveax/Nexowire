@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import os from 'node:os';
-import {execFileSync} from 'node:child_process';
+import {execFileSync,spawnSync} from 'node:child_process';
 import {resolve,join} from 'node:path';
 
 const path = resolve('scripts/broker-handoff-preflight.ps1');
@@ -44,6 +44,38 @@ test('hardened report does not grant elevated authority from unauthenticated 401
   assert.match(script, /unauthenticatedHealthStatus/);
   assert.match(script, /safeToChangeProcesses = \$false/);
   assert.doesNotMatch(script, /safeToChangeProcesses = \$true/);
+});
+
+test('Broker handoff preserves unsigned Windows Scheduler results instead of truncating to Int32',()=>{
+  assert.match(script,/if \(\$null -ne \$info\.LastTaskResult\)/);
+  assert.match(script,/\[long\]\$info\.LastTaskResult/);
+  assert.doesNotMatch(script,/\[int\]\(Get-ScheduledTaskInfo[^)]*\)\.LastTaskResult/);
+  assert.match(script,/safeToChangeProcesses = \$false/);
+});
+
+test('Windows Broker handoff preserves high-bit lastTaskResult including 0x800710E0',{
+  skip:process.platform!=='win32',timeout:55000,
+},()=>{
+  for(const value of [0,2147946720,3221225786,4294967295,null]){
+    const v=value===null?'$null':'[uint32]'+value;
+    const ps=[
+      "$ErrorActionPreference='Stop'",
+      "$ProgressPreference='SilentlyContinue'",
+      '$global:nexowireHandoffSyntheticResult='+v,
+      "function Get-ScheduledTask {param([string]$TaskName) [pscustomobject]@{State='Running';Principal=[pscustomobject]@{RunLevel='Highest'};Actions=@([pscustomobject]@{Arguments=''})}}",
+      "function Get-ScheduledTaskInfo {param([string]$TaskName) [pscustomobject]@{LastTaskResult=$global:nexowireHandoffSyntheticResult}}",
+      "& '"+path.replaceAll("'","''")+"' -ExpectedVersion '1.0.8' -Staging '"+join(os.tmpdir(),'nexowire-handoff-nonexistent').replaceAll("'","''")+"'",
+    ].join('\r\n');
+    const result=spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',[
+      '-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',
+      Buffer.from(ps,'utf16le').toString('base64'),
+    ],{encoding:'utf8',windowsHide:true,timeout:14000,maxBuffer:128*1024});
+    assert.equal(result.status,0,result.stderr);
+    const report=JSON.parse(result.stdout) as Record<string,unknown>;
+    assert.equal(report.brokerTaskLastResult,value,String(value));
+    assert.equal(report.safeToChangeProcesses,false);
+    assert.equal(report.actionsPerformed,'READ_ONLY');
+  }
 });
 
 test('PowerShell parser accepts maintenance preflight without executing it',{
