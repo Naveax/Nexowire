@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {runRecoverableSystemHubCutover,SystemCutoverFailed,type SystemCutoverOperations} from '../src/hub/system-cutover-orchestrator.js';
-const phases=['preflight','armRecovery','quiesceLegacy','copyProtectedState',
+const phases=['preflight','armRecovery','confirmRecoveryBeforeQuiesce','quiesceLegacy','copyProtectedState',
   'issueReceipt','installSystemHub','verifySystemHub','commit'] as const;
 function setup(fail?:string,rollbackFails=false){
   const events:string[]=[];
@@ -37,7 +37,17 @@ test('an incomplete recovery arm never attempts rollback or touches the legacy w
   assert.deepEqual(events,['preflight','armRecovery']);
 });
 
-for(const phase of phases.slice(2)){
+test('failed recovery recheck cannot invoke rollback before legacy quiescence',async()=>{
+  const {ops,events}=setup('confirmRecoveryBeforeQuiesce',true);
+  await assert.rejects(runRecoverableSystemHubCutover(ops),(error:unknown)=>
+    error instanceof SystemCutoverFailed&&
+    error.failedStep==='arm-recovery'&&
+    error.rollbackAttempted===false&&
+    error.message==='SYSTEM_HUB_CUTOVER_FAILED_ARM_RECOVERY_RECOVERY_UNVERIFIED');
+  assert.deepEqual(events,['preflight','armRecovery','confirmRecoveryBeforeQuiesce']);
+});
+
+for(const phase of phases.slice(3)){
   test('failure at '+phase+' invokes exactly one rollback',async()=>{
     const {ops,events}=setup(phase);
     await assert.rejects(runRecoverableSystemHubCutover(ops),(error:unknown)=>
@@ -46,7 +56,7 @@ for(const phase of phases.slice(2)){
     assert.equal(events.at(-1),'rollback');
     assert.equal(events.filter(event=>event==='rollback').length,1);
     assert.equal(events.includes('commit'),phase==='commit');
-    assert.equal(events.includes('verifySystemHub'),phases.indexOf(phase)>=6);
+    assert.equal(events.includes('verifySystemHub'),phases.indexOf(phase)>=7);
   });
 }
 test('rollback failure remains explicit, never presented as recovered',async()=>{
