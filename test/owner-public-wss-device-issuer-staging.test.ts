@@ -264,3 +264,77 @@ test('device PoP rejects alternate base64url spelling before nonce is consumed',
     assert.equal(nonceCount,0);
   }finally{db.close()}
 });
+
+test('pending authentication cannot rebind a signed proof to another device using the same public key',async()=>{
+  const {db,issuer}=setup();
+  const secondDevice='device-enrolled-002';
+  try{
+    // Deliberately simulate two independently enrolled devices sharing a
+    // copied key. The proof must still bind the ORIGINAL signed device ID.
+    db.prepare('INSERT INTO proposed_owner_quota_devices VALUES(?,?,?,?)')
+      .run(secondDevice,acct,1,'full');
+    db.prepare('INSERT INTO proposed_owner_rpc_device_keys VALUES(?,?,?)')
+      .run(secondDevice,pem(deviceKeys.publicKey),1);
+    db.prepare('INSERT INTO proposed_owner_wss_profile_revisions VALUES(?,?,?)')
+      .run(secondDevice,5,1);
+    const request=claim();
+    const originalNonce=request.nonce;
+    const pending=issuer.issue(request);
+    request.deviceId=secondDevice; // happens while async auth awaits
+    const receipt=await pending;
+    assert.equal(receipt.deviceId,device,
+      'An authenticated receipt must not bind to a different device than signed bytes');
+    const a=db.prepare(
+      'SELECT COUNT(*) AS n FROM proposed_owner_wss_enrollment_nonces WHERE device_id=? AND nonce=?'
+    ).get(device,originalNonce) as {n:number};
+    assert.equal(a.n,1);
+  }finally{db.close()}
+});
+test('pending authentication cannot replace nonce after signing and bypass replay key',async()=>{
+  const {db,issuer}=setup();
+  try{
+    const signed=claim();
+    const originalNonce=signed.nonce;
+    const pending=issuer.issue(signed);
+    signed.nonce=randomBytes(18).toString('base64url');
+    await pending;
+    const originalRecorded=db.prepare(
+      'SELECT COUNT(*) AS n FROM proposed_owner_wss_enrollment_nonces WHERE device_id=? AND nonce=?'
+    ).get(device,originalNonce) as {n:number};
+    assert.equal(originalRecorded.n,1,
+      'The replay-exclusion nonce must be the nonce included in signed bytes');
+  }finally{db.close()}
+});
+
+test('owner revoke, session epoch change and device key rotation during OAuth await reject without nonce consumption',async()=>{
+  const changes=[
+    {
+      sql:'UPDATE proposed_owner_quota_accounts SET enabled=0',
+      expected:/revoked/,
+    },
+    {
+      sql:'UPDATE proposed_owner_quota_accounts SET session_generation=8',
+      expected:/revoked/,
+    },
+    {
+      sql:'UPDATE proposed_owner_rpc_device_keys SET enabled=0',
+      expected:/revoked/,
+    },
+    {
+      sql:"UPDATE proposed_owner_rpc_device_keys SET public_key_pem='not-a-valid-key'",
+      expected:/error|key|invalid|asn/i,
+    },
+  ];
+  for(const item of changes){
+    const {db,issuer}=setup();
+    try{
+      const pending=issuer.issue(claim());
+      db.exec(item.sql); // alter independent owner authority during awaited auth
+      await assert.rejects(pending);
+      const used=(db.prepare(
+        'SELECT COUNT(*) AS n FROM proposed_owner_wss_enrollment_nonces'
+      ).get() as {n:number}).n;
+      assert.equal(used,0);
+    }finally{db.close()}
+  }
+});
