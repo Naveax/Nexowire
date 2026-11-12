@@ -14,6 +14,7 @@ test('a basic SYSTEM health check never counts as physical cutover acceptance',a
   const operations={
     preflight:async()=>{phases.push('preflight');},
     armRecovery:async()=>{phases.push('armRecovery');},
+    confirmRecoveryBeforeQuiesce:async()=>{phases.push('confirmRecoveryBeforeQuiesce');},
     quiesceLegacy:async()=>{phases.push('quiesceLegacy');},
     copyProtectedState:async()=>{phases.push('copyProtectedState');},
     issueReceipt:async()=>{phases.push('issueReceipt');},

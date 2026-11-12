@@ -17,6 +17,7 @@ export function postHealthSystemHubDisposition():{
 export interface SystemCutoverOperations {
   preflight():Promise<void>;
   armRecovery():Promise<void>;
+  confirmRecoveryBeforeQuiesce():Promise<void>;
   quiesceLegacy():Promise<void>;
   copyProtectedState():Promise<void>;
   issueReceipt():Promise<void>;
@@ -45,11 +46,12 @@ export async function runRecoverableSystemHubCutover(
   ops:SystemCutoverOperations,
 ):Promise<{booted:true;rollbackArmed:true;physicalRebootAccepted:false;pendingPhysicalAcceptance:true}>{
   await ops.preflight();
-  // A failed or partially completed arm step does not prove a durable
+  // An incomplete arm or pre-quiesce recheck does not prove a durable
   // recovery task exists. The old writer has not been stopped yet, so
   // attempting a rollback here could execute an unverified recovery script.
   try{
     await ops.armRecovery();
+    await ops.confirmRecoveryBeforeQuiesce();
   }catch(error){
     throw new SystemCutoverFailed('arm-recovery',false,error,false);
   }

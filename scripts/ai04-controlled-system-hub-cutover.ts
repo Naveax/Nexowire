@@ -322,11 +322,15 @@ export async function controlledSystemHubCutover(
       if(taskCheck!=='OK')throw new Error('AI04_RECOVERY_TASK_UNVERIFIED');
       await advance(journal,'ARMED');
     },
-    async quiesceLegacy(){
-      // Check again immediately before disabling the original writer. A
-      // recovered but altered task is not a durable rollback guarantee.
+    async confirmRecoveryBeforeQuiesce(){
+      // This check MUST remain outside the rollback catch. The user Hub
+      // has not been disabled and the registered recovery is untrusted.
       if(runPS(systemHubRecoveryTaskReadbackScript())!=='OK')
         throw new Error('AI04_RECOVERY_TASK_CHANGED_BEFORE_QUIESCE');
+      verifyWindowsPrivateAcl(RECOVERY);
+      verifyWindowsPrivateAcl(JOURNAL);
+    },
+    async quiesceLegacy(){
       await advance(journal,'QUIESCING');
       runPS([
         "$ErrorActionPreference='Stop'",

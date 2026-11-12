@@ -98,11 +98,17 @@ for(const attack of attackCases){
       new RegExp('^DENY:AI04_RECOVERY_TASK_'+attack.denial+'$'));
   });
 }
-test('production revalidates recovery before quiescing the original writer',()=>{
-  const file=readFileSync(new URL('../scripts/ai04-controlled-system-hub-cutover.ts',import.meta.url),'utf8');
-  const start=file.indexOf('async quiesceLegacy(){');
-  const readback=file.indexOf('runPS(systemHubRecoveryTaskReadbackScript())',start);
-  const disable=file.indexOf('Disable-ScheduledTask',start);
-  assert.ok(start>=0&&readback>start&&disable>readback,
-    'recovery task must be read back before disabling the interactive Hub');
+test('production confirms recovery outside rollback region before quiescing writer',()=>{
+  const source=readFileSync(new URL('../scripts/ai04-controlled-system-hub-cutover.ts',import.meta.url),'utf8');
+  const orchestrator=readFileSync(new URL('../src/hub/system-cutover-orchestrator.ts',import.meta.url),'utf8');
+  const confirm=source.indexOf('async confirmRecoveryBeforeQuiesce(){');
+  const readback=source.indexOf('runPS(systemHubRecoveryTaskReadbackScript())',confirm);
+  const quiesce=source.indexOf('async quiesceLegacy(){',confirm);
+  const disable=source.indexOf('Disable-ScheduledTask',quiesce);
+  const orchestratorRecheck=orchestrator.indexOf('await ops.confirmRecoveryBeforeQuiesce()');
+  const rollbackRegion=orchestrator.indexOf("let step:SystemCutoverStep='quiesce-legacy'");
+  assert.ok(confirm>=0&&confirm<readback&&readback<quiesce&&quiesce<disable,
+    'readback must occur before the first task mutation');
+  assert.ok(orchestratorRecheck>=0&&orchestratorRecheck<rollbackRegion,
+    'failed recovery readback must not invoke rollback of a still-running Hub');
 });
