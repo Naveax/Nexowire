@@ -1,0 +1,36 @@
+name: QA29 Elevated Command Audit Source
+
+on:
+  pull_request:
+    paths:
+      - "test/qa29-elevated-command-audit-provenance.test.ts"
+      - "docs/QA29_ELEVATED_COMMAND_AUDIT_PROVENANCE_617.md"
+      - ".github/workflows/qa29-elevated-audit-source.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qa29-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  provenance-source-only:
+    name: Provenance synthetic Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Synthetic negative audit contract; NO elevated execution
+        run: node --test --import tsx test/qa29-elevated-command-audit-provenance.test.ts
