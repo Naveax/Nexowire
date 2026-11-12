@@ -26,11 +26,23 @@ test('cutover executes ordered, recoverable physical steps',async()=>{
   assert.deepEqual(events,[...phases]);
   assert.equal(result.physicalRebootAccepted,false);
 });
-for(const phase of phases.slice(1)){
+test('an incomplete recovery arm never attempts rollback or touches the legacy writer',async()=>{
+  const {ops,events}=setup('armRecovery',true);
+  await assert.rejects(runRecoverableSystemHubCutover(ops),(error:unknown)=>
+    error instanceof SystemCutoverFailed&&
+    error.failedStep==='arm-recovery'&&
+    error.rollbackAttempted===false&&
+    error.rollbackFailed===false&&
+    error.message==='SYSTEM_HUB_CUTOVER_FAILED_ARM_RECOVERY_RECOVERY_UNVERIFIED');
+  assert.deepEqual(events,['preflight','armRecovery']);
+});
+
+for(const phase of phases.slice(2)){
   test('failure at '+phase+' invokes exactly one rollback',async()=>{
     const {ops,events}=setup(phase);
     await assert.rejects(runRecoverableSystemHubCutover(ops),(error:unknown)=>
-      error instanceof SystemCutoverFailed && !error.rollbackFailed);
+      error instanceof SystemCutoverFailed && !error.rollbackFailed&&
+      error.rollbackAttempted===true);
     assert.equal(events.at(-1),'rollback');
     assert.equal(events.filter(event=>event==='rollback').length,1);
     assert.equal(events.includes('commit'),phase==='commit');
