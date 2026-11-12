@@ -3,6 +3,7 @@ import {spawnSync} from 'node:child_process';
 import {test} from 'node:test';
 import {
   SYSTEM_HUB_RECOVERY_BOOT_VISIBILITY_PS,
+  SYSTEM_HUB_RECOVERY_FINAL_ABSENCE_PS,
   SYSTEM_HUB_RECOVERY_PS,
 } from '../scripts/ai04-controlled-system-hub-cutover.js';
 
@@ -23,7 +24,7 @@ test('recovery determines SYSTEM boot presence before state inspection or task m
     /Stop-ScheduledTask|Unregister-ScheduledTask|Enable-ScheduledTask|Start-ScheduledTask|SilentlyContinue/);
 });
 
-function runFixture(mode:Mode):string{
+function runFixture(mode:Mode,stage:'pre'|'post'='pre'):string{
   const script=[
     "$ErrorActionPreference='Stop'",
     "$script:mode='"+mode+"'",
@@ -51,7 +52,8 @@ function runFixture(mode:Mode):string{
     "  throw 'SYNTHETIC_TASK_CMDLET_NOT_READABLE'",
     '}',
     "$code=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('"+
-      Buffer.from(SYSTEM_HUB_RECOVERY_BOOT_VISIBILITY_PS,'utf8').toString('base64')+"'))",
+      Buffer.from(stage==='pre'?SYSTEM_HUB_RECOVERY_BOOT_VISIBILITY_PS:
+        SYSTEM_HUB_RECOVERY_FINAL_ABSENCE_PS,'utf8').toString('base64')+"'))",
     "try{&([scriptblock]::Create($code));'ACCEPT'}catch{'DENY:'+$_.Exception.Message}",
   ].join('\r\n');
   const result=spawnSync(powershell,['-NoLogo','-NoProfile','-NonInteractive',
@@ -72,5 +74,30 @@ for(const [mode,expected] of [
 ] as const){
   test('recovery Task Scheduler visibility '+mode,{skip:process.platform!=='win32'},()=>{
     assert.equal(runFixture(mode),expected);
+  });
+}
+test('final boot task absence is proven after unregister and before legacy fallback',()=>{
+  const all=SYSTEM_HUB_RECOVERY_PS;
+  const unregister=all.indexOf('Unregister-ScheduledTask');
+  const final=all.indexOf(SYSTEM_HUB_RECOVERY_FINAL_ABSENCE_PS);
+  const user=all.indexOf("$user=Get-ScheduledTask",final);
+  assert.ok(unregister>0&&final>unregister&&user>final,
+    'COM-confirmed absence must precede starting the interactive Hub');
+  assert.match(SYSTEM_HUB_RECOVERY_FINAL_ABSENCE_PS,/-2147024894/);
+  assert.doesNotMatch(SYSTEM_HUB_RECOVERY_FINAL_ABSENCE_PS,
+    /Stop-ScheduledTask|Unregister-ScheduledTask|Enable-ScheduledTask|Start-ScheduledTask/);
+});
+
+for(const [mode,expected] of [
+  ['found','DENY:AI04_RECOVERY_BOOT_TASK_REAPPEARED'],
+  ['absent','ACCEPT'],
+  ['denied','DENY:AI04_RECOVERY_BOOT_VISIBILITY_UNVERIFIED'],
+  ['still-hidden','DENY:AI04_RECOVERY_BOOT_STILL_REGISTERED_OR_HIDDEN'],
+  ['null','DENY:AI04_RECOVERY_BOOT_STILL_REGISTERED_OR_HIDDEN'],
+  ['cmdlet-null','DENY:AI04_RECOVERY_BOOT_STILL_REGISTERED_OR_HIDDEN'],
+  ['service-fault','DENY:SYNTHETIC_COM_CONNECT_FAILED'],
+] as const){
+  test('final recovery boot task absence '+mode,{skip:process.platform!=='win32'},()=>{
+    assert.equal(runFixture(mode,'post'),expected);
   });
 }

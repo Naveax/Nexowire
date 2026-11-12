@@ -148,6 +148,23 @@ export const SYSTEM_HUB_RECOVERY_BOOT_VISIBILITY_PS=[
   "  if(-not $notFound){throw 'AI04_RECOVERY_BOOT_STILL_REGISTERED_OR_HIDDEN'}",
   "}",
 ].join('\r\n');
+/** After SYSTEM task removal, only an exact COM not-found proves fallback safe. */
+export const SYSTEM_HUB_RECOVERY_FINAL_ABSENCE_PS=[
+  "$check=$null",
+  "try{$check=Get-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\\' -ErrorAction Stop}catch{$check=$null}",
+  "if($check){throw 'AI04_RECOVERY_BOOT_TASK_REAPPEARED'}",
+  "$svc=New-Object -ComObject 'Schedule.Service' -ErrorAction Stop",
+  "$svc.Connect()",
+  "$folder=$svc.GetFolder('\\')",
+  "$registered=$null;$notFound=$false",
+  "try{$registered=$folder.GetTask('Nexowire Hub Boot')}catch{",
+  "  $exception=$_.Exception",
+  "  while($null -ne $exception.InnerException){$exception=$exception.InnerException}",
+  "  if([int]$exception.HResult -eq -2147024894){$notFound=$true}",
+  "  else{throw 'AI04_RECOVERY_BOOT_VISIBILITY_UNVERIFIED'}",
+  "}",
+  "if(-not $notFound){throw 'AI04_RECOVERY_BOOT_STILL_REGISTERED_OR_HIDDEN'}",
+].join('\r\n');
 export const SYSTEM_HUB_RECOVERY_PS=[
   "$ErrorActionPreference='Stop'",
   "$root='C:\\ProgramData\\Nexowire\\hub-cutover-recovery'",
@@ -237,10 +254,11 @@ export const SYSTEM_HUB_RECOVERY_PS=[
   "  if([string]$current.Description -cne [string]$journal.marker -or [string]$current.Principal.UserId -notin @('SYSTEM','S-1-5-18')){throw 'AI04_RECOVERY_BOOT_REPLACED'}",
   "  Unregister-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\\' -Confirm:$false",
   "}",
-  "$check=Get-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\\' -ErrorAction SilentlyContinue",
-  "if($check){throw 'AI04_RECOVERY_BOOT_TASK_REAPPEARED'}",
-  "$svc=New-Object -ComObject 'Schedule.Service';$svc.Connect();$folder=$svc.GetFolder('\\')",
-  "try{$null=$folder.GetTask('Nexowire Hub Boot');throw 'AI04_RECOVERY_BOOT_VISIBILITY_UNVERIFIED'}catch{if([int]$_.Exception.HResult -ne -2147024894){throw}}",
+
+
+
+
+  SYSTEM_HUB_RECOVERY_FINAL_ABSENCE_PS,
   "$user=Get-ScheduledTask -TaskName 'Nexowire Hub' -TaskPath '\\' -ErrorAction Stop",
   "if([string]$user.Principal.UserId -cne [string]$journal.originalUserPrincipal){throw 'AI04_RECOVERY_LEGACY_TASK_REPLACED'}",
   "$portOwner=@(Get-NetTCPConnection -State Listen -ErrorAction Stop | Where-Object LocalPort -eq $port)",
