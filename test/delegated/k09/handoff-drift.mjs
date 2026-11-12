@@ -46,9 +46,14 @@ export function reconcileHandoff(observationsToAudit) {
       };
     }
 
+    const validMergedAt = row.mergedAt === null || (
+      row.currentState === 'closed' && typeof row.mergedAt === 'string' &&
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(row.mergedAt) &&
+      !Number.isNaN(Date.parse(row.mergedAt)) &&
+      new Date(row.mergedAt).toISOString() === row.mergedAt.replace(/Z$/, '.000Z')
+    );
     if (!['open', 'draft', 'closed'].includes(row.previousState) ||
-        !['open', 'closed'].includes(row.currentState) ||
-        !(row.mergedAt === null || typeof row.mergedAt === 'string'))
+        !['open', 'closed'].includes(row.currentState) || !validMergedAt)
       throw new Error(`Invalid pull request state: ${key}`);
     if (typeof row.previousHead !== 'string' || !/^[0-9a-f]{40}$/.test(row.previousHead) ||
         typeof row.currentHead !== 'string' || !/^[0-9a-f]{40}$/.test(row.currentHead))

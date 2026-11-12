@@ -46,3 +46,10 @@ test('report is deterministic and cannot show an accepted live result', () => {
   assert.equal(reportHandoff().split('\n').length, 8);
   assert.doesNotMatch(reportHandoff(), /DEPLOYED|ACCEPTED|CI_PASS/);
 });
+
+test('impossible open/merged and malformed merged_at cannot masquerade as merged evidence', () => {
+  assert.throws(() => reconcileHandoff([{ ...observations[0], currentState: 'open', mergedAt: '2026-11-07T00:00:00Z' }]), /Invalid pull request state/);
+  assert.throws(() => reconcileHandoff([{ ...observations[0], mergedAt: 'not-a-timestamp' }]), /Invalid pull request state/);
+  assert.throws(() => reconcileHandoff([{ ...observations[0], mergedAt: '' }]), /Invalid pull request state/);
+  assert.throws(() => reconcileHandoff([{ ...observations[0], mergedAt: '2026-02-31T00:00:00Z' }]), /Invalid pull request state/);
+});
