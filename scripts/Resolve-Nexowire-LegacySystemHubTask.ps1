@@ -138,24 +138,43 @@ function Make-PrivateDirectory([string]$p) {
 function Hash([string]$p) {
   return (Get-FileHash -LiteralPath $p -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
 }
-function Get-TaskOrVisibility {
-  try {
+# Only the COM GetTask operation may prove the task truly absent. A later
+# cmdlet error is NEVER proof of absence of a COM-registered task.
+function Get-TaskOrVisibility(
+  [scriptblock]$ComTaskLookup,
+  [scriptblock]$CmdletTaskLookup
+) {
+  if($null -eq $ComTaskLookup){
     $svc=New-Object -ComObject 'Schedule.Service' -ErrorAction Stop
     $svc.Connect()
     $folder=$svc.GetFolder('\')
-    $registered=$folder.GetTask($taskName)
-    if($null -eq $registered){throw 'AI01_RECONCILE_TASK_VISIBILITY_UNVERIFIED'}
-    $task=Get-ScheduledTask -TaskName $taskName -TaskPath '\' -ErrorAction Stop
-    return [pscustomobject]@{Visibility='found';Task=$task;Registered=$registered}
+    $ComTaskLookup={ $folder.GetTask($taskName) }
+  }
+  if($null -eq $CmdletTaskLookup){
+    $CmdletTaskLookup={ Get-ScheduledTask -TaskName $taskName -TaskPath '\' -ErrorAction Stop }
+  }
+  $registered=$null
+  try {
+    $registered=& $ComTaskLookup
   } catch {
-    if([int]$_.Exception.HResult -eq -2147024894){
+    $errorCode=$_.Exception
+    while($null -ne $errorCode.InnerException){$errorCode=$errorCode.InnerException}
+    if([int]$errorCode.HResult -eq -2147024894) {
       return [pscustomobject]@{Visibility='not-installed';Task=$null;Registered=$null}
     }
-    if([int]$_.Exception.HResult -eq -2147024891) {
+    if([int]$errorCode.HResult -eq -2147024891) {
       return [pscustomobject]@{Visibility='access-denied';Task=$null;Registered=$null}
     }
-    throw
+    throw 'AI01_RECONCILE_TASK_VISIBILITY_UNVERIFIED'
   }
+  if($null -eq $registered){throw 'AI01_RECONCILE_TASK_VISIBILITY_UNVERIFIED'}
+  try {
+    $task=& $CmdletTaskLookup
+  } catch {
+    throw 'AI01_RECONCILE_TASK_CMDLET_VISIBILITY_UNVERIFIED'
+  }
+  if($null -eq $task){throw 'AI01_RECONCILE_TASK_CMDLET_VISIBILITY_UNVERIFIED'}
+  return [pscustomobject]@{Visibility='found';Task=$task;Registered=$registered}
 }
 function Assert-LegacyIdentity($found) {
   if($found.Visibility -ne 'found'){throw 'AI01_RECONCILE_TASK_IDENTITY_UNVERIFIED'}
