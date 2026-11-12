@@ -22,8 +22,8 @@ const acceptanceStatus = z.enum(['pending', 'accepted', 'rejected']);
 const manifestSchema = z.object({
   version: z.literal(1), scope: scopeSchema, artifactPath: logicalPathSchema,
   repository: z.string().min(1).max(512), commitSha: z.string().regex(/^[0-9a-f]{40}$/),
-  producerOperationId: safeName, size: z.number().int().min(0).max(268_435_456),
-  sha256: shaSchema, createdAt: z.string().datetime(),
+  producerOperationId: safeName, size: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  sha256: shaSchema, receiptSha256: shaSchema.optional(), createdAt: z.string().datetime(),
   testStatus, acceptanceStatus,
 }).strict();
 const chunkSchema = z.object({
@@ -36,6 +36,29 @@ const sessionSchema = z.object({
   offset: z.number().int().min(0),
   chunks: z.array(chunkSchema).max(4096),
 }).strict();
+// Large sessions use a bounded-size metadata header plus append-only 44-byte
+// checksummed receipts. Existing <=256MiB v1 sessions remain readable.
+const largeSessionSchema = z.object({
+  version: z.literal(2), id: shaSchema, metadata: manifestSchema,
+  expectedPreviousSha256: shaSchema.optional(),
+}).strict();
+type LargeSession = z.infer<typeof largeSessionSchema>;
+const RECEIPT_BYTES = 44; // u64 offset, u32 byte length, 32-byte SHA-256
+function encodeReceipt(offset: number, size: number, sha: string): Buffer {
+  const b = Buffer.alloc(RECEIPT_BYTES);
+  b.writeBigUInt64LE(BigInt(offset), 0);
+  b.writeUInt32LE(size, 8);
+  Buffer.from(sha, 'hex').copy(b, 12);
+  return b;
+}
+function decodeReceipt(b: Buffer): { offset: number; size: number; sha256: string } {
+  const raw = b.readBigUInt64LE(0);
+  if (raw > BigInt(Number.MAX_SAFE_INTEGER)) fail('CORRUPT_RECEIPT', 'Receipt offset is outside safe integer range.');
+  const offset = Number(raw);
+  const size = b.readUInt32LE(8);
+  if (size < 1 || size > 65536) fail('CORRUPT_RECEIPT', 'Receipt size is outside bounded transfer range.');
+  return { offset, size, sha256: b.subarray(12, 44).toString('hex') };
+}
 const lockSchema = z.object({
   version: z.literal(1), id: z.string().uuid(), host: z.string().min(1).max(256),
   pid: z.number().int().positive(), createdAt: z.string().datetime(),
@@ -117,11 +140,17 @@ export class ArtifactBridgeStore {
   private sessionFile(dir: string, id: string): string {
     return path.join(dir, 'sessions', shaSchema.parse(id) + '.json');
   }
+  private receiptsFile(dir: string, id: string): string {
+    return path.join(dir, 'sessions', shaSchema.parse(id) + '.receipts');
+  }
   private partFile(dir: string, id: string): string {
     return path.join(dir, 'sessions', shaSchema.parse(id) + '.part');
   }
   private objectFile(dir: string, sha: string): string {
     return path.join(dir, 'objects', shaSchema.parse(sha));
+  }
+  private objectReceiptsFile(dir: string, sha: string): string {
+    return path.join(dir, 'objects', shaSchema.parse(sha) + '.receipts');
   }
   // Scope-local cross-process lock. Recovery is intentionally operator-only
   // and never triggered by normal request handling.
@@ -226,7 +255,7 @@ export class ArtifactBridgeStore {
         return fail('RETENTION_SCAN_LIMIT', 'The number of staged objects exceeds the safe scan bound.');
       }
       for (const name of names) {
-        if (!/^[a-f0-9]{64}\.(?:json|part)$/.test(name)) {
+        if (!/^[a-f0-9]{64}\.(?:json|part|receipts)$/.test(name)) {
           return fail('RETENTION_UNKNOWN_ENTRY', 'Unrecognized staging entry requires operator review.');
         }
       }
@@ -234,10 +263,16 @@ export class ArtifactBridgeStore {
       for (const name of names.filter(x => x.endsWith('.json'))) {
         const id = name.slice(0, -5);
         // A missing or corrupt stage is an error, never silent deletion.
-        await this.loadSession(scope, id);
+        const variant = await this.sessionVariant(dir, id);
+        if (!variant) return fail('CORRUPT_METADATA', 'Session disappeared during retention scan.');
+        if ('version' in variant) await this.loadLargeSession(scope, id, true);
+        else await this.loadSession(scope, id);
         const jsonStat = await fs.stat(path.join(sessionsDir, name));
         const partStat = await fs.stat(this.partFile(dir, id));
-        if (Date.now() - Math.max(jsonStat.mtimeMs, partStat.mtimeMs) >= olderThanMs) {
+        const ledgerStat = 'version' in variant
+          ? await fs.stat(this.receiptsFile(dir, id)) : null;
+        if (Date.now() - Math.max(jsonStat.mtimeMs, partStat.mtimeMs,
+            ledgerStat?.mtimeMs ?? 0) >= olderThanMs) {
           candidates.push(id);
         }
       }
@@ -246,12 +281,25 @@ export class ArtifactBridgeStore {
           return fail('RETENTION_ORPHAN_STAGE', 'Orphaned stage requires manual review before pruning.');
         }
       }
+      for (const name of names.filter(x => x.endsWith('.receipts'))) {
+        const id = name.slice(0, -9);
+        if (!names.includes(id + '.json')) {
+          fail('RETENTION_ORPHAN_STAGE', 'Orphaned receipt journal requires manual review.');
+        }
+        const variant = await this.sessionVariant(dir, id);
+        if (!variant || !('version' in variant)) {
+          fail('RETENTION_UNKNOWN_ENTRY', 'Receipt journal does not match large transfer metadata.');
+        }
+      }
       if (!dryRun) {
         for (const id of candidates) {
-          // Never remove a file not verified in this scope and with this ID.
-          await this.loadSession(scope, id);
+          const variant = await this.sessionVariant(dir, id);
+          if (!variant) return fail('CORRUPT_METADATA', 'Session removed before retention cleanup.');
+          if ('version' in variant) await this.loadLargeSession(scope, id, true);
+          else await this.loadSession(scope, id);
           await fs.rm(this.partFile(dir, id));
           await fs.rm(this.sessionFile(dir, id));
+          if ('version' in variant) await fs.rm(this.receiptsFile(dir, id));
         }
       }
       return { candidateSessionIds: candidates, deleted: dryRun ? 0 : candidates.length, dryRun };
@@ -284,6 +332,13 @@ export class ArtifactBridgeStore {
       try {
         if (await regularFile(file) !== manifest.size || await digestFile(file) !== manifest.sha256) {
           return fail('CORRUPT_ARTIFACT', 'Stored artifact size or SHA-256 verification failed.');
+        }
+        if (manifest.receiptSha256) {
+          const index = this.objectReceiptsFile(dir, manifest.sha256);
+          if (await regularFile(index) % RECEIPT_BYTES !== 0 ||
+              await digestFile(index) !== manifest.receiptSha256) {
+            return fail('CORRUPT_RECEIPT', 'Published receipt index integrity failed.');
+          }
         }
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') return fail('ARTIFACT_MISSING', 'Manifest exists but content is missing.');
@@ -356,12 +411,111 @@ export class ArtifactBridgeStore {
     }
     return session;
   }
+  private async sessionVariant(dir: string, id: string): Promise<Session | LargeSession | null> {
+    return existing(this.sessionFile(dir, id), z.union([sessionSchema, largeSessionSchema]));
+  }
+
+  // O(1) work and memory for each normal append. Full validation is mandatory
+  // at explicit resume and publication; no unbounded receipts JSON in RAM.
+  private async loadLargeSession(scope: ArtifactScope, id: string, verifyFull = false):
+    Promise<{ session: LargeSession; offset: number; count: number }> {
+    const dir = this.dir(scope);
+    const session = await existing(this.sessionFile(dir, id), largeSessionSchema);
+    if (!session) return fail('SESSION_NOT_FOUND', 'Large transfer session not found.');
+    if (session.id !== id || !equalScope(session.metadata.scope, scope)) {
+      fail('SCOPE_MISMATCH', 'Large transfer scope does not match authenticated principal.');
+    }
+    const ledger = this.receiptsFile(dir, id), stage = this.partFile(dir, id);
+    const fd = await fs.open(ledger, 'r');
+    try {
+      const stat = await fd.stat();
+      if (!stat.isFile() || stat.size % RECEIPT_BYTES !== 0) {
+        fail('CORRUPT_RECEIPT', 'Receipt journal is truncated or is not regular.');
+      }
+      const count = stat.size / RECEIPT_BYTES;
+      let offset = 0;
+      const readAt = async (index: number) => {
+        const b = Buffer.alloc(RECEIPT_BYTES);
+        const r = await fd.read(b, 0, RECEIPT_BYTES, index * RECEIPT_BYTES);
+        if (r.bytesRead !== RECEIPT_BYTES) fail('CORRUPT_RECEIPT', 'Receipt was truncated.');
+        return decodeReceipt(b);
+      };
+      if (verifyFull) {
+        const part = await fs.open(stage, 'r');
+        try {
+          for (let i = 0; i < count; i++) {
+            const receipt = await readAt(i);
+            if (receipt.offset !== offset || offset + receipt.size > session.metadata.size) {
+              fail('CORRUPT_RECEIPT', 'Receipts are not contiguous.');
+            }
+            const chunk = Buffer.alloc(receipt.size);
+            const read = await part.read(chunk, 0, receipt.size, offset);
+            if (read.bytesRead !== receipt.size || digest(chunk) !== receipt.sha256) {
+              fail('CORRUPT_SESSION', 'Staged content differs from durable receipt.');
+            }
+            offset += receipt.size;
+          }
+        } finally { await part.close(); }
+      } else if (count) {
+        const last = await readAt(count - 1);
+        offset = last.offset + last.size;
+        if (!Number.isSafeInteger(offset) || offset > session.metadata.size) {
+          fail('CORRUPT_RECEIPT', 'Receipt total exceeds declared artifact size.');
+        }
+        const part = await fs.open(stage, 'r');
+        try {
+          const bytes = Buffer.alloc(last.size);
+          const read = await part.read(bytes, 0, bytes.length, last.offset);
+          if (read.bytesRead !== bytes.length || digest(bytes) !== last.sha256) {
+            fail('CORRUPT_SESSION', 'Last staged chunk differs from durable receipt.');
+          }
+        } finally { await part.close(); }
+      }
+      if (await regularFile(stage) !== offset) {
+        fail('CORRUPT_SESSION', 'Stage length differs from durable receipts. Stop and inspect.');
+      }
+      return { session, offset, count };
+    } finally { await fd.close(); }
+  }
+
+  // Admission limits are policy- and available-disk-based, not a hard 256MiB
+  // whole-file cutoff. Never preallocate a sparse object of declared size.
+  private async admitLarge(dir: string, size: number): Promise<void> {
+    const conf = process.env.NEXOWIRE_ARTIFACT_MAX_BYTES;
+    if (conf !== undefined) {
+      const n = Number(conf);
+      if (!Number.isSafeInteger(n) || n < 1) fail('INVALID_QUOTA', 'Artifact quota policy is invalid.');
+      if (size > n) fail('ARTIFACT_QUOTA_EXCEEDED', 'Transfer exceeds provisioned account artifact limit.');
+    }
+    const sessions = path.join(dir, 'sessions');
+    const names = await fs.readdir(sessions);
+    if (names.filter(x => x.endsWith('.json')).length >= 8) {
+      fail('ACTIVE_SESSION_LIMIT', 'At most eight unfinished sessions per device scope.');
+    }
+    const stat = await fs.statfs(dir);
+    const free = BigInt(stat.bavail) * BigInt(stat.bsize);
+    const reserve = 64n * 1024n * 1024n;
+    if (BigInt(size) + reserve > free) {
+      fail('INSUFFICIENT_STORAGE', 'Not enough free disk space for artifact and safety reserve.');
+    }
+  }
+
   async begin(input: Omit<ArtifactManifest, 'version' | 'createdAt'> & {
     expectedPreviousSha256?: string;
   }): Promise<{ state: 'ALREADY_PRESENT' | 'OPEN'; sessionId?: string; offset: number; manifest?: ArtifactManifest }> {
     const { expectedPreviousSha256: _cas, ...candidate } = input;
     const metadata = manifestSchema.parse({ ...candidate, version: 1, createdAt: new Date().toISOString() });
     const scope = metadata.scope, dir = this.dir(scope);
+    const quota = process.env.NEXOWIRE_ARTIFACT_MAX_BYTES;
+    if (quota !== undefined) {
+      const cap = Number(quota);
+      if (!Number.isSafeInteger(cap) || cap < 1) {
+        fail('INVALID_QUOTA', 'Provisioned artifact size quota is invalid.');
+      }
+      if (metadata.size > cap) {
+        fail('ARTIFACT_QUOTA_EXCEEDED', 'Artifact exceeds provisioned per-file quota.');
+      }
+    }
     const expected = input.expectedPreviousSha256 ? shaSchema.parse(input.expectedPreviousSha256) : undefined;
     return this.locked(dir, async () => {
       await this.projectGuard(scope, metadata.repository, true);
@@ -374,7 +528,7 @@ export class ArtifactBridgeStore {
       }
       const id = key(JSON.stringify(scope), metadata.artifactPath, metadata.sha256, metadata.producerOperationId);
       await fs.mkdir(path.join(dir, 'sessions'), { recursive: true });
-      const existingSession = await existing(this.sessionFile(dir, id), sessionSchema);
+      const existingSession = await this.sessionVariant(dir, id);
       if (existingSession) {
         if (existingSession.metadata.sha256 !== metadata.sha256 ||
             existingSession.metadata.size !== metadata.size ||
@@ -383,8 +537,23 @@ export class ArtifactBridgeStore {
             existingSession.expectedPreviousSha256 !== expected) {
           fail('SESSION_CONFLICT', 'Transfer identity was reused with different metadata.');
         }
-        const checked = await this.loadSession(scope, id);
-        return { state: 'OPEN', sessionId: id, offset: checked.offset };
+        const offset = 'version' in existingSession
+          ? (await this.loadLargeSession(scope, id, true)).offset
+          : (await this.loadSession(scope, id)).offset;
+        return { state: 'OPEN', sessionId: id, offset };
+      }
+      if (metadata.size > 268_435_456) {
+        await this.admitLarge(dir, metadata.size);
+        const part = await fs.open(this.partFile(dir, id), 'wx', 0o600);
+        await part.close();
+        const journal = await fs.open(this.receiptsFile(dir, id), 'wx', 0o600);
+        await journal.close();
+        const header = largeSessionSchema.parse({
+          version: 2, id, metadata,
+          ...(expected ? { expectedPreviousSha256: expected } : {}),
+        });
+        await atomicJson(this.sessionFile(dir, id), header);
+        return { state: 'OPEN', sessionId: id, offset: 0 };
       }
       const session: Session = { id, metadata, offset: 0, chunks: [],
         ...(expected ? { expectedPreviousSha256: expected } : {}) };
@@ -398,6 +567,48 @@ export class ArtifactBridgeStore {
     const dir = this.dir(scope), bytes = canonicalBase64(contentBase64);
     if (!Number.isSafeInteger(offset) || offset < 0) fail('OFFSET_INVALID', 'Invalid transfer offset.');
     return this.locked(dir, async () => {
+      const variant = await this.sessionVariant(dir, sessionId);
+      if (variant && 'version' in variant) {
+        const { session, offset: current, count } =
+          await this.loadLargeSession(scope, sessionId);
+        if (offset < current) {
+          // Replayed receipts are matched by exact start offset and digest.
+          const receipt = await fs.open(this.receiptsFile(dir, sessionId), 'r');
+          try {
+            for (let i = 0; i < count; i++) {
+              const b = Buffer.alloc(RECEIPT_BYTES);
+              const r = await receipt.read(b, 0, b.length, i * RECEIPT_BYTES);
+              if (r.bytesRead !== b.length) fail('CORRUPT_RECEIPT', 'Short replay receipt.');
+              const prior = decodeReceipt(b);
+              if (prior.offset === offset && prior.size === bytes.length &&
+                  prior.sha256 === digest(bytes)) {
+                return { state: 'ALREADY_WRITTEN' as const, offset: current };
+              }
+            }
+          } finally { await receipt.close(); }
+          return fail('CHUNK_REPLAY_CONFLICT', 'Nonmatching old chunk cannot be replayed.');
+        }
+        if (offset !== current || offset + bytes.length > session.metadata.size ||
+            !Number.isSafeInteger(offset + bytes.length)) {
+          return fail('OFFSET_MISMATCH', 'Transfer requires exact next offset.');
+        }
+        const stage = await fs.open(this.partFile(dir, sessionId), 'r+');
+        try {
+          const result = await stage.write(bytes, 0, bytes.length, offset);
+          if (result.bytesWritten !== bytes.length) fail('SHORT_WRITE', 'Stage write was incomplete.');
+          await stage.sync();
+        } finally { await stage.close(); }
+        // Commit receipt AFTER staged content fsync. Crash in this gap causes
+        // stage/receipt mismatch, so no unverified mutation is ever replayed.
+        const journal = await fs.open(this.receiptsFile(dir, sessionId), 'a');
+        try {
+          const b = encodeReceipt(offset, bytes.length, digest(bytes));
+          const result = await journal.write(b);
+          if (result.bytesWritten !== b.length) fail('SHORT_WRITE', 'Receipt write was incomplete.');
+          await journal.sync();
+        } finally { await journal.close(); }
+        return { state: 'WRITTEN' as const, offset: offset + bytes.length };
+      }
       const session = await this.loadSession(scope, sessionId, false);
       if (offset < session.offset) {
         const prior = session.chunks.find(c => c.offset === offset && c.size === bytes.length);
@@ -418,19 +629,72 @@ export class ArtifactBridgeStore {
       return { state: 'WRITTEN' as const, offset: session.offset };
     });
   }
+  // Bounded Agent-to-Hub pull: 32 x 64KiB with one fsync pair per batch.
+  // Each source invocation returns at most one 64KiB Base64 chunk.
+  async appendSourceChunks(
+    scope: ArtifactScope, sessionId: string, maxChunks: number,
+    source: (offset: number, length: number) => Promise<string>,
+  ): Promise<{ offset: number; transferredBytes: number; chunks: number }> {
+    if (!Number.isSafeInteger(maxChunks) || maxChunks < 1 || maxChunks > 32) {
+      return fail('CHUNK_BATCH_LIMIT', 'At most 32 bounded chunks per source batch.');
+    }
+    const dir = this.dir(scope);
+    return this.locked(dir, async () => {
+      const { session, offset: initial, count } =
+        await this.loadLargeSession(scope, sessionId);
+      let offset = initial;
+      let writtenChunks = 0;
+      const stage = await fs.open(this.partFile(dir, sessionId), 'r+');
+      const ledger = await fs.open(this.receiptsFile(dir, sessionId), 'r+');
+      try {
+        for (let index = 0; index < maxChunks && offset < session.metadata.size; index++) {
+          const size = Math.min(65536, session.metadata.size - offset);
+          const bytes = canonicalBase64(await source(offset, size));
+          if (bytes.length !== size) {
+            fail('SOURCE_SHORT_READ', 'Source returned an incomplete bounded chunk.');
+          }
+          const receipt = encodeReceipt(offset, bytes.length, digest(bytes));
+          const sw = await stage.write(bytes, 0, bytes.length, offset);
+          if (sw.bytesWritten !== bytes.length) {
+            fail('SHORT_WRITE', 'Staged artifact write was incomplete.');
+          }
+          const rw = await ledger.write(receipt, 0, receipt.length,
+            (count + writtenChunks) * RECEIPT_BYTES);
+          if (rw.bytesWritten !== receipt.length) {
+            fail('SHORT_WRITE', 'Durable receipt write was incomplete.');
+          }
+          offset += bytes.length;
+          writtenChunks++;
+        }
+        await stage.sync();
+        await ledger.sync();
+        return { offset, transferredBytes: offset - initial, chunks: writtenChunks };
+      } finally {
+        await ledger.close();
+        await stage.close();
+      }
+    });
+  }
+
+
   async commit(scope: ArtifactScope, sessionId: string): Promise<ArtifactManifest> {
     const dir = this.dir(scope);
     return this.locked(dir, async () => {
-      const session = await this.loadSession(scope, sessionId);
-      const metadata = session.metadata, stage = this.partFile(dir, sessionId);
-      if (session.offset !== metadata.size || await digestFile(stage) !== metadata.sha256) {
+      const variant = await this.sessionVariant(dir, sessionId);
+      if (!variant) return fail('SESSION_NOT_FOUND', 'Transfer session does not exist.');
+      const large = 'version' in variant;
+      const offset = large ? (await this.loadLargeSession(scope, sessionId, true)).offset
+        : (await this.loadSession(scope, sessionId)).offset;
+      const metadata = variant.metadata, stage = this.partFile(dir, sessionId);
+      if (offset !== metadata.size || await digestFile(stage) !== metadata.sha256) {
         return fail('HASH_MISMATCH', 'Incomplete or corrupt content cannot be committed.');
       }
       const old = await this.checkManifest(scope, metadata.artifactPath);
-      if ((old?.sha256 ?? undefined) !== session.expectedPreviousSha256) {
+      if ((old?.sha256 ?? undefined) !== variant.expectedPreviousSha256) {
         if (old?.sha256 === metadata.sha256 && old.size === metadata.size) {
           await fs.rm(this.sessionFile(dir, sessionId));
           await fs.rm(stage);
+          if (large) await fs.rm(this.receiptsFile(dir, sessionId));
           return old;
         }
         fail('COMPARE_AND_SWAP_FAILED', 'The artifact changed before finalization.');
@@ -444,13 +708,130 @@ export class ArtifactBridgeStore {
       if (await regularFile(blob) !== metadata.size || await digestFile(blob) !== metadata.sha256) {
         fail('CORRUPT_ARTIFACT', 'Existing content-addressed object is corrupt.');
       }
+      const receiptSha256 = large
+        ? await digestFile(this.receiptsFile(dir, sessionId)) : undefined;
+      const published = large ? manifestSchema.parse({ ...metadata, receiptSha256 }) : metadata;
+      if (large) {
+        const indexed = this.objectReceiptsFile(dir, metadata.sha256);
+        try { await fs.link(this.receiptsFile(dir, sessionId), indexed); }
+        catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+        }
+        if (await digestFile(indexed) !== receiptSha256) {
+          fail('CORRUPT_RECEIPT', 'Published chunk index does not match verified staged receipts.');
+        }
+      }
       await fs.mkdir(path.join(dir, 'manifests'), { recursive: true });
-      await atomicJson(this.manifestFile(dir, metadata.artifactPath), metadata);
+      await atomicJson(this.manifestFile(dir, metadata.artifactPath), published);
       await fs.rm(this.sessionFile(dir, sessionId));
       await fs.rm(stage);
-      return metadata;
+      if (large) await fs.rm(this.receiptsFile(dir, sessionId));
+      return published;
     });
   }
+  async cancel(scope: ArtifactScope, sessionId: string): Promise<{ cancelled: true }> {
+    const dir = this.dir(scope);
+    return this.locked(dir, async () => {
+      const variant = await this.sessionVariant(dir, sessionId);
+      if (!variant) return fail('SESSION_NOT_FOUND', 'Cancellation requires a valid unfinished session.');
+      if (!equalScope(variant.metadata.scope, scope) || variant.id !== sessionId) {
+        fail('SCOPE_MISMATCH', 'Cannot cancel another owner/project/device transfer.');
+      }
+      // No published object or manifest is ever removed by cancellation.
+      if ('version' in variant) await this.loadLargeSession(scope, sessionId, true);
+      else await this.loadSession(scope, sessionId, true);
+      await fs.rm(this.sessionFile(dir, sessionId));
+      await fs.rm(this.partFile(dir, sessionId));
+      if ('version' in variant) await fs.rm(this.receiptsFile(dir, sessionId));
+      return { cancelled: true };
+    });
+  }
+
+  // V2 egress validates the content-addressed receipt index once per call,
+  // then checks only overlapping chunks on one pinned object descriptor.
+  // This avoids hashing an entire 1GiB object for EVERY 64KiB read.
+  private async readIndexedChunk(
+    scope: ArtifactScope, manifest: ArtifactManifest, offset: number, length: number,
+  ) {
+    const dir = this.dir(scope);
+    const indexPath = this.objectReceiptsFile(dir, manifest.sha256);
+    let index: fs.FileHandle;
+    try { index = await fs.open(indexPath, 'r'); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return fail('RECEIPTS_MISSING', 'Published artifact chunk index is missing.');
+      }
+      throw error;
+    }
+    const selected: Array<{ offset: number; size: number; sha256: string }> = [];
+    try {
+      const stat = await index.stat();
+      if (!stat.isFile() || stat.size % RECEIPT_BYTES !== 0) {
+        fail('CORRUPT_RECEIPT', 'Published receipt index is malformed.');
+      }
+      const all = createHash('sha256');
+      const block = Buffer.alloc(RECEIPT_BYTES * 256);
+      let position = 0;
+      let byteOffset = 0;
+      while (position < stat.size) {
+        const size = Math.min(block.length, stat.size - position);
+        const { bytesRead } = await index.read(block, 0, size, position);
+        if (bytesRead !== size) fail('CORRUPT_RECEIPT', 'Truncated published receipt index.');
+        all.update(block.subarray(0, size));
+        for (let cursor = 0; cursor < size; cursor += RECEIPT_BYTES) {
+          const receipt = decodeReceipt(block.subarray(cursor, cursor + RECEIPT_BYTES));
+          if (receipt.offset !== byteOffset ||
+              byteOffset + receipt.size > manifest.size) {
+            fail('CORRUPT_RECEIPT', 'Non-contiguous published chunk index.');
+          }
+          if (receipt.offset < offset + length && receipt.offset + receipt.size > offset) {
+            selected.push(receipt);
+          }
+          byteOffset += receipt.size;
+        }
+        position += size;
+      }
+      if (byteOffset !== manifest.size || all.digest('hex') !== manifest.receiptSha256) {
+        fail('CORRUPT_RECEIPT', 'Published index digest or extent failed validation.');
+      }
+    } finally { await index.close(); }
+    const buf = Buffer.alloc(length);
+    const file = this.objectFile(dir, manifest.sha256);
+    let fd: fs.FileHandle;
+    try { fd = await fs.open(file, 'r'); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return fail('ARTIFACT_MISSING', 'Published artifact object is missing.');
+      }
+      throw error;
+    }
+    try {
+      const before = await fd.stat();
+      if (!before.isFile() || before.size !== manifest.size) {
+        fail('CORRUPT_ARTIFACT', 'Object size or file type is invalid.');
+      }
+      for (const receipt of selected) {
+        const bytes = Buffer.alloc(receipt.size);
+        const got = await fd.read(bytes, 0, bytes.length, receipt.offset);
+        if (got.bytesRead !== bytes.length || digest(bytes) !== receipt.sha256) {
+          fail('CORRUPT_ARTIFACT', 'Indexed chunk integrity verification failed.');
+        }
+        const start = Math.max(receipt.offset, offset);
+        const end = Math.min(receipt.offset + receipt.size, offset + length);
+        if (end > start) bytes.copy(buf, start - offset, start - receipt.offset,
+          end - receipt.offset);
+      }
+      const after = await fd.stat();
+      if (!after.isFile() || after.size !== manifest.size) {
+        fail('ARTIFACT_CHANGED', 'Object changed during pinned-descriptor read.');
+      }
+    } finally { await fd.close(); }
+    return { artifactPath: manifest.artifactPath, offset, size: length,
+      totalSize: manifest.size, sha256: manifest.sha256,
+      chunkSha256: digest(buf), contentBase64: buf.toString('base64') };
+  }
+
+
   async readChunk(scope: ArtifactScope, artifactPath: string, offset: number, maxBytes = 65536) {
     // Do not verify one file path then reopen the same path for unverified bytes.
     // Resolve only authenticated metadata, then verify AND extract from one
@@ -462,6 +843,7 @@ export class ArtifactBridgeStore {
       fail('READ_RANGE_INVALID', 'Invalid artifact read range.');
     }
     const length = Math.min(maxBytes, manifest.size - offset);
+    if (manifest.receiptSha256) return this.readIndexedChunk(scope, manifest, offset, length);
     const buf = Buffer.alloc(length);
     const file = this.objectFile(this.dir(scope), manifest.sha256);
     let fd: fs.FileHandle;
