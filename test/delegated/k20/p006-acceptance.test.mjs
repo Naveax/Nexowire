@@ -14,7 +14,7 @@ const snapshot = JSON.parse(readFileSync(
 const p007 = JSON.parse(readFileSync(
   new URL('../../../docs/delegated/maintenance-k20/P007_59PR_LIVE_SNAPSHOT_20261108.json', import.meta.url)));
 const workflow = readFileSync(new URL('../../../.github/workflows/ci.yml', import.meta.url), 'utf8');
-const tap = n => `# tests ${n}\n# pass ${n}\n# fail 0\n# skipped 0\n# todo 0\n`;
+const tap = n => `# tests ${n}\n# pass ${n}\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n`;
 const prior = { head: snapshot.upstreamMain, runHead: snapshot.upstreamMain,
   workflow, expectedFile: 'nw-k20-qa.tap', conclusion: 'failure' };
 
@@ -48,14 +48,22 @@ test('D-117: dynamic owner TAP count survives 41/48/50/52/55 drift while rejecti
     assert.equal(auditDynamicTapSummary(tap(n)).verdict,'DYNAMIC_COUNT_VALID');
   }
   assert.equal(auditDynamicTapSummary(tap(0)).verdict,'RED_TAP');
-  assert.equal(auditDynamicTapSummary('# tests 1\n# pass 1\n# fail 0\n# skipped 1\n# todo 0\n').verdict,
+  assert.equal(auditDynamicTapSummary('# tests 1\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 1\n# todo 0\n').verdict,
     'RED_TAP');
-  assert.equal(auditDynamicTapSummary('# tests 1\n# pass 1\n# fail 0\n# skipped 0\n# todo 1\n').verdict,
+  assert.equal(auditDynamicTapSummary('# tests 1\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 1\n').verdict,
     'RED_TAP');
   assert.equal(auditDynamicTapSummary('# tests 1\n# pass 1\n# fail 0\n').verdict,
     'UNTRUSTED_OR_INCOMPLETE_TAP');
   assert.equal(auditDynamicTapSummary(`${tap(1)}# tests 1\n`).verdict,
     'UNTRUSTED_OR_INCOMPLETE_TAP');
+});
+
+test('R-117: cancelled TAP and missing or duplicate cancellation footers fail closed', () => {
+  assert.equal(auditDynamicTapSummary(tap(78)).verdict, 'DYNAMIC_COUNT_VALID');
+  assert.equal(auditDynamicTapSummary(tap(78).replace('# cancelled 0', '# cancelled 1')).verdict, 'RED_TAP');
+  assert.equal(auditDynamicTapSummary(tap(78).replace('# cancelled 0\\n', '')).verdict, 'UNTRUSTED_OR_INCOMPLETE_TAP');
+  assert.equal(auditDynamicTapSummary(`${tap(78)}# cancelled 0\\n`).verdict, 'UNTRUSTED_OR_INCOMPLETE_TAP');
+  assert.equal(auditDynamicTapSummary(tap(78).replaceAll('\\n', '\\r\\n')).verdict, 'DYNAMIC_COUNT_VALID');
 });
 
 test('D-119: owner-ready --tap CLI returns zero on positive 55/55 fixture without fixed 41 pin', () => {
