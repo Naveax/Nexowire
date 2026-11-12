@@ -52,10 +52,54 @@ function runCommands(workflow) {
   return commands;
 }
 
+// Shell comments are not test arguments; respect quoted hashes and spaces.
+function stripShellComment(command) {
+  let quote = null;
+  let escaped = false;
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i];
+    if (escaped) { escaped = false; continue; }
+    if (ch === '\\' && quote !== "'") { escaped = true; continue; }
+    if (ch === "'" || ch === '"') {
+      if (quote === null) quote = ch;
+      else if (quote === ch) quote = null;
+      continue;
+    }
+    if (ch === '#' && quote === null && (i === 0 || /\s/.test(command[i - 1]))) {
+      return command.slice(0, i);
+    }
+  }
+  return command;
+}
+
+function shellWords(text) {
+  const words = [];
+  let word = '';
+  let quote = null;
+  let escaped = false;
+  let started = false;
+  for (const ch of text) {
+    if (escaped) { word += ch; escaped = false; started = true; continue; }
+    if (ch === '\\' && quote !== "'") { escaped = true; started = true; continue; }
+    if ((ch === "'" || ch === '"') && (quote === null || quote === ch)) {
+      quote = quote === null ? ch : null;
+      started = true;
+      continue;
+    }
+    if (/\s/.test(ch) && quote === null) {
+      if (started) { words.push(word); word = ''; started = false; }
+      continue;
+    }
+    word += ch; started = true;
+  }
+  if (started) words.push(word);
+  return words;
+}
+
 function nodeTestInvokesPath(command, path) {
-  const match = /(?:^|[;&|])\s*node\s+--test\b([^;&|]*)/.exec(command);
+  const match = /(?:^|[;&|])\s*node\s+--test\b([^;&|]*)/.exec(stripShellComment(command));
   if (!match) return false;
-  const args = match[1].trim().split(/\s+/).map((s) => s.replace(/^['"]|['"]$/g, ''));
+  const args = shellWords(match[1]);
   return args.some((arg) => arg === path ||
     (arg.endsWith('/*.test.mjs') && path.startsWith(arg.slice(0, -'*.test.mjs'.length)) &&
       !path.slice(arg.slice(0, -'*.test.mjs'.length).length).includes('/')) ||

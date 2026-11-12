@@ -120,3 +120,19 @@ test('T-423: source-only evidence cannot masquerade as physical, NVDA or Chromiu
   ]);
   assert.ok(evaluateEvidence({...base,ciRunConclusion:null}).includes('non-success-run-claimed-pass'));
 });
+
+test('R-027: inline shell comments and quoted args cannot forge a new K05 test invocation', () => {
+  const target = 'test/delegated/k05/audit-p006-ui.test.mjs';
+  const pkg = JSON.stringify({scripts: {test: 'echo noop'}});
+  for (const workflow of [
+    `- run: node --test test/other.test.mjs # ${target}`,
+    `- run: |\n    node --test test/other.test.mjs # ${target}`,
+    `- run: node --test 'test/other.test.mjs # ${target}'`,
+    `- run: echo node --test ${target}`,
+  ]) assert.equal(inspectCiDiscovery(workflow, pkg, [target])[0].discovered, false, workflow);
+  for (const workflow of [
+    `- run: node --test ${target} # harmless comment`,
+    `- run: node --test '${target}' # harmless comment`,
+    `- run: >-\n    node --test --import tsx\n    ${target}`,
+  ]) assert.equal(inspectCiDiscovery(workflow, pkg, [target])[0].discovered, true, workflow);
+});
