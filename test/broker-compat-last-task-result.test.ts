@@ -19,7 +19,7 @@ test('Broker compatibility diagnostic does not narrow UInt32 task results to Int
   assert.doesNotMatch(source,/Start-ScheduledTask|Stop-ScheduledTask|Register-ScheduledTask/);
 });
 
-async function checkResult(value:number|null):Promise<Record<string,unknown>>{
+async function checkResult(value:number|null, options:{state?:'Running'|'Ready';multipleInstances?:'IgnoreNew'|'Queue'}={}):Promise<Record<string,unknown>>{
   const server=createServer((_req,res)=>{
     res.writeHead(401,{'content-type':'application/json'});
     res.end('{"ok":false}');
@@ -34,7 +34,7 @@ async function checkResult(value:number|null):Promise<Record<string,unknown>>{
     const ps=[
       '$ErrorActionPreference="Stop"',
       '$ProgressPreference="SilentlyContinue"',
-      "function Get-ScheduledTask { param([string]$TaskName) [pscustomobject]@{State='Running'} }",
+      "function Get-ScheduledTask { param([string]$TaskName) [pscustomobject]@{State='"+(options.state??'Running')+"';Settings=[pscustomobject]@{MultipleInstances='"+(options.multipleInstances??'IgnoreNew')+"'}} }",
       'function Get-ScheduledTaskInfo { param([string]$TaskName) [pscustomobject]@{LastTaskResult='+taskValue+'} }',
       "& '"+escaped+"' -Port "+address.port+" -StackPackageRoot '"+process.cwd().replaceAll("'","''")+"'",
     ].join('\r\n');
@@ -49,7 +49,17 @@ async function checkResult(value:number|null):Promise<Record<string,unknown>>{
   }
 }
 
+test('Broker 0x800710E0 is not benign without Running and IgnoreNew', {skip:!win},async()=>{
+  for(const options of [{state:'Ready',multipleInstances:'IgnoreNew'},
+    {state:'Running',multipleInstances:'Queue'}] as const){
+    const report=await checkResult(0x800710e0,options);
+    assert.equal(report.brokerTaskLastResultClassification,'TASK_FAILURE_OR_UNVERIFIED');
+    assert.equal(report.privilegedHealthVerified,false);
+  }
+});
+
 for(const [name,result] of [
+  ['0',0],
   ['0x800710E0',0x800710e0],
   ['0xC000013A',0xc000013a],
   ['0xFFFFFFFF',0xffffffff],
@@ -59,6 +69,10 @@ for(const [name,result] of [
     const report=await checkResult(result);
     assert.equal(report.brokerTaskState,'Running');
     assert.equal(report.brokerTaskLastResult,result);
+    assert.equal(report.brokerTaskMultipleInstances,'IgnoreNew');
+    assert.equal(report.brokerTaskLastResultClassification,
+      result===null?'NO_LAST_RESULT':result===0?'SUCCESS':
+      result===0x800710e0?'POSSIBLE_IGNORE_NEW':'TASK_FAILURE_OR_UNVERIFIED');
     assert.equal(report.unauthenticatedHealthStatus,401);
     assert.equal(report.privilegedHealthVerified,false,
       'Task Scheduler/HTTP status cannot attest elevated Broker authority');

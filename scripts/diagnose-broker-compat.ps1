@@ -68,9 +68,13 @@ try {
 
 $taskState = $null
 $taskLastResult = $null
+$taskMultipleInstances = $null
 try {
   $task = Get-ScheduledTask -TaskName 'Nexowire Privileged Broker' -ErrorAction Stop
   $taskState = [string]$task.State
+  if ($null -ne $task.Settings -and $null -ne $task.Settings.MultipleInstances) {
+    $taskMultipleInstances = [string]$task.Settings.MultipleInstances
+  }
   try {
     $taskInfo = Get-ScheduledTaskInfo -TaskName 'Nexowire Privileged Broker' -ErrorAction Stop
     # Windows ScheduledTasks exposes LastTaskResult as UInt32. HRESULT
@@ -81,6 +85,19 @@ try {
     }
   } catch { }
 } catch { }
+
+# Task Scheduler may reject a duplicate start of an already-running IgnoreNew
+# singleton (0x800710E0). This is ONLY a possible task-result explanation;
+# it does not prove Broker authentication, elevation, or effect admission.
+$taskResultClassification = 'TASK_FAILURE_OR_UNVERIFIED'
+if ($null -eq $taskLastResult) {
+  $taskResultClassification = 'NO_LAST_RESULT'
+} elseif ($taskLastResult -eq 0) {
+  $taskResultClassification = 'SUCCESS'
+} elseif ($taskLastResult -eq 2147946720 -and
+          $taskState -eq 'Running' -and $taskMultipleInstances -eq 'IgnoreNew') {
+  $taskResultClassification = 'POSSIBLE_IGNORE_NEW'
+}
 
 $healthStatus = Get-LocalHttpStatus '/health'
 $executeStatus = Get-LocalHttpStatus '/execute'
@@ -108,7 +125,9 @@ $report = [ordered]@{
   stackPackageVersion = $stackVersion
   stackCodeHasHealthRoute = $stackHasHealth
   brokerTaskState = $taskState
+  brokerTaskMultipleInstances = $taskMultipleInstances
   brokerTaskLastResult = $taskLastResult
+  brokerTaskLastResultClassification = $taskResultClassification
   classification = $classification
   privilegedHealthVerified = $false
   nextStep = 'Only a separately authorized Broker probe with its protected token can verify reachable/elevated/version. Do not kill Hub, Agent or durable workers. Stage a verified Broker and use an approved isolated port handoff.'
