@@ -10,6 +10,29 @@ param(
   [switch]$RequireTaskAbsent
 )
 $ErrorActionPreference='Stop'
+# An inaccessible task is not a missing task. The cutover preflight must
+# establish absence with an independent Windows Scheduler COM not-found.
+function Assert-HubTaskAbsent([scriptblock]$TaskLookup,[scriptblock]$ComLookup) {
+  $task=$null
+  try {$task=& $TaskLookup} catch {$task=$null}
+  if($null -ne $task) {
+    throw 'IDEMPOTENCY_HUB_TASK_ALREADY_PRESENT'
+  }
+  $registered=$null
+  $provenAbsent=$false
+  try {$registered=& $ComLookup} catch {
+    $e=$_.Exception
+    while($null -ne $e.InnerException){$e=$e.InnerException}
+    if([int]$e.HResult -eq -2147024894) {
+      $provenAbsent=$true
+    } else {
+      throw 'IDEMPOTENCY_HUB_TASK_VISIBILITY_UNVERIFIED'
+    }
+  }
+  if(-not $provenAbsent) {
+    throw 'IDEMPOTENCY_HUB_TASK_STILL_REGISTERED_OR_HIDDEN'
+  }
+}
 try {
   # Explicitly forbid JSON-only targets. Once an operation exists only in
   # SQLite, the legacy JSON reader can execute it a second time.
@@ -54,9 +77,13 @@ try {
     }
   }
   if($RequireTaskAbsent) {
-    $existing=Get-ScheduledTask -TaskName 'Nexowire Hub' -TaskPath '\' -ErrorAction SilentlyContinue
-    if($null -ne $existing) {
-      throw 'IDEMPOTENCY_HUB_TASK_ALREADY_PRESENT: do not overwrite an unknown task.'
+    Assert-HubTaskAbsent -TaskLookup {
+      Get-ScheduledTask -TaskName 'Nexowire Hub' -TaskPath '\' -ErrorAction Stop
+    } -ComLookup {
+      $service=New-Object -ComObject 'Schedule.Service' -ErrorAction Stop
+      $service.Connect()
+      $folder=$service.GetFolder('\')
+      $folder.GetTask('Nexowire Hub')
     }
   }
   $sqlite=Join-Path $full 'idempotency-records.sqlite'
