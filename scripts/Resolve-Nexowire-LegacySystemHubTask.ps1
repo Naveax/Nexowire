@@ -335,6 +335,22 @@ function Assert-RuntimeStaged {
     throw 'AI01_RECONCILE_SIGNED_NODE_UNVERIFIED'
   }
 }
+# A hidden or protected probe is NOT evidence of successful rehearsal cleanup.
+# Only an exact Task Scheduler COM not-found result proves the probe is absent.
+function Assert-RehearsalProbeAbsent([scriptblock]$lookup,[string]$name) {
+  if([string]::IsNullOrWhiteSpace($name)){throw 'AI01_RECONCILE_PROBE_NAME_UNTRUSTED'}
+  $registered=$null
+  try {
+    $registered=& $lookup $name
+  } catch {
+    $errorCode=$_.Exception
+    while($null -ne $errorCode.InnerException){$errorCode=$errorCode.InnerException}
+    if([int]$errorCode.HResult -eq -2147024894){return}
+    throw 'AI01_RECONCILE_REHEARSAL_PROBE_VISIBILITY_UNVERIFIED'
+  }
+  if($null -eq $registered){throw 'AI01_RECONCILE_REHEARSAL_PROBE_VISIBILITY_UNVERIFIED'}
+  throw 'AI01_RECONCILE_REHEARSAL_PROBE_STILL_REGISTERED'
+}
 function Rehearse($b) {
   $task=[xml](Get-Content -LiteralPath $b.Xml -Raw)
   $ns=New-Object Xml.XmlNamespaceManager($task.NameTable)
@@ -362,6 +378,12 @@ function Rehearse($b) {
     if($existing){Unregister-ScheduledTask -TaskName $probeName -TaskPath '\' -Confirm:$false -ErrorAction Stop}
     $left=Get-ScheduledTask -TaskName $probeName -TaskPath '\' -ErrorAction SilentlyContinue
     if($left){throw 'AI01_RECONCILE_REHEARSAL_CLEANUP_FAILED'}
+    # Get-ScheduledTask alone cannot distinguish absence from access denial.
+    # Prove the disposable probe is absent using the Task Scheduler COM API.
+    $svc=New-Object -ComObject 'Schedule.Service' -ErrorAction Stop
+    $svc.Connect()
+    $folder=$svc.GetFolder('\')
+    Assert-RehearsalProbeAbsent { param($name) $folder.GetTask($name) } $probeName
   }
   Write-PrivateText (Join-Path $b.Root 'rehearsal.txt') $b.Sha256
   return $true
