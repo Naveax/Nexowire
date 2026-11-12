@@ -175,3 +175,31 @@ test('T-647: transfer below 100% stays in progress and over-count is not treated
   assert.equal(view({ ...e, bytesSent: e.bytesTotal + 1,
     receiverAck: receipt(e), independentReceiverReadback: receipt(e) }).state, 'UNVERIFIED');
 });
+
+test('R-111: mismatched ACK byte count or digest cannot be upgraded by correct readback', () => {
+  const e = evidence(bytesFor(221 * 1024), '/receiver/receipt-check');
+  const good = receipt(e);
+  assert.equal(view({ ...e, receiverAck: { ...good, bytes: good.bytes - 1 },
+    independentReceiverReadback: good }).state, 'UNVERIFIED');
+  assert.equal(view({ ...e, receiverAck: { ...good, sha256: '0'.repeat(64) },
+    independentReceiverReadback: good }).state, 'UNVERIFIED');
+  assert.equal(view({ ...e, receiverAck: good,
+    independentReceiverReadback: { ...good, bytes: good.bytes + 1 } }).state, 'UNVERIFIED');
+});
+
+test('R-111: same-length final-file mutation invalidates independent receiver digest', async () => {
+  await lab(async f => {
+    const data = bytesFor(221 * 1024);
+    await writeFile(f.final, data);
+    const e = evidence(data, f.final);
+    const good = receipt(e);
+    const altered = Buffer.from(await readFile(f.final));
+    altered[altered.length - 1] ^= 1;
+    await writeFile(f.final, altered);
+    assert.equal((await stat(f.final)).size, e.bytesTotal);
+    assert.notEqual(digest(await readFile(f.final)), good.sha256);
+    assert.equal(view({ ...e, receiverAck: good, independentReceiverReadback: {
+      ...good, sha256: digest(await readFile(f.final)),
+    } }).state, 'UNVERIFIED');
+  });
+});
