@@ -7,8 +7,8 @@ import test from 'node:test';
 import { auditBrowserScreenshot, auditIndependentScreenshotCaptures } from './browser-screenshot-evidence.mjs';
 
 const SHA = 'b5a3f8840517d65ecbd6a018699c4c8bdde09987';
-// Public tiny 1x1 PNG fixture. It is deliberately NOT a real viewport capture.
-const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y2W7J4AAAAASUVORK5CYII=', 'base64');
+// Valid tiny 1x1 PNG fixture (chunk CRC checked). It is NOT a real viewport capture.
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGP4/x8AAwAB//wl3FEAAAAASUVORK5CYII=', 'base64');
 const screenshotSha256 = createHash('sha256').update(PNG).digest('hex');
 
 function withFixture(fn) {
@@ -146,4 +146,26 @@ test('malformed or absent screenshot audit inputs fail closed without crashing',
   assert.deepEqual(auditIndependentScreenshotCaptures({ captures: [null, undefined, 0, [], 'bad'],
     expectedSha: SHA, evidenceDir: '/unused' }).map(x => x.status),
   ['UNKNOWN', 'UNKNOWN', 'UNKNOWN', 'UNKNOWN', 'UNKNOWN']);
+});
+
+test('truncated PNG, bad chunk CRC and trailing bytes cannot count as screenshot evidence', () => {
+  withFixture(({ dir, evidence }) => {
+    const valid = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGP4/x8AAwAB//wl3FEAAAAASUVORK5CYII=', 'base64');
+    const variants = [
+      valid.subarray(0, valid.length - 12), // missing IEND
+      Buffer.from(valid), // corrupt IDAT CRC despite matching the recorded digest
+      Buffer.concat([valid, Buffer.from([0])]), // extra bytes after IEND
+    ];
+    variants[1][valid.length - 17] ^= 1;
+    for (const [index, png] of variants.entries()) {
+      const filename = `invalid-${index}.png`;
+      writeFileSync(join(dir, filename), png);
+      const outcome = evaluate(dir, evidence, {
+        screenshotFile: filename,
+        screenshotSha256: createHash('sha256').update(png).digest('hex'),
+      });
+      assert.equal(outcome.status, 'FAIL', `invalid PNG ${index} must fail closed`);
+    }
+    assert.equal(evaluate(dir, evidence).status, 'REVIEW_REQUIRED');
+  });
 });
