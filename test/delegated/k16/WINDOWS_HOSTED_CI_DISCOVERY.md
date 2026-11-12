@@ -116,3 +116,58 @@ a CI failure. The owner #1096 candidate has advanced to
 still does not name the nested K16 taskkill file. No workflow rerun or protected
 source edit was performed; K16's remaining hosted-nested/Work-PC gates are
 **NOT_RUN** pending owner integration and explicit physical acceptance.
+
+## P008 R-091/R-092/R-093/R-094/R-095/R-096 — 2026-11-12 exact-head audit
+
+**PR #1105 pre-audit head:** `1652837935a529880b4359e014a3807237d51706`.
+Automatic [run 42527651975](https://github.com/Naveax/Nexowire/actions/runs/42527651975)
+is now **completed: 7/7 jobs success** (not a K16 delegated pass).
+The decoded full logs of `test (22)` job **128874747963**, `test (24)`
+**128874747849**, Windows `browser-live` **128874748032**, and WSL2
+**128874747706** each have **zero** occurrences of
+`test/delegated/k16`, `windows-taskkill-contract`, and the `T-625`
+test label. Therefore this PR's current K16 nested taskkill regressions
+are **HOSTED NOT_RUN**, despite the general 7/7 success.
+
+**PR #1121 head:** `1b97d6341c036e1eadde491be1abfe743c716b7c`.
+Automatic [run 42411781654](https://github.com/Naveax/Nexowire/actions/runs/42411781654)
+completed **7/7 jobs success**. Decoded full logs for Ubuntu Node22
+job **128521274683**, Node24 **128521274713** and Windows
+`browser-live` **128521274607** have zero occurrences of
+`test/delegated/k16` and `platform-status-evidence`; its six
+platform-status delegated cases are likewise **HOSTED NOT_RUN**.
+
+**Reproduced CI discovery gap:** Node22/24 logs invoke
+`node --test --import tsx test/**/*.test.ts`. In a local Bash
+filesystem fixture with one `test/one/probe.test.ts` and one
+`test/delegated/k16/windows-taskkill-contract.test.ts`,
+the literal `test/**/*.test.ts` shell glob expanded to
+`test/one/probe.test.ts` **only**. This is a deterministic
+shell-discovery reproduction, **not a project test PASS**.
+The actual CI's separately enumerated delegated command also omitted
+K16 files. This confirms the **R-093 source/CI coverage gap** on the
+above immutable PR heads, without changing the owner workflow.
+
+**Change-set and de-dup:** A read-only compare against current fork
+`main 52d452f717d891eeaf4c2b9aff3c6e1ea68369b0`
+reports four **added** `test/delegated/k16/` files on #1105 and one
+different **added** K16 platform-status file on #1121.
+Neither PR changes `src/agent/process-manager.ts` or
+`.github/workflows/ci.yml`. Owner Draft #1096 at
+`43e8125e7a4ced654a769b661dc10938c02bc7a4` changes
+protected source/workflow, but has zero path overlap with the K16
+delegated file paths. Both K16 branches are **behind fork main by two
+commits** and must not be force-rebased/merged here. The five added
+K16 paths are distinct; this is **path-level** nonduplication, not
+proof that all assertions are semantically unique from main.
+Do not delete independent tests or close either PR without owner review.
+
+**Acceptance boundary:** The previous **24/24 local Linux VM
+synthetic PASS**, typecheck and build are historical evidence from
+the earlier K16 session and **were not rerun in this audit**.
+The original #540 Work-PC orphan descendant / exact PID+creation-time
+readback, actual process exit, Windows Node22/24 explicit K16 TAP and
+owner #1096 integration remain **NOT_RUN / owner-gated**.
+Only Ömer/CI owner can add the required explicit K16 invocation and
+perform real Windows process cleanup acceptance. No workflow, source,
+live PID, issue state, release or main merge was modified.
