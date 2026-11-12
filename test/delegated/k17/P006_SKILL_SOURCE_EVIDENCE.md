@@ -119,3 +119,37 @@ New exact-HEAD hosted CI is **NOT_VERIFIED** until its own run/job evidence is
 collected. The new K17 nested test is not explicitly invoked in upstream main
 CI's known callsites; generic success must never be borrowed. Windows/macOS
 real devices and within-a-single-read attacker race remain **NOT_RUN**.
+
+## P008 R-097/R-099 — post-validation directory-entry replacement (2026-11-12)
+
+The existing file-level swap fixture checks `SKILL.md` replacement after `validate()`.
+A separate harmless temporary-catalogue negative fixture now checks a **directory-level**
+replacement: validate a regular `swapped-directory/` and its in-root manifest,
+rename that directory, link the original directory name to an outside temporary
+skill directory, then call `SkillRegistry.read('swapped-directory')`. The test
+expects the outside `EXTERNAL_DIRECTORY_MARKER` to appear. This is the
+source behavior to check on the existing `SkillRegistry`, **not** a proof that a
+concurrent race inside a single load operation has been exploited. A green test
+would mean the unsafe behavior was reproduced, not that it was fixed.
+
+At the time of editing, the last existing #1150 exact HEAD was
+`bf6d5c6e4efefd6ccecae7fc54876621cc846cac`, with generic CI run
+[42527818857](https://github.com/Naveax/Nexowire/actions/runs/42527818857)
+**7/7 completed-success jobs** (Node22 and Node24 included). None of the
+seven job step names explicitly invokes the new K17 nested test. Therefore
+**HOSTED K17 FILE EXECUTION NOT_PROVEN** for that HEAD. This new fixture
+was not run locally here: **LOCAL NOT_RUN; no PASS asserted**. Its new exact
+commit requires independent verification using:
+
+```sh
+node --test --import tsx --test-concurrency=1 test/delegated/k17/p006-skill-source-evidence.test.ts
+```
+
+Source correction remains owner-only (trusted-root containment / no-follow /
+open-handle identity and platform-specific junction verification). The expected
+post-fix regression is a **rejected external read**, and these reproduction-as-PASS
+fixtures must be converted to rejection expectations after owner remediation.
+Physical Windows/macOS/real installed-Agent validation **NOT_RUN**; no main
+merge or issue closure. PR [#1030](https://github.com/Naveax/Nexowire/pull/1030)
+and [#1113](https://github.com/Naveax/Nexowire/pull/1113) contain distinct
+metadata/catalogue work, not a duplicated directory-swap fixture.

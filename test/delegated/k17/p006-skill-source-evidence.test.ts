@@ -143,6 +143,41 @@ test('P007 followup: KNOWN OPEN GAP — validation does not bind a later manifes
   });
 });
 
+test('P008 R-097/R-099: KNOWN OPEN GAP — a validated skill directory can be swapped before read', {
+  skip: process.platform === 'win32'
+    ? 'Windows symlink/junction permissions and semantics are not established'
+    : false,
+}, async () => {
+  await withCatalog(async (root) => {
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'nexowire-k17-p008-outside-'));
+    try {
+      const name = 'swapped-directory';
+      const skillDir = path.join(root, name);
+      const parkedDir = path.join(root, 'parked-before-read');
+      await fs.mkdir(skillDir);
+      await fs.writeFile(path.join(skillDir, 'SKILL.md'), source(name));
+      const registry = new SkillRegistry(root);
+
+      assert.deepEqual((await registry.validate()).valid.map((skill) => skill.name), [name]);
+      await fs.writeFile(
+        path.join(outside, 'SKILL.md'),
+        `${source(name)}\nEXTERNAL_DIRECTORY_MARKER`,
+      );
+
+      // A *directory entry* replacement, distinct from the prior SKILL.md swap.
+      // It proves only a gap between separate validate() and read() calls.
+      await fs.rename(skillDir, parkedDir);
+      await fs.symlink(outside, skillDir, 'dir');
+
+      const readback = await registry.read(name);
+      assert.match(readback, /EXTERNAL_DIRECTORY_MARKER/,
+        'Outside content was read after a successful earlier validate; OPEN GAP, not security PASS');
+    } finally {
+      await fs.rm(outside, { recursive: true, force: true });
+    }
+  });
+});
+
 test('T-633: platform source admission is separate from a physically executed install command', () => {
   const windowsOnly = parseSkillManifest(source('fixture', ['platforms: win32']));
   const linuxResult = evaluateSkillManifest(windowsOnly, { platform: 'linux' });
