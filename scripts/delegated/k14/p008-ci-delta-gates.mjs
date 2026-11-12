@@ -31,9 +31,9 @@ export function stageTriage(failed, control) {
     failedInstallStepState:bad.status,
     failedInstallStepConclusion:bad.conclusion,
     downstreamWereNotRun:later.length===3&&later.every(s=>s.status==='pending'&&s.conclusion===null),
-    directRootCauseLogAvailable:failed.jobLog!=='404_BlobNotFound',
+    directRootCauseLogAvailable:typeof failed.jobLog==='string' && failed.jobLog.length>0 && failed.jobLog!=='404_BlobNotFound' && failed.jobLog!=='NOT_RUN',
     artifactCount:failed.artifactCount,
-    inference:before && bad.status==='in_progress' && later.every(s=>s.status==='pending')
+    inference:before && bad.status==='in_progress' && bad.conclusion===null && later.length===3 && later.every(s=>s.status==='pending'&&s.conclusion===null)
       ? 'WSL_DISTRO_INSTALL_STAGE_HUNG_OR_TIMED_OUT_CAUSE_NOT_PROVEN' : 'WSL_FAILURE_STAGE_UNKNOWN',
     bugInNexowireSourceProven:false,
   };
