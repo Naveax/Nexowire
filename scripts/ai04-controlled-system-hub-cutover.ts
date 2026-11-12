@@ -75,6 +75,31 @@ export function systemHubRecoveryTaskReadbackScript():string{
     "'OK'",
   ].join('\n');
 }
+/**
+ * Fail closed on an existing or hidden recovery-task registration BEFORE
+ * creating recovery artifacts. Task cmdlet absence/error alone is not proof;
+ * only Task Scheduler COM GetTask 0x80070002 establishes nonexistence.
+ */
+export function systemHubRecoveryTaskAbsencePreflightScript():string{
+  return [
+    "$ErrorActionPreference='Stop'",
+    "$existing=$null",
+    "try{$existing=Get-ScheduledTask -TaskName "+psLiteral(TASK)+" -TaskPath '\\' -ErrorAction Stop}catch{$existing=$null}",
+    "if($null -ne $existing){throw 'AI04_RECOVERY_TASK_ALREADY_EXISTS'}",
+    "$service=New-Object -ComObject 'Schedule.Service' -ErrorAction Stop",
+    "$service.Connect()",
+    "$folder=$service.GetFolder('\\')",
+    "$registered=$null;$notFound=$false",
+    "try{$registered=$folder.GetTask("+psLiteral(TASK)+")}catch{",
+    "  $errorCode=$_.Exception",
+    "  while($null -ne $errorCode.InnerException){$errorCode=$errorCode.InnerException}",
+    "  if([int]$errorCode.HResult -eq -2147024894){$notFound=$true}",
+    "  else{throw 'AI04_RECOVERY_TASK_VISIBILITY_UNVERIFIED'}",
+    "}",
+    "if(-not $notFound){throw 'AI04_RECOVERY_TASK_STILL_REGISTERED_OR_HIDDEN'}",
+    "'OK'",
+  ].join('\r\n');
+}
 function runPS(code:string):string{
   const r=spawnSync(POWERSHELL,[
     '-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-EncodedCommand',
@@ -331,6 +356,8 @@ export async function controlledSystemHubCutover(
       journal.originalUserPrincipal=info.principal;
     },
     async armRecovery(){
+      if(runPS(systemHubRecoveryTaskAbsencePreflightScript())!=='OK')
+        throw new Error('AI04_RECOVERY_TASK_ABSENCE_UNVERIFIED');
       await fs.mkdir(ROOT,{recursive:false,mode:0o700});
       setProtectedOwner(ROOT);
       hardenWindowsProgramDataAcl(ROOT);
@@ -342,10 +369,10 @@ export async function controlledSystemHubCutover(
       await privateWrite(path.win32.join(ROOT,'original-user-task.xml'),xml+'\n');
       await privateWrite(RECOVERY,SYSTEM_HUB_RECOVERY_PS+'\r\n');
       await privateWrite(JOURNAL,JSON.stringify({...journal,phase:'ARMED'},null,2)+'\n');
+      if(runPS(systemHubRecoveryTaskAbsencePreflightScript())!=='OK')
+        throw new Error('AI04_RECOVERY_TASK_ABSENCE_UNVERIFIED');
       runPS([
         "$ErrorActionPreference='Stop'",
-        "$existing=Get-ScheduledTask -TaskName "+psLiteral(TASK)+" -TaskPath '\\' -ErrorAction SilentlyContinue",
-        "if($existing){throw 'AI04_RECOVERY_TASK_ALREADY_EXISTS'}",
         "$script="+psLiteral(RECOVERY),
         "$execute="+psLiteral(POWERSHELL),
         "$action=New-ScheduledTaskAction -Execute $execute -Argument ('-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"'+$script+'\"')",
