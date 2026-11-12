@@ -50,6 +50,31 @@ interface Journal {
   createdAt:string;
 }
 function psLiteral(value:string):string{return "'"+value.replaceAll("'","''")+"'";}
+/**
+ * Re-read the registered recovery task before stopping the legacy Hub.
+ * A SYSTEM principal without matching executable, triggers and singleton
+ * policy cannot establish durable rollback. This script is read-only.
+ */
+export function systemHubRecoveryTaskReadbackScript():string{
+  const expectedArgs='-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+RECOVERY+'"';
+  return [
+    "$ErrorActionPreference='Stop'",
+    "$t=Get-ScheduledTask -TaskName "+psLiteral(TASK)+" -TaskPath '\\' -ErrorAction Stop",
+    "if(-not $t){throw 'AI04_RECOVERY_TASK_UNVERIFIED'}",
+    "if([string]$t.TaskName -cne "+psLiteral(TASK)+" -or [string]$t.TaskPath -cne '\\'){throw 'AI04_RECOVERY_TASK_IDENTITY_CHANGED'}",
+    "if([string]$t.Principal.UserId -notin @('SYSTEM','S-1-5-18') -or [string]$t.Principal.RunLevel -cne 'Highest' -or [string]$t.Principal.LogonType -cne 'ServiceAccount'){throw 'AI04_RECOVERY_TASK_PRINCIPAL_UNTRUSTED'}",
+    "$actions=@($t.Actions)",
+    "if($actions.Count -ne 1 -or [string]$actions[0].Execute -cne "+psLiteral(POWERSHELL)+" -or [string]$actions[0].Arguments -cne "+psLiteral(expectedArgs)+"){throw 'AI04_RECOVERY_TASK_ACTION_UNTRUSTED'}",
+    "$triggers=@($t.Triggers)",
+    "$boot=@($triggers|Where-Object {$_.CimClass.CimClassName -ceq 'MSFT_TaskBootTrigger'})",
+    "$timer=@($triggers|Where-Object {$_.CimClass.CimClassName -ceq 'MSFT_TaskTimeTrigger'})",
+    "if($triggers.Count -ne 2 -or $boot.Count -ne 1 -or $timer.Count -ne 1 -or @($triggers|Where-Object {$_.Enabled -ne $true}).Count -ne 0){throw 'AI04_RECOVERY_TASK_TRIGGERS_UNTRUSTED'}",
+    "if([string]$timer[0].Repetition.Interval -cne 'PT15M' -or [string]$timer[0].Repetition.Duration -cne 'P365D'){throw 'AI04_RECOVERY_TASK_RECURRENCE_UNTRUSTED'}",
+    "if([string]$t.Settings.MultipleInstances -cne 'IgnoreNew'){throw 'AI04_RECOVERY_TASK_SINGLETON_UNTRUSTED'}",
+    "if($t.Settings.StartWhenAvailable -ne $true){throw 'AI04_RECOVERY_TASK_SETTINGS_UNTRUSTED'}",
+    "'OK'",
+  ].join('\n');
+}
 function runPS(code:string):string{
   const r=spawnSync(POWERSHELL,[
     '-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-EncodedCommand',
@@ -293,13 +318,15 @@ export async function controlledSystemHubCutover(
         "$settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 5)",
         "Register-ScheduledTask -TaskName "+psLiteral(TASK)+" -TaskPath '\\' -Action $action -Trigger @($startup,$timeout) -Principal $principal -Settings $settings -ErrorAction Stop|Out-Null",
         ].join('\n'));
-      const taskCheck=runPS("$ErrorActionPreference='Stop';$t=Get-ScheduledTask -TaskName "+
-        psLiteral(TASK)+" -TaskPath '\\' -ErrorAction Stop;"+
-        "if([string]$t.Principal.UserId -notin @('SYSTEM','S-1-5-18')){throw 'AI04_RECOVERY_TASK_WRONG_PRINCIPAL'};'OK'");
+      const taskCheck=runPS(systemHubRecoveryTaskReadbackScript());
       if(taskCheck!=='OK')throw new Error('AI04_RECOVERY_TASK_UNVERIFIED');
       await advance(journal,'ARMED');
     },
     async quiesceLegacy(){
+      // Check again immediately before disabling the original writer. A
+      // recovered but altered task is not a durable rollback guarantee.
+      if(runPS(systemHubRecoveryTaskReadbackScript())!=='OK')
+        throw new Error('AI04_RECOVERY_TASK_CHANGED_BEFORE_QUIESCE');
       await advance(journal,'QUIESCING');
       runPS([
         "$ErrorActionPreference='Stop'",
