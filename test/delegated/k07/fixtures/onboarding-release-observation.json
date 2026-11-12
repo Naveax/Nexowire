@@ -1,0 +1,14 @@
+{
+  "observedAt": "2026-11-07",
+  "source": "https://api.github.com/repos/Naveax/Nexowire/releases/tags/v1.0.8",
+  "latestSource": "https://api.github.com/repos/Naveax/Nexowire/releases/latest",
+  "tag": "v1.0.8",
+  "latestTagAtObservation": "v1.0.8",
+  "publishedAt": "2026-10-30T15:55:53Z",
+  "releaseDraft": false,
+  "prerelease": false,
+  "installerAsset": "Nexowire-Setup.cmd",
+  "installerSizeBytes": 6424,
+  "installerSha256": "8f39a1954eb22131ed516d32acfad1fe17e3ccb9766eda3883b90595a9135694",
+  "installerUrl": "https://github.com/Naveax/Nexowire/releases/download/v1.0.8/Nexowire-Setup.cmd"
+}
