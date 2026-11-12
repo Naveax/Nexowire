@@ -63,6 +63,11 @@ function releaseFindings(markdown, observation) {
   if (matchingInstallerLinks.length !== 1 || matchingInstallerLinks[0] !== observation.installerUrl) {
     problems.push('public installer URL differs from verified GitHub release asset');
   }
+  const unexpectedCmdDownloads = links(markdown).filter((url) =>
+    /\.cmd(?:[?#].*)?$/i.test(url) && url !== observation.installerUrl);
+  if (unexpectedCmdDownloads.length > 0) {
+    problems.push('unexpected CMD download outside the verified GitHub release');
+  }
   if (!markdown.includes(`Resmî ${observation.tag} Nexowire-Setup.cmd indir`)) {
     problems.push('download label/version differs from release tag');
   }
@@ -116,4 +121,6 @@ test('negative fixtures reject stale release versions, asset URLs and checksums'
   assert.match(releaseFindings(install.replace('download/v1.0.8/', 'download/v1.0.7/'), observation).join(' '), /URL differs/);
   assert.match(releaseFindings(install.replace('Resmî v1.0.8 Nexowire-Setup', 'Resmî v1.0.9 Nexowire-Setup'), observation).join(' '), /label\/version differs/);
   assert.match(releaseFindings(install.replace(observation.installerSha256, '0'.repeat(64)), observation).join(' '), /checksum differs/);
+  assert.match(releaseFindings(install + '\n[Unofficial installer](https://untrusted.example/Nexowire-Setup.cmd)', observation).join(' '), /unexpected CMD download/);
+  assert.match(releaseFindings(install + '\n[Unverified script](https://untrusted.example/bootstrap.cmd?source=mirror)', observation).join(' '), /unexpected CMD download/);
 });
