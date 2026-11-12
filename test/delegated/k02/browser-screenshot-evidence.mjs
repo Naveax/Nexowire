@@ -1,12 +1,38 @@
 import { createHash } from 'node:crypto';
 import { lstatSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { crc32 } from 'node:zlib';
 
 // #539 R21/R22: local evidence hygiene only. A PNG and an unsigned JSON record
 // cannot establish an authentic hosted-browser run, so this gate NEVER returns
 // PASS. Its strongest outcome is REVIEW_REQUIRED with exact source metadata.
 const SHA = /^[a-f\d]{40}$/i;
 const PNG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+
+// Validate the complete PNG chunk envelope, not just its magic bytes and the
+// checksum of a possibly truncated/corrupt file. This is not browser attestation.
+function hasValidPngChunkStructure(png) {
+  let offset = PNG.length;
+  let chunkIndex = 0;
+  let hasIdat = false;
+  while (offset + 12 <= png.length) {
+    const length = png.readUInt32BE(offset);
+    const end = offset + 12 + length;
+    if (end > png.length) return false;
+    const type = png.toString('ascii', offset + 4, offset + 8);
+    if (!/^[A-Za-z]{4}$/.test(type) ||
+        (chunkIndex === 0 && (type !== 'IHDR' || length !== 13)) ||
+        (chunkIndex > 0 && type === 'IHDR') ||
+        crc32(png.subarray(offset + 4, end - 4)) !== png.readUInt32BE(end - 4)) {
+      return false;
+    }
+    if (type === 'IDAT') hasIdat = true;
+    if (type === 'IEND') return length === 0 && hasIdat && end === png.length;
+    offset = end;
+    chunkIndex++;
+  }
+  return false;
+}
 
 const result = (status, reason) => ({ status, reason });
 
@@ -51,6 +77,9 @@ export function auditBrowserScreenshot(input) {
   if (png.length < 33 || !png.subarray(0, 8).equals(PNG) ||
       png.toString('ascii', 12, 16) !== 'IHDR') {
     return result('FAIL', 'artifact lacks PNG signature or IHDR');
+  }
+  if (!hasValidPngChunkStructure(png)) {
+    return result('FAIL', 'PNG chunks incomplete or CRC invalid');
   }
   const width = png.readUInt32BE(16);
   const height = png.readUInt32BE(20);
