@@ -579,6 +579,10 @@ jobs:
         run: ./scripts/build-windows-job-owner.ps1
       - name: Run QA-02 output ordering and CLEAN-10 no-replay oracle without skip
         shell: pwsh
+        # Force the disposable hosted runner into the native Job code path.
+        # The personal local-owner profile must not silently SKIP this gate.
+        env:
+          NEXOWIRE_CORE_APPROVAL_MODE: native
         run: |
           node --test --import tsx --test-concurrency=1 test/qa-02-windows-output-ordering.test.ts test/qa-02-error-contract-no-replay.test.ts test/clean-10/idempotency-reservation-negative.test.ts test/clean-10/timeout-reconnect-no-replay.test.ts test/clean-10/runbook-unknown-acceptance-red.test.ts test/clean-10/round3-semantic-effect-reservation.test.ts
           if ($LASTEXITCODE -ne 0) { throw 'CLEAN10_NO_REPLAY_RED' }
