@@ -36,7 +36,7 @@ Status on 2026-11-11: **NO-GO / physical SYSTEM execution NOT_RUN**.
 
 - Work-PC online. Interactive session: DESKTOP-ONDD84S\umut, Elevated=false.
 - Nexowire Privileged Broker: Scheduled Task Running, principal umut, Interactive/Highest, LastTaskResult 0x800710E0. Its own authenticated health: version 1.0.8, reachable=true, elevated=true, status=READY, effectAdmissionState=LEGACY_UNKNOWN. Hence effect authorization is unverified.
-- User Hub task Running; SYSTEM Nexowire Hub Boot task not installed.
+- User Hub task Running; the earlier unelevated `not installed` report did **not** establish absence of the protected `Nexowire Hub Boot` task. Its actual identity and visibility required an independent Task Scheduler COM inspection. The 2026-11-13 read-only inspection returns `access-denied`; task absence and authority to replace it remain **UNVERIFIED**.
 - Local-owner CORE STOP and legacy console STOP both present. Encrypted grant envelope remains present. Do not clear a revoke fence because old ciphertext still exists.
 - AI-03 acceptance tests: 4 PASS. Targeted Broker/credential regressions: 47 PASS / 1 SKIP / 0 FAIL. Typecheck + build PASS.
 - Real SYSTEM DPAPI verification, physical reboot, protected cutover and Broker effect admission remain NOT_RUN / unverified.
@@ -44,3 +44,46 @@ Status on 2026-11-11: **NO-GO / physical SYSTEM execution NOT_RUN**.
 ## Security and provenance
 
 The source evidence is diagnostic. The protected receipt, actual installed runtime, live health, full exact-HEAD hosted CI and physical acceptance must be checked separately. Do not weaken ACLs, forge SYSTEM identity, bypass UAC, clear local CORE revocation, print secrets, or manually rerun a workflow already active for an identical SHA and inputs.
+
+## Work-PC addendum: 2026-11-13, source accepted, physical cutover still NO-GO
+
+This addendum supersedes any earlier inference that an unelevated task query proving
+"not installed" establishes physical task absence. Never install or replace a task
+on the strength of that query.
+
+- Main integration Draft PR #1160: exact GitHub and clean Work-PC commit
+  `5efab6c7a96c0115cfb2b07bdb2583854f527040`.
+- Exact-commit General CI `43405984858`, Release Readiness `43405985009`,
+  and AI-03 Windows Control Plane Authority `43405984991`: **SUCCESS**.
+  CI acceptance does not authorize installation, local-owner enrollment or reboot.
+- Read-only `Resolve-Nexowire-LegacySystemHubTask.ps1 -Action Inspect`
+  returned `taskName=Nexowire Hub Boot`, `visibility=access-denied`.
+  This is neither a confirmed absent task nor a task XML/SDDL backup.
+- Hub loopback health responded HTTP 200. CORE state is `REVOKED_LOCALLY`
+  and `localEnrolled=false`. Broker authenticated probe reported
+  `ready=true`, `elevated=true`, but `effectAdmissionState=LEGACY_UNKNOWN`.
+  No privileged effect was attested.
+- SYSTEM pre-login Agent is not installed and remote recovery before sign-in
+  is not verified. Unattended reboot readiness remains false.
+- Read-only full user-Hub state fingerprint covered 218 files / 53,966,718 bytes
+  with SQLite `quick_check=ok` and 2,861 idempotency records. The first
+  fingerprint attempt did not complete; a later attempt succeeded. The successful
+  fingerprint is **not** a frozen backup: writer quiescence, protected destination
+  ACLs and DPAPI scope transfer are all unverified.
+- Exact-commit isolated SYSTEM Hub runtime stage passed independent SHA-256
+  tree validation (4,745 files, tree digest
+  `e1d9a2733430c9fa283a6769aa8b63b0fc1911d89351c86f8d25f369d563260a`).
+  `productionInstalled=false`, `taskChanged=false`, `sqliteChanged=false`.
+  The elevated installer still reports `TARGET_EXISTENCE_UNVERIFIED`.
+
+### Operator-only next acceptance gate
+
+After explicit local physical approval, use a **genuinely elevated trusted**
+Windows operator session to verify the existing protected task, back up its exact
+XML and SDDL, and complete an isolated restore rehearsal using the pinned and
+protected runtime. Do not copy or execute maintenance scripts from an ordinary
+writable Git worktree with elevated privileges. Preserve the active interactive Hub,
+CORE revoke/STOP fences and current SQLite/WAL until recovery is independently armed.
+Only then follow the separately approved controlled one-writer migration, SYSTEM
+LocalMachine DPAPI attestation and physical reboot/rollback procedure. No health
+endpoint, source test or approval dialog alone promotes this gate to GO.
