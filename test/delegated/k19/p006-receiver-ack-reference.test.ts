@@ -194,7 +194,7 @@ test('R-111: same-length final-file mutation invalidates independent receiver di
     const e = evidence(data, f.final);
     const good = receipt(e);
     const altered = Buffer.from(await readFile(f.final));
-    altered[altered.length - 1] ^= 1;
+    altered[altered.length - 1] = (altered[altered.length - 1] ?? 0) ^ 1;
     await writeFile(f.final, altered);
     assert.equal((await stat(f.final)).size, e.bytesTotal);
     assert.notEqual(digest(await readFile(f.final)), good.sha256);
