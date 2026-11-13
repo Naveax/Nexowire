@@ -46,6 +46,18 @@ try {
   if(!(Test-Path -LiteralPath $full -PathType Container)) {
     throw 'IDEMPOTENCY_STATE_DIR_MISSING: no implicit state directory creation.'
   }
+  # An ordinary child of a junction is not itself marked ReparsePoint.
+  # Reject *every* ancestor to prevent an aliased state root passing the ACL gate.
+  $ancestor=$full
+  while($true) {
+    $component=Get-Item -LiteralPath $ancestor -Force -ErrorAction Stop
+    if(($component.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+      throw 'IDEMPOTENCY_PARENT_REPARSE_DENIED'
+    }
+    $parent=[System.IO.Directory]::GetParent($ancestor)
+    if($null -eq $parent){break}
+    $ancestor=$parent.FullName
+  }
   $state=Get-Item -LiteralPath $full -Force
   if(([int]$state.Attributes -band [int][System.IO.FileAttributes]::ReparsePoint) -ne 0) {
     throw 'IDEMPOTENCY_REPARSE_STATE_DIR_DENIED'
@@ -88,6 +100,17 @@ try {
   }
   $sqlite=Join-Path $full 'idempotency-records.sqlite'
   $legacy=Join-Path $full 'idempotency-records.json'
+  # SQLite, rollback JSON and both WAL companions must be ordinary files.
+  # A hardlink has no ReparsePoint flag, so check the native FileInfo LinkType too.
+  foreach($candidate in @($sqlite,($sqlite+'-wal'),($sqlite+'-shm'),$legacy)) {
+    if(!(Test-Path -LiteralPath $candidate)) {continue}
+    $file=Get-Item -LiteralPath $candidate -Force -ErrorAction Stop
+    if($file.PSIsContainer -or
+       ($file.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0 -or
+       [string]$file.LinkType -eq 'HardLink') {
+      throw 'IDEMPOTENCY_SQLITE_FILE_ALIAS_DENIED'
+    }
+  }
   $exists=Test-Path -LiteralPath $sqlite -PathType Leaf
   if($exists) {
     $stream=[System.IO.File]::Open($sqlite,
