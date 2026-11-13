@@ -33,6 +33,7 @@ The post-health state is now `AWAITING_PHYSICAL_ACCEPTANCE`, recovery remains ar
 ## Evidence taxonomy
 
 - Unit tests and Windows PowerShell mocked failure injection are **synthetic PASS**, not physical PASS.
+- The read-only `hub boot-status` API retains the legacy `installed` boolean, but now also reports `taskPresence=present|absent|unverified`. A result like `installed=false`, `taskPresence=unverified`, `state=access-denied` means **task absence is NOT proven**. `taskPresence=present` establishes only scheduler visibility, never SYSTEM identity or ownership. Do not retire, replace or register a protected task until the trusted elevated AI-01 inspect/backup rehearsal has independently proved its identity.
 - Physical test rows stay BLOCKED or NOT_RUN until exact-session evidence exists.
 - Draft PR #1160 and issue #1161 remain open and production remains NO-GO.
 

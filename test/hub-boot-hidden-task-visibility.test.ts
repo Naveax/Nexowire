@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {
   assessWindowsUnattendedRebootReadiness,
+  classifyHubBootTaskPresence,
   hubBootTaskVisibilityProbe,
 } from '../src/hub/hub-boot-lifecycle.js';
 
@@ -53,6 +54,18 @@ test('real read-only COM query classifies hidden or absent SYSTEM task without m
   assert.ok([
     'not-installed','access-denied','identity-unverified','visibility-unverified',
   ].includes(result.state),'Unexpected read-only scheduler classification: '+result.state);
+});
+
+test('protected SYSTEM task presence never invents absence from access-denied',()=>{
+  assert.equal(classifyHubBootTaskPresence(false,'access-denied'),'unverified');
+  assert.equal(classifyHubBootTaskPresence(false,'visibility-unverified'),'unverified');
+  assert.equal(classifyHubBootTaskPresence(false,'identity-unverified'),'present');
+  assert.equal(classifyHubBootTaskPresence(false,'not-installed'),'absent');
+  assert.equal(classifyHubBootTaskPresence(true,'running'),'present');
+  assert.equal(classifyHubBootTaskPresence(true,'ready'),'present');
+  // A contradictory unseen state must remain unknown rather than being
+  // classified absent merely because Get-ScheduledTask returned null.
+  assert.equal(classifyHubBootTaskPresence(false,'unexpected'),'unverified');
 });
 
 test('uncertain SYSTEM task visibility cannot be treated as installed or reboot-ready',()=>{

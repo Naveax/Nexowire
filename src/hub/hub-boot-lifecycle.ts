@@ -122,6 +122,9 @@ const USER_TASK_DEFAULT = 'Nexowire Hub';
 
 const BootStatusSchema = z.object({
   installed: z.boolean(),
+  // Presence is not equivalent to trusted ownership or installation.
+  // An ACL-hidden task may report installed=false but is NOT absent.
+  taskPresence: z.enum(['present','absent','unverified']),
   state: z.string(),
   taskName: z.string(),
   userTaskState: z.string(),
@@ -635,6 +638,21 @@ if($null -eq $bootTask -and $bootVisibility -cne 'not-installed'){
 }
 `;
 
+/**
+ * A boolean "installed=false" is NOT proof of task absence when the scheduler
+ * returns AccessDenied or cannot verify visibility. Keep the legacy boolean
+ * for existing callers but expose the independently verified presence state.
+ * "present" means a scheduler task was observed, not that it is owned by us.
+ */
+export function classifyHubBootTaskPresence(
+  installed:boolean,
+  state:string,
+):'present'|'absent'|'unverified'{
+  if(installed||state==='identity-unverified')return 'present';
+  if(state==='not-installed')return 'absent';
+  return 'unverified';
+}
+
 export async function hubBootLifecycleStatus(
   options: HubBootLifecycleOptions = {},
 ): Promise<HubBootLifecycleStatus> {
@@ -671,6 +689,7 @@ export async function hubBootLifecycleStatus(
   const pid = await readPid(p.pid);
   return BootStatusSchema.parse({
     installed: result.installed,
+    taskPresence: classifyHubBootTaskPresence(result.installed,result.state),
     state: result.state,
     taskName: bootTaskName(options),
     userTaskState: result.userTaskState,
