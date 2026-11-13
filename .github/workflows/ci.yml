@@ -556,7 +556,9 @@ jobs:
           path: ${{ runner.temp }}/connection-v2-native-git-dag.json
           if-no-files-found: error
   connection-v2-clean10-windows:
-    if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'coord/connection-v2-release-candidate-') || startsWith(github.head_ref, 'coord/ai05-core-connection-v2-windows-'))
+    # The exact AI-01..AI-06 integration PR must exercise the real native Job
+    # QA02 branch on Windows, not accept Linux-only / SKIP evidence as proof.
+    if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'coord/connection-v2-release-candidate-') || startsWith(github.head_ref, 'coord/ai05-core-connection-v2-windows-') || github.head_ref == 'integration/ai01-ai06-candidate-20261109')
     runs-on: windows-latest
     timeout-minutes: 25
     strategy:
