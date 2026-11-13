@@ -225,7 +225,7 @@ source,source_sha,path,source_blob_sha,integrated_blob_sha,classification
 "CONNECTION_1085","44e7b3424c578515b70abdfe68b6a101cc0b2e5a","test/control-plane-agent-auth.test.ts","dc7ec7741330d4bacd9f533e4baa8bf06cc014fa","dc7ec7741330d4bacd9f533e4baa8bf06cc014fa","EXACT_SOURCE_BLOB"
 "CONNECTION_1085","44e7b3424c578515b70abdfe68b6a101cc0b2e5a","test/local-first-cloudflare.test.ts","e9f920e502d9ba68cda3488eab122e1c12344423","e9f920e502d9ba68cda3488eab122e1c12344423","EXACT_SOURCE_BLOB"
 "CONNECTION_1085","44e7b3424c578515b70abdfe68b6a101cc0b2e5a","test/qa-02-error-contract-no-replay.test.ts","0d6f2d5d35c4c73dbb361c899a1fd04bae301a7c","0d6f2d5d35c4c73dbb361c899a1fd04bae301a7c","EXACT_SOURCE_BLOB"
-"CONNECTION_1085","44e7b3424c578515b70abdfe68b6a101cc0b2e5a","test/qa-02-windows-output-ordering.test.ts","75b01033445772b5864a19495a2c8d7c211a0524","75b01033445772b5864a19495a2c8d7c211a0524","EXACT_SOURCE_BLOB"
+"CONNECTION_1085","44e7b3424c578515b70abdfe68b6a101cc0b2e5a","test/qa-02-windows-output-ordering.test.ts","75b01033445772b5864a19495a2c8d7c211a0524","56e3c8e3afb61687612ac629d8c6dc47afd94ba2","EVOLVED"
 "CONNECTION_1085","44e7b3424c578515b70abdfe68b6a101cc0b2e5a","test/qa-18-durable-runbook-cloned-unknown-negative.test.ts","c1af49b1f3ffeaa5f9e35031225aea08658bc510","c1af49b1f3ffeaa5f9e35031225aea08658bc510","EXACT_SOURCE_BLOB"
 "CONNECTION_1085","44e7b3424c578515b70abdfe68b6a101cc0b2e5a","test/relay-resource-budgets.test.ts","8a029e18aada138259708a635326c988c707603c","8a029e18aada138259708a635326c988c707603c","EXACT_SOURCE_BLOB"
 "CONNECTION_1085","44e7b3424c578515b70abdfe68b6a101cc0b2e5a","test/runbooks.test.ts","6ef689f66602cd8bfae6b8a681248d0e184c1729","6ef689f66602cd8bfae6b8a681248d0e184c1729","EXACT_SOURCE_BLOB"
