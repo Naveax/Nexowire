@@ -1,0 +1,31 @@
+name: Test Discovery Inventory
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: discovery-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: tracked TS inventory (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Verify deterministic test-path inventory and hostile Git index fixtures
+        run: node --test test/ci/test-inventory.test.mjs
+      - name: Report exact-commit tracked test paths (discovery only, not execution)
+        run: node scripts/ci/test-inventory.mjs --json
