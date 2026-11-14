@@ -14,9 +14,11 @@ const approved=Object.freeze([
   'test/version.test.ts',
   'test/release-tag.test.ts',
   'test/ai07-physical-cutover-gate.test.ts',
+  'test/capability-policy.test.ts',
+  'test/device-routing-policy-store.test.ts',
 ]);
 
-test('portable root smoke invokes only the three reviewed read-only contract files',()=>{
+test('portable root smoke invokes only five reviewed isolated policy and source contracts',()=>{
   const target=workflow.match(/^      - name: Execute allowlisted root tests and assert SHA-bound TAP receipt\n        timeout-minutes: 7\n        env:\n          NEXOWIRE_EXPECTED_COMMIT_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}\n        run: (.+)$/m);
   assert.ok(target,'missing separate timeout-bounded pure-contract step');
   const tokens=target[1].trim().split(/\s+/);

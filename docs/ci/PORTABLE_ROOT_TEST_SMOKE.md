@@ -9,9 +9,14 @@ This is a **bounded first execution lane**, not a blanket "635 tests PASS":
 
 - New hosted `Portable Root Test Smoke` workflow runs only on disposable
   `ubuntu-latest` runners, independently with Node 22 and 24.
-- Exactly three reviewed, read-only root-level files are invoked explicitly:
-  `test/version.test.ts`, `test/release-tag.test.ts`, and
-  `test/ai07-physical-cutover-gate.test.ts`.
+- Exactly five reviewed root-level files are invoked explicitly:
+  `test/version.test.ts`, `test/release-tag.test.ts`,
+  `test/ai07-physical-cutover-gate.test.ts`,
+  `test/capability-policy.test.ts`, and
+  `test/device-routing-policy-store.test.ts`.
+  The two policy-store suites create and remove **only isolated temporary
+  fixture directories** on the disposable GitHub runner. No task, network,
+  Broker, CORE, registry or production state is touched.
 - It uses `npm ci`, serialized `--test-concurrency=1`, a bounded step timeout,
   no permissions beyond read-only repository contents, and fail-closed source
   and TAP receipt tests that check the allowlist and Git tracked-file inventory.
@@ -24,7 +29,7 @@ This is a **bounded first execution lane**, not a blanket "635 tests PASS":
   Git's checked-out `HEAD` does not match the expected SHA supplied by GitHub.
   This prevents a passing merge-ref receipt from being mislabeled exact PR HEAD.
   The receipt prints to CI logs; it does not write to protected production paths.
-- This is a **root-level test execution proof only for the exact three files**.
+- This is a **root-level test execution proof only for the exact five files**.
   It does not certify the remaining tracked files, any production Windows
   privilege, or physical SYSTEM cutover.
 - Never enlarge this allowlist without reviewing imported modules, side effects,
