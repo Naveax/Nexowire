@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync, spawnSync} from 'node:child_process';
+import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {parseGitStageEntries, summarizeTestFiles, readTestInventory} from '../../scripts/ci/test-inventory.mjs';
+import {parseGitStageEntries, parseGitCommitTreeEntries, summarizeTestFiles, readTestInventory} from '../../scripts/ci/test-inventory.mjs';
 
 const BLOB = 'a'.repeat(40);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -44,6 +46,50 @@ test('rejects duplicate entries, unsafe paths, symlink tests, unmerged entries a
   assert.throws(() => summarizeTestFiles([], 'b'.repeat(40)), /EMPTY_OR_UNPINNED/);
   assert.throws(() => summarizeTestFiles([{path:'test/a.test.ts',blob:BLOB,mode:'100644'}], 'bad'),
     /EMPTY_OR_UNPINNED/);
+});
+
+test('immutable Git HEAD inventory rejects staged or uncommitted test edits',()=>{
+  const repo=mkdtempSync(path.join(os.tmpdir(),'nx-test-inventory-source-'));
+  const call=(...args)=>execFileSync('git',args,{
+    cwd:repo,encoding:'utf8',maxBuffer:1024*1024,
+  });
+  try {
+    mkdirSync(path.join(repo,'test'));
+    writeFileSync(path.join(repo,'test','sample.test.ts'),"export const n = 1;\n");
+    call('init','-q');
+    call('add','--','test/sample.test.ts');
+    call('-c','user.name=Nexowire QA','-c','user.email=qa@example.invalid',
+      'commit','-qm','synthetic committed test fixture');
+    const {report:committed}=readTestInventory(repo);
+    assert.equal(committed.trackedTsTestFiles,1);
+    assert.match(committed.commitSha,/^[a-f0-9]{40}$/);
+
+    // A changed checkout cannot inherit the committed test SHA even without staging.
+    writeFileSync(path.join(repo,'test','sample.test.ts'),"export const n = 2;\n");
+    assert.throws(()=>readTestInventory(repo),/TEST_INVENTORY_TRACKED_TEST_WORKTREE_DIRTY/);
+
+    // A staged edit must also fail: the index blob is not the HEAD tree blob.
+    call('add','--','test/sample.test.ts');
+    assert.throws(()=>readTestInventory(repo),/TEST_INVENTORY_INDEX_HEAD_TREE_MISMATCH/);
+
+    call('restore','--staged','--worktree','--','test/sample.test.ts');
+    assert.deepEqual(readTestInventory(repo).report,committed);
+  }finally{
+    rmSync(repo,{recursive:true,force:true,maxRetries:5,retryDelay:100});
+  }
+});
+
+test('commit tree parser fails closed on symlink, duplicate and malformed Git records',()=>{
+  const t=(file,mode='100644')=>mode+' blob '+BLOB+'\t'+file+'\0';
+  assert.deepEqual(parseGitCommitTreeEntries(Buffer.from(t('test/a.test.ts'))),[
+    {path:'test/a.test.ts',mode:'100644',blob:BLOB},
+  ]);
+  for(const bad of [
+    t('test/a.test.ts')+t('test/a.test.ts'),
+    t('test/../outside.test.ts'),
+    t('test/a.test.ts','120000'),
+    'garbage\0',
+  ])assert.throws(()=>parseGitCommitTreeEntries(Buffer.from(bad)),/TEST_INVENTORY_/);
 });
 
 test('CLI explicitly denies a false all-tests-covered claim and emits a complete path list', () => {

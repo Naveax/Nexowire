@@ -9,7 +9,7 @@
  * that a discovered test has passed. The optional --assert-legacy-complete flag
  * intentionally fails if a plain Bash ** glob omits files.
  */
-import {execFileSync} from 'node:child_process';
+import {execFileSync, spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {lstatSync} from 'node:fs';
 import path from 'node:path';
@@ -41,6 +41,29 @@ export function parseGitStageEntries(buffer) {
     if (!TEST_FILE.test(relative)) continue;
     if (mode !== '100644' && mode !== '100755') reject('NONREGULAR_TEST_FILE');
     entries.push({path: relative, mode, blob});
+  }
+  entries.sort((a,b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+  return entries;
+}
+
+/** Read the immutable HEAD tree instead of silently trusting a modified index. */
+export function parseGitCommitTreeEntries(buffer) {
+  if (!Buffer.isBuffer(buffer)) reject('TREE_NOT_BUFFER');
+  const entries = [];
+  const seen = new Set();
+  for (const record of buffer.toString('utf8').split('\0')) {
+    if (!record) continue;
+    const m = /^([0-7]{6}) blob ([0-9a-f]{40})\t(.+)$/.exec(record);
+    if (!m) reject('INVALID_COMMIT_TREE_RECORD');
+    const [,mode,blob,relative] = m;
+    if (relative.includes('\\') || relative.startsWith('/') ||
+        relative.split('/').some(s => !s || s === '.' || s === '..'))
+      reject('UNSAFE_COMMIT_TREE_PATH');
+    if (seen.has(relative)) reject('DUPLICATE_COMMIT_TREE_PATH');
+    seen.add(relative);
+    if (!TEST_FILE.test(relative)) continue;
+    if (mode !== '100644' && mode !== '100755') reject('NONREGULAR_TREE_TEST_FILE');
+    entries.push({path:relative,mode,blob});
   }
   entries.sort((a,b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
   return entries;
@@ -85,10 +108,23 @@ export function readTestInventory(repoRoot) {
   const commitSha = execFileSync('git',['rev-parse','HEAD'],{
     cwd:repoRoot,encoding:'utf8',maxBuffer:1024*1024,
   }).trim();
-  const raw = execFileSync('git',['ls-files','--stage','-z','--','test'],{
+  const rawIndex = execFileSync('git',['ls-files','--stage','-z','--','test'],{
     cwd:repoRoot,encoding:'buffer',maxBuffer:16*1024*1024,
   });
-  const entries = parseGitStageEntries(raw);
+  const rawHead = execFileSync('git',['ls-tree','-r','-z','HEAD','--','test'],{
+    cwd:repoRoot,encoding:'buffer',maxBuffer:16*1024*1024,
+  });
+  const indexEntries = parseGitStageEntries(rawIndex);
+  const entries = parseGitCommitTreeEntries(rawHead);
+  if (JSON.stringify(indexEntries) !== JSON.stringify(entries))
+    reject('INDEX_HEAD_TREE_MISMATCH');
+  const dirty = spawnSync('git',['diff','--name-only','-z','HEAD','--','test'],{
+    cwd:repoRoot,encoding:'utf8',timeout:15000,maxBuffer:1024*1024,
+  });
+  if (dirty.error || dirty.status !== 0)
+    reject('WORKTREE_DIFF_UNVERIFIED');
+  if (dirty.stdout.split('\0').some(relative => TEST_FILE.test(relative)))
+    reject('TRACKED_TEST_WORKTREE_DIRTY');
   for (const entry of entries) {
     const file = path.resolve(repoRoot, ...entry.path.split('/'));
     if (!file.startsWith(path.resolve(repoRoot) + path.sep)) reject('OUTSIDE_REPO');

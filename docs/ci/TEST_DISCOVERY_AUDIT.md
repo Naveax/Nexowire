@@ -17,10 +17,13 @@ node --test test/ci/test-inventory.test.mjs
 ```
 
 The JSON report includes `commitSha`, `manifestSha256` over sorted
-Git index blob IDs and paths, `trackedTsTestFiles`, `byDepth`, and the
-`legacyBashGlob` one-directory match/miss counts. The inventory checks
-tracked files exist and are regular files, rejecting symlinks, unsafe paths,
-unmerged index entries and duplicate paths.
+immutable HEAD-tree Git blob IDs and paths, `trackedTsTestFiles`, `byDepth`,
+and the `legacyBashGlob` one-directory match/miss counts. It requires the
+Git index entries to match the committed HEAD tree, with no modified tracked
+TypeScript test files in the working directory. The inventory also checks
+committed files exist and are regular files, rejecting symlinks, unsafe paths,
+unmerged index entries and duplicate paths. A staged or unstaged test change
+is **not** allowed to borrow the previous commit SHA as evidence.
 
 ```sh
 node scripts/ci/test-inventory.mjs --assert-legacy-complete
