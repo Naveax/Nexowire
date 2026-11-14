@@ -20,7 +20,9 @@ The JSON report includes `commitSha`, `manifestSha256` over sorted
 immutable HEAD-tree Git blob IDs and paths, `trackedTsTestFiles`, `byDepth`,
 and the `legacyBashGlob` one-directory match/miss counts. It requires the
 Git index entries to match the committed HEAD tree, with no modified tracked
-TypeScript test files in the working directory. The inventory also checks
+TypeScript test files in the working directory. Hosted pull-request runs check
+out the exact PR head SHA (not GitHub's temporary merge ref) and supply that
+expected SHA to the CLI, which fails closed on a mismatch. The inventory also checks
 committed files exist and are regular files, rejecting symlinks, unsafe paths,
 unmerged index entries and duplicate paths. A staged or unstaged test change
 is **not** allowed to borrow the previous commit SHA as evidence.

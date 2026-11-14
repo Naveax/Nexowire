@@ -22,10 +22,14 @@ jobs:
         node-version: [22, 24]
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
       - name: Verify deterministic test-path inventory and hostile Git index fixtures
         run: node --test test/ci/test-inventory.test.mjs
       - name: Report exact-commit tracked test paths (discovery only, not execution)
+        env:
+          NEXOWIRE_EXPECTED_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: node scripts/ci/test-inventory.mjs --json

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync, spawnSync} from 'node:child_process';
-import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -90,6 +90,38 @@ test('commit tree parser fails closed on symlink, duplicate and malformed Git re
     t('test/a.test.ts','120000'),
     'garbage\0',
   ])assert.throws(()=>parseGitCommitTreeEntries(Buffer.from(bad)),/TEST_INVENTORY_/);
+});
+
+test('hosted inventory checkout and expected SHA must pin the real PR head',()=>{
+  const yaml=readFileSync(path.resolve(ROOT,'.github/workflows/test-discovery-inventory.yml'),'utf8')
+    .replace(/\r\n/g,'\n');
+  assert.match(yaml,/^      - uses: actions\/checkout@v4\n        with:\n          ref: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}$/m);
+  assert.match(yaml,/^      - name: Report exact-commit tracked test paths \(discovery only, not execution\)\n        env:\n          NEXOWIRE_EXPECTED_COMMIT_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}\n        run: node scripts\/ci\/test-inventory\.mjs --json$/m);
+  assert.match(yaml,/^        node-version: \[22, 24\]$/m);
+  assert.match(yaml,/^  contents: read$/m);
+});
+
+test('CLI rejects a synthetic PR merge SHA when a different PR head is expected',()=>{
+  const script=path.join(ROOT,'scripts/ci/test-inventory.mjs');
+  const head=readTestInventory(ROOT).report.commitSha;
+  const accepted=spawnSync(process.execPath,[script,'--json'],{
+    cwd:ROOT,encoding:'utf8',timeout:10000,
+    env:{...process.env,NEXOWIRE_EXPECTED_COMMIT_SHA:head},
+  });
+  assert.equal(accepted.status,0,accepted.stderr);
+  assert.equal(JSON.parse(accepted.stdout).commitSha,head);
+  const denied=spawnSync(process.execPath,[script,'--json'],{
+    cwd:ROOT,encoding:'utf8',timeout:10000,
+    env:{...process.env,NEXOWIRE_EXPECTED_COMMIT_SHA:'a'.repeat(40)},
+  });
+  assert.equal(denied.status,1);
+  assert.match(denied.stderr,/TEST_INVENTORY_EXPECTED_HEAD_SHA_MISMATCH/);
+  const empty=spawnSync(process.execPath,[script,'--json'],{
+    cwd:ROOT,encoding:'utf8',timeout:10000,
+    env:{...process.env,NEXOWIRE_EXPECTED_COMMIT_SHA:''},
+  });
+  assert.equal(empty.status,1);
+  assert.match(empty.stderr,/TEST_INVENTORY_EXPECTED_HEAD_SHA_MISMATCH/);
 });
 
 test('CLI explicitly denies a false all-tests-covered claim and emits a complete path list', () => {
