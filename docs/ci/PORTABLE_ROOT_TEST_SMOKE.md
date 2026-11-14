@@ -19,6 +19,10 @@ This is a **bounded first execution lane**, not a blanket "635 tests PASS":
   with forced TAP output, rejects nonzero/partial/duplicate/skipped/missing
   summaries, and emits one JSON object binding executed file names and Git
   blob IDs to the exact commit SHA and full test inventory SHA-256.
+  Hosted PR runs explicitly check out `github.event.pull_request.head.sha`
+  instead of the synthetic PR merge commit, and the receipt fails closed when
+  Git's checked-out `HEAD` does not match the expected SHA supplied by GitHub.
+  This prevents a passing merge-ref receipt from being mislabeled exact PR HEAD.
   The receipt prints to CI logs; it does not write to protected production paths.
 - This is a **root-level test execution proof only for the exact three files**.
   It does not certify the remaining tracked files, any production Windows

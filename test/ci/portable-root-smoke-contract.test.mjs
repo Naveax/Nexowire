@@ -17,7 +17,7 @@ const approved=Object.freeze([
 ]);
 
 test('portable root smoke invokes only the three reviewed read-only contract files',()=>{
-  const target=workflow.match(/^      - name: Execute allowlisted root tests and assert SHA-bound TAP receipt\n        timeout-minutes: 7\n        run: (.+)$/m);
+  const target=workflow.match(/^      - name: Execute allowlisted root tests and assert SHA-bound TAP receipt\n        timeout-minutes: 7\n        env:\n          NEXOWIRE_EXPECTED_COMMIT_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}\n        run: (.+)$/m);
   assert.ok(target,'missing separate timeout-bounded pure-contract step');
   const tokens=target[1].trim().split(/\s+/);
   assert.deepEqual(tokens,[
@@ -46,6 +46,7 @@ test('portable root test smoke cannot silently skip, widen OS, or lose CI lockfi
   assert.match(workflow,/^        run: node --test test\/ci\/portable-root-smoke-contract\.test\.mjs$/m);
   assert.match(workflow,/^        run: node --test test\/ci\/portable-root-execution-receipt\.test\.mjs$/m);
   assert.match(workflow,/^  contents: read$/m);
+  assert.match(workflow,/^      - uses: actions\/checkout@v4\n        with:\n          ref: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}$/m);
   assert.match(workflow,/^  cancel-in-progress: true$/m);
   assert.doesNotMatch(workflow,/continue-on-error:|--test-skip-pattern|^\s+if:\s*false\s*$/m);
   assert.doesNotMatch(workflow,/windows-latest|self-hosted|powershell|workflow_call/);

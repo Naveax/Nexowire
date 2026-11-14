@@ -22,6 +22,8 @@ jobs:
         node-version: [22, 24]
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
@@ -34,4 +36,6 @@ jobs:
         run: node --test test/ci/portable-root-execution-receipt.test.mjs
       - name: Execute allowlisted root tests and assert SHA-bound TAP receipt
         timeout-minutes: 7
+        env:
+          NEXOWIRE_EXPECTED_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: node scripts/ci/portable-root-execution-receipt.mjs --json

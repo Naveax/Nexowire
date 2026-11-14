@@ -21,6 +21,11 @@ function deny(code) {
   throw new Error('PORTABLE_ROOT_RECEIPT_'+code);
 }
 
+export function assertExpectedCommit(actual, expected) {
+  if(!/^[a-f0-9]{40}$/.test(expected??'') || actual!==expected)
+    deny('EXPECTED_HEAD_SHA_MISMATCH');
+}
+
 /** The only permissible process arguments, with each file run separately. */
 export function commandForApprovedRootFile(file) {
   if(!APPROVED_ROOT_TEST_FILES.includes(file))
@@ -34,8 +39,9 @@ export function commandForApprovedRootFile(file) {
  * always calls the real Node spawnSync and emits a receipt only after all files
  * exit zero with full zero-SKIP TAP footer acceptance.
  */
-export function createPortableRootReceipt(repoRoot, runner=spawnSync) {
+export function createPortableRootReceipt(repoRoot, runner=spawnSync, expectedCommitSha=null) {
   const {entries,report}=readTestInventory(repoRoot);
+  if(expectedCommitSha!==null) assertExpectedCommit(report.commitSha,expectedCommitSha);
   const known=new Map(entries.map(entry=>[entry.path,entry]));
   const files=[];
   let testsPassed=0;
@@ -95,7 +101,10 @@ if(invoked) {
     if(process.argv.length!==3 || process.argv[2]!=='--json')
       deny('USAGE');
     const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
-    const receipt=createPortableRootReceipt(root);
+    const expected=process.env.NEXOWIRE_EXPECTED_COMMIT_SHA??null;
+    if(process.env.CI==='true' && expected===null)
+      deny('EXPECTED_HEAD_SHA_REQUIRED_IN_CI');
+    const receipt=createPortableRootReceipt(root,spawnSync,expected);
     process.stdout.write(JSON.stringify(receipt)+'\n');
   }catch(error){
     process.stderr.write((error instanceof Error?error.message:'PORTABLE_ROOT_RECEIPT_UNKNOWN')+'\n');

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {APPROVED_ROOT_TEST_FILES,commandForApprovedRootFile,createPortableRootReceipt}
+import {APPROVED_ROOT_TEST_FILES,assertExpectedCommit,commandForApprovedRootFile,createPortableRootReceipt}
   from '../../scripts/ci/portable-root-execution-receipt.mjs';
 import {readTestInventory} from '../../scripts/ci/test-inventory.mjs';
 
@@ -58,6 +58,19 @@ test('only successful exact-file TAP subprocesses produce a source-bound receipt
   assert.equal(receipt.physicalWindowsAcceptance,'NOT_INFERRED');
   assert.deepEqual(receipt.files.map(f=>f.path),EXPECTED);
   assert.ok(receipt.files.every(f=>/^[a-f0-9]{40}$/.test(f.gitBlobSha)));
+});
+
+test('PR SHA expected-head mismatch is rejected before executing any test process',()=>{
+  const sha=readTestInventory(root).report.commitSha;
+  assert.doesNotThrow(()=>assertExpectedCommit(sha,sha));
+  assert.throws(()=>assertExpectedCommit(sha,'a'.repeat(40)),
+    /PORTABLE_ROOT_RECEIPT_EXPECTED_HEAD_SHA_MISMATCH/);
+  assert.throws(()=>assertExpectedCommit(sha,undefined),
+    /PORTABLE_ROOT_RECEIPT_EXPECTED_HEAD_SHA_MISMATCH/);
+  let executed=false;
+  assert.throws(()=>createPortableRootReceipt(root,()=>{executed=true;},'a'.repeat(40)),
+    /PORTABLE_ROOT_RECEIPT_EXPECTED_HEAD_SHA_MISMATCH/);
+  assert.equal(executed,false);
 });
 
 test('nonzero, timed out, partial and skipped subprocesses fail closed',()=>{
