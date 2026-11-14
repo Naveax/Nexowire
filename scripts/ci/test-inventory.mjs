@@ -144,6 +144,11 @@ if (invoked) {
       reject('USAGE');
     const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
     const {entries,report} = readTestInventory(repo);
+    if (Object.hasOwn(process.env,'NEXOWIRE_EXPECTED_COMMIT_SHA')) {
+      const expected = process.env.NEXOWIRE_EXPECTED_COMMIT_SHA;
+      if (!SHA.test(expected) || expected !== report.commitSha)
+        reject('EXPECTED_HEAD_SHA_MISMATCH');
+    }
     if (flags.includes('--assert-legacy-complete') && report.legacyBashGlob.omittedWithoutGlobstar)
       reject('LEGACY_BASH_GLOB_INCOMPLETE_' + report.legacyBashGlob.omittedWithoutGlobstar);
     if (flags.includes('--list')) {
