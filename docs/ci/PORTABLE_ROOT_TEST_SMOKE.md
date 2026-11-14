@@ -13,8 +13,13 @@ This is a **bounded first execution lane**, not a blanket "635 tests PASS":
   `test/version.test.ts`, `test/release-tag.test.ts`, and
   `test/ai07-physical-cutover-gate.test.ts`.
 - It uses `npm ci`, serialized `--test-concurrency=1`, a bounded step timeout,
-  no permissions beyond read-only repository contents, and a fail-fast source
-  contract test that checks the allowlist and Git tracked-file inventory.
+  no permissions beyond read-only repository contents, and fail-closed source
+  and TAP receipt tests that check the allowlist and Git tracked-file inventory.
+- The receipt runner executes each approved file in its own real Node subprocess
+  with forced TAP output, rejects nonzero/partial/duplicate/skipped/missing
+  summaries, and emits one JSON object binding executed file names and Git
+  blob IDs to the exact commit SHA and full test inventory SHA-256.
+  The receipt prints to CI logs; it does not write to protected production paths.
 - This is a **root-level test execution proof only for the exact three files**.
   It does not certify the remaining tracked files, any production Windows
   privilege, or physical SYSTEM cutover.
@@ -27,6 +32,7 @@ Locally inspect the plan without running broad side-effectful tests:
 ```sh
 node scripts/ci/test-inventory.mjs --json
 node --test test/ci/portable-root-smoke-contract.test.mjs
+node --test test/ci/portable-root-execution-receipt.test.mjs
 ```
 
 Full execution coverage stays OPEN under #1205. Do not treat absent tests as

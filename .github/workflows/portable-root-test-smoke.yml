@@ -30,6 +30,8 @@ jobs:
         run: npm ci
       - name: Assert root test allowlist and bounded Linux-only workflow
         run: node --test test/ci/portable-root-smoke-contract.test.mjs
-      - name: Run explicitly allowlisted pure root-level tests
+      - name: Verify TAP receipt fail-closed contracts
+        run: node --test test/ci/portable-root-execution-receipt.test.mjs
+      - name: Execute allowlisted root tests and assert SHA-bound TAP receipt
         timeout-minutes: 7
-        run: node --test --import tsx --test-concurrency=1 test/version.test.ts test/release-tag.test.ts test/ai07-physical-cutover-gate.test.ts
+        run: node scripts/ci/portable-root-execution-receipt.mjs --json
