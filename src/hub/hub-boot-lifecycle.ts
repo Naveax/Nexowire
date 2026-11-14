@@ -6,7 +6,9 @@ import path from 'node:path';
 import * as z from 'zod';
 import { isWindowsProcessElevated } from '../agent/privileged-broker.js';
 import { hardenWindowsProgramDataAcl, verifyWindowsPrivateAcl } from '../security/windows-programdata-acl.js';
+import { verifyWindowsStackOuterAncestorAcl } from '../security/windows-programdata-acl.js';
 import {assertWindowsLocalTcpListenerOwnedByPid} from '../security/windows-local-listener-owner.js';
+import {verifyProtectedSystemHubCutoverReadOnly} from './system-hub-state-cutover.js';
 import {
   assertNoPrivilegedNodeStartupFlags,
   assertWindowsPrivilegedRuntimeTrusted,
@@ -57,6 +59,19 @@ export function protectedHubTaskShellEnvironment(input:NodeJS.ProcessEnv):NodeJS
 }
 
 const PROTECTED_HUB_BOOT_ROOT='C:\\ProgramData\\Nexowire\\hub-boot';
+const PROTECTED_SYSTEM_HUB_STATE_ROOT='C:\\ProgramData\\Nexowire\\hub-state';
+
+/**
+ * SYSTEM Hub may never inherit the interactive user's writable SQLite state
+ * tree. A separate, protected offline migration must precede activation.
+ * This is a hard release gate, not a fallback to the user's existing data.
+ */
+export function assertProtectedSystemHubStateRoot(value:string|undefined):string {
+  if(value!==PROTECTED_SYSTEM_HUB_STATE_ROOT){
+    throw new Error('HUB_BOOT_SYSTEM_STATE_MIGRATION_REQUIRED');
+  }
+  return PROTECTED_SYSTEM_HUB_STATE_ROOT;
+}
 
 /**
  * A SYSTEM task lifecycle may only create or recursively delete its exact
@@ -69,6 +84,15 @@ export function assertProtectedHubBootRoot(value:string):void {
      path.win32.resolve(value).toLowerCase()!==PROTECTED_HUB_BOOT_ROOT.toLowerCase()){
     throw new Error('HUB_BOOT_UNTRUSTED_PROTECTED_ROOT');
   }
+}
+
+/** Read-only trust boundary for privileged ProgramData lifecycle mutations. */
+export function verifyHubBootSharedAncestorTrust():void {
+  if(process.platform!=='win32')throw new Error('HUB_BOOT_WINDOWS_ONLY');
+  // Shared Windows ancestors can permit unrelated sibling creation but may
+  // not grant untrusted replacement, delete, ownership or DACL rights.
+  verifyWindowsStackOuterAncestorAcl('C:\\');
+  verifyWindowsStackOuterAncestorAcl('C:\\ProgramData');
 }
 
 /** Preflight: never recursively delete unknown or linked objects. */
@@ -98,6 +122,9 @@ const USER_TASK_DEFAULT = 'Nexowire Hub';
 
 const BootStatusSchema = z.object({
   installed: z.boolean(),
+  // Presence is not equivalent to trusted ownership or installation.
+  // An ACL-hidden task may report installed=false but is NOT absent.
+  taskPresence: z.enum(['present','absent','unverified']),
   state: z.string(),
   taskName: z.string(),
   userTaskState: z.string(),
@@ -115,6 +142,8 @@ export interface HubBootLifecycleOptions
   extends HubLifecycleOptions {
   bootTaskName?: string;
   programDataDir?: string;
+  /** Protected cutover journal binds rollback to this exact task instance. */
+  cutoverInstallMarker?: string;
 }
 
 function assertWindows(): void {
@@ -548,6 +577,7 @@ async function writeManifest(
   options: HubBootLifecycleOptions,
   sourceSecretFile: string,
   port: number,
+  userTaskPreviousState: string,
 ): Promise<void> {
   const p = pathsFor(options);
   await fs.writeFile(
@@ -558,6 +588,7 @@ async function writeManifest(
         installedAt: new Date().toISOString(),
         taskName: bootTaskName(options),
         userTaskName: userTaskName(options),
+        userTaskPreviousState,
         launcher: p.launcher,
         secretFile: p.secret,
         sourceSecretFile,
@@ -568,6 +599,58 @@ async function writeManifest(
     ) + '\n',
     'utf8',
   );
+}
+
+/**
+ * A task hidden by Task Scheduler ACL may appear absent via Get-ScheduledTask.
+ * COM distinguishes E_ACCESSDENIED 0x80070005 from true absence 0x80070002
+ * without interpreting localized diagnostic text or changing task state.
+ */
+export const hubBootTaskVisibilityProbe=String.raw`
+$bootVisibility='not-installed'
+if($null -eq $bootTask){
+  try {
+    $scheduleService=New-Object -ComObject 'Schedule.Service' -ErrorAction Stop
+    $scheduleService.Connect()
+    $rootTaskFolder=$scheduleService.GetFolder('\')
+    $lookedUpTask=$rootTaskFolder.GetTask($boot)
+    $bootVisibility=if($null -ne $lookedUpTask){'identity-unverified'}else{'visibility-unverified'}
+  }catch {
+    $hresult=[int]$_.Exception.HResult
+    if($hresult -eq -2147024894){
+      $bootVisibility='not-installed'
+    }elseif($hresult -eq -2147024891){
+      $bootVisibility='access-denied'
+    }else{
+      $bootVisibility='visibility-unverified'
+    }
+  }
+}
+`;
+
+/**
+ * An installer must prove absence, not merely fail to see a protected task.
+ * Status calls may display 'access-denied'; all mutation paths fail closed.
+ */
+export const hubBootInstallTaskAbsenceGuard=String.raw`
+if($null -eq $bootTask -and $bootVisibility -cne 'not-installed'){
+  throw 'HUB_BOOT_EXISTING_TASK_VISIBILITY_UNVERIFIED'
+}
+`;
+
+/**
+ * A boolean "installed=false" is NOT proof of task absence when the scheduler
+ * returns AccessDenied or cannot verify visibility. Keep the legacy boolean
+ * for existing callers but expose the independently verified presence state.
+ * "present" means a scheduler task was observed, not that it is owned by us.
+ */
+export function classifyHubBootTaskPresence(
+  installed:boolean,
+  state:string,
+):'present'|'absent'|'unverified'{
+  if(installed||state==='identity-unverified')return 'present';
+  if(state==='not-installed')return 'absent';
+  return 'unverified';
 }
 
 export async function hubBootLifecycleStatus(
@@ -590,13 +673,14 @@ export async function hubBootLifecycleStatus(
       '$boot=$env:NEXOWIRE_HUB_BOOT_TASK_NAME',
       '$user=$env:NEXOWIRE_HUB_TASK_NAME',
       '$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue',
+      hubBootTaskVisibilityProbe,
       '$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
       // Status is read-only. A legacy user Hub task can still run with a
       // noncanonical executable path when no SYSTEM Boot task exists.
       // Report the mismatch instead of making boot-status unusable; keep the
       // strict identity gate unchanged for boot-install and boot-uninstall.
       hubBootStatusIdentityInspection,
-      "$bootState=if($bootTask){([string]$bootTask.State).ToLowerInvariant()}else{'not-installed'}",
+      '$bootState=if($bootTask){([string]$bootTask.State).ToLowerInvariant()}else{$bootVisibility}',
       "$userState=if($userTaskIdentityError){'identity-mismatch'}elseif($userTask){([string]$userTask.State).ToLowerInvariant()}else{'not-installed'}",
       '[pscustomobject]@{installed=($null-ne$bootTask);state=$bootState;userTaskState=$userState}|ConvertTo-Json -Compress',
     ].join('\n'),
@@ -605,6 +689,7 @@ export async function hubBootLifecycleStatus(
   const pid = await readPid(p.pid);
   return BootStatusSchema.parse({
     installed: result.installed,
+    taskPresence: classifyHubBootTaskPresence(result.installed,result.state),
     state: result.state,
     taskName: bootTaskName(options),
     userTaskState: result.userTaskState,
@@ -620,8 +705,14 @@ export async function installHubBootLifecycle(
 ): Promise<HubBootLifecycleStatus> {
   assertElevated();
   assertCanonicalHubBootTaskNames(options);
+  const installMarker=options.cutoverInstallMarker??
+    'Nexowire pre-logon Hub install '+randomUUID();
+  if(!/^Nexowire pre-logon Hub install [0-9a-f-]{36}$/.test(installMarker)){
+    throw new Error('HUB_BOOT_INSTALL_MARKER_UNTRUSTED');
+  }
   const protectedBootRoot=pathsFor(options).root;
   assertProtectedHubBootRoot(protectedBootRoot);
+  verifyHubBootSharedAncestorTrust();
   // A protected Hub Boot child is not safe if an untrusted account can
   // rename or replace its parent. Check owner, write/delete/DACL rights and
   // reparse status before reading any user or machine DPAPI credentials.
@@ -643,17 +734,21 @@ export async function installHubBootLifecycle(
 
   // Fail BEFORE any DPAPI credential read or launcher overwrite if a root
   // task matching our canonical name actually belongs to different code.
-  await runPowerShellJson<{ok:true}>([
+  const taskPreflight = await runPowerShellJson<{ok:true;legacyState:string}>([
     "$ErrorActionPreference='Stop'",
     '$boot=$env:NEXOWIRE_HUB_BOOT_TASK_NAME',
     '$user=$env:NEXOWIRE_HUB_TASK_NAME',
     "$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue",
+    hubBootTaskVisibilityProbe,
     "$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue",
     hubBootRegisteredTaskIdentityGuard,
+    hubBootInstallTaskAbsenceGuard,
     // Upgrading a preexisting SYSTEM Boot task requires a separately
     // backed-up owner-approved migration; do not overwrite it in place.
     "if($null -ne $bootTask){throw 'HUB_BOOT_EXISTING_TASK_INSTALL_DENIED'}",
-    '[pscustomobject]@{ok=$true}|ConvertTo-Json -Compress',
+    "$legacyState=if($userTask){[string]$userTask.State}else{'NotInstalled'}",
+    "if($legacyState -notin @('Running','Ready','Disabled','NotInstalled')){throw 'HUB_USER_TASK_UNEXPECTED_STATE'}",
+    '[pscustomobject]@{ok=$true;legacyState=$legacyState}|ConvertTo-Json -Compress',
   ].join('\n'),taskEnv(options));
 
   const currentLauncher =
@@ -668,6 +763,16 @@ export async function installHubBootLifecycle(
     );
   // Reject malformed configuration before protected directory creation,
   // machine DPAPI sealing or launcher replacement.
+  // Keep the original interactive Hub launcher untouched for rollback.
+  // The SYSTEM task can use only a separately migrated ProgramData copy whose
+  // private receipt binds both old and new state trees, checked read-only.
+  // Missing/invalid receipts fail before any current-user DPAPI secret unseal.
+  const protectedStateRoot=assertProtectedSystemHubStateRoot(
+    await verifyProtectedSystemHubCutoverReadOnly(sourceEnv.NEXOWIRE_STATE_DIR??''),
+  );
+  verifyWindowsPrivateAcl(path.win32.dirname(protectedStateRoot));
+  verifyWindowsPrivateAcl(protectedStateRoot);
+  verifyWindowsPrivateAcl(path.win32.join(protectedStateRoot,'idempotency-records.sqlite'));
   const rawPort=sourceEnv.NEXOWIRE_HTTP_PORT??'43110';
   const port=Number(rawPort);
   if(!Number.isInteger(port)||port<1||port>65_535){
@@ -710,43 +815,61 @@ export async function installHubBootLifecycle(
     }
     throw error;
   }
-  // Repair a stale child DACL before any overwrite or DPAPI work.
-  hardenProgramDataAcl(p.root);
-  await writeProtectedSecretFile(
-    p.secret,
-    'control-plane-service-token',
-    serviceToken,
-    {
-      overwrite: true,
-      scope: 'local-machine',
-    },
-  );
-
-  const env: NodeJS.ProcessEnv = {
-    ...sourceEnv,
-    NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_DPAPI_FILE:
+  // Stage files in one recoverable phase: a DPAPI or launcher write failure
+  // must not leave an undeployable, permanently blocking protected root.
+  try {
+    hardenProgramDataAcl(p.root);
+    await writeProtectedSecretFile(
       p.secret,
-  };
-  delete env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_FILE;
-  delete env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_PLATFORM_NAME;
+      'control-plane-service-token',
+      serviceToken,
+      {
+        overwrite: true,
+        scope: 'local-machine',
+      },
+    );
 
-  await fs.writeFile(
-    p.launcher,
-    buildHubBootLauncher({
-      env,
-      executable: rt.executable,
-      args: rt.args,
-      pidFile: p.pid,
-    }),
-    'utf8',
-  );
+    const env: NodeJS.ProcessEnv = {
+      ...sourceEnv,
+      // Never carry the original user's writable state path into SYSTEM.
+      NEXOWIRE_STATE_DIR:protectedStateRoot,
+      NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_DPAPI_FILE:
+        p.secret,
+    };
+    delete env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_FILE;
+    delete env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_PLATFORM_NAME;
 
-  hardenProgramDataAcl(p.root);
+    await fs.writeFile(
+      p.launcher,
+      buildHubBootLauncher({
+        env,
+        executable: rt.executable,
+        args: rt.args,
+        pidFile: p.pid,
+      }),
+      'utf8',
+    );
+
+    hardenProgramDataAcl(p.root);
+    verifyHubBootSharedAncestorTrust();
+  } catch (stageError) {
+    try {
+      verifyHubBootSharedAncestorTrust();
+      verifyWindowsPrivateAcl(path.win32.dirname(p.root));
+      await assertHubBootRootSafeToRemove(p.root);
+      verifyWindowsPrivateAcl(p.root);
+      await fs.rm(p.root,{recursive:true,force:true});
+    } catch (cleanupError) {
+      // Preserve files when their ownership is uncertain; never delete
+      // another install's directory just to hide the original error.
+      throw new AggregateError([stageError,cleanupError],'HUB_BOOT_STAGE_CLEANUP_FAILED');
+    }
+    throw stageError;
+  }
 
   const envForTask = taskEnv(options);
   // An exclusive ephemeral task marker prevents a failed install from
   // unregistering another process's same-name task during rollback.
-  const installMarker='Nexowire pre-logon Hub install '+randomUUID();
   let switched = false;
   try {
     // The PowerShell transaction can modify the user task before a later
@@ -758,6 +881,8 @@ export async function installHubBootLifecycle(
         '$boot=$env:NEXOWIRE_HUB_BOOT_TASK_NAME',
         '$user=$env:NEXOWIRE_HUB_TASK_NAME',
         '$marker='+psLiteral(installMarker),
+        '$expectedLegacyState='+psLiteral(taskPreflight.legacyState),
+        '$port='+String(port),
         '$launcher=$env:NEXOWIRE_HUB_BOOT_LAUNCHER',
         '$argument=\'-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "\' + $launcher.Replace(\'"\',\'""\') + \'"\'',
         "$action=New-ScheduledTaskAction -Execute 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe' -Argument $argument",
@@ -765,9 +890,13 @@ export async function installHubBootLifecycle(
         "$principal=New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest",
         '$settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -MultipleInstances IgnoreNew',
         "$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue",
+        hubBootTaskVisibilityProbe,
         "$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue",
         hubBootRegisteredTaskIdentityGuard,
+        hubBootInstallTaskAbsenceGuard,
         "if($null -ne $bootTask){throw 'HUB_BOOT_EXISTING_TASK_INSTALL_DENIED'}",
+        "$actualLegacyState=if($userTask){[string]$userTask.State}else{'NotInstalled'}",
+        "if($actualLegacyState -cne $expectedLegacyState){throw 'HUB_USER_TASK_STATE_RACE'}",
         // No -Force: a concurrent registration must fail rather than replace.
         'Register-ScheduledTask -TaskName $boot -TaskPath \\ -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description $marker|Out-Null',
         '$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
@@ -775,7 +904,14 @@ export async function installHubBootLifecycle(
         '  Stop-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
         '  Disable-ScheduledTask -TaskName $user -TaskPath \\ | Out-Null',
         '}',
-        'Start-Sleep -Milliseconds 500',
+        // An orphan Node listener must never race the SYSTEM Hub handoff.
+        '$deadline=(Get-Date).AddSeconds(15)',
+        'do {',
+        '  $listeners=@(Get-NetTCPConnection -State Listen -ErrorAction Stop | Where-Object { $_.LocalPort -eq $port })',
+        '  if($listeners.Count -eq 0){break}',
+        '  Start-Sleep -Milliseconds 250',
+        '} while((Get-Date) -lt $deadline)',
+        "if($listeners.Count -gt 0){throw 'HUB_LEGACY_PORT_STILL_OWNED'}",
         'Start-ScheduledTask -TaskName $boot -TaskPath \\',
         '[pscustomobject]@{ok=$true}|ConvertTo-Json -Compress',
       ].join('\n'),
@@ -786,6 +922,7 @@ export async function installHubBootLifecycle(
       options,
       sourceSecretFile,
       port,
+      taskPreflight.legacyState,
     );
     hardenProgramDataAcl(p.root);
     return await hubBootLifecycleStatus(options);
@@ -799,16 +936,19 @@ export async function installHubBootLifecycle(
             '$boot=$env:NEXOWIRE_HUB_BOOT_TASK_NAME',
             '$user=$env:NEXOWIRE_HUB_TASK_NAME',
             '$marker='+psLiteral(installMarker),
+            '$expectedLegacyState='+psLiteral(taskPreflight.legacyState),
             "$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue",
+            hubBootTaskVisibilityProbe,
             "$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue",
             hubBootRegisteredTaskIdentityGuard,
+            hubBootInstallTaskAbsenceGuard,
             hubBootRollbackTaskOwnershipGuard,
             'if($bootTask){',
             '  Stop-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue',
             '  Unregister-ScheduledTask -TaskName $boot -TaskPath \\ -Confirm:$false',
             '  if($userTask){',
-            '    Enable-ScheduledTask -TaskName $user -TaskPath \\ | Out-Null',
-            '    Start-ScheduledTask -TaskName $user -TaskPath \\',
+            "    if($expectedLegacyState -ne 'Disabled' -and $expectedLegacyState -ne 'NotInstalled'){Enable-ScheduledTask -TaskName $user -TaskPath \\ | Out-Null}",
+            "    if($expectedLegacyState -eq 'Running'){Start-ScheduledTask -TaskName $user -TaskPath \\}",
             '  }',
             '}',
             '[pscustomobject]@{ok=$true}|ConvertTo-Json -Compress',
@@ -823,6 +963,7 @@ export async function installHubBootLifecycle(
     // preserve evidence instead of destroying a potentially live source.
     if(taskRollbackFailure===null){
       try {
+        verifyHubBootSharedAncestorTrust();
         verifyWindowsPrivateAcl(path.win32.dirname(p.root));
         await assertHubBootRootSafeToRemove(p.root);
         verifyWindowsPrivateAcl(p.root);
@@ -851,8 +992,17 @@ export async function uninstallHubBootLifecycle(
   // The managed root can be replaced through a writable/junction parent.
   // Fail closed before any SYSTEM task removal or user Hub restoration.
   const parent=path.win32.dirname(p.root);
+  assertProtectedHubBootRoot(p.root);
+  verifyHubBootSharedAncestorTrust();
   verifyWindowsPrivateAcl(parent);
   await assertHubBootRootSafeToRemove(p.root);
+  verifyWindowsPrivateAcl(p.root);
+  // Preserve the pre-install user task state. Uninstall must not start a Hub
+  // that was deliberately stopped or disabled before the SYSTEM migration.
+  const installedManifest = z.object({
+    userTaskPreviousState: z.enum(['Running','Ready','Disabled','NotInstalled']),
+    port: z.number().int().min(1).max(65535),
+  }).parse(JSON.parse(await fs.readFile(p.manifest,'utf8')));
   const result = await runPowerShellJson<{
     removed: boolean;
     userHubRestored: boolean;
@@ -861,28 +1011,51 @@ export async function uninstallHubBootLifecycle(
       "$ErrorActionPreference='Stop'",
       '$boot=$env:NEXOWIRE_HUB_BOOT_TASK_NAME',
       '$user=$env:NEXOWIRE_HUB_TASK_NAME',
+      '$expectedLegacyState='+psLiteral(installedManifest.userTaskPreviousState),
+      '$port='+String(installedManifest.port),
       "$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue",
+      hubBootTaskVisibilityProbe,
       "$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue",
       hubBootRegisteredTaskIdentityGuard,
+      hubBootInstallTaskAbsenceGuard,
       '$removed=$false',
       'if($bootTask){',
       '  Stop-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue',
+      '  $deadline=(Get-Date).AddSeconds(15)',
+      '  do {',
+      '    $listeners=@(Get-NetTCPConnection -State Listen -ErrorAction Stop | Where-Object { $_.LocalPort -eq $port })',
+      '    if($listeners.Count -eq 0){break}',
+      '    Start-Sleep -Milliseconds 250',
+      '  } while((Get-Date) -lt $deadline)',
+      "  if($listeners.Count -gt 0){throw 'HUB_BOOT_PORT_STILL_OWNED'}",
       '  Unregister-ScheduledTask -TaskName $boot -TaskPath \\ -Confirm:$false',
       '  $removed=$true',
       '}',
       '$restored=$false',
       '$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
-      'if($userTask){',
+      "if($userTask -and $expectedLegacyState -ne 'Disabled' -and $expectedLegacyState -ne 'NotInstalled'){",
       '  Enable-ScheduledTask -TaskName $user -TaskPath \\ | Out-Null',
-      '  Start-ScheduledTask -TaskName $user -TaskPath \\',
+      "  if($expectedLegacyState -eq 'Running'){Start-ScheduledTask -TaskName $user -TaskPath \\}",
       '  $restored=$true',
       '}',
       '[pscustomobject]@{removed=$removed;userHubRestored=$restored}|ConvertTo-Json -Compress',
     ].join('\n'),
     taskEnv(options),
   );
+  // A task recreated during uninstall may still depend on this launcher.
+  // Independently prove absence again before deleting the protected root.
+  await runPowerShellJson<{ok:true}>([
+    "$ErrorActionPreference='Stop'",
+    '$boot=$env:NEXOWIRE_HUB_BOOT_TASK_NAME',
+    "$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue",
+    hubBootTaskVisibilityProbe,
+    "if($null -ne $bootTask){throw 'HUB_BOOT_TASK_REAPPEARED_BEFORE_REMOVAL'}",
+    hubBootInstallTaskAbsenceGuard,
+    '[pscustomobject]@{ok=$true}|ConvertTo-Json -Compress',
+  ].join('\n'),taskEnv(options));
   // Another process may have changed the parent or managed root while
   // Task Scheduler was operating. Recheck before recursive deletion.
+  verifyHubBootSharedAncestorTrust();
   verifyWindowsPrivateAcl(parent);
   await assertHubBootRootSafeToRemove(p.root);
   await fs.rm(p.root, {
@@ -905,12 +1078,14 @@ export interface WindowsRebootAgentTaskEvidence {
 
 export interface WindowsUnattendedRebootEvidence {
   systemHubInstalled: boolean;
+  systemHubTaskState?: string;
   agent: WindowsRebootAgentTaskEvidence;
   autoAdminLogon: boolean;
 }
 
 export type WindowsRebootBlocker =
   | 'SYSTEM_HUB_BOOT_NOT_INSTALLED'
+  | 'SYSTEM_HUB_BOOT_VISIBILITY_UNVERIFIED'
   | 'NATIVE_AGENT_NOT_INSTALLED'
   | 'NATIVE_AGENT_LOGON_ONLY'
   | 'NATIVE_AGENT_PRELOGIN_IDENTITY_UNVERIFIED'
@@ -929,8 +1104,11 @@ export function assessWindowsUnattendedRebootReadiness(
   blockers: WindowsRebootBlocker[];
 } {
   const blockers:WindowsRebootBlocker[]=[];
-  if(!evidence.systemHubInstalled)
-    blockers.push('SYSTEM_HUB_BOOT_NOT_INSTALLED');
+  if(!evidence.systemHubInstalled){
+    blockers.push(evidence.systemHubTaskState && evidence.systemHubTaskState!=='not-installed'
+      ? 'SYSTEM_HUB_BOOT_VISIBILITY_UNVERIFIED'
+      : 'SYSTEM_HUB_BOOT_NOT_INSTALLED');
+  }
   if(!evidence.agent.installed) {
     blockers.push('NATIVE_AGENT_NOT_INSTALLED');
   } else if(evidence.agent.interactiveOnly || !evidence.agent.bootTrigger) {
@@ -977,6 +1155,7 @@ export async function inspectWindowsUnattendedRebootReadiness(
   ].join('\n'),taskEnv(options));
   return assessWindowsUnattendedRebootReadiness({
     systemHubInstalled:boot.installed,
+    systemHubTaskState:boot.state,
     agent:probe.agent,
     autoAdminLogon:probe.autoAdminLogon,
   });

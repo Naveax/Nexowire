@@ -79,6 +79,10 @@ jobs:
         if: runner.os == 'Windows'
         timeout-minutes: 15
         run: node --test --import tsx --test-concurrency=1 test/windows-dpapi-secret.test.ts test/protected-secret-files.test.ts test/hub-lifecycle.test.ts
+      - name: Verify protected SYSTEM Hub task presence and no-overwrite guards
+        if: runner.os == 'Windows'
+        timeout-minutes: 7
+        run: node --test --import tsx --test-concurrency=1 test/hub-boot-hidden-task-visibility.test.ts test/hub-boot-install-task-absence.test.ts test/hub-boot-status-legacy-user.test.ts test/windows-unattended-reboot-readiness.test.ts test/qa-ci-browser-live-timeout.test.ts
       - name: Build Windows one-click user bundle
         if: runner.os == 'Windows'
         shell: pwsh
@@ -131,7 +135,7 @@ jobs:
           $stable = Join-Path $env:RUNNER_TEMP 'nexowire-published-v1.0.7'
           Copy-Item -LiteralPath installers/Nexowire-Setup.cmd -Destination $stable -Force
           Copy-Item -LiteralPath installers/SHA256SUMS-Windows -Destination $stable -Force
-          node --import tsx scripts/smoke-windows-user-setup.ts --bundle-dir $stable --download-source github
+          node --import tsx scripts/smoke-windows-user-setup.ts --bundle-dir $stable --download-source github --public-source-sha "${{ github.event.pull_request.head.sha || github.sha }}"
           if ($LASTEXITCODE -ne 0) { throw 'Repository bootstrap Unicode clean-profile setup failed.' }
       - name: Upload Windows user bundle
         if: runner.os == 'Windows'

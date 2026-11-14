@@ -199,10 +199,13 @@ export class IdempotencyStore {
     });
   }
 
-  private claimExclusiveHubProcess(db: DatabaseSync): void {
+  private claimExclusiveHubProcess(db: DatabaseSync): boolean {
     const row = db.prepare(
       "SELECT value FROM idempotency_meta WHERE key='hub_writer'",
     ).get() as { value: string } | undefined;
+    // Initialization by another store instance in this *same* Hub process
+    // must not mark that process's still-running reservations as abandoned.
+    const recoveredPreviousWriter = row?.value !== JSON.stringify(HUB_WRITER);
     if (row) {
       let old: unknown;
       try { old = JSON.parse(row.value); } catch { /* deny corrupt owner */ }
@@ -250,6 +253,7 @@ export class IdempotencyStore {
       "INSERT INTO idempotency_meta (key, value) VALUES ('hub_writer', ?) " +
       'ON CONFLICT(key) DO UPDATE SET value=excluded.value',
     ).run(JSON.stringify(HUB_WRITER));
+    return recoveredPreviousWriter;
   }
 
   async initialize(): Promise<void> {
@@ -321,7 +325,7 @@ export class IdempotencyStore {
             );
           }
 
-          this.claimExclusiveHubProcess(db);
+          const recoveredPreviousWriter = this.claimExclusiveHubProcess(db);
 
           if (!schema) {
             const existingCount = db.prepare(
@@ -377,13 +381,16 @@ export class IdempotencyStore {
             }
           }
 
-          // Crash recovery cannot attest external effects. Conservatively
-          // fence all abandoned reservations as UNKNOWN, never FAILED.
-          db.prepare(`
-            UPDATE idempotency_records
-            SET status='unknown', updated_at=?
-            WHERE status='in_progress'
-          `).run(new Date().toISOString());
+          // Only a new Hub incarnation can adopt abandoned reservations.
+          // Reinitializing another store in the *same* running Hub must not
+          // turn its active work into terminal UNKNOWN tombstones.
+          if (recoveredPreviousWriter) {
+            db.prepare(`
+              UPDATE idempotency_records
+              SET status='unknown', updated_at=?
+              WHERE status='in_progress'
+            `).run(new Date().toISOString());
+          }
 
           db.exec('COMMIT');
         } catch (error) {

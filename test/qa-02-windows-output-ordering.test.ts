@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { ProcessManager } from '../src/agent/process-manager.js';
 import { PathPolicy } from '../src/agent/path-policy.js';
+import { useWindowsJobForProcess } from '../src/agent/process-launch-mode.js';
 
 interface ObservedEvent {
   seq: number;
@@ -98,8 +99,17 @@ test('QA02 output ordering control: split valid stream events precede exited', (
   assert.equal(proof.cursor,2);
 });
 
-test('QA02 Windows physical Job fast-exit read cannot outrun both pipes', {
-  skip: process.platform !== 'win32',timeout:45_000,
+// A personal local-owner profile intentionally launches standard-user shells,
+// not the optional native Job guardian. Preserve the physical-Job regression
+// in Job mode and independently attest output ordering in local-owner mode.
+const fastExitCases=[
+  {name:'QA02 Windows physical Job fast-exit read cannot outrun both pipes',job:true},
+  {name:'QA02 Windows local-owner fast-exit read preserves both pipes',job:false},
+] as const;
+for (const scenario of fastExitCases) {
+test(scenario.name, {
+  skip: process.platform !== 'win32' || useWindowsJobForProcess() !== scenario.job,
+  timeout:45_000,
 },async () => {
   const manager = new ProcessManager();
   const policy = new PathPolicy(['*']);
@@ -111,7 +121,12 @@ test('QA02 Windows physical Job fast-exit read cannot outrun both pipes', {
     const session=await manager.start({
       shell:'cmd', command:'echo '+stdout+' & echo '+stderr+' 1>&2',
     },policy);
-    assert.equal(session.treeOwnership,'windows_job');
+    if(scenario.job){
+      assert.equal(session.treeOwnership,'windows_job');
+    }else{
+      assert.equal(session.treeOwnership,undefined,
+        'local-owner standard-user shells must not claim Windows Job ownership');
+    }
     const snapshots:Snapshot[]=[];
     let cursor=0;
     try {
@@ -144,3 +159,4 @@ test('QA02 Windows physical Job fast-exit read cannot outrun both pipes', {
     }
   }
 });
+}
