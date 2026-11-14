@@ -1,0 +1,35 @@
+name: Portable Root Test Smoke
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: portable-root-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pure-root-contracts:
+    name: pure root contracts (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - name: Install exact lockfile dependencies
+        run: npm ci
+      - name: Assert root test allowlist and bounded Linux-only workflow
+        run: node --test test/ci/portable-root-smoke-contract.test.mjs
+      - name: Run explicitly allowlisted pure root-level tests
+        timeout-minutes: 7
+        run: node --test --import tsx --test-concurrency=1 test/version.test.ts test/release-tag.test.ts test/ai07-physical-cutover-gate.test.ts
