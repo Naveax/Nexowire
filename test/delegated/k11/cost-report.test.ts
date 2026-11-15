@@ -92,9 +92,9 @@ test('T-064: CSV headings are stable, RFC-style quoted, and formula-safe',()=>{
   assert.ok(csv.includes('"OFFLINE_SIMULATION_NOT_PROVIDER_BILL"'));
   // CSV injection is not limited to a bare = prefix. Check the other
   // spreadsheet formula starters and whitespace-prefixed formulas too.
-  for (const label of ['\\t=SUM(1,2)', '+SUM(1,2)', '-SUM(1,2)', '@SUM(1,2)']) {
-    const firstDataRow=formatS5CostCsv([{label,activeUsers:2,report}]).split('\\n')[1];
-    assert.ok(firstDataRow?.startsWith("\\\"'"+label+"\\\""), 'Unsafe CSV formula prefix');
+  for (const label of ['\t=SUM(1,2)', '+SUM(1,2)', '-SUM(1,2)', '@SUM(1,2)']) {
+    const firstDataRow=formatS5CostCsv([{label,activeUsers:2,report}]).split('\n')[1];
+    assert.ok(firstDataRow?.startsWith("\"'"+label+"\""), 'Unsafe CSV formula prefix');
   }
   assert.equal(formatS5CostCsv([{label:'safe',activeUsers:2,report}]),
     formatS5CostCsv([{label:'safe',activeUsers:2,report}]));
