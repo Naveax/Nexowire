@@ -26,7 +26,7 @@ function hasValidPngChunkStructure(png) {
         crc32(png.subarray(offset + 4, end - 4)) !== png.readUInt32BE(end - 4)) {
       return false;
     }
-    if (type === 'IDAT') hasIdat = true;
+    if (type === 'IDAT' && length > 0) hasIdat = true;
     if (type === 'IEND') return length === 0 && hasIdat && end === png.length;
     offset = end;
     chunkIndex++;
