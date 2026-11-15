@@ -28,6 +28,8 @@ export const APPROVED_ROOT_TEST_FILES=Object.freeze([
   'test/guardian-signed-receipt.test.ts',
   'test/private-display-plan.test.ts',
   'test/owner-public-wss-p256-migration-proposal.test.ts',
+  'test/agent-request-cache.test.ts',
+  'test/owner-public-wss-stream-flow-staging.test.ts',
 ]);
 const MAX_TEST_MILLIS=7*60*1000;
 const MAX_LOG_BYTES=2*1024*1024;

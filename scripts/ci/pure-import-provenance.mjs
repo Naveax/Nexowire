@@ -1,5 +1,5 @@
 /**
- * Read-only source and import provenance gate for thirteen independently reviewed,
+ * Read-only source and import provenance gate for fifteen independently reviewed,
  * pure-contract root suites. Does NOT approve any other tests.
  */
 import {execFileSync} from 'node:child_process';
@@ -25,6 +25,8 @@ const EXPECTED=Object.freeze({
   'test/guardian-signed-receipt.test.ts':'9eddfb2267a6a7defe2a8e69c43cd6c96ebb17d8',
   'test/private-display-plan.test.ts':'84e416cfc6f8ca183ba6400a362e80ef2325ea6d',
   'test/owner-public-wss-p256-migration-proposal.test.ts':'e3b95ef518676022766d1edefda55ef729835717',
+  'test/agent-request-cache.test.ts':'745865fb0a79aa4b271d703f4b924bb601cff9a5',
+  'test/owner-public-wss-stream-flow-staging.test.ts':'a6c5d85e137e30237de8e3e3a72362f37b388751',
   'src/protocol/agent.ts':'6bd55d19f898021fd1e70e78045ddba656aaf4e5',
   'src/protocol/capabilities.ts':'5e92ce4db343bb4c1fda33d5da0603dfd35f4e84',
   'src/product/plans.ts':'9ac634f06f475d4c4ae9c12032ebda68e2b2ee04',
@@ -42,6 +44,8 @@ const EXPECTED=Object.freeze({
   'src/agent/windows-private-display-plan.ts':'5cd669c9077a453b36e374e7ccab716d5314a012',
   'src/mcp/tool-capabilities.ts':'0e420f2d69e65bd38ae044dbb3d1b9980b2e1523',
   'src/product/owner-public-wss-p256-migration-proposal.ts':'5f66b24ba73ef64051c791b5d95523184f321ffe',
+  'src/agent/request-cache.ts':'dc5c3da93f29a0860415235d3bad648b976c765b',
+  'src/product/owner-public-wss-stream-flow-proposal.ts':'0b0784299b8f17904695263b130bfb13eacb66c1',
 });
 export const PURE_REVIEWED_FILES=EXPECTED;
 export const PURE_ENTRYPOINTS=Object.freeze([
@@ -58,6 +62,8 @@ export const PURE_ENTRYPOINTS=Object.freeze([
   'test/guardian-signed-receipt.test.ts',
   'test/private-display-plan.test.ts',
   'test/owner-public-wss-p256-migration-proposal.test.ts',
+  'test/agent-request-cache.test.ts',
+  'test/owner-public-wss-stream-flow-staging.test.ts',
 ]);
 const external=new Set(['node:test','node:assert/strict','node:crypto','zod']);
 const SHA=/^[a-f0-9]{40}$/;
