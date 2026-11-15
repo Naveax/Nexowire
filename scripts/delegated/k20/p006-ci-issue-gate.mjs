@@ -30,7 +30,25 @@ export function auditRequiredCiPaths({ workflow, paths }) {
       paths.some(x => typeof x !== 'string' || !/^test\/[\w./-]+\.test\.(?:mjs|ts)$/.test(x))) {
     throw new TypeError('Owner workflow and explicit delegated test paths required');
   }
-  const commandText = workflow.split('\n').filter(line => !/^\s*#/.test(line)).join('\n');
+  // Fail closed: merely echoing or assigning a test path in YAML is not a CI
+  // invocation. Only collect paths belonging to an executable Node test command
+  // (including shell continuation lines), never comments or display-only text.
+  const testCommands = [];
+  let pending = null;
+  for (const raw of workflow.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    if (pending !== null) {
+      pending += ' ' + line.replace(/\\\s*$/, '').trim();
+      if (!/\\\s*$/.test(line)) { testCommands.push(pending); pending = null; }
+      continue;
+    }
+    if (!/^node\s+--test(?:\s|$)/.test(line)) continue;
+    const command = line.replace(/\\\s*$/, '').trim();
+    if (/\\\s*$/.test(line)) pending = command;
+    else testCommands.push(command);
+  }
+  const commandText = testCommands.map(s => s.replace(/\s+#.*$/, '')).join('\n');
   const missing = paths.filter(path => !commandText.includes(path));
   return { total: paths.length, staticallyReferenced: paths.length - missing.length,
     missing, verdict: missing.length ? 'OWNER_REQUIRED_CI_DISCOVERY_GAP' : 'STATIC_PATHS_PRESENT_NOT_EXECUTION',
