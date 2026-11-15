@@ -1,5 +1,5 @@
 /**
- * Read-only source and import provenance gate for eight independently reviewed,
+ * Read-only source and import provenance gate for eleven independently reviewed,
  * pure-contract root suites. Does NOT approve any other tests.
  */
 import {execFileSync} from 'node:child_process';
@@ -20,6 +20,9 @@ const EXPECTED=Object.freeze({
   'test/product-pairing.test.ts':'1d2f8738bb4eebeac1094231644e496280f15492',
   'test/daily-quota-proposal.test.ts':'2f4abf418858d3bfd507d9e6f7593c18a767f455',
   'test/product-usage-ledger.test.ts':'970a9502cadd2e1df37839e866646fba471db8cc',
+  'test/progress-supervisor.test.ts':'a6f62bbc58657585d516e36f7caf26fa36acce7b',
+  'test/guardian-key-enrollment-proof.test.ts':'f9d52ebbcbcd7d5667069c1f3fd27e9a35d09588',
+  'test/guardian-signed-receipt.test.ts':'9eddfb2267a6a7defe2a8e69c43cd6c96ebb17d8',
   'src/protocol/agent.ts':'6bd55d19f898021fd1e70e78045ddba656aaf4e5',
   'src/protocol/capabilities.ts':'5e92ce4db343bb4c1fda33d5da0603dfd35f4e84',
   'src/product/plans.ts':'9ac634f06f475d4c4ae9c12032ebda68e2b2ee04',
@@ -31,6 +34,9 @@ const EXPECTED=Object.freeze({
   'src/product/pairing.ts':'7528c7902f5b63fce98187721325098a88735c5d',
   'src/product/daily-quota-proposal.ts':'779be3e17cdfe7c02edc8818b6acf257c1677084',
   'src/product/usage-ledger.ts':'0e1fd3e8c966ecc4743e3b949964d4e703f9e68c',
+  'src/agent/progress-supervisor.ts':'c407c72667df20bb844ef0eb7e9ca736d257a69c',
+  'src/protocol/guardian-key-enrollment-proof.ts':'7e64ff644b03cb154e75ab8658ea95d2b9a4f533',
+  'src/protocol/guardian-signed-receipt.ts':'304b2da32957d18797afa1a900cbd1e25b93e9b5',
 });
 export const PURE_REVIEWED_FILES=EXPECTED;
 export const PURE_ENTRYPOINTS=Object.freeze([
@@ -42,6 +48,9 @@ export const PURE_ENTRYPOINTS=Object.freeze([
   'test/product-pairing.test.ts',
   'test/daily-quota-proposal.test.ts',
   'test/product-usage-ledger.test.ts',
+  'test/progress-supervisor.test.ts',
+  'test/guardian-key-enrollment-proof.test.ts',
+  'test/guardian-signed-receipt.test.ts',
 ]);
 const external=new Set(['node:test','node:assert/strict','node:crypto','zod']);
 const SHA=/^[a-f0-9]{40}$/;
