@@ -20,9 +20,11 @@ const approved=Object.freeze([
   'test/product-usage-policy.test.ts',
   'test/product-transport-policy.test.ts',
   'test/task-os-sandbox-policy-p07.test.ts',
+  'test/bridge-guardian-policy.test.ts',
+  'test/product-pairing.test.ts',
 ]);
 
-test('portable root smoke invokes only nine reviewed isolated policy and source contracts',()=>{
+test('portable root smoke invokes only eleven reviewed isolated policy and source contracts',()=>{
   const target=workflow.match(/^      - name: Execute allowlisted root tests and reconcile source-bound coverage\n        timeout-minutes: 7\n        env:\n          NEXOWIRE_EXPECTED_COMMIT_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}\n        run: (.+)$/m);
   assert.ok(target,'missing separate timeout-bounded pure-contract step');
   const tokens=target[1].trim().split(/\s+/);

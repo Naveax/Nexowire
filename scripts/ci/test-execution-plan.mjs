@@ -21,6 +21,8 @@ const REVIEWED_GIT_BLOBS = Object.freeze({
   'test/product-usage-policy.test.ts':'708d91d1f79c4a6f1be8d3c2b342fc6e01a83a37',
   'test/product-transport-policy.test.ts':'47fa693c290a7a57408bfa7d477cd1a982b26f14',
   'test/task-os-sandbox-policy-p07.test.ts':'387ce6e5351678d5c19afb5f293d2083d8d54829',
+  'test/bridge-guardian-policy.test.ts':'e45398adeaa4b3840889027e532013e4f69aa23a',
+  'test/product-pairing.test.ts':'1d2f8738bb4eebeac1094231644e496280f15492',
 });
 
 function fail(reason) { throw new Error('TEST_EXECUTION_PLAN_' + reason); }
