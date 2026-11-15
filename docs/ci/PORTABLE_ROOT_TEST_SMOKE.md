@@ -9,7 +9,7 @@ This is a **bounded first execution lane**, not a blanket "635 tests PASS":
 
 - New hosted `Portable Root Test Smoke` workflow runs only on disposable
   `ubuntu-latest` runners, independently with Node 22 and 24.
-- Exactly eleven reviewed root-level files are invoked explicitly:
+- Exactly thirteen reviewed root-level files are invoked explicitly:
   `test/version.test.ts`, `test/release-tag.test.ts`,
   `test/ai07-physical-cutover-gate.test.ts`,
   `test/capability-policy.test.ts`,
@@ -19,7 +19,9 @@ This is a **bounded first execution lane**, not a blanket "635 tests PASS":
   `test/product-transport-policy.test.ts`,
   `test/task-os-sandbox-policy-p07.test.ts`,
   `test/bridge-guardian-policy.test.ts`, and
-  `test/product-pairing.test.ts`.
+  `test/product-pairing.test.ts`,
+  `test/daily-quota-proposal.test.ts`, and
+  `test/product-usage-ledger.test.ts`.
   The two policy-store suites create and remove **only isolated temporary
   fixture directories** on the disposable GitHub runner. No task, network,
   Broker, CORE, registry or production state is touched.
@@ -35,7 +37,7 @@ This is a **bounded first execution lane**, not a blanket "635 tests PASS":
   Git's checked-out `HEAD` does not match the expected SHA supplied by GitHub.
   This prevents a passing merge-ref receipt from being mislabeled exact PR HEAD.
   The receipt prints to CI logs; it does not write to protected production paths.
-- This is a **root-level test execution proof only for the exact eleven files**.
+- This is a **root-level test execution proof only for the exact thirteen files**.
   It does not certify the remaining tracked files, any production Windows
   privilege, or physical SYSTEM cutover.
 - Never enlarge this allowlist without reviewing imported modules, side effects,
@@ -72,7 +74,7 @@ node --test test/ci/portable-root-coverage-gate.test.mjs
 node scripts/ci/portable-root-coverage-gate.mjs --json
 ```
 
-Only the eleven reviewed portable root files are executed. There is no
+Only the thirteen reviewed portable root files are executed. There is no
 automatic promotion of unreviewed files, no broad npm-test invocation, no
 privileged Windows action, and no assertion that physical SYSTEM cutover
 or all tracked files have passed. A coverage count is not authorization.
@@ -83,13 +85,13 @@ pure product plan/usage policy functions, respectively; they do not invoke
 filesystem, process, network, Windows tasks, privileged Broker or production
 state. Their exact committed Git blobs are separately pinned by the planner.
 
-## Exact Git source provenance for six pure contract suites
+## Exact Git source provenance for eight pure contract suites
 
 Before the hosted runner executes the portable-root receipt, it runs
 `pure-import-provenance.mjs --json` and its negative tests. This gate checks
-six independently reviewed test files: agent-protocol, product-usage-policy,
+eight independently reviewed test files: agent-protocol, product-usage-policy,
 product-transport-policy, task-os-sandbox-policy-p07, bridge-guardian-policy,
-and product-pairing; plus all nine source modules reachable by
+product-pairing, daily-quota-proposal, and product-usage-ledger; plus all eleven source modules reachable by
 their static local imports. It ties each committed regular file and each
 working copy to an explicitly reviewed Git blob SHA and validates the
 direct and transitive **local static** import graph with the TypeScript
@@ -134,3 +136,17 @@ local source modules are pinned to exact Git blobs. The Node built-in crypto
 module is the only newly permitted external runtime import.
 
 Neither test grants an OS effect admission or physical Windows acceptance.
+
+### Daily quota simulation and pure usage ledger
+
+Two pure root suites were reviewed: daily-quota-proposal and
+product-usage-ledger. The proposed quota simulator uses deterministic
+in-memory account/invocation counters; it is not a live billing or
+entitlement authority. The usage ledger verifies free, prepaid and
+paid charging decisions on isolated in-memory state, without a network
+or production account. Both tests and their two new pure source modules
+are pinned by exact Git blobs and transitive local import closure.
+
+All 622 other tracked TypeScript tests will remain unreviewed if the exact
+13-file lane passes. Static review and source CI cannot authorize protected
+Windows tasks, CORE effects, DPAPI migration, SQLite cutover or reboot.
