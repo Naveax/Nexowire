@@ -153,3 +153,52 @@ Physical Windows/macOS/real installed-Agent validation **NOT_RUN**; no main
 merge or issue closure. PR [#1030](https://github.com/Naveax/Nexowire/pull/1030)
 and [#1113](https://github.com/Naveax/Nexowire/pull/1113) contain distinct
 metadata/catalogue work, not a duplicated directory-swap fixture.
+
+## P009 Q-237–Q-242 — exact-head CI and owner handoff (2026-11-15)
+
+**Exact source:** PR [#1150](https://github.com/Naveax/Nexowire/pull/1150)
+head `339f05dadf3f0858c6111f9558a85548d2ba09c0`, upstream `main`
+`52d452f717d891eeaf4c2b9aff3c6e1ea68369b0`;
+`src/skills/registry.ts` main blob `77d6a74bf715093b54f467cb4367d66c692f07a2`.
+PR has **only** this report and `p006-skill-source-evidence.test.ts`.
+No shared changed paths with current #1030 (six paths), #1113 (seven paths),
+or owner #1096/#1068/#1160. Existing source corrections remain unmerged.
+
+**Real CI result:** exact-head
+[run 43285651212](https://github.com/Naveax/Nexowire/actions/runs/43285651212)
+completed **SUCCESS, 7/7 jobs**, including
+`test (22)` job `131418244837` and `test (24)` job `131418244929`.
+Both full job logs were checked for
+`p006-skill-source-evidence`, `test/delegated/k17`, and
+`EXTERNAL_DIRECTORY_MARKER`: **zero occurrences**.
+Current main `package.json` runs `node --test --import tsx test/**/*.test.ts`;
+the required main `.github/workflows/ci.yml` does not explicitly select
+`test/delegated/k17/p006-skill-source-evidence.test.ts`.
+Therefore the K17 **specific assertions are HOSTED_NOT_PROVEN** despite the
+successful generic workflow. **No CI rerun requested.**
+
+**Owner-facing source gap:** `SkillRegistry.load(name)` currently calls
+`fs.readFile(path.join(skillsDir, name, 'SKILL.md'), 'utf8')` after
+a lexical skill-name check. It does not bind the final path/read handle to
+the trusted catalogue. `validate()` enumerates direct directory entries
+and invokes `load()`, but does not authorize a later read safely:
+external symlink directories, external `SKILL.md` links, and file/directory
+entry swaps have separate harmless fixtures. A **passing reproduction**
+only confirms a problem, **not its remediation**.
+
+**Owner fix/acceptance request (not implemented by K17):**
+1. Prevent external reads through linked directories and linked manifest files;
+   verify trusted-root boundaries using platform-specific canonical/open-handle
+   semantics, including the path that is actually read.
+2. Change K17 `KNOWN OPEN GAP` expectations into **negative rejection**
+   assertions after the owner patch; run the explicit focused test on the
+   **same patched HEAD** on Node 22 and 24, and provide its TAP/log proof.
+3. Verify actual Windows junction/reparse/UNC and macOS/native-installed
+   behavior separately. A validate-then-read fixture **does not prove**
+   within-one-load race exploitation or an atomic fix.
+
+**Evidence ledger:** New P008 directory-swap fixture local execution on
+`339f05d...`: **NOT_RUN**. Hosted specific K17 tests: **NOT_PROVEN**.
+Generic CI: **7/7 SUCCESS**. Physical Windows/macOS/installed Agent:
+**NOT_RUN**. Security defect: **OPEN**. No PR merge, issue close,
+source-policy relaxation or new PR.
