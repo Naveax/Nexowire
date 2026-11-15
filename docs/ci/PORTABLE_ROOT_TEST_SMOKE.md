@@ -78,3 +78,33 @@ product-usage-policy. They import static Zod/protocol/capability schemas and
 pure product plan/usage policy functions, respectively; they do not invoke
 filesystem, process, network, Windows tasks, privileged Broker or production
 state. Their exact committed Git blobs are separately pinned by the planner.
+
+## Exact Git source provenance for two pure contract suites
+
+Before the hosted runner executes the portable-root receipt, it runs
+`pure-import-provenance.mjs --json` and its negative tests. This gate checks
+two independently reviewed test files, `agent-protocol.test.ts` and
+`product-usage-policy.test.ts`, plus all four source modules reachable by
+their static local imports. It ties each committed regular file and each
+working copy to an explicitly reviewed Git blob SHA and validates the
+direct and transitive **local static** import graph with the TypeScript
+parser. New local imports, unexpected external package names, changes
+to reviewed source blobs, and runtime `require`, `eval`, or dynamic
+`import()` in reviewed local files fail closed.
+
+Direct external imports are constrained to `node:test`,
+`node:assert/strict`, and `zod`; the packages' own implementations and
+possible runtime-generated code are **not** independently attested by
+this gate. `npm ci` supplies the lockfile-installed dependencies.
+
+Example of a read-only local check:
+
+```powershell
+$env:NEXOWIRE_EXPECTED_COMMIT_SHA = (git rev-parse HEAD).Trim()
+node --test test/ci/pure-import-provenance.test.mjs
+node scripts/ci/pure-import-provenance.mjs --json
+```
+
+Source re-review is required before updating a pinned hash. This step
+does not review the other five portable suites, grant CORE authority,
+approve SYSTEM runtime, or prove end-to-end production safety.
