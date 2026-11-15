@@ -169,3 +169,17 @@ test('truncated PNG, bad chunk CRC and trailing bytes cannot count as screenshot
     assert.equal(evaluate(dir, evidence).status, 'REVIEW_REQUIRED');
   });
 });
+
+test('PNG with only an empty IDAT chunk cannot request screenshot review', () => {
+  withFixture(({ dir, evidence }) => {
+    // CRC of the IDAT type with no data is correct; the image still has no zlib stream.
+    const emptyIdat = Buffer.from('000000004944415435af061e', 'hex');
+    const invalid = Buffer.concat([PNG.subarray(0, 33), emptyIdat, PNG.subarray(PNG.length - 12)]);
+    const screenshotFile = 'zero-idat.png';
+    writeFileSync(join(dir, screenshotFile), invalid);
+    assert.equal(evaluate(dir, evidence, {
+      screenshotFile,
+      screenshotSha256: createHash('sha256').update(invalid).digest('hex'),
+    }).status, 'FAIL');
+  });
+});
