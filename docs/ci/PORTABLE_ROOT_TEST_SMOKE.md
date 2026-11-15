@@ -9,11 +9,13 @@ This is a **bounded first execution lane**, not a blanket "635 tests PASS":
 
 - New hosted `Portable Root Test Smoke` workflow runs only on disposable
   `ubuntu-latest` runners, independently with Node 22 and 24.
-- Exactly five reviewed root-level files are invoked explicitly:
+- Exactly seven reviewed root-level files are invoked explicitly:
   `test/version.test.ts`, `test/release-tag.test.ts`,
   `test/ai07-physical-cutover-gate.test.ts`,
-  `test/capability-policy.test.ts`, and
-  `test/device-routing-policy-store.test.ts`.
+  `test/capability-policy.test.ts`,
+  `test/device-routing-policy-store.test.ts`,
+  `test/agent-protocol.test.ts`, and
+  `test/product-usage-policy.test.ts`.
   The two policy-store suites create and remove **only isolated temporary
   fixture directories** on the disposable GitHub runner. No task, network,
   Broker, CORE, registry or production state is touched.
@@ -29,7 +31,7 @@ This is a **bounded first execution lane**, not a blanket "635 tests PASS":
   Git's checked-out `HEAD` does not match the expected SHA supplied by GitHub.
   This prevents a passing merge-ref receipt from being mislabeled exact PR HEAD.
   The receipt prints to CI logs; it does not write to protected production paths.
-- This is a **root-level test execution proof only for the exact five files**.
+- This is a **root-level test execution proof only for the exact seven files**.
   It does not certify the remaining tracked files, any production Windows
   privilege, or physical SYSTEM cutover.
 - Never enlarge this allowlist without reviewing imported modules, side effects,
@@ -66,7 +68,13 @@ node --test test/ci/portable-root-coverage-gate.test.mjs
 node scripts/ci/portable-root-coverage-gate.mjs --json
 ```
 
-Only the five reviewed portable root files are executed. There is no
+Only the seven reviewed portable root files are executed. There is no
 automatic promotion of unreviewed files, no broad npm-test invocation, no
 privileged Windows action, and no assertion that physical SYSTEM cutover
 or all tracked files have passed. A coverage count is not authorization.
+
+Two additional pure suites were source-reviewed: agent-protocol and
+product-usage-policy. They import static Zod/protocol/capability schemas and
+pure product plan/usage policy functions, respectively; they do not invoke
+filesystem, process, network, Windows tasks, privileged Broker or production
+state. Their exact committed Git blobs are separately pinned by the planner.

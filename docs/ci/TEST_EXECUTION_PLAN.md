@@ -33,6 +33,6 @@ the per-file TAP receipt or coverage reconciliation introduced in #1212.
 
 Approved test paths additionally require exact pinned Git blob SHAs. Modifying an
 approved test invalidates its prior review until the blob is explicitly re-reviewed.
-The same map includes two hashes from the independently reviewed policy-store
-root-test proposal; they are not selected unless the canonical receipt allowlist
+The same map includes exact hashes for reviewed policy-store and pure-contract
+suites; each is selected only when the canonical receipt allowlist
 also includes the matching paths. No path-only automatic promotion is allowed.
