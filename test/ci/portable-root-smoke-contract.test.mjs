@@ -47,6 +47,9 @@ test('portable root test smoke cannot silently skip, widen OS, or lose CI lockfi
   assert.match(workflow,/^    timeout-minutes: 12$/m);
   assert.match(workflow,/^        node-version: \[22, 24\]$/m);
   assert.match(workflow,/^        run: npm ci$/m);
+  assert.match(workflow,/run: node --test test\/ci\/pure-import-provenance\.test\.mjs/);
+  assert.match(workflow,/run: node scripts\/ci\/pure-import-provenance\.mjs --json/);
+  assert.match(workflow,/NEXOWIRE_EXPECTED_COMMIT_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
   assert.match(workflow,/^        run: node --test test\/ci\/portable-root-smoke-contract\.test\.mjs$/m);
   assert.match(workflow,/^        run: node --test test\/ci\/portable-root-execution-receipt\.test\.mjs$/m);
   assert.match(workflow,/^        run: node --test test\/ci\/portable-root-coverage-gate\.test\.mjs test\/ci\/test-execution-coverage\.test\.mjs$/m);
