@@ -33,3 +33,11 @@ test('source-only timeline does not assert issue or device completion', () => {
   assert.match(reportIssueTransitions(), /ACCEPTANCE=NOT_VERIFIED/);
   assert.doesNotMatch(reportIssueTransitions(), /DEPLOYED|ISSUE_FIXED/);
 });
+
+test('impossible dates and noncanonical timestamps cannot enter issue close/reopen evidence', () => {
+  const row = source.modifiedSinceNov7[0];
+  for (const at of ['2026-02-31T12:14:44Z', '2026-11-08', '2026-11-08T15:14:44+03:00']) {
+    const events = [{ ...row.events[0], at }, row.events[1]];
+    assert.throws(() => reconcileOpenIssues({ ...source, modifiedSinceNov7: [{ ...row, events }, source.modifiedSinceNov7[1]] }), /Invalid state event/);
+  }
+});

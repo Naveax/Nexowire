@@ -22,6 +22,13 @@ export const source = Object.freeze({
   updatedQueryCount: 2,
 });
 
+function isCanonicalUtcTimestamp(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(value))
+    return false;
+  const parsed = Date.parse(value);
+  return !Number.isNaN(parsed) && new Date(parsed).toISOString() === value.replace(/Z$/, '.000Z');
+}
+
 export function reconcileOpenIssues(input = source) {
   const ids = input.currentOpenIssues;
   if (!Array.isArray(ids) || ids.length !== 22 || new Set(ids).size !== ids.length ||
@@ -40,7 +47,7 @@ export function reconcileOpenIssues(input = source) {
     let last = '';
     for (const event of row.events) {
       if (!['closed', 'reopened'].includes(event.event) ||
-          Number.isNaN(Date.parse(event.at)) || event.at <= last)
+          !isCanonicalUtcTimestamp(event.at) || event.at <= last)
         throw new Error(`Invalid state event for issue #${row.number}`);
       const expected = state === 'open' ? 'closed' : 'reopened';
       if (event.event !== expected) throw new Error(`Non-alternating state transition for issue #${row.number}`);
