@@ -90,6 +90,12 @@ test('T-064: CSV headings are stable, RFC-style quoted, and formula-safe',()=>{
   assert.equal(header?.split(',').length,18);
   assert.ok(csv.includes('"\'=HYPERLINK(""a,b"")\r\nreport"'));
   assert.ok(csv.includes('"OFFLINE_SIMULATION_NOT_PROVIDER_BILL"'));
+  // CSV injection is not limited to a bare = prefix. Check the other
+  // spreadsheet formula starters and whitespace-prefixed formulas too.
+  for (const label of ['\\t=SUM(1,2)', '+SUM(1,2)', '-SUM(1,2)', '@SUM(1,2)']) {
+    const firstDataRow=formatS5CostCsv([{label,activeUsers:2,report}]).split('\\n')[1];
+    assert.ok(firstDataRow?.startsWith("\\\"'"+label+"\\\""), 'Unsafe CSV formula prefix');
+  }
   assert.equal(formatS5CostCsv([{label:'safe',activeUsers:2,report}]),
     formatS5CostCsv([{label:'safe',activeUsers:2,report}]));
   assert.equal(report.capacityEvidence.measuredCompletedToolCallsPerDay,'UNKNOWN');
@@ -149,5 +155,12 @@ test('T-066: report renderer does not call missing inputs a provider bill or ren
     const invalid=join(dir,'invalid.json');
     writeFileSync(invalid,JSON.stringify({assumptions:{...assumptions(),activeUsers:-1},rates:rates()}));
     assert.throws(()=>renderS5CostReport(['--input',invalid]),/Unsafe/);
+    // A local reconnect/transport fixture cannot enter the offline price
+    // report as if it were a measured external provider invoice.
+    const spoofed=join(dir,'reconnect-as-bill.json');
+    writeFileSync(spoofed,JSON.stringify({label:'loopback only',assumptions:assumptions(),
+      rates:rates(),reconnectEvidence:{kind:'SYNTHETIC_LOOPBACK',costUsd:0}}));
+    assert.throws(()=>renderS5CostReport(['--input',spoofed]),/Unexpected offline scenario field/);
+    assert.throws(()=>renderS5CostReport(['--csv','--input',spoofed]),/Unexpected offline scenario field/);
   }finally{rmSync(dir,{recursive:true,force:true});}
 });
