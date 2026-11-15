@@ -1,5 +1,5 @@
 /**
- * Read-only source and import provenance gate for eleven independently reviewed,
+ * Read-only source and import provenance gate for thirteen independently reviewed,
  * pure-contract root suites. Does NOT approve any other tests.
  */
 import {execFileSync} from 'node:child_process';
@@ -23,6 +23,8 @@ const EXPECTED=Object.freeze({
   'test/progress-supervisor.test.ts':'a6f62bbc58657585d516e36f7caf26fa36acce7b',
   'test/guardian-key-enrollment-proof.test.ts':'f9d52ebbcbcd7d5667069c1f3fd27e9a35d09588',
   'test/guardian-signed-receipt.test.ts':'9eddfb2267a6a7defe2a8e69c43cd6c96ebb17d8',
+  'test/private-display-plan.test.ts':'84e416cfc6f8ca183ba6400a362e80ef2325ea6d',
+  'test/owner-public-wss-p256-migration-proposal.test.ts':'e3b95ef518676022766d1edefda55ef729835717',
   'src/protocol/agent.ts':'6bd55d19f898021fd1e70e78045ddba656aaf4e5',
   'src/protocol/capabilities.ts':'5e92ce4db343bb4c1fda33d5da0603dfd35f4e84',
   'src/product/plans.ts':'9ac634f06f475d4c4ae9c12032ebda68e2b2ee04',
@@ -37,6 +39,9 @@ const EXPECTED=Object.freeze({
   'src/agent/progress-supervisor.ts':'c407c72667df20bb844ef0eb7e9ca736d257a69c',
   'src/protocol/guardian-key-enrollment-proof.ts':'7e64ff644b03cb154e75ab8658ea95d2b9a4f533',
   'src/protocol/guardian-signed-receipt.ts':'304b2da32957d18797afa1a900cbd1e25b93e9b5',
+  'src/agent/windows-private-display-plan.ts':'5cd669c9077a453b36e374e7ccab716d5314a012',
+  'src/mcp/tool-capabilities.ts':'0e420f2d69e65bd38ae044dbb3d1b9980b2e1523',
+  'src/product/owner-public-wss-p256-migration-proposal.ts':'5f66b24ba73ef64051c791b5d95523184f321ffe',
 });
 export const PURE_REVIEWED_FILES=EXPECTED;
 export const PURE_ENTRYPOINTS=Object.freeze([
@@ -51,6 +56,8 @@ export const PURE_ENTRYPOINTS=Object.freeze([
   'test/progress-supervisor.test.ts',
   'test/guardian-key-enrollment-proof.test.ts',
   'test/guardian-signed-receipt.test.ts',
+  'test/private-display-plan.test.ts',
+  'test/owner-public-wss-p256-migration-proposal.test.ts',
 ]);
 const external=new Set(['node:test','node:assert/strict','node:crypto','zod']);
 const SHA=/^[a-f0-9]{40}$/;

@@ -26,6 +26,8 @@ export const APPROVED_ROOT_TEST_FILES=Object.freeze([
   'test/progress-supervisor.test.ts',
   'test/guardian-key-enrollment-proof.test.ts',
   'test/guardian-signed-receipt.test.ts',
+  'test/private-display-plan.test.ts',
+  'test/owner-public-wss-p256-migration-proposal.test.ts',
 ]);
 const MAX_TEST_MILLIS=7*60*1000;
 const MAX_LOG_BYTES=2*1024*1024;
