@@ -29,6 +29,9 @@ test('experimental package and exact source inventory are recognized without cla
   assert.equal(result.fullCoreAccessVerified, false);
   assert.equal(result.physicalCoreStatus, 'NOT_ATTESTED');
   assert.equal(result.physicalAcceptance, 'NOT_RUN');
+  assert.equal(result.trackedTypeScriptTests, 635);
+  assert.equal(result.approvedPortableTestFiles, 29);
+  assert.equal(result.notRunInPortableLane, 606);
   assert.deepEqual(result.physicalCoreRequirements, [...CORE_PHYSICAL_GATES]);
   assert.ok(Object.values(result.sourceCapabilityInventory).every(
     item => item.sourceFound === true && item.runtimeAccepted === false,

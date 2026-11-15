@@ -32,6 +32,15 @@ const REVIEWED_GIT_BLOBS = Object.freeze({
   'test/owner-public-wss-p256-migration-proposal.test.ts':'e3b95ef518676022766d1edefda55ef729835717',
   'test/agent-request-cache.test.ts':'745865fb0a79aa4b271d703f4b924bb601cff9a5',
   'test/owner-public-wss-stream-flow-staging.test.ts':'a6c5d85e137e30237de8e3e3a72362f37b388751',
+'test/scale-elastic-capacity-model.test.ts':'ce9012cd2048eef83c31535f8b35a4fd8ddcbbaf',
+  'test/scale-s5-cost-envelope.test.ts':'4bbf0f7949be9c86c48fda1a7ce1470adc64b868',
+  'test/scale-s5-resource-reconciliation.test.ts':'bd60b7b10bc22be4219155b165e401de34b4d277',
+  'test/scale-s5-durable-object-cost.test.ts':'b483dddfb16d683fed0b5fa898ce446bcf992618',
+  'test/scale-s5-chunk-receipt-audit.test.ts':'1b70d6bc7112d2e21c2ebdf165a237a68fe51848',
+  'test/scale-transport-metrics.test.ts':'7a5cf2d1fac5cdff68f33367bef682edb972c092',
+  'test/scale-s5-provider-meter-evidence.test.ts':'4950286aea128fa34aa279dfc2cd17a12e190297',
+  'test/security-tokens.test.ts':'92ea5c61df1c707f2970e1305a34b56d5cf7b8e0',
+  'test/scale-s5-staging-acceptance.test.ts':'b381c0cc734d7a29f650bf922beb168074817e3d',
 });
 
 function fail(reason) { throw new Error('TEST_EXECUTION_PLAN_' + reason); }

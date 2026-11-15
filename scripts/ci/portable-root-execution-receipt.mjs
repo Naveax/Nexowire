@@ -30,6 +30,15 @@ export const APPROVED_ROOT_TEST_FILES=Object.freeze([
   'test/owner-public-wss-p256-migration-proposal.test.ts',
   'test/agent-request-cache.test.ts',
   'test/owner-public-wss-stream-flow-staging.test.ts',
+'test/scale-elastic-capacity-model.test.ts',
+  'test/scale-s5-cost-envelope.test.ts',
+  'test/scale-s5-resource-reconciliation.test.ts',
+  'test/scale-s5-durable-object-cost.test.ts',
+  'test/scale-s5-chunk-receipt-audit.test.ts',
+  'test/scale-transport-metrics.test.ts',
+  'test/scale-s5-provider-meter-evidence.test.ts',
+  'test/security-tokens.test.ts',
+  'test/scale-s5-staging-acceptance.test.ts',
 ]);
 const MAX_TEST_MILLIS=7*60*1000;
 const MAX_LOG_BYTES=2*1024*1024;

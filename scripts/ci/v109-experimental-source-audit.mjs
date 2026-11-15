@@ -60,7 +60,10 @@ export function assessExperimentalSource({
     physicalCoreStatus: 'NOT_ATTESTED',
     physicalCoreRequirements: [...CORE_PHYSICAL_GATES],
     physicalAcceptance: 'NOT_RUN',
-    remainingTypeScriptTestFilesOnCurrentParent: 615,
+    testLaneSourceSha: 'af6a83b8474500b48fe663129f5f1df2beb63e3e',
+    trackedTypeScriptTests: 635,
+    approvedPortableTestFiles: 29,
+    notRunInPortableLane: 606,
     warning: 'Source presence, a running task, and an experimental label are not proof of elevated CORE effects.',
   };
 }

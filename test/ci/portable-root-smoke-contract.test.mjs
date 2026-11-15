@@ -31,9 +31,18 @@ const approved=Object.freeze([
   'test/owner-public-wss-p256-migration-proposal.test.ts',
   'test/agent-request-cache.test.ts',
   'test/owner-public-wss-stream-flow-staging.test.ts',
+'test/scale-elastic-capacity-model.test.ts',
+  'test/scale-s5-cost-envelope.test.ts',
+  'test/scale-s5-resource-reconciliation.test.ts',
+  'test/scale-s5-durable-object-cost.test.ts',
+  'test/scale-s5-chunk-receipt-audit.test.ts',
+  'test/scale-transport-metrics.test.ts',
+  'test/scale-s5-provider-meter-evidence.test.ts',
+  'test/security-tokens.test.ts',
+  'test/scale-s5-staging-acceptance.test.ts',
 ]);
 
-test('portable root smoke invokes only twenty reviewed isolated policy and source contracts',()=>{
+test('portable root smoke invokes only twenty-nine reviewed isolated policy and source contracts',()=>{
   const target=workflow.match(/^      - name: Execute allowlisted root tests and reconcile source-bound coverage\n        timeout-minutes: 7\n        env:\n          NEXOWIRE_EXPECTED_COMMIT_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}\n        run: (.+)$/m);
   assert.ok(target,'missing separate timeout-bounded pure-contract step');
   const tokens=target[1].trim().split(/\s+/);

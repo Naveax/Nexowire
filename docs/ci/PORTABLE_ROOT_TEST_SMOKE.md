@@ -9,7 +9,7 @@ This is a **bounded first execution lane**, not a blanket "635 tests PASS":
 
 - New hosted `Portable Root Test Smoke` workflow runs only on disposable
   `ubuntu-latest` runners, independently with Node 22 and 24.
-- Exactly twenty reviewed root-level files are invoked explicitly:
+- Exactly twenty-nine reviewed root-level files are invoked explicitly:
   `test/version.test.ts`, `test/release-tag.test.ts`,
   `test/ai07-physical-cutover-gate.test.ts`,
   `test/capability-policy.test.ts`,
@@ -28,7 +28,16 @@ This is a **bounded first execution lane**, not a blanket "635 tests PASS":
   `test/private-display-plan.test.ts`, and
   `test/owner-public-wss-p256-migration-proposal.test.ts`,
   `test/agent-request-cache.test.ts`, and
-  `test/owner-public-wss-stream-flow-staging.test.ts`.
+  `test/owner-public-wss-stream-flow-staging.test.ts`,
+  `test/scale-elastic-capacity-model.test.ts`,
+  `test/scale-s5-cost-envelope.test.ts`,
+  `test/scale-s5-resource-reconciliation.test.ts`,
+  `test/scale-s5-durable-object-cost.test.ts`,
+  `test/scale-s5-chunk-receipt-audit.test.ts`,
+  `test/scale-transport-metrics.test.ts`,
+  `test/scale-s5-provider-meter-evidence.test.ts`,
+  `test/security-tokens.test.ts`, and
+  `test/scale-s5-staging-acceptance.test.ts`.
   The two policy-store suites create and remove **only isolated temporary
   fixture directories** on the disposable GitHub runner. No task, network,
   Broker, CORE, registry or production state is touched.
@@ -44,7 +53,7 @@ This is a **bounded first execution lane**, not a blanket "635 tests PASS":
   Git's checked-out `HEAD` does not match the expected SHA supplied by GitHub.
   This prevents a passing merge-ref receipt from being mislabeled exact PR HEAD.
   The receipt prints to CI logs; it does not write to protected production paths.
-- This is a **root-level test execution proof only for the exact twenty files**.
+- This is a **root-level test execution proof only for the exact twenty-nine files**.
   It does not certify the remaining tracked files, any production Windows
   privilege, or physical SYSTEM cutover.
 - Never enlarge this allowlist without reviewing imported modules, side effects,
@@ -81,7 +90,7 @@ node --test test/ci/portable-root-coverage-gate.test.mjs
 node scripts/ci/portable-root-coverage-gate.mjs --json
 ```
 
-Only the twenty reviewed portable root files are executed. There is no
+Only the twenty-nine reviewed portable root files are executed. There is no
 automatic promotion of unreviewed files, no broad npm-test invocation, no
 privileged Windows action, and no assertion that physical SYSTEM cutover
 or all tracked files have passed. A coverage count is not authorization.
@@ -92,13 +101,13 @@ pure product plan/usage policy functions, respectively; they do not invoke
 filesystem, process, network, Windows tasks, privileged Broker or production
 state. Their exact committed Git blobs are separately pinned by the planner.
 
-## Exact Git source provenance for fifteen pure contract suites
+## Exact Git source provenance for twenty-four pure contract suites
 
 Before the hosted runner executes the portable-root receipt, it runs
 `pure-import-provenance.mjs --json` and its negative tests. This gate checks
-fifteen independently reviewed test files: agent-protocol, product-usage-policy,
+twenty-four independently reviewed test files: agent-protocol, product-usage-policy,
 product-transport-policy, task-os-sandbox-policy-p07, bridge-guardian-policy,
-product-pairing, daily-quota-proposal, product-usage-ledger, progress-supervisor, guardian-key-enrollment-proof, guardian-signed-receipt, private-display-plan, owner-public-wss-p256-migration-proposal, agent-request-cache, and owner-public-wss-stream-flow-staging; plus all nineteen source modules reachable by
+product-pairing, daily-quota-proposal, product-usage-ledger, progress-supervisor, guardian-key-enrollment-proof, guardian-signed-receipt, private-display-plan, owner-public-wss-p256-migration-proposal, agent-request-cache, owner-public-wss-stream-flow-staging, scale-elastic-capacity-model, scale-s5-cost-envelope, scale-s5-resource-reconciliation, scale-s5-durable-object-cost, scale-s5-chunk-receipt-audit, scale-transport-metrics, scale-s5-provider-meter-evidence, security-tokens, and scale-s5-staging-acceptance; plus all twenty-eight source modules reachable by
 their static local imports. It ties each committed regular file and each
 working copy to an explicitly reviewed Git blob SHA and validates the
 direct and transitive **local static** import graph with the TypeScript
@@ -154,8 +163,8 @@ paid charging decisions on isolated in-memory state, without a network
 or production account. Both tests and their two new pure source modules
 are pinned by exact Git blobs and transitive local import closure.
 
-All 615 other tracked TypeScript tests remain unreviewed after the exact
-20-file lane passes. Static review and source CI cannot authorize protected
+All 606 other tracked TypeScript tests remain unreviewed after the exact
+29-file lane passes. Static review and source CI cannot authorize protected
 Windows tasks, CORE effects, DPAPI migration, SQLite cutover or reboot.
 
 ### Guardian cryptographic evidence and progress supervisor contracts
@@ -199,6 +208,34 @@ harness. Its 1 GiB case is virtual and does not allocate an actual 1 GiB
 buffer, connect to WSS, write files, or grant a real stream capability.
 Both suites and their two local imported modules have exact Git blob pins.
 
-The proposed 20-file receipt is 20 of 635 tracked TypeScript test files;
-615 remain NOT_RUN and NOT_APPROVED. Full review and Windows SYSTEM
+The proposed 29-file receipt is 29 of 635 tracked TypeScript test files;
+606 remain NOT_RUN and NOT_APPROVED. Full review and Windows SYSTEM
 acceptance remain separate open gates.
+
+### Offline scale-envelope and synthetic resource evidence suites
+
+Seven individually source-reviewed tests model hypothetical Worker/D1/DO
+cost envelopes, elastic request capacity, bounded transfer receipt metadata,
+numeric transport metrics, and operator-supplied resource/meter deltas.
+They use deterministic in-memory input and no provider API, production
+billing credentials, network service, or durable storage. The receipt
+metadata audit does not attest a real transferred file or native effect.
+The cost assumptions are dated illustrations and must be independently
+reverified before any purchasing or production pricing decision.
+
+The seven test files and seven local source modules are pinned by exact
+Git blob identity. 608 of 635 tracked TypeScript tests remain unreviewed
+at this proposed 27-file execution lane; fail closed for all others.
+
+### Token parsing and staging-evidence assessment
+
+Two additional reviewed pure contracts test parsing and digest matching
+for synthetic bearer/token rotation values, and a source-only S5 staging
+canary acceptance model with explicitly unverified external observations.
+No real bearer secret, live identity, provider API, socket, Windows task,
+or production staging resource is accessed. An unverified staging observation
+does not authorize any native effect or imply hosted acceptance.
+
+The two test files and their two imported local modules are pinned to
+exact Git blob identities. These source checks leave 606 other tracked
+TypeScript tests blocked as NOT_RUN/NOT_APPROVED.

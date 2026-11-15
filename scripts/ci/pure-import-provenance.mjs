@@ -1,5 +1,5 @@
 /**
- * Read-only source and import provenance gate for fifteen independently reviewed,
+ * Read-only source and import provenance gate for twenty-four independently reviewed,
  * pure-contract root suites. Does NOT approve any other tests.
  */
 import {execFileSync} from 'node:child_process';
@@ -27,6 +27,15 @@ const EXPECTED=Object.freeze({
   'test/owner-public-wss-p256-migration-proposal.test.ts':'e3b95ef518676022766d1edefda55ef729835717',
   'test/agent-request-cache.test.ts':'745865fb0a79aa4b271d703f4b924bb601cff9a5',
   'test/owner-public-wss-stream-flow-staging.test.ts':'a6c5d85e137e30237de8e3e3a72362f37b388751',
+'test/scale-elastic-capacity-model.test.ts':'ce9012cd2048eef83c31535f8b35a4fd8ddcbbaf',
+  'test/scale-s5-cost-envelope.test.ts':'4bbf0f7949be9c86c48fda1a7ce1470adc64b868',
+  'test/scale-s5-resource-reconciliation.test.ts':'bd60b7b10bc22be4219155b165e401de34b4d277',
+  'test/scale-s5-durable-object-cost.test.ts':'b483dddfb16d683fed0b5fa898ce446bcf992618',
+  'test/scale-s5-chunk-receipt-audit.test.ts':'1b70d6bc7112d2e21c2ebdf165a237a68fe51848',
+  'test/scale-transport-metrics.test.ts':'7a5cf2d1fac5cdff68f33367bef682edb972c092',
+  'test/scale-s5-provider-meter-evidence.test.ts':'4950286aea128fa34aa279dfc2cd17a12e190297',
+  'test/security-tokens.test.ts':'92ea5c61df1c707f2970e1305a34b56d5cf7b8e0',
+  'test/scale-s5-staging-acceptance.test.ts':'b381c0cc734d7a29f650bf922beb168074817e3d',
   'src/protocol/agent.ts':'6bd55d19f898021fd1e70e78045ddba656aaf4e5',
   'src/protocol/capabilities.ts':'5e92ce4db343bb4c1fda33d5da0603dfd35f4e84',
   'src/product/plans.ts':'9ac634f06f475d4c4ae9c12032ebda68e2b2ee04',
@@ -46,6 +55,15 @@ const EXPECTED=Object.freeze({
   'src/product/owner-public-wss-p256-migration-proposal.ts':'5f66b24ba73ef64051c791b5d95523184f321ffe',
   'src/agent/request-cache.ts':'dc5c3da93f29a0860415235d3bad648b976c765b',
   'src/product/owner-public-wss-stream-flow-proposal.ts':'0b0784299b8f17904695263b130bfb13eacb66c1',
+'src/ops/scale-elastic-capacity-model.ts':'0671e7e568510de58af8377b3f0e8775a1f1b791',
+  'src/ops/scale-s5-cost-envelope.ts':'2c01c3e9fda8e04aa7c6a2fe5e4f50c9cdac9b22',
+  'src/ops/scale-s5-resource-reconciliation.ts':'4b6cfc9850ee2a130317b8d030fc35f5772550ab',
+  'src/ops/scale-s5-durable-object-cost.ts':'c2e2a897d21cfd2c388213de2437bad345411454',
+  'src/ops/scale-s5-chunk-receipt-audit.ts':'e381342b779999026bf0f15e0c8205192c503fa9',
+  'src/ops/scale-transport-metrics.ts':'5a3dc9c36e0dda54d2d448e95e6d2e2f3dcfb828',
+  'src/ops/scale-s5-provider-meter-evidence.ts':'21233e0c7e5dd9a39209bfe6989cab7f02334d79',
+  'src/security/tokens.ts':'8587293f920b7910388e432baf2b84239b02c782',
+  'src/ops/scale-s5-staging-acceptance.ts':'4b1cc45ad5150bf82e90dd4edff425e85acb605b',
 });
 export const PURE_REVIEWED_FILES=EXPECTED;
 export const PURE_ENTRYPOINTS=Object.freeze([
@@ -64,6 +82,15 @@ export const PURE_ENTRYPOINTS=Object.freeze([
   'test/owner-public-wss-p256-migration-proposal.test.ts',
   'test/agent-request-cache.test.ts',
   'test/owner-public-wss-stream-flow-staging.test.ts',
+'test/scale-elastic-capacity-model.test.ts',
+  'test/scale-s5-cost-envelope.test.ts',
+  'test/scale-s5-resource-reconciliation.test.ts',
+  'test/scale-s5-durable-object-cost.test.ts',
+  'test/scale-s5-chunk-receipt-audit.test.ts',
+  'test/scale-transport-metrics.test.ts',
+  'test/scale-s5-provider-meter-evidence.test.ts',
+  'test/security-tokens.test.ts',
+  'test/scale-s5-staging-acceptance.test.ts',
 ]);
 const external=new Set(['node:test','node:assert/strict','node:crypto','zod']);
 const SHA=/^[a-f0-9]{40}$/;
