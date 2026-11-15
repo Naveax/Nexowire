@@ -378,7 +378,7 @@ async function main(): Promise<void> {
     );
     const shortcut = path.join(
       installRoot,
-      'Nexowire.lnk',
+      version.includes('-') ? 'Nexowire Experimental.lnk' : 'Nexowire.lnk',
     );
 
     for (const required of [
