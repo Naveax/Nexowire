@@ -10,7 +10,9 @@ import {createTestExecutionPlan} from '../../scripts/ci/test-execution-plan.mjs'
 import {sourceTextHints,triageTrackedTests,readTestReviewTriage,TEXT_SIGNAL_NAMES}
   from '../../scripts/ci/test-review-triage.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
-const sha=readTestInventory(root).report.commitSha;
+const {entries:trackedEntries,report:trackedReport}=readTestInventory(root);
+const sha=trackedReport.commitSha;
+const reviewedPlan=createTestExecutionPlan(trackedEntries,trackedReport,2);
 const script=path.join(root,'scripts/ci/test-review-triage.mjs');
 const blob=b=>createHash('sha1').update('blob '+b.length+'\0').update(b).digest('hex');
 function fixture(){
@@ -60,11 +62,11 @@ test('changed blob, duplicate partitions and review-count inflation are rejected
 });
 test('live tracked test paths are all partitioned and still require review',()=>{
   const r=readTestReviewTriage(root,sha);
-  assert.equal(r.trackedTestFiles,635);
-  assert.equal(r.explicitlyReviewedFiles,7);
-  assert.equal(r.queuedManualReviewFiles,628);
-  assert.equal(r.manualReviewQueue.length,628);
-  assert.equal(Object.values(r.bandCounts).reduce((a,b)=>a+b,0),628);
+  assert.equal(r.trackedTestFiles,trackedEntries.length);
+  assert.equal(r.explicitlyReviewedFiles,reviewedPlan.reviewedPortableFileCount);
+  assert.equal(r.queuedManualReviewFiles,reviewedPlan.notReviewedFileCount);
+  assert.equal(r.manualReviewQueue.length,reviewedPlan.notReviewedFileCount);
+  assert.equal(Object.values(r.bandCounts).reduce((a,b)=>a+b,0),reviewedPlan.notReviewedFileCount);
   assert.equal(r.reviewSemantics,'TEXTUAL_HEURISTIC_NOT_SAFETY_CLASSIFICATION');
 });
 test('CLI refuses wrong SHA, absent CI SHA and unsupported execute flags',()=>{
@@ -112,10 +114,10 @@ test('CLI summary is bounded, explicitly not a safety or execution attestation',
   });
   assert.equal(r.status,0,r.stderr);
   const summary=JSON.parse(r.stdout);
-  assert.equal(summary.queuedManualReviewFiles,628);
-  assert.equal(summary.explicitlyReviewedFiles,7);
+  assert.equal(summary.queuedManualReviewFiles,reviewedPlan.notReviewedFileCount);
+  assert.equal(summary.explicitlyReviewedFiles,reviewedPlan.reviewedPortableFileCount);
   assert.equal(summary.manualReviewQueue,undefined);
-  assert.equal(summary.examplePendingPaths.length,8);
+  assert.equal(summary.examplePendingPaths.length,Math.min(8,reviewedPlan.notReviewedFileCount));
   assert.equal(summary.noAutomaticExecution,true);
   assert.equal(summary.reviewSemantics,'TEXTUAL_HEURISTIC_NOT_SAFETY_CLASSIFICATION');
 });
