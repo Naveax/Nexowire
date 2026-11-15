@@ -29,6 +29,12 @@ jobs:
           node-version: ${{ matrix.node-version }}
       - name: Verify deterministic test-path inventory and hostile Git index fixtures
         run: node --test test/ci/test-inventory.test.mjs
+      - name: Check source-bound reviewed shard planning and denial contracts
+        run: node --test test/ci/test-execution-plan.test.mjs
+      - name: Report reviewed-only portable shards and all unreviewed tests
+        env:
+          NEXOWIRE_EXPECTED_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/ci/test-execution-plan.mjs --json --shards=2
       - name: Report exact-commit tracked test paths (discovery only, not execution)
         env:
           NEXOWIRE_EXPECTED_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
