@@ -13,6 +13,8 @@ export const APPROVED_ROOT_TEST_FILES=Object.freeze([
   'test/version.test.ts',
   'test/release-tag.test.ts',
   'test/ai07-physical-cutover-gate.test.ts',
+  'test/capability-policy.test.ts',
+  'test/device-routing-policy-store.test.ts',
 ]);
 const MAX_TEST_MILLIS=7*60*1000;
 const MAX_LOG_BYTES=2*1024*1024;
