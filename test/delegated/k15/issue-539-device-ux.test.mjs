@@ -524,6 +524,31 @@ test('T-619/#539: delayed stale folder snapshot cannot swap identically named ta
   assert.equal(h.cards()[0].querySelector('.core-shortcut').getAttribute('aria-label'), verifiedLabel);
 });
 
+test('Q-227/#539: stale 503 cannot overwrite a newer successful device dashboard', {
+  todo: !hasLoadingReset && 'main lacks request-generation fencing until #1068',
+}, async () => {
+  const h = harness();
+  h.render(snapshot([device({id: 'private-old'})]));
+  const pending = [];
+  h.setFetch(() => new Promise(resolve => pending.push(resolve)));
+  const older = h.load();
+  const newer = h.load();
+  assert.equal(pending.length, 2);
+
+  pending[1]({status: 200, ok: true,
+    json: async () => snapshot([device({id: 'fresh-machine'})])});
+  await newer;
+  assert.deepEqual(h.cards().map(card => card.dataset.deviceId), ['fresh-machine']);
+
+  // The late failed request is older than the already-visible latest success.
+  // It must not convert a healthy session into a transport-error presentation.
+  pending[0]({status: 503, ok: false});
+  await older;
+  assert.deepEqual(h.cards().map(card => card.dataset.deviceId), ['fresh-machine']);
+  assert.equal(h.id('connection-pill').textContent, 'Bağlı');
+  assert.equal(h.id('error-panel').classList.contains('hidden'), true);
+});
+
 test('T-666/#539: filtered card heading, accessible identity and POST target agree', {
   todo: !hasDeviceLabelFix && 'main has no device-scoped accessible action labels yet',
 }, () => {
