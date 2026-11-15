@@ -47,3 +47,26 @@ node --test test/ci/portable-root-execution-receipt.test.mjs
 Full execution coverage stays OPEN under #1205. Do not treat absent tests as
 green, silently skip failures or change CORE/STOP or protected production state
 to satisfy a suite.
+
+## Hosted TAP execution + immutable inventory reconciliation
+
+The hosted Node 22/24 Portable Root Test Smoke workflow executes
+`scripts/ci/portable-root-coverage-gate.mjs --json`. This invokes the existing
+exact-reviewed-file TAP runner and the independently tested immutable Git
+inventory reconciler within one fail-closed job. The output preserves the
+per-file TAP receipt, Git blob SHA, source HEAD SHA, full inventory manifest
+SHA-256, and **all** explicitly NOT_RUN test paths. CI runs its negative
+contracts before this bounded step.
+
+To repeat the same read-only check locally:
+
+```powershell
+$env:NEXOWIRE_EXPECTED_COMMIT_SHA = (git rev-parse HEAD).Trim()
+node --test test/ci/portable-root-coverage-gate.test.mjs
+node scripts/ci/portable-root-coverage-gate.mjs --json
+```
+
+Only the five reviewed portable root files are executed. There is no
+automatic promotion of unreviewed files, no broad npm-test invocation, no
+privileged Windows action, and no assertion that physical SYSTEM cutover
+or all tracked files have passed. A coverage count is not authorization.

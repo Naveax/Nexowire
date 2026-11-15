@@ -19,11 +19,11 @@ const approved=Object.freeze([
 ]);
 
 test('portable root smoke invokes only five reviewed isolated policy and source contracts',()=>{
-  const target=workflow.match(/^      - name: Execute allowlisted root tests and assert SHA-bound TAP receipt\n        timeout-minutes: 7\n        env:\n          NEXOWIRE_EXPECTED_COMMIT_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}\n        run: (.+)$/m);
+  const target=workflow.match(/^      - name: Execute allowlisted root tests and reconcile source-bound coverage\n        timeout-minutes: 7\n        env:\n          NEXOWIRE_EXPECTED_COMMIT_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}\n        run: (.+)$/m);
   assert.ok(target,'missing separate timeout-bounded pure-contract step');
   const tokens=target[1].trim().split(/\s+/);
   assert.deepEqual(tokens,[
-    'node','scripts/ci/portable-root-execution-receipt.mjs','--json',
+    'node','scripts/ci/portable-root-coverage-gate.mjs','--json',
   ],'unsafe or bypassed verified test runner');
   assert.deepEqual(APPROVED_ROOT_TEST_FILES,approved,'execution allowlist changed');
   for(const file of approved) assert.deepEqual(commandForApprovedRootFile(file),[
@@ -47,6 +47,7 @@ test('portable root test smoke cannot silently skip, widen OS, or lose CI lockfi
   assert.match(workflow,/^        run: npm ci$/m);
   assert.match(workflow,/^        run: node --test test\/ci\/portable-root-smoke-contract\.test\.mjs$/m);
   assert.match(workflow,/^        run: node --test test\/ci\/portable-root-execution-receipt\.test\.mjs$/m);
+  assert.match(workflow,/^        run: node --test test\/ci\/portable-root-coverage-gate\.test\.mjs test\/ci\/test-execution-coverage\.test\.mjs$/m);
   assert.match(workflow,/^  contents: read$/m);
   assert.match(workflow,/^      - uses: actions\/checkout@v4\n        with:\n          ref: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}$/m);
   assert.match(workflow,/^  cancel-in-progress: true$/m);
