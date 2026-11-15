@@ -17,6 +17,8 @@ const REVIEWED_GIT_BLOBS = Object.freeze({
   'test/ai07-physical-cutover-gate.test.ts':'7e92c75c744575f1b4acbf5e8054b6bc7fbb88a9',
   'test/capability-policy.test.ts':'60bb307b4121304a24a7bde63218139139f769f4',
   'test/device-routing-policy-store.test.ts':'f1a39bbec8d0d7623ebef5e72a9d0e185e62ce49',
+  'test/agent-protocol.test.ts':'6eeaec135201e8bb6a7ab08382098223b6e05747',
+  'test/product-usage-policy.test.ts':'708d91d1f79c4a6f1be8d3c2b342fc6e01a83a37',
 });
 
 function fail(reason) { throw new Error('TEST_EXECUTION_PLAN_' + reason); }
