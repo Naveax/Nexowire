@@ -96,6 +96,28 @@ test('D-119: current owner ci.yml lacks seven explicitly selected auxiliary #114
     'STATIC_PATHS_PRESENT_NOT_EXECUTION');
 });
 
+test('Q-257: printed or assigned test paths are not executable hosted CI discovery', () => {
+  const path = requiredSeven[0];
+  const deceptive = `run: |
+    echo "node --test ${path}"
+    printf '%s\\n' '${path}'
+    TEST_FILE="${path}"
+    # node --test ${path}`;
+  const r = auditRequiredCiPaths({workflow:deceptive,paths:[path]});
+  assert.equal(r.staticallyReferenced,0);
+  assert.deepEqual(r.missing,[path]);
+  assert.equal(r.hostedExecution,'NOT_VERIFIED');
+
+  const invoked = `run: |
+    node --test --test-reporter=tap \\
+      ${path} \\
+      > results.tap`;
+  const actual = auditRequiredCiPaths({workflow:invoked,paths:[path]});
+  assert.equal(actual.staticallyReferenced,1);
+  assert.equal(actual.verdict,'STATIC_PATHS_PRESENT_NOT_EXECUTION');
+  assert.equal(actual.hostedExecution,'NOT_VERIFIED');
+});
+
 test('D-119: commented out test paths do not count as an invoked hosted test', () => {
   const r = auditRequiredCiPaths({workflow:requiredSeven.map(x=>`# ${x}`).join('\n'),paths:requiredSeven});
   assert.equal(r.missing.length,7);
