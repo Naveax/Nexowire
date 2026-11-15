@@ -194,3 +194,45 @@ test('#1006 R-057: real K10 invocations remain detectable with unrelated shell r
   assert.equal(report.status, 'NOT_RUN');
   assert.equal(report.reason, 'CAPTURE_ARTIFACTS_NOT_PROVIDED');
 });
+
+test('#1006 Q-197: --flag=K10-path and quoted flag values never count as selected suites', () => {
+  const workflow = [
+    'jobs:', '  test:', '    steps:', '      - run: |',
+    '          node --test test/unrelated.test.mjs --test-reporter-destination=test/delegated/k10/issue-browser-negative.test.mjs',
+    "          node --test test/unrelated.test.mjs --test-name-pattern='test/delegated/k10/issue-evidence-contract.test.mjs'",
+    '  browser-live:', '    steps:',
+    '      - run: node scripts/unrelated.mjs --out=scripts/delegated/k10/hosted-connect-three-state.mjs',
+  ].join('\n');
+  const report = auditHostedBrowserEvidence({ workflow, targetSha: head, runSha: head, jobs: successfulBrowserJob });
+  assert.equal(report.checks.issueNegativesListed, false);
+  assert.equal(report.checks.pngContractListed, false);
+  assert.equal(report.checks.threeStateCaptureListed, false);
+  assert.equal(report.status, 'NOT_RUN');
+});
+
+test('#1006 Q-197: space-separated options never masquerade as executed K10 files', () => {
+  const workflow = [
+    'jobs:', '  test:', '    steps:',
+    '      - run: node --test test/unrelated.test.mjs --test-name-pattern test/delegated/k10/issue-browser-negative.test.mjs',
+    '  browser-live:', '    steps:',
+    '      - run: node scripts/unrelated.mjs --out scripts/delegated/k10/hosted-connect-three-state.mjs',
+  ].join('\n');
+  const report = auditHostedBrowserEvidence({ workflow, targetSha: head, runSha: head, jobs: successfulBrowserJob });
+  assert.equal(report.checks.issueNegativesListed, false);
+  assert.equal(report.checks.threeStateCaptureListed, false);
+  assert.equal(report.status, 'NOT_RUN');
+});
+
+test('#1006 Q-197: later actual K10 test still wins over earlier --flag=path mention', () => {
+  const workflow = [
+    'jobs:', '  test:', '    steps:',
+    '      - run: node --test --test-name-pattern=test/delegated/k10/issue-browser-negative.test.mjs test/delegated/k10/issue-browser-negative.test.mjs',
+    '  browser-live:', '    steps:',
+    '      - run: node scripts/delegated/k10/hosted-connect-three-state.mjs --out output.json',
+  ].join('\n');
+  const report = auditHostedBrowserEvidence({ workflow, targetSha: head, runSha: head, jobs: successfulBrowserJob });
+  assert.equal(report.checks.issueNegativesListed, true);
+  assert.equal(report.checks.threeStateCaptureListed, true);
+  assert.equal(report.status, 'NOT_RUN');
+  assert.equal(report.reason, 'CAPTURE_ARTIFACTS_NOT_PROVIDED');
+});

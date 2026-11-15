@@ -71,9 +71,20 @@ function invokesNodePath(commands, path) {
       // Dropping them prevents a redirected file named like a K10 test from
       // being mistaken for an actually selected suite or capture runner.
       const argumentsOnly = text.replace(/(?:\d*>>?|\d*<<?|&>)\s*(?:"[^"]*"|'[^']*'|[^\s;|&<>]+)/g, ' ');
-      const index = argumentsOnly.indexOf(path);
-      return index >= 0 && !/[\w./-]/.test(argumentsOnly[index - 1] ?? ' ') &&
-        !/[\w./-]/.test(argumentsOnly[index + path.length] ?? ' ');
+      // CLI --option=path values are not selected test files or scripts.
+      // Check every occurrence: a later positional argument may genuinely
+      // execute the same path after an unrelated --option=path reference.
+      for (let from = 0, index = argumentsOnly.indexOf(path, from);
+        index >= 0; from = index + path.length, index = argumentsOnly.indexOf(path, from)) {
+        const prefix = argumentsOnly.slice(0, index);
+        const previousWord = prefix.trimEnd().split(/\s+/).pop() ?? '';
+        const optionValue = /=(?:['"])?$/.test(prefix) ||
+          /^(?:--test-name-pattern|--test-reporter|--test-reporter-destination|--out)$/.test(previousWord);
+        const leftBoundary = !/[\w./-]/.test(argumentsOnly[index - 1] ?? ' ');
+        const rightBoundary = !/[\w./-]/.test(argumentsOnly[index + path.length] ?? ' ');
+        if (!optionValue && leftBoundary && rightBoundary) return true;
+      }
+      return false;
     });
   });
 }
