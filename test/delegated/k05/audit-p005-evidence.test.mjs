@@ -136,3 +136,21 @@ test('R-027: inline shell comments and quoted args cannot forge a new K05 test i
     `- run: >-\n    node --test --import tsx\n    ${target}`,
   ]) assert.equal(inspectCiDiscovery(workflow, pkg, [target])[0].discovered, true, workflow);
 });
+
+test('Q-167: unreachable shell branches are not executed-test proof, later real call remains visible', () => {
+  const target = 'test/delegated/k05/audit-p006-ui.test.mjs';
+  const pkg = JSON.stringify({ scripts: { test: 'echo no-test' } });
+  for (const command of [
+    `false && node --test ${target}`,
+    `true || node --test ${target}`,
+    `exit 0; node --test ${target}`,
+    `exit 1; node --test ${target}`,
+    `node --test test/other.test.mjs # ${target}`,
+  ]) assert.equal(inspectCiDiscovery(`run: ${command}`, pkg, [target])[0].discovered, false, command);
+  for (const command of [
+    `true && node --test ${target}`,
+    `false || node --test ${target}`,
+    `node --test test/other.test.mjs; node --test ${target}`,
+    `false && node --test test/other.test.mjs; node --test ${target}`,
+  ]) assert.equal(inspectCiDiscovery(`run: ${command}`, pkg, [target])[0].discovered, true, command);
+});

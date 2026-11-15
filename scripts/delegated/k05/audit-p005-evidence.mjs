@@ -97,13 +97,21 @@ function shellWords(text) {
 }
 
 function nodeTestInvokesPath(command, path) {
-  const match = /(?:^|[;&|])\s*node\s+--test\b([^;&|]*)/.exec(stripShellComment(command));
-  if (!match) return false;
-  const args = shellWords(match[1]);
-  return args.some((arg) => arg === path ||
-    (arg.endsWith('/*.test.mjs') && path.startsWith(arg.slice(0, -'*.test.mjs'.length)) &&
-      !path.slice(arg.slice(0, -'*.test.mjs'.length).length).includes('/')) ||
-    (arg === 'test/**/*.test.mjs' && path.startsWith('test/') && path.endsWith('.test.mjs')));
+  const clean = stripShellComment(command);
+  // A path in a definitely unreachable short-circuit/exit branch is not a test run.
+  // Inspect every node --test call: a preceding unrelated test must not mask a later one.
+  for (const match of clean.matchAll(/(?:^|[;&|])\s*node\s+--test\b([^;&|]*)/g)) {
+    const before = clean.slice(0, match.index + match[0].indexOf('node'));
+    if (/(?:^|[;&|])\s*false\s*&&\s*$/.test(before) ||
+        /(?:^|[;&|])\s*true\s*\|\|\s*$/.test(before) ||
+        /(?:^|[;&|])\s*exit(?:\s+\d+)?\s*;\s*$/.test(before)) continue;
+    const args = shellWords(match[1]);
+    if (args.some((arg) => arg === path ||
+      (arg.endsWith('/*.test.mjs') && path.startsWith(arg.slice(0, -'*.test.mjs'.length)) &&
+        !path.slice(arg.slice(0, -'*.test.mjs'.length).length).includes('/')) ||
+      (arg === 'test/**/*.test.mjs' && path.startsWith('test/') && path.endsWith('.test.mjs')))) return true;
+  }
+  return false;
 }
 
 export function inspectCiDiscovery(workflow, packageText, paths = K05_NEW_TESTS) {
