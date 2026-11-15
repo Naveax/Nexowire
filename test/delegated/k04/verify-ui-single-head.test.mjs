@@ -61,3 +61,25 @@ test('T-382: dirty checkout or changed test file path cannot prove exact source'
   assert.ok(result.issues.includes('dirty-worktree'));
   assert.ok(result.issues.includes('K01:unexpected-path'));
 });
+
+
+test('T-382: repeated summary must not overwrite an earlier failed run', () => {
+  const mixed = '# tests 13\n# pass 12\n# fail 1\n' +
+    'ℹ tests 13\nℹ pass 13\nℹ fail 0\nℹ skipped 0\nℹ todo 0';
+  const parsed = parseTestSummary(mixed);
+  assert.equal(parsed.ambiguousSummary, true);
+  const evidence = complete();
+  evidence.records[0].summary = parsed;
+  const result = validateEvidence(evidence);
+  assert.equal(result.ok, false);
+  assert.ok(result.issues.includes('K01:incomplete-tap'));
+});
+
+test('T-382: repeated identical summary is ambiguous, not silent PASS', () => {
+  const one = '# tests 13\n# pass 13\n# fail 0\n# skipped 0\n# todo 0';
+  const parsed = parseTestSummary(one + '\n' + one);
+  assert.equal(parsed.ambiguousSummary, true);
+  const evidence = complete();
+  evidence.records[3].summary = parsed;
+  assert.equal(validateEvidence(evidence).ok, false);
+});
