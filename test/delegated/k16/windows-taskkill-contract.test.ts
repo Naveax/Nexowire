@@ -22,7 +22,9 @@ const executableSource = ts.transpileModule(functionNode.getText(parsed), {
 
 type FakeOutcome = { event: "close"; exitCode: number | null } |
   { event: "error"; message: string } |
-  { event: "timeout" };
+  { event: "timeout" } |
+  { event: "error-close"; message: string; exitCode: number | null } |
+  { event: "timeout-close"; exitCode: number | null };
 
 function makeFixture(outcome: FakeOutcome, rootAlive: boolean) {
   const commands: Array<{ file: string; args: string[]; options: Record<string, unknown> }> = [];
@@ -42,15 +44,25 @@ function makeFixture(outcome: FakeOutcome, rootAlive: boolean) {
       queueMicrotask(() => {
         if (outcome.event === "close") child.emit("close", outcome.exitCode);
         else if (outcome.event === "error") child.emit("error", new Error(outcome.message));
-        // Timeout case deliberately never emits close/error. Its mocked
-        // timer advances immediately, with no real ten-second wait or PID.
+        else if (outcome.event === "error-close") {
+          // Node may emit close after a failed spawn/error; close(0) must not
+          // overwrite the first, unconfirmed result.
+          child.emit("error", new Error(outcome.message));
+          child.emit("close", outcome.exitCode);
+        } else if (outcome.event === "timeout-close") {
+          // The mocked timeout callback is already enqueued: close(0)
+          // arrives afterwards and must not upgrade unconfirmed cleanup.
+          queueMicrotask(() => child.emit("close", outcome.exitCode));
+        }
+        // Timeout cases advance only a fake timer and never touch real PIDs.
       });
       return child;
     },
-    setTimeout: outcome.event === "timeout"
+    setTimeout: outcome.event === "timeout" || outcome.event === "timeout-close"
       ? (callback: () => void) => { queueMicrotask(callback); return 0; }
       : setTimeout,
-    clearTimeout: outcome.event === "timeout" ? () => undefined : clearTimeout,
+    clearTimeout: outcome.event === "timeout" || outcome.event === "timeout-close"
+      ? () => undefined : clearTimeout,
   };
   const terminate = runInNewContext(
     `${executableSource}\nkillPidTree`, sandbox,
@@ -227,4 +239,24 @@ test("#540: hung taskkill with gone root remains unconfirmed, not confirmed clea
   assert.equal(fixture.fakeKillCalls, 1);
   assert.deepEqual(fixture.checkedPids, [orphan.originalParentPid]);
   assert.equal(orphan.alive, true, "a timeout cannot establish the grandchild postcondition");
+});
+
+test("#540 Q-233: spawn error followed by close zero cannot overwrite unconfirmed stop", async () => {
+  const fixture = makeFixture({ event: "error-close", message: "Access denied", exitCode: 0 }, false);
+  assert.equal(await fixture.terminate(17319), "unconfirmed",
+    "the first taskkill error must take precedence over its later close(0)");
+  assert.deepEqual(fixture.checkedPids, [17319]);
+  assert.equal(fixture.commands.length, 1);
+  assert.equal(fixture.fakeKillCalls, 0);
+});
+
+test("#540 Q-233: timeout followed by late close zero cannot upgrade cleanup", async () => {
+  const fixture = makeFixture({ event: "timeout-close", exitCode: 0 }, false);
+  assert.equal(await fixture.terminate(17320), "unconfirmed");
+  // Drain the simulated late close event; neither PID probe nor fake kill
+  // count may change, and no second OS termination request may be issued.
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.deepEqual(fixture.checkedPids, [17320]);
+  assert.equal(fixture.commands.length, 1);
+  assert.equal(fixture.fakeKillCalls, 1);
 });
