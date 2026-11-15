@@ -1,5 +1,5 @@
 /**
- * Read-only source and import provenance gate for two independently reviewed,
+ * Read-only source and import provenance gate for four independently reviewed,
  * pure-contract root suites. Does NOT approve any other tests.
  */
 import {execFileSync} from 'node:child_process';
@@ -14,15 +14,21 @@ import {APPROVED_ROOT_TEST_FILES} from './portable-root-execution-receipt.mjs';
 const EXPECTED=Object.freeze({
   'test/agent-protocol.test.ts':'6eeaec135201e8bb6a7ab08382098223b6e05747',
   'test/product-usage-policy.test.ts':'708d91d1f79c4a6f1be8d3c2b342fc6e01a83a37',
+  'test/product-transport-policy.test.ts':'47fa693c290a7a57408bfa7d477cd1a982b26f14',
+  'test/task-os-sandbox-policy-p07.test.ts':'387ce6e5351678d5c19afb5f293d2083d8d54829',
   'src/protocol/agent.ts':'6bd55d19f898021fd1e70e78045ddba656aaf4e5',
   'src/protocol/capabilities.ts':'5e92ce4db343bb4c1fda33d5da0603dfd35f4e84',
   'src/product/plans.ts':'9ac634f06f475d4c4ae9c12032ebda68e2b2ee04',
   'src/product/usage-policy.ts':'8bcc7539dbdb6ac85e080791306dd60432a59d7d',
+  'src/product/transport-policy.ts':'ea0593dfc9bf29b6be40120cc4a1cb2a61f46788',
+  'src/agent/task-os-sandbox-policy.ts':'a35e1b25d40b2a0d796dd9fdd51d7079370e6730',
 });
 export const PURE_REVIEWED_FILES=EXPECTED;
 export const PURE_ENTRYPOINTS=Object.freeze([
   'test/agent-protocol.test.ts',
   'test/product-usage-policy.test.ts',
+  'test/product-transport-policy.test.ts',
+  'test/task-os-sandbox-policy-p07.test.ts',
 ]);
 const external=new Set(['node:test','node:assert/strict','zod']);
 const SHA=/^[a-f0-9]{40}$/;
