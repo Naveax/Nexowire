@@ -83,3 +83,13 @@ test('T-382: repeated identical summary is ambiguous, not silent PASS', () => {
   evidence.records[3].summary = parsed;
   assert.equal(validateEvidence(evidence).ok, false);
 });
+
+test('T-382: cancelled TAP subtests cannot be reported as complete PASS', () => {
+  const cancelled = parseTestSummary('# tests 13\n# pass 13\n# fail 0\n# cancelled 1\n# skipped 0\n# todo 0');
+  assert.equal(cancelled.cancelled, 1);
+  const evidence = complete();
+  evidence.records[3].summary = cancelled;
+  assert.equal(validateEvidence(evidence).ok, false);
+  assert.ok(validateEvidence(evidence).issues.includes('K04:incomplete-tap'));
+  assert.equal(parseTestSummary('# tests 1\n# pass 1\n# fail 0\n# cancelled 0').cancelled, 0);
+});
