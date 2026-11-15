@@ -21,6 +21,8 @@ export const APPROVED_ROOT_TEST_FILES=Object.freeze([
   'test/task-os-sandbox-policy-p07.test.ts',
   'test/bridge-guardian-policy.test.ts',
   'test/product-pairing.test.ts',
+  'test/daily-quota-proposal.test.ts',
+  'test/product-usage-ledger.test.ts',
 ]);
 const MAX_TEST_MILLIS=7*60*1000;
 const MAX_LOG_BYTES=2*1024*1024;
