@@ -16,6 +16,8 @@ export const UI_SUITES = Object.freeze([
 export function parseTestSummary(output) {
   const fields = {};
   for (const match of String(output).matchAll(/^(?:ℹ|#)\s*(tests|pass|fail|skipped|todo)\s+(\d+)\s*$/gm)) {
+    // Multiple summaries can conceal a failed earlier run; never trust the last one.
+    if (Object.hasOwn(fields, match[1])) fields.ambiguousSummary = true;
     fields[match[1]] = Number(match[2]);
   }
   return fields;
@@ -38,8 +40,8 @@ export function validateEvidence({ before, after, cleanBefore, cleanAfter, recor
     if (row.head !== before || row.afterHead !== before) issues.push(`${suite.id}:different-head`);
     if (row.path !== suite.file) issues.push(`${suite.id}:unexpected-path`);
     if (row.exitCode !== 0) issues.push(`${suite.id}:failed-or-not-run`);
-    const { tests, pass, fail, skipped, todo } = row.summary || {};
-    if (tests !== suite.count || pass !== suite.count || fail !== 0 ||
+    const { tests, pass, fail, skipped, todo, ambiguousSummary } = row.summary || {};
+    if (ambiguousSummary || tests !== suite.count || pass !== suite.count || fail !== 0 ||
         skipped !== 0 || todo !== 0) issues.push(`${suite.id}:incomplete-tap`);
   }
   if (records.length !== UI_SUITES.length) issues.push('unexpected-suite-count');
@@ -80,7 +82,8 @@ export function runSingleHeadCheck(cwd = process.cwd()) {
       afterHead: git(cwd, ['rev-parse', 'HEAD']), exitCode: result.code, summary,
       error: result.error });
     // Do not continue into another suite after a failure or missing summary.
-    if (result.code !== 0 || summary.tests === undefined || (summary.fail ?? 1) !== 0) break;
+    if (result.code !== 0 || summary.ambiguousSummary || summary.tests === undefined ||
+        (summary.fail ?? 1) !== 0) break;
   }
   const after = git(cwd, ['rev-parse', 'HEAD']);
   const cleanAfter = git(cwd, ['status', '--porcelain', '--untracked-files=all']) === '';
