@@ -52,3 +52,20 @@ passing release gate without changing the selection strategy and validating it.
 
 The audit is deliberately a first-stage, read-only diagnostic. Full portable
 test execution coverage remains OPEN in issue #1205 until validated.
+
+## Execution coverage reconciliation (incremental, #1205)
+
+The portable-root receipt covers a bounded, explicitly approved set, not all tests.
+Reconcile a real execution receipt against the full immutable Git test inventory:
+
+    $env:NEXOWIRE_EXPECTED_COMMIT_SHA = (git rev-parse HEAD).Trim()
+    node scripts/ci/portable-root-execution-receipt.mjs --json > "$env:TEMP\nexowire-root-receipt.json"
+    node scripts/ci/test-execution-coverage.mjs --receipt "$env:TEMP\nexowire-root-receipt.json"
+    node --test test/ci/test-execution-coverage.test.mjs
+
+The reconciliation checks exact source HEAD, manifest SHA256 and per-file Git blob,
+rejects duplicates, non-committed files, skipped/failed/ambiguous counters, and
+explicitly reports each NOT_RUN file. This is not an independent attestation of
+execution, and cannot authenticate a fabricated receipt. It is not comprehensive
+Windows, CORE, Broker, SYSTEM DPAPI, or physical cutover acceptance. CI requires
+NEXOWIRE_EXPECTED_COMMIT_SHA. The CLI never starts privileged Windows tests.
