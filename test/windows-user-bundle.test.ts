@@ -69,6 +69,22 @@ test('hidden Windows launcher opens only the simple connect flow', () => {
   );
 });
 
+test('experimental Windows setup cannot register the stable hourly updater', () => {
+  const preview = renderSetupScript({
+    version: '1.0.9-exp.0',
+    sourceSha,
+    payloadSha256: payloadSha,
+    repository: 'Naveax/Nexowire',
+  });
+  assert.match(preview, /releases\/download\/v1\.0\.9-exp\.0\/Nexowire-Windows-x64\.zip/);
+  assert.match(preview, /Nexowire experimental preview: automatic updates disabled/);
+  assert.match(preview, /Nexowire Experimental\.lnk/);
+  assert.doesNotMatch(preview, /GetFolderPath\('Programs'\)\) 'Nexowire\.lnk'/);
+  assert.doesNotMatch(preview, /& \$autoNode \$autoCli update auto install/);
+  assert.doesNotMatch(preview, /Nexowire hourly auto-update task registration failed/);
+  assert.match(preview, /NX_PAYLOAD_SHA256/);
+});
+
 test('Windows setup is non-admin, versioned, and checksum-pinned', () => {
   const setup = renderSetupScript({
     version: '1.0.1',

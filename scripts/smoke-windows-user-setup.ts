@@ -266,26 +266,33 @@ async function main(): Promise<void> {
     let smokeSetup = downloadSource === 'fixture'
       ? verifiedSetupText.replace(urlMatch[1]!, localUrl)
       : verifiedSetupText;
-    smokeSetup = smokeSetup.replace(
-      "$shortcutPath = Join-Path ([Environment]::GetFolderPath('Programs')) 'Nexowire.lnk';",
-      "$shortcutPath = Join-Path $env:NX_INSTALL 'Nexowire.lnk';",
-    );
+    // Both stable and preview shortcuts must be redirected into the fixture
+    // directory; never touch the runner's real Start Menu.
+    for (const shortcutName of ['Nexowire.lnk', 'Nexowire Experimental.lnk']) {
+      smokeSetup = smokeSetup.replace(
+        "$shortcutPath = Join-Path ([Environment]::GetFolderPath('Programs')) '" + shortcutName + "';",
+        "$shortcutPath = Join-Path $env:NX_INSTALL '" + shortcutName + "';",
+      );
+    }
     smokeSetup = smokeSetup.replace(
       "Start-Process -FilePath $shortcut.TargetPath -ArgumentList $shortcut.Arguments -WorkingDirectory $env:NX_INSTALL;",
       "Write-Output 'launcher-ready';",
     );
-    // The setup smoke must not register a real task on the host.
-    smokeSetup = smokeSetup.replace(
-      '& $autoNode $autoCli update auto install | Out-Null;',
-      "$global:LASTEXITCODE=0; Write-Output 'hourly-updater-simulated';",
-    );
+    // The setup smoke must never register a real task on the host.
+    // Stable installers contain an updater; experimental installers omit it.
+    if (smokeSetup.includes('& $autoNode $autoCli update auto install | Out-Null;')) {
+      smokeSetup = smokeSetup.replace(
+        '& $autoNode $autoCli update auto install | Out-Null;',
+        "$global:LASTEXITCODE=0; Write-Output 'hourly-updater-simulated';",
+      );
+    }
     smokeSetup = smokeSetup.replace(
       /^pause$/m,
       'rem smoke-no-pause',
     );
 
     assert.match(smokeSetup, /launcher-ready/);
-    assert.match(smokeSetup, /hourly-updater-simulated/);
+    assert.match(smokeSetup, /hourly-updater-simulated|Nexowire experimental preview: automatic updates disabled/);
     assert.doesNotMatch(smokeSetup, /& \$autoNode \$autoCli update auto install/);
     assert.doesNotMatch(
       smokeSetup,
@@ -330,7 +337,7 @@ async function main(): Promise<void> {
     if (scenario === 'checksum-mismatch') {
       assert.notEqual(installed.exitCode, 0, 'Corrupt payload must be rejected.');
       assert.match(installed.stdout + installed.stderr, /Nexowire payload checksum mismatch/);
-      assert.doesNotMatch(installed.stdout, /^(?:launcher-ready|hourly-updater-simulated)$/m);
+      assert.doesNotMatch(installed.stdout, /^(?:launcher-ready|hourly-updater-simulated|Nexowire experimental preview: automatic updates disabled)$/m);
       await assert.rejects(fs.access(installRoot), { code: 'ENOENT' });
       process.stdout.write(JSON.stringify({
         testPassed: true, scenario, installed: false,
@@ -351,7 +358,7 @@ async function main(): Promise<void> {
       ].join('\n'),
     );
     assert.match(installed.stdout, /launcher-ready/);
-    assert.match(installed.stdout, /hourly-updater-simulated/);
+    assert.match(installed.stdout, /hourly-updater-simulated|Nexowire experimental preview: automatic updates disabled/);
 
     const nodeExe = path.join(
       installRoot,
