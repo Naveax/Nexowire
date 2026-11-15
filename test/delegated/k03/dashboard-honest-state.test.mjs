@@ -145,3 +145,11 @@ test('T-408: empty command receipt must not poll into a false applied result', a
   assert.equal(bridge.fetchCalls, 1, 'Invalid issue receipt must not be polled');
   assert.ok(bridge.history.every((line) => !/İmzalı cihaz onayı alındı/.test(line)));
 });
+
+test('T-408: whitespace-only command receipt must not poll into a false applied result', async () => {
+  const bridge = bridgeSequence(['applied'], { requestId: ' \t\n ' });
+  const reloads = await bridge.run();
+  assert.equal(reloads, 0, 'Whitespace is not a valid command identity');
+  assert.equal(bridge.fetchCalls, 1, 'Whitespace-only issue receipt must not be polled');
+  assert.ok(bridge.history.every((line) => !/İmzalı cihaz onayı alındı/.test(line)));
+});
