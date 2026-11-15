@@ -9,13 +9,13 @@ This is a **bounded first execution lane**, not a blanket "635 tests PASS":
 
 - New hosted `Portable Root Test Smoke` workflow runs only on disposable
   `ubuntu-latest` runners, independently with Node 22 and 24.
-- Exactly seven reviewed root-level files are invoked explicitly:
+- Exactly nine reviewed root-level files are invoked explicitly:
   `test/version.test.ts`, `test/release-tag.test.ts`,
   `test/ai07-physical-cutover-gate.test.ts`,
   `test/capability-policy.test.ts`,
   `test/device-routing-policy-store.test.ts`,
-  `test/agent-protocol.test.ts`, and
-  `test/product-usage-policy.test.ts`.
+  `test/agent-protocol.test.ts`,
+  `test/product-usage-policy.test.ts`,
   The two policy-store suites create and remove **only isolated temporary
   fixture directories** on the disposable GitHub runner. No task, network,
   Broker, CORE, registry or production state is touched.
@@ -31,7 +31,7 @@ This is a **bounded first execution lane**, not a blanket "635 tests PASS":
   Git's checked-out `HEAD` does not match the expected SHA supplied by GitHub.
   This prevents a passing merge-ref receipt from being mislabeled exact PR HEAD.
   The receipt prints to CI logs; it does not write to protected production paths.
-- This is a **root-level test execution proof only for the exact seven files**.
+- This is a **root-level test execution proof only for the exact nine files**.
   It does not certify the remaining tracked files, any production Windows
   privilege, or physical SYSTEM cutover.
 - Never enlarge this allowlist without reviewing imported modules, side effects,
@@ -68,7 +68,7 @@ node --test test/ci/portable-root-coverage-gate.test.mjs
 node scripts/ci/portable-root-coverage-gate.mjs --json
 ```
 
-Only the seven reviewed portable root files are executed. There is no
+Only the nine reviewed portable root files are executed. There is no
 automatic promotion of unreviewed files, no broad npm-test invocation, no
 privileged Windows action, and no assertion that physical SYSTEM cutover
 or all tracked files have passed. A coverage count is not authorization.
@@ -79,12 +79,12 @@ pure product plan/usage policy functions, respectively; they do not invoke
 filesystem, process, network, Windows tasks, privileged Broker or production
 state. Their exact committed Git blobs are separately pinned by the planner.
 
-## Exact Git source provenance for two pure contract suites
+## Exact Git source provenance for four pure contract suites
 
 Before the hosted runner executes the portable-root receipt, it runs
 `pure-import-provenance.mjs --json` and its negative tests. This gate checks
-two independently reviewed test files, `agent-protocol.test.ts` and
-`product-usage-policy.test.ts`, plus all four source modules reachable by
+four independently reviewed test files, `agent-protocol.test.ts`,
+`product-usage-policy.test.ts`, `product-transport-policy.test.ts` and `task-os-sandbox-policy-p07.test.ts`, plus all six source modules reachable by
 their static local imports. It ties each committed regular file and each
 working copy to an explicitly reviewed Git blob SHA and validates the
 direct and transitive **local static** import graph with the TypeScript
@@ -108,3 +108,11 @@ node scripts/ci/pure-import-provenance.mjs --json
 Source re-review is required before updating a pinned hash. This step
 does not review the other five portable suites, grant CORE authority,
 approve SYSTEM runtime, or prove end-to-end production safety.
+
+### Transport and sandbox source-only contracts
+
+Two new suites: product-transport-policy and task-os-sandbox-policy-p07.
+The former tests direct-first and prepaid-only cost routing; the latter
+tests fail-closed source-only sandbox evaluation without an OS executor.
+Both suites and their imported source modules are Git-blob-pinned.
+No live network, protected task, Broker, CORE or production state is used.
