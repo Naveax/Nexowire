@@ -26,6 +26,8 @@ const EXPECTED=[
   'test/guardian-signed-receipt.test.ts',
   'test/private-display-plan.test.ts',
   'test/owner-public-wss-p256-migration-proposal.test.ts',
+  'test/agent-request-cache.test.ts',
+  'test/owner-public-wss-stream-flow-staging.test.ts',
 ];
 const PASS_TAP=[
   'TAP version 13','1..2','# tests 2','# pass 2','# fail 0',
@@ -54,7 +56,7 @@ test('only successful exact-file TAP subprocesses produce a source-bound receipt
     return {status:0,stdout:PASS_TAP,stderr:''};
   };
   const receipt=createPortableRootReceipt(root,runner);
-  assert.equal(calls.length,18);
+  assert.equal(calls.length,20);
   for(let i=0;i<calls.length;i++){
     assert.equal(calls[i].exe,process.execPath);
     assert.equal(calls[i].options.cwd,root);
@@ -65,8 +67,8 @@ test('only successful exact-file TAP subprocesses produce a source-bound receipt
   const inventory=readTestInventory(root).report;
   assert.equal(receipt.sourceCommitSha,inventory.commitSha);
   assert.equal(receipt.sourceManifestSha256,inventory.manifestSha256);
-  assert.equal(receipt.executedFileCount,18);
-  assert.equal(receipt.testsPassed,36);
+  assert.equal(receipt.executedFileCount,20);
+  assert.equal(receipt.testsPassed,40);
   assert.equal(receipt.fail,0);
   assert.equal(receipt.skipped,0);
   assert.equal(receipt.scope,'ONLY_EXPLICIT_APPROVED_ROOT_TEST_FILES');

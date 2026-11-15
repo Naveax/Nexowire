@@ -30,6 +30,8 @@ const REVIEWED_GIT_BLOBS = Object.freeze({
   'test/guardian-signed-receipt.test.ts':'9eddfb2267a6a7defe2a8e69c43cd6c96ebb17d8',
   'test/private-display-plan.test.ts':'84e416cfc6f8ca183ba6400a362e80ef2325ea6d',
   'test/owner-public-wss-p256-migration-proposal.test.ts':'e3b95ef518676022766d1edefda55ef729835717',
+  'test/agent-request-cache.test.ts':'745865fb0a79aa4b271d703f4b924bb601cff9a5',
+  'test/owner-public-wss-stream-flow-staging.test.ts':'a6c5d85e137e30237de8e3e3a72362f37b388751',
 });
 
 function fail(reason) { throw new Error('TEST_EXECUTION_PLAN_' + reason); }
