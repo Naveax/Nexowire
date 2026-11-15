@@ -37,6 +37,13 @@ function view(e: ReferenceEvidence): { state: ReferenceState; message: string } 
   if (e.bytesSent < e.bytesTotal && e.bytesSent >= 0) {
     return { state: 'SENDING', message: 'Aktarım sürüyor; teslim henüz doğrulanmadı.' };
   }
+  // This is only a reference UI gate, but invalid transport metadata must never look verified.
+  const wellFormed = Number.isSafeInteger(e.bytesTotal) && e.bytesTotal >= 0 &&
+    Number.isSafeInteger(e.bytesSent) && e.bytesSent >= 0 &&
+    e.bytesSent <= e.bytesTotal && /^[a-f0-9]{64}$/.test(e.sourceSha256);
+  if (!wellFormed) {
+    return { state: 'UNVERIFIED', message: 'Aktarım kanıtı geçersiz; alıcı teslimi doğrulanmadı.' };
+  }
   const same = (p: ReceiverProof | undefined) => p !== undefined &&
     p.operationId === e.operationId && p.deviceId === e.expectedDeviceId &&
     p.destination === e.destination && p.bytes === e.bytesTotal &&
@@ -202,4 +209,30 @@ test('R-111: same-length final-file mutation invalidates independent receiver di
       ...good, sha256: digest(await readFile(f.final)),
     } }).state, 'UNVERIFIED');
   });
+});
+
+test('Q-251: malformed transfer sizes never form a verified receiver receipt', () => {
+  const base = evidence(bytesFor(1024), '/receiver/invalid-size');
+  const bad = [
+    { bytesTotal: -1, bytesSent: -1 },
+    { bytesTotal: Number.MAX_SAFE_INTEGER + 1, bytesSent: Number.MAX_SAFE_INTEGER + 1 },
+    { bytesTotal: Number.NaN, bytesSent: Number.NaN },
+    { bytesTotal: base.bytesTotal, bytesSent: Number.POSITIVE_INFINITY },
+  ];
+  for (const partial of bad) {
+    const e = { ...base, ...partial };
+    const matched = receipt(e);
+    assert.equal(view({ ...e, receiverAck: matched,
+      independentReceiverReadback: matched }).state, 'UNVERIFIED');
+  }
+});
+
+test('Q-251: matching non-SHA256 text cannot certify receiver delivery', () => {
+  const base = evidence(bytesFor(1024), '/receiver/invalid-digest');
+  for (const malformed of ['not-a-digest', '', 'f'.repeat(63), 'G'.repeat(64)]) {
+    const e = { ...base, sourceSha256: malformed };
+    const matched = receipt(e);
+    assert.equal(view({ ...e, receiverAck: matched,
+      independentReceiverReadback: matched }).state, 'UNVERIFIED');
+  }
 });
