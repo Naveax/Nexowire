@@ -168,3 +168,30 @@ test('D-106 #588 exactly 256MiB passes size gate but not SHA gate, without alloc
     assert.equal(hashLimit,cap);
     assert.equal(reads,0);
   }));
+
+
+test('Q-245 #588 in-flight chunk mutation with stable sender SHA cannot publish',()=>
+  fixture(async store=>{
+    const bytes=Buffer.alloc(225_281);
+    for(let i=0;i<bytes.length;i++)bytes[i]=(i*31+7)%251;
+    const expectedDigest=sha(bytes);
+    const artifactPath='k18/inflight-chunk-corrupted.bin';
+    const changedChunkSource:ArtifactSourceOps={
+      stat:async()=>({type:'file',size:bytes.length}),
+      sha256:async()=>expectedDigest,
+      read:async(_,offset,maxBytes)=>{
+        const chunk=Buffer.from(bytes.subarray(offset,offset+maxBytes));
+        if(offset===65_536)chunk[0]=chunk[0]! ^ 0x01;
+        return {sourceBytes:bytes.length,offsetBytes:offset,
+          bytesRead:chunk.length,contentBase64:chunk.toString('base64')};
+      },
+    };
+    // The sender reports the original SHA throughout; all chunks have correct
+    // lengths and canonical Base64. Receiver must detect altered bytes.
+    await assert.rejects(
+      ingestDeviceArtifact(store,changedChunkSource,input(artifactPath,8)),
+      (error:unknown)=>error instanceof ArtifactBridgeError&&
+        error.code==='HASH_MISMATCH',
+    );
+    assert.equal(await store.get(scope,artifactPath),null);
+  }));
