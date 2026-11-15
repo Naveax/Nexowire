@@ -69,3 +69,32 @@ explicitly reports each NOT_RUN file. This is not an independent attestation of
 execution, and cannot authenticate a fabricated receipt. It is not comprehensive
 Windows, CORE, Broker, SYSTEM DPAPI, or physical cutover acceptance. CI requires
 NEXOWIRE_EXPECTED_COMMIT_SHA. The CLI never starts privileged Windows tests.
+
+## Source-bound manual review triage (incremental #1205)
+
+To build a **non-authoritative** review queue for every tracked TypeScript test:
+
+```powershell
+$env:NEXOWIRE_EXPECTED_COMMIT_SHA = (git rev-parse HEAD).Trim()
+node --test test/ci/test-review-triage.test.mjs
+node scripts/ci/test-review-triage.mjs --summary
+node scripts/ci/test-review-triage.mjs --json
+```
+
+The last command emits all pending paths, source Git blob SHAs, and textual
+review signals. The summary prints bounded counts and a small sample only.
+The repository source HEAD, index, manifest SHA-256, and each test's actual
+working-copy Git blob are verified; malformed/different evidence fails closed.
+
+Every file not in the exact approved portable-root allowlist has admission
+`NOT_APPROVED_NO_EXECUTION`. The review hints include process execution,
+network/listeners, file I/O, SQLite, Windows privilege vocabulary, environment,
+native process and runtime module loading. These are **regular expressions**
+over source text, not parsed call graphs or runtime traces. Comments and test
+fixture strings can create false positives; obfuscation and indirect imports
+can create false negatives. Even the lowest-hint category MUST be manually
+reviewed before being added to an isolated, source-pinned test lane.
+
+The pipeline does not run test files, grant Windows privileges, infer complete
+test coverage, change production state or authorize SYSTEM Hub cutover.
+Only use this triage to prioritize human source review; retain #1161 NO-GO.
