@@ -9,8 +9,11 @@ const read = (filename) => readFile(path.join(root, filename), 'utf8');
 const ownerDocs = ['docs/SELF_HOST.md', 'docs/DEPLOYMENT_ONBOARDING.md'];
 
 function links(markdown) {
-  return [...markdown.matchAll(/!?\[[^\]]+\]\(([^\s)]+)(?:\s+['"][^'"]*['"])?\)/g)]
+  const inline = [...markdown.matchAll(/!?\[[^\]]+\]\(([^\s)]+)(?:\s+['"][^'"]*['"])?\)/g)]
     .map((match) => match[1]);
+  const references = [...markdown.matchAll(/^[ \t]{0,3}\[[^\]\r\n]+\]:[ \t]*<?([^\s>]+)>?/gm)]
+    .map((match) => match[1]);
+  return [...inline, ...references];
 }
 
 function headingAnchors(markdown) {
@@ -113,6 +116,10 @@ test('negative fixtures expose missing local targets and changed anchors', async
   assert.equal(broken.length, 2);
   assert.match(broken.join(' '), /missing docs\/NOT_HERE\.md/);
   assert.match(broken.join(' '), /missing anchor #old-heading/);
+  assert.deepEqual(await brokenLocalLinks('docs/SELF_HOST.md',
+    '[guide][win]\n\n[win]: INSTALL_WINDOWS.md#chatgpt-adresini-bulma', load), []);
+  assert.match((await brokenLocalLinks('docs/SELF_HOST.md',
+    '[broken][win]\n\n[win]: NOT_HERE.md', load)).join(' '), /missing docs\/NOT_HERE\.md/);
 });
 
 test('negative fixtures reject stale release versions, asset URLs and checksums', async () => {
@@ -123,4 +130,5 @@ test('negative fixtures reject stale release versions, asset URLs and checksums'
   assert.match(releaseFindings(install.replace(observation.installerSha256, '0'.repeat(64)), observation).join(' '), /checksum differs/);
   assert.match(releaseFindings(install + '\n[Unofficial installer](https://untrusted.example/Nexowire-Setup.cmd)', observation).join(' '), /unexpected CMD download/);
   assert.match(releaseFindings(install + '\n[Unverified script](https://untrusted.example/bootstrap.cmd?source=mirror)', observation).join(' '), /unexpected CMD download/);
+  assert.match(releaseFindings(install + '\n[Mirror installer][mirror]\n\n[mirror]: https://untrusted.example/extra.cmd', observation).join(' '), /unexpected CMD download/);
 });
