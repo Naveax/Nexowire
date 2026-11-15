@@ -12,14 +12,14 @@ import {readTestInventory} from '../../scripts/ci/test-inventory.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const getSource=()=>Object.fromEntries(Object.keys(PURE_REVIEWED_FILES).map(f=>
   [f,readFileSync(path.join(root,...f.split('/')))]));
-test('commit-pinned local import graph includes four reviewed suites and six source dependencies',()=>{
+test('commit-pinned local import graph includes six reviewed suites and nine source dependencies',()=>{
   const result=attestPureImportProvenance(root);
   assert.equal(result.sourceCommitSha,readTestInventory(root).report.commitSha);
-  assert.equal(result.reviewedTestFileCount,4);
-  assert.equal(result.reviewedDependencyFileCount,6);
-  assert.equal(result.directAndTransitiveLocalSourceFiles.length,10);
+  assert.equal(result.reviewedTestFileCount,6);
+  assert.equal(result.reviewedDependencyFileCount,9);
+  assert.equal(result.directAndTransitiveLocalSourceFiles.length,15);
   assert.deepEqual(result.externalPackagesReviewedAsDirectImports,
-    ['node:assert/strict','node:test','zod']);
+    ['node:assert/strict','node:crypto','node:test','zod']);
   assert.equal(result.physicalWindowsAcceptance,'NOT_INFERRED');
   assert.equal(result.externalPackageImplementationProvenance,'NOT_ATTESTED');
   assert.equal(result.runtimeDynamicCodeProvenance,'NOT_INFERRED');

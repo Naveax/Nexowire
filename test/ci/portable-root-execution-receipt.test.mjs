@@ -17,6 +17,8 @@ const EXPECTED=[
   'test/product-usage-policy.test.ts',
   'test/product-transport-policy.test.ts',
   'test/task-os-sandbox-policy-p07.test.ts',
+  'test/bridge-guardian-policy.test.ts',
+  'test/product-pairing.test.ts',
 ];
 const PASS_TAP=[
   'TAP version 13','1..2','# tests 2','# pass 2','# fail 0',
@@ -45,7 +47,7 @@ test('only successful exact-file TAP subprocesses produce a source-bound receipt
     return {status:0,stdout:PASS_TAP,stderr:''};
   };
   const receipt=createPortableRootReceipt(root,runner);
-  assert.equal(calls.length,9);
+  assert.equal(calls.length,11);
   for(let i=0;i<calls.length;i++){
     assert.equal(calls[i].exe,process.execPath);
     assert.equal(calls[i].options.cwd,root);
@@ -56,8 +58,8 @@ test('only successful exact-file TAP subprocesses produce a source-bound receipt
   const inventory=readTestInventory(root).report;
   assert.equal(receipt.sourceCommitSha,inventory.commitSha);
   assert.equal(receipt.sourceManifestSha256,inventory.manifestSha256);
-  assert.equal(receipt.executedFileCount,9);
-  assert.equal(receipt.testsPassed,18);
+  assert.equal(receipt.executedFileCount,11);
+  assert.equal(receipt.testsPassed,22);
   assert.equal(receipt.fail,0);
   assert.equal(receipt.skipped,0);
   assert.equal(receipt.scope,'ONLY_EXPLICIT_APPROVED_ROOT_TEST_FILES');
