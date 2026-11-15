@@ -1,5 +1,5 @@
 /**
- * Read-only source and import provenance gate for twenty-two independently reviewed,
+ * Read-only source and import provenance gate for twenty-four independently reviewed,
  * pure-contract root suites. Does NOT approve any other tests.
  */
 import {execFileSync} from 'node:child_process';
@@ -34,6 +34,8 @@ const EXPECTED=Object.freeze({
   'test/scale-s5-chunk-receipt-audit.test.ts':'1b70d6bc7112d2e21c2ebdf165a237a68fe51848',
   'test/scale-transport-metrics.test.ts':'7a5cf2d1fac5cdff68f33367bef682edb972c092',
   'test/scale-s5-provider-meter-evidence.test.ts':'4950286aea128fa34aa279dfc2cd17a12e190297',
+  'test/security-tokens.test.ts':'92ea5c61df1c707f2970e1305a34b56d5cf7b8e0',
+  'test/scale-s5-staging-acceptance.test.ts':'b381c0cc734d7a29f650bf922beb168074817e3d',
   'src/protocol/agent.ts':'6bd55d19f898021fd1e70e78045ddba656aaf4e5',
   'src/protocol/capabilities.ts':'5e92ce4db343bb4c1fda33d5da0603dfd35f4e84',
   'src/product/plans.ts':'9ac634f06f475d4c4ae9c12032ebda68e2b2ee04',
@@ -60,6 +62,8 @@ const EXPECTED=Object.freeze({
   'src/ops/scale-s5-chunk-receipt-audit.ts':'e381342b779999026bf0f15e0c8205192c503fa9',
   'src/ops/scale-transport-metrics.ts':'5a3dc9c36e0dda54d2d448e95e6d2e2f3dcfb828',
   'src/ops/scale-s5-provider-meter-evidence.ts':'21233e0c7e5dd9a39209bfe6989cab7f02334d79',
+  'src/security/tokens.ts':'8587293f920b7910388e432baf2b84239b02c782',
+  'src/ops/scale-s5-staging-acceptance.ts':'4b1cc45ad5150bf82e90dd4edff425e85acb605b',
 });
 export const PURE_REVIEWED_FILES=EXPECTED;
 export const PURE_ENTRYPOINTS=Object.freeze([
@@ -85,6 +89,8 @@ export const PURE_ENTRYPOINTS=Object.freeze([
   'test/scale-s5-chunk-receipt-audit.test.ts',
   'test/scale-transport-metrics.test.ts',
   'test/scale-s5-provider-meter-evidence.test.ts',
+  'test/security-tokens.test.ts',
+  'test/scale-s5-staging-acceptance.test.ts',
 ]);
 const external=new Set(['node:test','node:assert/strict','node:crypto','zod']);
 const SHA=/^[a-f0-9]{40}$/;
