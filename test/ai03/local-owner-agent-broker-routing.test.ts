@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { createServer } from 'node:http';
+import { once } from 'node:events';
 import { executeCapability } from '../../src/agent/executors.js';
 import { PathPolicy } from '../../src/agent/path-policy.js';
 import { NEXOWIRE_VERSION } from '../../src/version.js';
@@ -126,4 +128,44 @@ test('AI-03 Windows Agent to authenticated Broker HTTP callback composes correct
     }),/BROKER_LOCAL_OWNER_OPERATION_ALREADY_RECORDED/);
     assert.equal(callbacks,1);
   }finally{admission.close();await server.close();}
+});
+
+test('AI-03 bounded Broker health probe permits a slow Windows token inspection', {
+  skip: process.platform !== 'win32',
+}, async () => {
+  const token = 'ai03-synthetic-health-token';
+  const server = createServer((req, res) => {
+    if (req.url !== '/health' || req.headers.authorization !== 'Bearer ' + token) {
+      res.writeHead(401);
+      res.end();
+      return;
+    }
+    // Slower than the old 5-second probe cap, but within the Broker's
+    // 15-second Windows token-inspection deadline and new 20-second cap.
+    setTimeout(() => {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({
+        ok: true, elevated: false, version: NEXOWIRE_VERSION,
+        localOwnerAdmissionConfigured: false,
+      }));
+    }, 6_200);
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  assert.ok(address && typeof address !== 'string');
+  try {
+    const client = new PrivilegedBrokerClient({
+      url: 'http://127.0.0.1:' + address.port,
+      token, timeoutMs: 25_000,
+    });
+    const health = await client.probe();
+    assert.equal(health.reachable, true,
+      'Slow real HTTP health readback must not be confused with an unavailable Broker');
+    assert.equal(health.elevated, false,
+      'A reachable synthetic Broker is never evidence of a HIGH token');
+    assert.equal(health.localOwnerAdmissionConfigured, false);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
 });

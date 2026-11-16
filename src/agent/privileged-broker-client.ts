@@ -54,9 +54,12 @@ export class PrivilegedBrokerClient {
     localOwnerAdmissionConfigured?: boolean | null;
   }> {
     const controller = new AbortController();
+    // The Windows /health endpoint verifies the actual token via a bounded
+    // PowerShell process (up to 15 s). Keep client-side health transport
+    // bounded, but allow that attestation to finish on slower Windows hosts.
     const timer = setTimeout(
       () => controller.abort(),
-      Math.min(this.timeoutMs, 5_000),
+      Math.min(this.timeoutMs, 20_000),
     );
     try {
       const response = await fetch(
