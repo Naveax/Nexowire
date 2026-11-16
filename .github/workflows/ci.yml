@@ -163,8 +163,8 @@ jobs:
           grep -qx '# skipped 0' "$RUNNER_TEMP/nw-batch3.tap"
           grep -qx '# todo 0' "$RUNNER_TEMP/nw-batch3.tap"
       - name: Verify delegated K20 evidence audits and safe URL offline QA
-        # npm test excludes .mjs. Reject missing/partial TAP while allowing
-        # the K20 suite to grow beyond its original 41 assertions.
+        # npm test excludes .mjs. Require the current K20 80-test inventory,
+        # including 39 P006/P007 cases; reject missing/partial TAP.
         shell: bash
         run: |
           set -euo pipefail
@@ -174,7 +174,7 @@ jobs:
             test/delegated/pool-k07/safe-url-language.test.mjs \
             > "$RUNNER_TEMP/nw-k20-qa.tap"
           cat "$RUNNER_TEMP/nw-k20-qa.tap"
-          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/nw-k20-qa.tap" 41
+          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/nw-k20-qa.tap" 80
       - name: Verify delegated K14 offline PR and integration audit QA
         # npm test excludes .mjs. Require explicit TAP with zero skipped/TODO.
         shell: bash
