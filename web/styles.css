@@ -225,6 +225,8 @@ small,.subtle,.label { color: var(--muted); }
 .hidden,[hidden] { display:none !important; }
 .connect-card { display:flex; flex-direction:column; gap:12px; min-height:0; margin-top:25px; }
 .connect-card strong { font-size:24px; }
+/* Long Unicode device names and UNKNOWN URLs must not expand narrow pairing cards. */
+#device-name,#status-text { min-width:0; max-width:100%; overflow-wrap:anywhere; }
 .connect-copy { margin-top:10px; }
 .connect-copy h2 { font-size:20px; margin-bottom:7px; }
 .connect-button { min-height:50px; font-size:15px; margin-top:8px; }

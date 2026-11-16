@@ -51,6 +51,7 @@ jobs:
             scripts/delegated/k14/pagination-integrity.test.mjs \
             test/delegated/k01/connect-state.test.ts \
             test/delegated/k02/responsive-css.test.ts \
+            test/delegated/k02/mobile-unknown-wrap.contract.test.mjs \
             test/delegated/k02/browser-screenshot-evidence.test.mjs \
             test/delegated/k02/platform-evidence-gate.test.mjs \
             test/delegated/k03/panel-states.test.mjs \
@@ -85,7 +86,7 @@ jobs:
             test/delegated/pool-k19/audit-physical-pass-labels.test.ts \
             > "$RUNNER_TEMP/nw-delegated-source-transfer.tap"
           cat "$RUNNER_TEMP/nw-delegated-source-transfer.tap"
-          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/nw-delegated-source-transfer.tap" 252
+          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/nw-delegated-source-transfer.tap" 260
       - name: Verify K01-K04 source tests on one exact Git HEAD
         # Source-only invariant: no browser, Agent, Hub or CORE launched.
         shell: bash
