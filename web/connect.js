@@ -246,6 +246,7 @@ async function loadAccount() {
       'Başka bir ayar yapmana gerek yok.';
 
     let retryable = true;
+    let visibleError = '';
     try {
       const pairing = await fetch('/api/v1/pairing', {
         method: 'POST',
@@ -259,6 +260,20 @@ async function loadAccount() {
 
       if (!pairing.ok) {
         const body = await pairing.json().catch(() => ({}));
+        if (pairing.status === 401) {
+          retryable = false;
+          visibleError = 'Oturumun sona erdi. GitHub ile yeniden giriş yapıp bağlantıyı dene.';
+          throw new Error('Oturum sona erdi.');
+        }
+        if (pairing.status === 429) {
+          const retryAfter = pairing.headers.get('retry-after');
+          const seconds = retryAfter !== null && /^[1-9][0-9]{0,3}$/.test(retryAfter)
+            ? Number(retryAfter) : null;
+          const wait = seconds !== null && seconds <= 3600
+            ? `${seconds} saniye bekle.` : 'Biraz bekle.';
+          visibleError = 'Çok fazla bağlantı isteği. ' + wait;
+          throw new Error('İstek sınırına ulaşıldı.');
+        }
         if (pairing.status === 403) {
           retryable = false;
           throw new Error(
@@ -272,8 +287,8 @@ async function loadAccount() {
 
       const body = await pairing.json();
       if (
-        typeof body.pairingId !== 'string' ||
-        typeof body.token !== 'string'
+        typeof body.pairingId !== 'string' || !body.pairingId.trim() ||
+        typeof body.token !== 'string' || !body.token.trim()
       ) {
         throw new Error('Bağlantı cevabı geçersiz.');
       }
@@ -283,10 +298,12 @@ async function loadAccount() {
       callback.searchParams.set('token', body.token);
       window.location.replace(callback.toString());
     } catch (error) {
-      showError(
-        error instanceof Error ? error.message : String(error),
-        retryable,
-      );
+      const rawMessage = error instanceof Error ? error.message : '';
+      const known = new Set([
+        'Bağlantı hazırlanamadı.', 'Bağlantı cevabı geçersiz.',
+        'Bu hesap için cihaz limiti dolu.', 'Bu cihaz bu hesaba bağlanamadı.',
+      ]);
+      showError(visibleError || (known.has(rawMessage) ? rawMessage : 'Beklenmeyen bağlantı hatası.'), retryable);
       $('status-title').textContent = retryable ? 'Tekrar deneyebilirsin' : 'Bağlantı durduruldu';
       $('status-text').textContent =
         retryable ? 'Ayarları değiştirmen gerekmez.' : 'Hata açıklamasını kontrol et.';
@@ -294,11 +311,8 @@ async function loadAccount() {
   });
 }
 
-loadAccount().catch((error) => {
+loadAccount().catch(() => {
   $('status-title').textContent = 'Hesap doğrulanamadı';
   $('status-text').textContent = 'Sayfayı yenilemeden önce bağlantını kontrol et.';
-  showError(
-    error instanceof Error ? error.message : String(error),
-    false,
-  );
+  showError('Hesap doğrulanamadı. Bağlantıyı kontrol edip yeniden dene.', false);
 });

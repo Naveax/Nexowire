@@ -363,3 +363,90 @@ test('T-144: timeout and request abort have distinct, non-successful user feedba
   assert.equal(aborted.el('copy-chatgpt-address').disabled, true);
   // AbortError is not proof of a human OAuth cancellation; this is request-status UX only.
 });
+
+test('P008: empty or whitespace pairing fields never navigate, valid fields still do', async () => {
+  const invalid = [
+    {pairingId: '', token: 'valid-token'},
+    {pairingId: '   ', token: 'valid-token'},
+    {pairingId: 'valid-pair', token: ''},
+    {pairingId: 'valid-pair', token: '   '},
+    {pairingId: '', token: ''},
+  ];
+  for (const body of invalid) {
+    const f = await boot({search:pairingSearch(), pairing:async()=>Response.json(body)});
+    await f.el('approve').dispatch('click');
+    assert.equal(f.navigations.length, 0);
+    assert.equal(f.el('connect-pill').textContent, 'Hata');
+    assert.match(f.el('error-message').textContent, /geçersiz/);
+  }
+  const valid = await boot({search:pairingSearch(),
+    pairing:async()=>Response.json({pairingId:'valid-pair',token:'safe-token'})});
+  await valid.el('approve').dispatch('click');
+  assert.equal(valid.navigations.length,1);
+  const callback = new URL(valid.navigations[0]!);
+  assert.equal(callback.searchParams.get('pairing_id'),'valid-pair');
+  assert.equal(callback.searchParams.get('token'),'safe-token');
+});
+
+test('P008: HTTP 429 Retry-After differs from HTTP 503, without navigating',async()=>{
+  const rate = await boot({search:pairingSearch(),
+    pairing:async()=>Response.json({error:'RATE_LIMITED'},
+      {status:429,headers:{'Retry-After':'15'}})});
+  await rate.el('approve').dispatch('click');
+  const outage = await boot({search:pairingSearch(),
+    pairing:async()=>Response.json({}, {status:503})});
+  await outage.el('approve').dispatch('click');
+  assert.equal(rate.navigations.length,0);
+  assert.equal(outage.navigations.length,0);
+  assert.match(rate.el('error-message').textContent,/15 saniye bekle/);
+  assert.notEqual(rate.el('error-message').textContent,outage.el('error-message').textContent);
+});
+
+test('P008: malformed Retry-After never becomes a misleading wait duration',async()=>{
+  for(const header of [null,'-30','0','1.5','99999999','1e3','1'.repeat(150)]){
+    const options=header===null?{status:429}:{status:429,headers:{'Retry-After':header}};
+    const f=await boot({search:pairingSearch(),pairing:async()=>Response.json(
+      {error:'RATE_LIMITED'},options)});
+    await f.el('approve').dispatch('click');
+    assert.equal(f.navigations.length,0);
+    assert.match(f.el('error-message').textContent,/Biraz bekle/);
+    assert.doesNotMatch(f.el('error-message').textContent,/saniye bekle/);
+    if(header!==null)assert.equal(f.el('error-message').textContent.includes(header),false);
+  }
+});
+
+test('P008: expired HTTP 401 is terminal and distinct from unavailable HTTP 503',async()=>{
+  const expired=await boot({search:pairingSearch(),
+    pairing:async()=>Response.json({error:'SESSION_EXPIRED'},{status:401})});
+  await expired.el('approve').dispatch('click');
+  const outage=await boot({search:pairingSearch(),
+    pairing:async()=>Response.json({error:'unavailable'},{status:503})});
+  await outage.el('approve').dispatch('click');
+  assert.equal(expired.navigations.length,0);
+  assert.equal(expired.el('approve').disabled,true);
+  assert.match(expired.el('error-message').textContent,/Oturumun sona erdi/);
+  assert.notEqual(expired.el('error-message').textContent,outage.el('error-message').textContent);
+  assert.equal(outage.el('approve').disabled,false);
+});
+
+test('P008: unexpected HTTP pairing failure cannot display raw credential diagnostics',async()=>{
+  const secret='secret-fixture-'+ 'a'.repeat(100);
+  const f=await boot({search:pairingSearch(),
+    pairing:async()=>{throw new Error('upstream debug leaked '+secret);}});
+  await f.el('approve').dispatch('click');
+  assert.equal(f.navigations.length,0);
+  assert.equal(f.el('connect-pill').textContent,'Hata');
+  assert.equal(f.el('error-message').textContent.includes(secret),false);
+  assert.equal(f.el('error-message').textContent,'Beklenmeyen bağlantı hatası.');
+});
+
+test('P008: initial account-fetch failure cannot disclose raw upstream diagnostics',async()=>{
+  const secret='sensitive-account-canary-'+ 'x'.repeat(80);
+  const f=await boot({search:pairingSearch(),
+    dashboard:async()=>{throw new Error('upstream diagnostics '+secret);}});
+  assert.equal(f.navigations.length,0);
+  assert.equal(f.el('approve').disabled,true);
+  assert.equal(f.el('error-panel').classes.has('hidden'),false);
+  assert.equal(f.el('error-message').textContent.includes(secret),false);
+  assert.match(f.el('error-message').textContent,/Hesap doğrulanamadı/);
+});
