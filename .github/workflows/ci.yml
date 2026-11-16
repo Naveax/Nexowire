@@ -52,6 +52,7 @@ jobs:
             test/delegated/k07/onboarding-link-integrity.test.mjs \
             test/delegated/k07/pairing-recovery-guide.test.mjs \
             test/delegated/k09/roadmap-evidence.test.mjs \
+            test/delegated/k09/issue539-coverage.test.mjs \
             test/delegated/k11/issue-487-commercial-unknown.test.ts \
             test/delegated/k11/issue-487-meter-acceptance.test.ts \
             test/delegated/k11/p005-s5-evidence.test.ts \
@@ -69,7 +70,7 @@ jobs:
             test/delegated/pool-k19/audit-physical-pass-labels.test.ts \
             > "$RUNNER_TEMP/nw-delegated-source-transfer.tap"
           cat "$RUNNER_TEMP/nw-delegated-source-transfer.tap"
-          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/nw-delegated-source-transfer.tap" 103
+          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/nw-delegated-source-transfer.tap" 108
       - name: AI-05 exact 0020/0021/0022, D1 authority, atomic no-replay and SQLite migration
         shell: bash
         timeout-minutes: 18
@@ -233,6 +234,18 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - name: Verify isolated Windows taskkill process-tree uncertainty (18 explicit tests)
+        # Windows Job/tree cleanup source contract, synthetic subprocess events
+        # only. No actual PIDs, tasks, services or user processes are signaled.
+        shell: pwsh
+        timeout-minutes: 4
+        run: |
+          $tapFile = Join-Path $env:RUNNER_TEMP 'nexowire-k16-taskkill.tap'
+          node --test --test-reporter=tap --import tsx --test-concurrency=1 test/delegated/k16/windows-taskkill-contract.test.ts > $tapFile
+          if ($LASTEXITCODE -ne 0) { throw 'K16 taskkill mock regression failed' }
+          Get-Content -LiteralPath $tapFile
+          node scripts/ci/assert-tap-summary.mjs $tapFile 18
+          if ($LASTEXITCODE -ne 0) { throw 'K16 taskkill TAP verification failed' }
       - name: Verify real Windows authorized CAS command/write and no-CAS fail-closed behavior
         timeout-minutes: 5
         run: node --test --test-concurrency=1 --import tsx test/agent-native-remote-cas-live.test.ts test/agent-readonly-without-cas.test.ts
