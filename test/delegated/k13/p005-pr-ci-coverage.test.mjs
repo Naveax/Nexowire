@@ -67,14 +67,18 @@ test('missing Windows or Node matrix and closed-unmerged PR are separate blocker
   assert.equal(evaluatePrTestCoverage(closed).source_reason, 'NOT_OPEN_UNMERGED_PR');
 });
 
-test('three recorded 7/7 green PRs still have uninvoked submitted tests', () => {
+test('current CI adds the PR1124 test path without retroactively proving its old run', () => {
   const cases = JSON.parse(readFileSync(new URL('./p005-pr-ci-candidates.fixture.json', import.meta.url), 'utf8'));
   const ciSource = readFileSync(new URL('../../../.github/workflows/ci.yml', import.meta.url), 'utf8');
   assert.deepEqual(cases.map(item => item.pr.number), [1111, 1124, 1112]);
+  // Current integration CI is not the exact old PR checkout; a new callsite
+  // establishes only SOURCE_REFERENCE_ONLY, never historic execution proof.
   const outcomes = cases.map(item => evaluatePrTestCoverage({
     ...item, ciSource, npmTestCommand: 'node --test --import tsx test/**/*.test.ts',
   }));
   assert.ok(outcomes.every(o => o.source_ci === 'PASS'));
-  assert.ok(outcomes.every(o => o.submitted_test_execution === 'NOT_PROVEN'));
-  assert.deepEqual(outcomes.map(o => o.missing_ci_source_paths.length), [1, 1, 2]);
+  assert.deepEqual(outcomes.map(o => o.submitted_test_execution),
+    ['NOT_PROVEN', 'SOURCE_REFERENCE_ONLY', 'NOT_PROVEN']);
+  assert.deepEqual(outcomes.map(o => o.missing_ci_source_paths.length), [1, 0, 2]);
+  assert.ok(outcomes.every(o => o.physical_device === 'NOT_RUN'));
 });
