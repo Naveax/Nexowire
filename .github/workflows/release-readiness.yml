@@ -59,6 +59,11 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Verify v1.0.9 experimental source and deny fake CORE acceptance
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/v1.0.9-exp0-')
+        run: |
+          node --test test/ci/v109-experimental-source-audit.test.mjs test/ci/v109-core-readonly-preflight.test.mjs
+          node scripts/ci/v109-experimental-source-audit.mjs --json
       - name: Compile native Windows Job guardian
         if: runner.os == 'Windows'
         shell: pwsh

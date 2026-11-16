@@ -198,6 +198,9 @@ export function renderSetupScript(input: {
 
   const buildId =
     version + '-' + sourceSha.slice(0, 12);
+  const shortcutName = version.includes('-')
+    ? 'Nexowire Experimental.lnk'
+    : 'Nexowire.lnk';
   const assetUrl =
     'https://github.com/' +
     repository +
@@ -236,13 +239,19 @@ export function renderSetupScript(input: {
     // decoded source uses Windows' own Shell Link API; no downloaded helper.
     "Add-Type -TypeDefinition ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" +
       Buffer.from(windowsShortcutInterop, 'utf8').toString('base64') + "')));",
-    "$shortcutPath = Join-Path ([Environment]::GetFolderPath('Programs')) 'Nexowire.lnk';",
+    "$shortcutPath = Join-Path ([Environment]::GetFolderPath('Programs')) '" + shortcutName + "';",
     "$shortcut = @{ TargetPath = (Join-Path $env:WINDIR 'System32\\wscript.exe'); Arguments = ([char]34 + $launcher + [char]34) };",
     "[NexowireShortcut]::Save($shortcutPath, $shortcut.TargetPath, $shortcut.Arguments, $env:NX_INSTALL);",
-    "$autoNode = Join-Path $env:NX_INSTALL 'runtime\\node.exe';",
-    "$autoCli = Join-Path $env:NX_INSTALL 'app\\dist\\src\\cli.js';",
-    "& $autoNode $autoCli update auto install | Out-Null;",
-    "if ($LASTEXITCODE -ne 0) { throw 'Nexowire hourly auto-update task registration failed.' };",
+    // Preview builds must not silently register a stable-channel hourly
+    // updater. Stable releases keep their existing update behavior.
+    ...(version.includes('-')
+      ? ["Write-Output 'Nexowire experimental preview: automatic updates disabled';"]
+      : [
+          "$autoNode = Join-Path $env:NX_INSTALL 'runtime\\node.exe';",
+          "$autoCli = Join-Path $env:NX_INSTALL 'app\\dist\\src\\cli.js';",
+          "& $autoNode $autoCli update auto install | Out-Null;",
+          "if ($LASTEXITCODE -ne 0) { throw 'Nexowire hourly auto-update task registration failed.' };",
+        ]),
     "Start-Process -FilePath $shortcut.TargetPath -ArgumentList $shortcut.Arguments -WorkingDirectory $env:NX_INSTALL;",
     "Remove-Item -LiteralPath $env:NX_TMP -Recurse -Force -ErrorAction SilentlyContinue;",
   ].join(' ');
