@@ -85,7 +85,9 @@ export function validateAdminHttpMatrix(observations, html) {
 
 export function inspectPairingRateLimit(js) {
   const findings = [];
-  const failedResponse = /if\s*\(!pairing\.ok\)\s*\{([\s\S]*?)\n\s*\}/.exec(js)?.[1] ?? '';
+  // Match the complete failed-response block, not its first nested `if`.
+  // The closing brace of this handler is at the same six-space indentation.
+  const failedResponse = /if\s*\(!pairing\.ok\)\s*\{([\s\S]*?)\r?\n {6}\}/.exec(js)?.[1] ?? '';
   if (!/pairing\.status\s*===\s*429|pairing\.status\s*==\s*429/.test(failedResponse)) {
     findings.push('pairing-429-not-distinguished');
   }

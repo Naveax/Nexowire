@@ -72,7 +72,10 @@ async function load() {
   } catch (error) {
     // Authentication/authorization denials are not network outages.
     $('admin-pill').textContent = httpStatus === 401 ? 'Oturum gerekli'
-      : httpStatus === 403 ? 'Yetki yetersiz' : 'Offline';
+      : httpStatus === 403 ? 'Yetki yetersiz'
+      : httpStatus === 429 ? 'İstek sınırı'
+      : httpStatus === 503 ? 'Servis kullanılamıyor'
+      : 'Offline';
     $('admin-pill').className = 'pill admin-status bad';
     $('admin-error-message').textContent =
       error instanceof Error ? error.message : String(error);

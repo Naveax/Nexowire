@@ -112,7 +112,7 @@ test('T-020/T-022: success populates KPI values and releases busy state', async 
 
 test('T-020/T-022: request failure exposes alert and clears busy state', async () => {
   const { nodes, calls } = await renderWithFetch({ ok: false, status: 503 });
-  assert.equal(nodes.get('admin-pill').textContent, 'Offline');
+  assert.equal(nodes.get('admin-pill').textContent, 'Servis kullanılamıyor');
   assert.equal(nodes.get('admin-pill').className, 'pill admin-status bad');
   assert.match(nodes.get('admin-error-message').textContent, /HTTP 503/);
   assert.equal(nodes.get('admin-error').classes.has('hidden'), false);

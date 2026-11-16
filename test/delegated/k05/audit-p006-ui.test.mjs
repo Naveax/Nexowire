@@ -10,14 +10,14 @@ import {
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const src = readUiSource(root);
 
-test('T-559: actual 401/403 are distinct while 429 still lacks a specific status', async () => {
+test('T-559: 401, 403 and 429 admin errors keep distinct status labels', async () => {
   for (const status of [401, 403, 429]) {
     const observation = await observeAdminHttpError(src.adminJs, status);
-    assert.equal(observation.pill, ({401:'Oturum gerekli',403:'Yetki yetersiz',429:'Offline'})[status]);
+    assert.equal(observation.pill, ({401:'Oturum gerekli',403:'Yetki yetersiz',429:'İstek sınırı'})[status]);
     assert.equal(observation.errorText, `HTTP ${status}`);
     assert.equal(observation.errorVisible, true);
     const findings = diagnoseAdminError(observation, src.adminHtml);
-    assert.deepEqual(findings, status === 429 ? ['http-error-collapsed-to-offline'] : []);
+    assert.deepEqual(findings, []);
     assert.ok(!findings.includes('http-error-falsely-successful'));
   }
 });
@@ -37,12 +37,12 @@ const httpScenario = (status, pill) => ({status, pill, pillClass:'bad',errorText
 const validHttpMatrix = () => [httpScenario(401,'Oturum gerekli'),httpScenario(403,'Erişim reddedildi'),
   httpScenario(429,'İstek sınırı'),httpScenario(503,'Hizmet kullanılamıyor')];
 
-test('D-138: current admin.js reproduces 503 as misleading Offline, not as successful action', async () => {
+test('D-138: actual 503 is service unavailable and remains visibly unsuccessful', async () => {
   const observation = await observeAdminHttpError(src.adminJs, 503);
-  assert.equal(observation.pill, 'Offline');
+  assert.equal(observation.pill, 'Servis kullanılamıyor');
   assert.equal(observation.errorText, 'HTTP 503');
   assert.equal(observation.errorVisible, true);
-  assert.ok(diagnoseAdminError(observation, src.adminHtml).includes('http-error-collapsed-to-offline'));
+  assert.deepEqual(diagnoseAdminError(observation, src.adminHtml), []);
   assert.ok(!diagnoseAdminError(observation, src.adminHtml).includes('http-error-falsely-successful'));
 });
 
@@ -82,35 +82,28 @@ test('D-138: rate-limit and service-down pills must differ from denial and each 
   assert.ok(!issues.includes('indistinguishable-http-status:401-403'));
 });
 
-test('D-138: source audit preserves fixed denials and reports remaining 429/503 collapse', async () => {
+test('D-138: source audit verifies distinct 401/403/429/503 status pills', async () => {
   const report = await auditUi(root);
   assert.deepEqual(Object.keys(report.errors), ['401','403','429','503']);
-  for (const status of [401,403]) {
+  for (const status of [401,403,429,503]) {
     assert.deepEqual(report.errors[status], []);
-    assert.equal(report.httpMatrix.some((finding) => finding.startsWith(`${status}:`)), false);
   }
-  for (const status of [429,503]) {
-    assert.ok(report.errors[status].includes('http-error-collapsed-to-offline'));
-    assert.equal(report.httpMatrix.some((finding) => finding.startsWith(`${status}:`)), true);
-  }
-  assert.ok(report.httpMatrix.includes('indistinguishable-http-status:429-503'));
+  assert.deepEqual(report.httpMatrix, []);
   assert.equal(report.browser, 'NOT_RUN');
   assert.equal(report.physical, 'NOT_RUN');
 });
 
-test('T-559: pairing 429 lacks a dedicated hint but failure focus is wired', () => {
+test('T-559: pairing 429 has a dedicated bounded Retry-After hint and error focus', () => {
   const found = inspectPairingRateLimit(src.connectJs);
-  assert.ok(found.includes('pairing-429-not-distinguished'));
+  assert.ok(!found.includes('pairing-429-not-distinguished'));
   assert.ok(!found.includes('pairing-error-focus-not-proven'));
 });
 
-test('T-559: explicit 429 branch and focus remove source warnings; generic branch fails', () => {
-  const synthetic = src.connectJs.replace('if (!pairing.ok) {',
-    "if (!pairing.ok) { if (pairing.status === 429) throw new Error('Çok fazla istek');")
-    .replace("$('error-panel').classList.remove('hidden');",
-      "$('error-panel').classList.remove('hidden'); $('error-panel').focus();");
-  assert.deepEqual(inspectPairingRateLimit(synthetic), []);
-  assert.ok(inspectPairingRateLimit(synthetic.replace('pairing.status === 429', 'pairing.status === 500'))
+test('T-559: pairing scanner detects an actual nested 429 handler and rejects mutated or out-of-branch checks', () => {
+  assert.deepEqual(inspectPairingRateLimit(src.connectJs), []);
+  const without429 = src.connectJs.replace('if (pairing.status === 429)', 'if (pairing.status === 500)');
+  assert.ok(inspectPairingRateLimit(without429).includes('pairing-429-not-distinguished'));
+  assert.ok(inspectPairingRateLimit(without429 + '\n// pairing.status === 429')
     .includes('pairing-429-not-distinguished'));
 });
 
@@ -193,5 +186,7 @@ test('T-564: current integration audit remains source-only without physical evid
   assert.equal(report.nvda, 'NOT_RUN');
   assert.equal(report.browser, 'NOT_RUN');
   assert.deepEqual(report.errors[401], []);
-  assert.ok(report.errors[429].includes('http-error-collapsed-to-offline'));
+  assert.deepEqual(report.errors[429], []);
+  assert.deepEqual(report.errors[503], []);
+  assert.deepEqual(report.httpMatrix, []);
 });
