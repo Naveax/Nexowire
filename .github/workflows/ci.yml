@@ -58,6 +58,7 @@ jobs:
             test/delegated/k03/dashboard-honest-state.test.mjs \
             test/delegated/k04/admin-a11y.test.mjs \
             test/delegated/k04/admin-denial-sequence.test.mjs \
+            test/delegated/k04/admin-auth-boundary.test.mjs \
             test/delegated/k04/verify-ui-single-head.test.mjs \
             test/connect-onboarding.test.ts \
             test/connect-web.test.ts \
@@ -88,7 +89,14 @@ jobs:
             test/delegated/pool-k19/audit-physical-pass-labels.test.ts \
             > "$RUNNER_TEMP/nw-delegated-source-transfer.tap"
           cat "$RUNNER_TEMP/nw-delegated-source-transfer.tap"
-          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/nw-delegated-source-transfer.tap" 275
+          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/nw-delegated-source-transfer.tap" 281
+      - name: Verify denied-admin 403 body privacy and retry status on actual source
+        # Offline VM only: no HTTP request or real account credentials.
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          node test/delegated/k04/admin-auth-boundary.mjs web/admin.js
       - name: Verify admin HTTP 401/403/503 denial sequence on actual source
         # Offline VM source check, not authenticated browser/admin acceptance.
         shell: bash
