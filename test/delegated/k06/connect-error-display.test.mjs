@@ -114,7 +114,14 @@ test('T-378 #485: 5xx pairing hatasındaki sunucu mesajı/sahte URL gösterilmiy
   const { getElement } = await simulate({
     pairingStatus: 503, pairingBody: { message: `https://invalid.example/?access_token=${sentinel}` },
   });
-  assert.equal(getElement('error-message').textContent, 'Bağlantı hazırlanamadı.');
+  assert.equal(getElement('error-message').textContent,
+    'Bağlantı hizmeti geçici olarak kullanılamıyor. Biraz sonra tekrar dene.');
+  assert.equal(getElement('approve').disabled, false,
+    'HTTP 503 stays retryable but upstream response bodies are never displayed');
+  const badGateway = await simulate({
+    pairingStatus: 502, pairingBody: { message: 'SECRET_SENTINEL_502' },
+  });
+  assert.equal(badGateway.getElement('error-message').textContent, 'Bağlantı hazırlanamadı.');
   assert.ok(!getElement('error-message').textContent.includes(sentinel));
 });
 

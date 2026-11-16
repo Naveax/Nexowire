@@ -273,6 +273,11 @@ async function loadAccount() {
           visibleError = 'Çok fazla bağlantı isteği. ' + wait;
           throw new Error('İstek sınırına ulaşıldı.');
         }
+        if (pairing.status === 503) {
+          // Do not echo upstream 503 payloads; preserve a safe retry path.
+          visibleError = 'Bağlantı hizmeti geçici olarak kullanılamıyor. Biraz sonra tekrar dene.';
+          throw new Error('Servis geçici olarak kullanılamıyor.');
+        }
         if (pairing.status === 403) {
           retryable = false;
           throw new Error(
