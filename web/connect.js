@@ -6,10 +6,9 @@ const state = params.get('state') ?? '';
 const deviceId = params.get('deviceId') ?? '';
 const deviceName = params.get('deviceName') ?? '';
 const platform = params.get('platform') ?? '';
-// Pin the already tested Unicode-safe bootstrap; branch cleanup must not break downloads.
-const INSTALLER_REF = '96315d5dd4986fffbd24a96859309271d2a88ffe';
-const INSTALLER_VIEW = 'https://github.com/Naveax/Nexowire/blob/' + INSTALLER_REF + '/installers/';
-const INSTALLER_RAW = 'https://raw.githubusercontent.com/Naveax/Nexowire/' + INSTALLER_REF + '/installers/';
+// Pin the verified published stable installer assets, not an archived source-tree bootstrap.
+// Update this alongside the release asset snapshot and installation contracts.
+const INSTALLER_RELEASE_ASSETS = 'https://github.com/Naveax/Nexowire/releases/download/v1.0.8/';
 const RELEASE_PAGE = 'https://github.com/Naveax/Nexowire/releases/latest';
 let chatgptAddress = '';
 
@@ -22,12 +21,12 @@ function detectedOS(ua = navigator.userAgent) {
 const installers = {
   windows: {
     heading: 'Windows kurulumu',
-    description: 'Windows 10/11 x64: açılan GitHub sayfasında Download raw ile indir ve dosyaya çift tıkla. Node.js, npm, Git veya PowerShell 7 gerekmez. Tarayıcıda giriş yapıp BAĞLA’ya bas.',
-    command: "Invoke-WebRequest -Uri '" + INSTALLER_RAW + "Nexowire-Setup.cmd' -OutFile \"$env:USERPROFILE\\Downloads\\Nexowire-Setup.cmd\"",
-    url: INSTALLER_VIEW + 'Nexowire-Setup.cmd',
+    description: 'Windows 10/11 x64: resmî GitHub Release kurucusunu indir ve dosyaya çift tıkla. Node.js, npm, Git veya PowerShell 7 gerekmez. Tarayıcıda giriş yapıp BAĞLA’ya bas.',
+    command: "Invoke-WebRequest -Uri '" + INSTALLER_RELEASE_ASSETS + "Nexowire-Setup.cmd' -OutFile \"$env:USERPROFILE\\Downloads\\Nexowire-Setup.cmd\"",
+    url: INSTALLER_RELEASE_ASSETS + 'Nexowire-Setup.cmd',
     label: 'Windows kurucusunu aç ↗',
-    checksum: INSTALLER_VIEW + 'SHA256SUMS-Windows',
-    note: 'Depodaki düzeltilmiş kurucu, yayımlanmış v1.0.7 paketini doğrulayarak kullanır. Yönetici olarak çalıştırman gerekmez. İstersen kopyalama düğmesiyle yalnızca indirme komutunu alabilirsin.',
+    checksum: INSTALLER_RELEASE_ASSETS + 'SHA256SUMS-Windows',
+    note: 'Resmî v1.0.8 GitHub Release kurucusu ve aynı yayının SHA256SUMS-Windows dosyası kullanılır. SHA-256 bütünlük kontrolüdür, yayıncı imzası değildir. İstersen kopyalama düğmesiyle yalnızca indirme komutunu alabilirsin.',
   },
   macos: {
     heading: 'macOS kurulumu',
