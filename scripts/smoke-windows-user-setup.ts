@@ -268,7 +268,7 @@ async function main(): Promise<void> {
       : verifiedSetupText;
     // Both stable and preview shortcuts must be redirected into the fixture
     // directory; never touch the runner's real Start Menu.
-    for (const shortcutName of ['Nexowire.lnk', 'Nexowire Experimental.lnk']) {
+    for (const shortcutName of ['Nexowire.lnk', 'Nexowire Experimental.lnk', 'Nexowire Danger Lab.lnk']) {
       smokeSetup = smokeSetup.replace(
         "$shortcutPath = Join-Path ([Environment]::GetFolderPath('Programs')) '" + shortcutName + "';",
         "$shortcutPath = Join-Path $env:NX_INSTALL '" + shortcutName + "';",
@@ -378,7 +378,7 @@ async function main(): Promise<void> {
     );
     const shortcut = path.join(
       installRoot,
-      version.includes('-') ? 'Nexowire Experimental.lnk' : 'Nexowire.lnk',
+      version === '1.0.9-exp0-danger' ? 'Nexowire Danger Lab.lnk' : version.includes('-') ? 'Nexowire Experimental.lnk' : 'Nexowire.lnk',
     );
 
     for (const required of [

@@ -3,9 +3,10 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const EXPERIMENTAL_VERSION = '1.0.9-exp.0';
-export const EXPERIMENTAL_TAG = 'v1.0.9-exp.0';
+export const EXPERIMENTAL_VERSION = '1.0.9-exp0-danger';
+export const EXPERIMENTAL_TAG = 'v1.0.9-exp0-danger';
 export const REQUIRED_SOURCE_FILES = Object.freeze({
+  dangerLab: 'src/agent/danger-lab.ts',
   ownerCoreCli: 'src/agent/local-owner-core-cli.ts',
   coreAdmission: 'src/agent/windows-core-console-provider.ts',
   privilegedBroker: 'src/agent/privileged-broker.ts',

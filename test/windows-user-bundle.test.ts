@@ -69,6 +69,18 @@ test('hidden Windows launcher opens only the simple connect flow', () => {
   );
 });
 
+test('danger lab preview installs an isolated shortcut without updater', () => {
+  const result = renderSetupScript({
+    version: '1.0.9-exp0-danger',
+    sourceSha,
+    payloadSha256: payloadSha,
+    repository: 'Naveax/Nexowire',
+  });
+  assert.match(result, /Nexowire Danger Lab\.lnk/);
+  assert.doesNotMatch(result, /& \$autoNode \$autoCli update auto install/);
+  assert.match(result, /automatic updates disabled/);
+});
+
 test('experimental Windows setup cannot register the stable hourly updater', () => {
   const preview = renderSetupScript({
     version: '1.0.9-exp.0',

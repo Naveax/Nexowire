@@ -198,9 +198,11 @@ export function renderSetupScript(input: {
 
   const buildId =
     version + '-' + sourceSha.slice(0, 12);
-  const shortcutName = version.includes('-')
-    ? 'Nexowire Experimental.lnk'
-    : 'Nexowire.lnk';
+  const shortcutName = version === '1.0.9-exp0-danger'
+    ? 'Nexowire Danger Lab.lnk'
+    : version.includes('-')
+      ? 'Nexowire Experimental.lnk'
+      : 'Nexowire.lnk';
   const assetUrl =
     'https://github.com/' +
     repository +

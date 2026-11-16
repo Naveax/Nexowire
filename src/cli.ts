@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { runNativeAgent } from './agent/native-agent.js';
 import {runLocalOwnerCoreCommand} from './agent/local-owner-core-cli.js';
+import {runDangerLabCommand} from './agent/danger-lab.js';
 import { runConnectCommand } from './connect.js';
 import { runNativeAgentLifecycleCommand } from './agent/native-agent-lifecycle.js';
 import {runSystemAgentPreloginLifecycleCommand} from './agent/windows-prelogin-lifecycle.js';
@@ -43,6 +44,7 @@ function printHelp(): void {
 Nexowire ${NEXOWIRE_VERSION}
 
 Usage:
+  nexowire danger-lab status|simulate <capability> [text]  Offline, no host effects
   nexowire core-console status|enroll|revoke
                    Manage one-time local-owner physical console consent
   nexowire http    Start the MCP hub and native-agent WebSocket endpoint
@@ -76,6 +78,10 @@ Default agent endpoint: ws://127.0.0.1:43110/agent
 
 async function main(): Promise<void> {
   const command = process.argv[2] ?? 'http';
+  if(command==='danger-lab'){
+    await runDangerLabCommand(process.argv.slice(3));
+    return;
+  }
   if(command==='core-console'){
     await runLocalOwnerCoreCommand(process.argv.slice(3));
     return;

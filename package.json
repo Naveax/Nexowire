@@ -1,6 +1,6 @@
 {
   "name": "nexowire",
-  "version": "1.0.9-exp.0",
+  "version": "1.0.9-exp0-danger",
   "private": true,
   "type": "module",
   "description": "AI-native remote computer control hub for ChatGPT",
