@@ -32,12 +32,16 @@ function showLoading() {
 
 async function load() {
   showLoading();
+  let httpStatus = null;
   try {
     const response = await fetch('/api/v1/admin/overview', {
       credentials: 'include',
       headers: { Accept: 'application/json' },
     });
-    if (!response.ok) throw new Error('HTTP ' + response.status);
+    if (!response.ok) {
+      httpStatus = response.status;
+      throw new Error('HTTP ' + response.status);
+    }
     const data = await response.json();
     if (!isOverview(data)) throw new Error('Yönetim özeti eksik veya geçersiz');
 
@@ -66,7 +70,9 @@ async function load() {
     pill.textContent = zeroSpend ? 'Zero-spend aktif' : 'Policy ihlali';
     pill.className = 'pill admin-status ' + (zeroSpend ? 'good' : 'bad');
   } catch (error) {
-    $('admin-pill').textContent = 'Offline';
+    // Authentication/authorization denials are not network outages.
+    $('admin-pill').textContent = httpStatus === 401 ? 'Oturum gerekli'
+      : httpStatus === 403 ? 'Yetki yetersiz' : 'Offline';
     $('admin-pill').className = 'pill admin-status bad';
     $('admin-error-message').textContent =
       error instanceof Error ? error.message : String(error);
