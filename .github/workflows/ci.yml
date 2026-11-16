@@ -51,6 +51,8 @@ jobs:
             scripts/delegated/k14/pagination-integrity.test.mjs \
             test/delegated/k01/connect-state.test.ts \
             test/delegated/k02/responsive-css.test.ts \
+            test/delegated/k02/browser-screenshot-evidence.test.mjs \
+            test/delegated/k02/platform-evidence-gate.test.mjs \
             test/delegated/k03/panel-states.test.mjs \
             test/delegated/k04/admin-a11y.test.mjs \
             test/connect-onboarding.test.ts \
@@ -82,7 +84,7 @@ jobs:
             test/delegated/pool-k19/audit-physical-pass-labels.test.ts \
             > "$RUNNER_TEMP/nw-delegated-source-transfer.tap"
           cat "$RUNNER_TEMP/nw-delegated-source-transfer.tap"
-          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/nw-delegated-source-transfer.tap" 220
+          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/nw-delegated-source-transfer.tap" 243
       - name: AI-05 exact 0020/0021/0022, D1 authority, atomic no-replay and SQLite migration
         shell: bash
         timeout-minutes: 18
