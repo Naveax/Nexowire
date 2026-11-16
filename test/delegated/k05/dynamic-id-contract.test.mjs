@@ -19,7 +19,13 @@ test('T-161: source mutation for a static repeated ID is rejected', () => {
 });
 
 test('T-161: removing device index or aria-controls binding fails closed', () => {
-  assert.ok(inspectDeviceCardIds(js.replace('devices.indexOf(device)', '0')).includes('missing-indexed-panel-id'));
+  // Target the actual panel ID expression, not the earlier aria-label ordinal.
+  const stalePanelId = js.replace(
+    "pcPanel.id = 'pc-settings-' + devices.indexOf(device)",
+    "pcPanel.id = 'pc-settings-' + 0",
+  );
+  assert.notEqual(stalePanelId, js, 'negative mutation must target the panel binding');
+  assert.ok(inspectDeviceCardIds(stalePanelId).includes('missing-indexed-panel-id'));
   assert.ok(inspectDeviceCardIds(js.replace("pcButton.setAttribute('aria-controls', pcPanel.id)",
     "pcButton.setAttribute('title', 'Ayarlar')")).includes('missing-panel-id-reference'));
 });
