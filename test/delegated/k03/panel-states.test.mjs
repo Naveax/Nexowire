@@ -286,7 +286,7 @@ test('a late, older success cannot overwrite a newer verified snapshot', async (
     ({ ...snapshot, usage: { monthlyCredits: null, usedCredits: 800 } }) });
   await oldLoad;
   assert.equal(ui.el('usage').textContent, '9');
-  assert.equal(ui.el('connection-pill').textContent, 'Bağlı');
+  assert.equal(ui.el('connection-pill').textContent, 'Cihaz yok');
 });
 
 test('late unauthorized and late JSON replies cannot hide a newer success', async () => {
@@ -317,7 +317,7 @@ test('late unauthorized and late JSON replies cannot hide a newer success', asyn
   releaseOldJson({ ...snapshot, usage: { monthlyCredits: null, usedCredits: 999 } });
   await oldJsonLoad;
   assert.equal(ui.el('usage').textContent, '0');
-  assert.equal(ui.el('connection-pill').textContent, 'Bağlı');
+  assert.equal(ui.el('connection-pill').textContent, 'Cihaz yok');
 });
 
 test('401 clears prior account name, folder names, device list and usage', async () => {

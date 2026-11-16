@@ -320,13 +320,15 @@ async function applyDeviceBridgeMode(deviceId,mode,row){
       '/api/v1/me/devices/bridge-command',deviceId,
       {mode,confirmation:'APPLY BRIDGE MODE'},'bridge-command-issue-v1',
     );
-    if(command.status!=='queued'||typeof command.requestId!=='string'){
+    if(command.status!=='queued'||typeof command.requestId!=='string'||
+       !command.requestId.trim()||command.requestId!==command.requestId.trim()){
       throw new Error('Sunucu doğrulanmış bir komut kimliği döndürmedi.');
     }
     panel.hidden=true;
     status.textContent=mode.toUpperCase()+' isteği kuyruğa alındı. Windows Broker henüz değişti sayılmaz.';
     const expiry=Date.parse(command.expiresAt);
     if(!Number.isFinite(expiry))throw new Error('Komut sona erme zamanı geçersiz.');
+    let claimedObserved=false;
     while(Date.now()<expiry){
       await new Promise(resolve=>setTimeout(resolve,2500));
       const response=await fetch(
@@ -339,6 +341,9 @@ async function applyDeviceBridgeMode(deviceId,mode,row){
         throw new Error('Cihaz komut yanıtı eşleşmiyor.');
       }
       if(data.status==='queued'||data.status==='claimed'){
+        // Delayed queue observations must not erase a newer claimed result.
+        if(data.status==='queued'&&claimedObserved)continue;
+        if(data.status==='claimed')claimedObserved=true;
         status.textContent='Broker komutu '+(data.status==='queued'?'kuyrukta':'cihazda işleniyor')+
           '. Yerel imzalı doğrulama bekleniyor.';
         continue;
@@ -814,7 +819,9 @@ function render(snapshot) {
   }
 
   $('connect-device').disabled = false;
-  setPill('Bağlı', 'good');
+  // Dashboard HTTP success is not evidence of an online connected device.
+  setPill(onlineCount > 0 ? 'Cihaz çevrimiçi' : devices.length > 0
+    ? 'Cihazlar çevrimdışı' : 'Cihaz yok', onlineCount > 0 ? 'good' : 'muted');
 }
 
 async function load() {
