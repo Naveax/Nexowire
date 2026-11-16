@@ -151,6 +151,19 @@ export async function collectSnapshot(get, { includeCi = false, onlyNumbers = nu
     collectPages(get, `/repos/${UPSTREAM}/pulls?state=open`),
   ]);
   if (!pulls.complete) throw new Error('PR listing incomplete; refusing a misleading full-fork inventory');
+  // GitHub's page boundaries may move during a multi-page scan as PRs open/close.
+  // A repeated number signals a non-atomic inventory: another PR can be silently
+  // omitted even when a short terminal page makes `complete` look true.
+  const seenPrNumbers = new Set();
+  for (const pr of pulls.items) {
+    if (!Number.isSafeInteger(pr?.number) || pr.number < 1) {
+      throw new Error('Invalid PR number in paginated listing');
+    }
+    if (seenPrNumbers.has(pr.number)) {
+      throw new Error(`Duplicate PR #${pr.number} in paginated listing; retry from page 1`);
+    }
+    seenPrNumbers.add(pr.number);
+  }
   const upstreamSha = assertSha(upstream.commit?.sha, 'upstream main');
   const forkSha = assertSha(fork.commit?.sha, 'fork main');
   let comparison = null;
