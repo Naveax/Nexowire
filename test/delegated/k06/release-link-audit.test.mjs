@@ -52,7 +52,16 @@ test('T-383 #485: sürüm notu ve kurulum bağlantıları tarihli latest snapsho
   const releaseDocs = read('docs/RELEASE.md');
   assert.ok(releaseDocs.includes(`latest published stable version is [${fixture.tag}]`));
   assert.ok(releaseDocs.includes(`https://github.com/Naveax/Nexowire/releases/tag/${fixture.tag}`));
-  assert.ok(read('package.json').includes(`"version": "${fixture.tag.slice(1)}"`));
+  const packageVersion = JSON.parse(read('package.json')).version;
+  if (packageVersion !== fixture.tag.slice(1)) {
+    // Preserve the dated real-release snapshot while testing an unpublished
+    // preview. A stable v1.0.8 asset must not be relabelled as v1.0.9.
+    assert.match(packageVersion, /^\d+\.\d+\.\d+-exp\.\d+$/);
+    const preview = read(`docs/releases/v${packageVersion.split('-')[0]}-experimental.md`);
+    assert.ok(preview.includes(`**Package version:** \`${packageVersion}\``));
+    assert.ok(preview.includes(`Keep ${fixture.tag} as the authorized stable version.`));
+    assert.match(preview, /NOT PUBLISHED/);
+  }
   assert.match(read('README.md'), /\]\(https:\/\/github\.com\/Naveax\/Nexowire\/releases\/latest\)/);
 });
 

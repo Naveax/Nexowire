@@ -37,7 +37,15 @@ function unsupportedPromise(text) {
 test('#485: kurulum mesajı, README, sürüm notu ve paket sürümü aynı', () => {
   const published = release.match(/latest published stable version is \[v(\d+\.\d+\.\d+)\]/)?.[1];
   assert.ok(published, 'published stable version not parseable');
-  assert.equal(published, pkg.version);
+  if (pkg.version !== published) {
+    // A documented, unpublished experimental candidate may coexist with the
+    // real stable installer. Never present that candidate as /releases/latest.
+    assert.match(pkg.version, /^\d+\.\d+\.\d+-exp\.\d+$/);
+    const experimental = read(`docs/releases/v${pkg.version.split('-')[0]}-experimental.md`);
+    assert.ok(experimental.includes(`**Package version:** \`${pkg.version}\``));
+    assert.match(experimental, /NOT PUBLISHED/);
+    assert.ok(experimental.includes(`Keep v${published} as the authorized stable version.`));
+  }
   const asset = `https://github.com/Naveax/Nexowire/releases/download/v${published}/Nexowire-Setup.cmd`;
   for (const [name, text] of [['README', readme], ['INSTALL_WINDOWS', install], ['CHATGPT_INSTALL_PROMPT', prompt]]) {
     assert.ok(text.includes(asset), `${name} incorrect current installer`);
