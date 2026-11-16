@@ -1,0 +1,50 @@
+[
+  {
+    "pr": { "number": 1111, "head": { "sha": "c5119a65a914ec339ad1c362ba9ba1ca19e339b4" }, "state": "open", "merged": false },
+    "run": { "id": 42410254755, "head_sha": "c5119a65a914ec339ad1c362ba9ba1ca19e339b4", "name": "CI", "event": "pull_request", "status": "completed", "conclusion": "success" },
+    "totalJobs": 7,
+    "jobs": [
+      { "name": "test (22)", "run_id": 42410254755, "status": "completed", "conclusion": "success" },
+      { "name": "test (24)", "run_id": 42410254755, "status": "completed", "conclusion": "success" },
+      { "name": "browser-live", "run_id": 42410254755, "status": "completed", "conclusion": "success" },
+      { "name": "linux-native-live", "run_id": 42410254755, "status": "completed", "conclusion": "success" },
+      { "name": "wsl2-live", "run_id": 42410254755, "status": "completed", "conclusion": "success" },
+      { "name": "security-operational-live", "run_id": 42410254755, "status": "completed", "conclusion": "success" },
+      { "name": "macos-agent-lifecycle-live", "run_id": 42410254755, "status": "completed", "conclusion": "success" }
+    ],
+    "changedTests": ["test/delegated/k19/issue588-large-file-acceptance.test.ts"]
+  },
+  {
+    "pr": { "number": 1124, "head": { "sha": "4d1a3dc32bd8c6718392ec743769c5409e114f3c" }, "state": "open", "merged": false },
+    "run": { "id": 42411882607, "head_sha": "4d1a3dc32bd8c6718392ec743769c5409e114f3c", "name": "CI", "event": "pull_request", "status": "completed", "conclusion": "success" },
+    "totalJobs": 7,
+    "jobs": [
+      { "name": "test (22)", "run_id": 42411882607, "status": "completed", "conclusion": "success" },
+      { "name": "test (24)", "run_id": 42411882607, "status": "completed", "conclusion": "success" },
+      { "name": "browser-live", "run_id": 42411882607, "status": "completed", "conclusion": "success" },
+      { "name": "linux-native-live", "run_id": 42411882607, "status": "completed", "conclusion": "success" },
+      { "name": "wsl2-live", "run_id": 42411882607, "status": "completed", "conclusion": "success" },
+      { "name": "security-operational-live", "run_id": 42411882607, "status": "completed", "conclusion": "success" },
+      { "name": "macos-agent-lifecycle-live", "run_id": 42411882607, "status": "completed", "conclusion": "success" }
+    ],
+    "changedTests": ["test/delegated/k19/issue588-limits-inventory.test.ts"]
+  },
+  {
+    "pr": { "number": 1112, "head": { "sha": "3ca2cd12f003768ac66dea0f242b6b8007587101" }, "state": "open", "merged": false },
+    "run": { "id": 42411620884, "head_sha": "3ca2cd12f003768ac66dea0f242b6b8007587101", "name": "CI", "event": "pull_request", "status": "completed", "conclusion": "success" },
+    "totalJobs": 7,
+    "jobs": [
+      { "name": "test (22)", "run_id": 42411620884, "status": "completed", "conclusion": "success" },
+      { "name": "test (24)", "run_id": 42411620884, "status": "completed", "conclusion": "success" },
+      { "name": "browser-live", "run_id": 42411620884, "status": "completed", "conclusion": "success" },
+      { "name": "linux-native-live", "run_id": 42411620884, "status": "completed", "conclusion": "success" },
+      { "name": "wsl2-live", "run_id": 42411620884, "status": "completed", "conclusion": "success" },
+      { "name": "security-operational-live", "run_id": 42411620884, "status": "completed", "conclusion": "success" },
+      { "name": "macos-agent-lifecycle-live", "run_id": 42411620884, "status": "completed", "conclusion": "success" }
+    ],
+    "changedTests": [
+      "test/delegated/k13/main-ci-discovery.test.mjs",
+      "test/delegated/k13/main-ci-evidence-gate.test.mjs"
+    ]
+  }
+]
