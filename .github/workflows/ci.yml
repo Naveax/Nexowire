@@ -55,6 +55,7 @@ jobs:
             test/delegated/k02/platform-evidence-gate.test.mjs \
             test/delegated/k03/panel-states.test.mjs \
             test/delegated/k04/admin-a11y.test.mjs \
+            test/delegated/k04/verify-ui-single-head.test.mjs \
             test/connect-onboarding.test.ts \
             test/connect-web.test.ts \
             test/delegated/k06/browser-ci-evidence-gate.test.mjs \
@@ -84,7 +85,14 @@ jobs:
             test/delegated/pool-k19/audit-physical-pass-labels.test.ts \
             > "$RUNNER_TEMP/nw-delegated-source-transfer.tap"
           cat "$RUNNER_TEMP/nw-delegated-source-transfer.tap"
-          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/nw-delegated-source-transfer.tap" 243
+          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/nw-delegated-source-transfer.tap" 252
+      - name: Verify K01-K04 source tests on one exact Git HEAD
+        # Source-only invariant: no browser, Agent, Hub or CORE launched.
+        shell: bash
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          node test/delegated/k04/verify-ui-single-head.mjs "$GITHUB_WORKSPACE"
       - name: AI-05 exact 0020/0021/0022, D1 authority, atomic no-replay and SQLite migration
         shell: bash
         timeout-minutes: 18
