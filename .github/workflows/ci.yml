@@ -183,15 +183,16 @@ jobs:
           node --test --test-reporter=tap --import tsx --test-concurrency=1 \
             scripts/delegated/k14/integration-report.test.mjs \
             scripts/delegated/k14/pr-overlap.test.mjs \
+            scripts/delegated/k14/p006-issue-closing-gates.test.mjs \
+            scripts/delegated/k14/p007-59-pr-gates.test.mjs \
+            scripts/delegated/k14/p008-ci-delta-gates.test.mjs \
+            scripts/delegated/k14/p009-acceptance-evidence-gates.test.mjs \
+            scripts/delegated/k14/p010-live-delta-gates.test.mjs \
             scripts/delegated/pool-k14/pr-kind.test.mjs \
             scripts/delegated/pr-summary-k14/pr-summary.test.mjs \
             > "$RUNNER_TEMP/nw-k14-audit.tap"
           cat "$RUNNER_TEMP/nw-k14-audit.tap"
-          grep -qx '# tests 32' "$RUNNER_TEMP/nw-k14-audit.tap"
-          grep -qx '# pass 32' "$RUNNER_TEMP/nw-k14-audit.tap"
-          grep -qx '# fail 0' "$RUNNER_TEMP/nw-k14-audit.tap"
-          grep -qx '# skipped 0' "$RUNNER_TEMP/nw-k14-audit.tap"
-          grep -qx '# todo 0' "$RUNNER_TEMP/nw-k14-audit.tap"
+          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/nw-k14-audit.tap" 110
       - name: Verify K10 offline web shell and QA24 integration DAG
         # npm test excludes .mjs; QA24 historical snapshot does not prove live CORE.
         shell: bash
