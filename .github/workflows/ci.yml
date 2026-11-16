@@ -79,6 +79,7 @@ jobs:
             test/delegated/k11/issue-487-commercial-unknown.test.ts \
             test/delegated/k11/issue-487-meter-acceptance.test.ts \
             test/delegated/k11/p005-s5-evidence.test.ts \
+            test/delegated/k11/p006-cost-boundary.test.ts \
             test/delegated/k13/p005-main-ci-inventory.test.mjs \
             test/delegated/k13/p005-pr-ci-coverage.test.mjs \
             test/delegated/k13/p006-ci-gates.test.mjs \
@@ -93,7 +94,7 @@ jobs:
             test/delegated/pool-k19/audit-physical-pass-labels.test.ts \
             > "$RUNNER_TEMP/nw-delegated-source-transfer.tap"
           cat "$RUNNER_TEMP/nw-delegated-source-transfer.tap"
-          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/nw-delegated-source-transfer.tap" 326
+          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/nw-delegated-source-transfer.tap" 331
       - name: Verify denied-admin 403 body privacy and retry status on actual source
         # Offline VM only: no HTTP request or real account credentials.
         shell: bash
