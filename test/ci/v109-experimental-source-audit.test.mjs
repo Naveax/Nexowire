@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   EXPERIMENTAL_TAG,
   EXPERIMENTAL_VERSION,
@@ -10,6 +11,22 @@ import {
 } from '../../scripts/ci/v109-experimental-source-audit.mjs';
 
 const sourceSha = 'a'.repeat(40);
+
+test('release readiness enforces preview source audit by package version, not PR branch name', () => {
+  const workflow = readFileSync(new URL('../../.github/workflows/release-readiness.yml', import.meta.url), 'utf8');
+  const start = workflow.indexOf('- name: Verify experimental source and deny fake CORE acceptance');
+  assert.ok(start >= 0, 'experimental source audit workflow step is required');
+  const end = workflow.indexOf('      - name:', start + 9);
+  const step = workflow.slice(start, end < 0 ? undefined : end);
+  assert.match(step, /if: github\.event_name == 'pull_request'/);
+  assert.match(step, /version=.*node -p/);
+  assert.match(step, /1\.0\.9-exp\.0/);
+  assert.match(step, /v109-experimental-source-audit\.test\.mjs/);
+  assert.match(step, /v109-core-readonly-preflight\.test\.mjs/);
+  assert.match(step, /Unknown experimental candidate/);
+  assert.doesNotMatch(step, /startsWith\(github\.head_ref/,
+    'The audit must remain enabled after a preview is integrated into a differently named PR branch');
+});
 const allFiles = Object.values(REQUIRED_SOURCE_FILES);
 const input = () => ({
   version: EXPERIMENTAL_VERSION,
