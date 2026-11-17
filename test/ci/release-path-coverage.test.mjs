@@ -31,6 +31,8 @@ test('release readiness is triggered by changes in critical physical CORE and fi
   assert.ok(prSection,'workflow must have pull_request path rules before push triggers');
   const paths=[...prSection.matchAll(/^\s+- "([^"]+)"\s*$/gm)].map(match=>match[1]);
   assert.equal(paths.length,new Set(paths).size,'duplicate release trigger paths');
+  assert.ok(paths.includes('test/windows-job-*.test.ts'),
+    'Windows Job test-only changes must trigger Release Readiness');
   for(const file of required){
     assert.ok(paths.includes(file),'missing exact release trigger: '+file);
     assert.ok(existsSync(path.join(root,file)),'listed release trigger file missing from source: '+file);

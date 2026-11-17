@@ -49,6 +49,7 @@ on:
       - "scripts/build-windows-job-owner.ps1"
       - "test/process-manager-tree-cleanup.test.ts"
       - "test/ai05/personal-process-mode.test.ts"
+      - "test/windows-job-*.test.ts"
       # The bounded device copy path is covered by release package tests.
       - "src/mcp/cross-device-file-transfer.ts"
       - "src/mcp/create-server.ts"
