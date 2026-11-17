@@ -426,6 +426,10 @@ jobs:
         shell: pwsh
         run: ./scripts/coord-build-wal-namespace-probe.ps1
       - name: Physical Windows Job Object regressions
+        # Never inherit an operator's personal local-owner shell profile here:
+        # native Job containment must be exercised rather than silently skipped.
+        env:
+          NEXOWIRE_CORE_APPROVAL_MODE: native
         run: node --test --import tsx --test-concurrency=1 test/windows-job-owner.test.ts test/windows-job-helper-trust.test.ts test/windows-job-helper-acl-publisher.test.ts test/windows-job-attestation-spoof.test.ts test/windows-job-duplicate-handle-risk.test.ts test/windows-job-breakaway.test.ts test/windows-job-hostile-nested.test.ts test/windows-job-named-handle-caveat.test.ts test/windows-job-capacity-128.test.ts test/process-manager-tree-cleanup.test.ts test/process-manager.test.ts
       - name: Verify AI-09 Windows Agent guardian receipt retention
         # Exercises the Win32-only mocked OS readback cases; no real Task or process mutation.
