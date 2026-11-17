@@ -20,7 +20,7 @@ test('source-derived #588 limit inventory is stable for current main implementat
   const inventory = await readIssue588SourceLimits(root);
   assert.deepEqual(inventory, {
     schemaVersion: 1,
-    directMcpMaxBytes: 8_388_608,
+    directMcpMaxBytes: 16_777_216,
     directHelperMaxBytes: 67_108_864,
     directChunkBytes: 49_152,
     artifactIngestMaxBytes: 268_435_456,
@@ -36,11 +36,17 @@ test('source-derived #588 limit inventory is stable for current main implementat
 
 test('unrelated max_bytes elsewhere cannot substitute for missing file-transfer schema', async () => {
   const sources = await load();
-  const changed = sources.mcpRegistration.replace(
-    /max_bytes:\s*z\.number\(\)\.int\(\)\.min\(1\)\.max\(8_388_608\)\.optional\(\)/,
+  const start = sources.mcpRegistration.indexOf("'file_transfer_between_devices',");
+  const next = sources.mcpRegistration.indexOf('  server.registerTool(', start);
+  assert.ok(start >= 0 && next > start);
+  const currentTool = sources.mcpRegistration.slice(start, next);
+  const changedTool = currentTool.replace(
+    /max_bytes:\s*z\.number\(\)\.int\(\)\.min\(1\)\.max\(16_777_216\)\.optional\(\)/,
     'max_bytes: customFileTransferLimit.optional()',
   );
-  assert.notEqual(changed, sources.mcpRegistration);
+  assert.notEqual(changedTool, currentTool);
+  const changed = sources.mcpRegistration.slice(0, start) +
+    changedTool + sources.mcpRegistration.slice(next);
   assert.throws(() => parseIssue588SourceLimits({ ...sources, mcpRegistration: changed }),
     /MCP file_transfer max_bytes: expected exactly one/);
 });
