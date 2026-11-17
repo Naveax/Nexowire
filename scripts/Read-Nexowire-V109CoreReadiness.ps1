@@ -6,6 +6,37 @@ if ($PSVersionTable.PSEdition -eq 'Core' -and -not $IsWindows) {
     throw 'WINDOWS_REQUIRED'
 }
 
+function Read-DiskReserve {
+    param([string]$Path)
+    # Advisory only: this never authorizes a migration or replaces its disk gate.
+    $requiredGiB = 8
+    try {
+        if ([string]::IsNullOrWhiteSpace($Path)) { throw 'MISSING_PATH' }
+        $root = [System.IO.Path]::GetPathRoot([System.IO.Path]::GetFullPath($Path))
+        if ([string]::IsNullOrWhiteSpace($root)) { throw 'MISSING_DRIVE_ROOT' }
+        $drive = New-Object System.IO.DriveInfo($root)
+        if (-not $drive.IsReady) { throw 'DRIVE_NOT_READY' }
+        $available = [long]$drive.AvailableFreeSpace
+        return [pscustomobject]@{
+            root = $root
+            availableGiB = [math]::Round($available / 1GB, 2)
+            recommendedReserveGiB = $requiredGiB
+            recommendedReserveMet = [bool]($available -ge ($requiredGiB * 1GB))
+            evidence = 'READ_ONLY_AVAILABLE_FREE_SPACE'
+            advisoryOnly = $true
+        }
+    } catch {
+        return [pscustomobject]@{
+            root = $null
+            availableGiB = $null
+            recommendedReserveGiB = $requiredGiB
+            recommendedReserveMet = $null
+            evidence = 'UNKNOWN'
+            advisoryOnly = $true
+        }
+    }
+}
+
 function Read-TaskState {
     param([Parameter(Mandatory=$true)][string]$Name)
     try {
@@ -50,6 +81,10 @@ $result = [pscustomobject]@{
     evidence = 'READ_ONLY_LOCAL_OBSERVATION'
     observer = $identity.Name
     elevated = [bool]$elevated
+    diskReserve = [pscustomobject]@{
+        systemStateVolume = Read-DiskReserve -Path $env:ProgramData
+        userStateVolume = Read-DiskReserve -Path $env:USERPROFILE
+    }
     tasks = @(
         Read-TaskState -Name 'Nexowire Hub'
         Read-TaskState -Name 'Nexowire Native Agent'
