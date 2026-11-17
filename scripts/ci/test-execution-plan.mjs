@@ -41,6 +41,7 @@ const REVIEWED_GIT_BLOBS = Object.freeze({
   'test/scale-s5-provider-meter-evidence.test.ts':'4950286aea128fa34aa279dfc2cd17a12e190297',
   'test/security-tokens.test.ts':'92ea5c61df1c707f2970e1305a34b56d5cf7b8e0',
   'test/scale-s5-staging-acceptance.test.ts':'b381c0cc734d7a29f650bf922beb168074817e3d',
+  'test/core-elevation-effective-truth-matrix.test.ts':'09d970538d6ce22b20edb25c9da1fcbed8929c4c',
 });
 
 function fail(reason) { throw new Error('TEST_EXECUTION_PLAN_' + reason); }

@@ -39,6 +39,7 @@ export const APPROVED_ROOT_TEST_FILES=Object.freeze([
   'test/scale-s5-provider-meter-evidence.test.ts',
   'test/security-tokens.test.ts',
   'test/scale-s5-staging-acceptance.test.ts',
+  'test/core-elevation-effective-truth-matrix.test.ts',
 ]);
 const MAX_TEST_MILLIS=7*60*1000;
 const MAX_LOG_BYTES=2*1024*1024;

@@ -1,5 +1,5 @@
 /**
- * Read-only source and import provenance gate for twenty-four independently reviewed,
+ * Read-only source and import provenance gate for twenty-five independently reviewed,
  * pure-contract root suites. Does NOT approve any other tests.
  */
 import {execFileSync} from 'node:child_process';
@@ -64,6 +64,9 @@ const EXPECTED=Object.freeze({
   'src/ops/scale-s5-provider-meter-evidence.ts':'21233e0c7e5dd9a39209bfe6989cab7f02334d79',
   'src/security/tokens.ts':'8587293f920b7910388e432baf2b84239b02c782',
   'src/ops/scale-s5-staging-acceptance.ts':'4b1cc45ad5150bf82e90dd4edff425e85acb605b',
+  'test/core-elevation-effective-truth-matrix.test.ts':'09d970538d6ce22b20edb25c9da1fcbed8929c4c',
+  'src/security/authorization-explain.ts':'a916ba1cffb24472d533630ceceb93febc8c46e2',
+  'src/security/privilege.ts':'64c79bd868e43448ecb34d9bc83624282b04b5c7',
 });
 export const PURE_REVIEWED_FILES=EXPECTED;
 export const PURE_ENTRYPOINTS=Object.freeze([
@@ -91,6 +94,7 @@ export const PURE_ENTRYPOINTS=Object.freeze([
   'test/scale-s5-provider-meter-evidence.test.ts',
   'test/security-tokens.test.ts',
   'test/scale-s5-staging-acceptance.test.ts',
+  'test/core-elevation-effective-truth-matrix.test.ts',
 ]);
 const external=new Set(['node:test','node:assert/strict','node:crypto','zod']);
 const SHA=/^[a-f0-9]{40}$/;
