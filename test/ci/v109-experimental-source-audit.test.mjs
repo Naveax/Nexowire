@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import {
   EXPERIMENTAL_TAG,
   EXPERIMENTAL_VERSION,
@@ -47,13 +48,29 @@ test('experimental package and exact source inventory are recognized without cla
   assert.equal(result.fullCoreAccessVerified, false);
   assert.equal(result.physicalCoreStatus, 'NOT_ATTESTED');
   assert.equal(result.physicalAcceptance, 'NOT_RUN');
-  assert.equal(result.trackedTypeScriptTests, 635);
-  assert.equal(result.approvedPortableTestFiles, 29);
-  assert.equal(result.notRunInPortableLane, 606);
+  assert.equal(result.trackedTypeScriptTests, null);
+  assert.equal(result.testInventoryEvidence, 'NOT_CHECKED_SOURCE_ONLY');
+  assert.equal(result.approvedPortableTestFiles, null);
+  assert.equal(result.notRunInPortableLane, null);
+  assert.deepEqual(result.historicalPortableLane, {
+    sourceSha: 'af6a83b8474500b48fe663129f5f1df2beb63e3e',
+    trackedTypeScriptTests: 635,
+    approvedPortableTestFiles: 29,
+    notRunInPortableLane: 606,
+  });
   assert.deepEqual(result.physicalCoreRequirements, [...CORE_PHYSICAL_GATES]);
   assert.ok(Object.values(result.sourceCapabilityInventory).every(
     item => item.sourceFound === true && item.runtimeAccepted === false,
   ));
+});
+
+test('source index count is descriptive and cannot silently claim test execution', () => {
+  const result = assessExperimentalSource({...input(), trackedTypeScriptTests: 649});
+  assert.equal(result.trackedTypeScriptTests, 649);
+  assert.equal(result.testInventoryEvidence, 'GIT_INDEX_ONLY_NOT_EXECUTION');
+  assert.equal(result.approvedPortableTestFiles, null);
+  assert.equal(result.notRunInPortableLane, null);
+  assert.equal(assessExperimentalSource({...input(), trackedTypeScriptTests: -1}).trackedTypeScriptTests, null);
 });
 
 test('missing package/lock version agreement blocks the candidate', () => {
@@ -92,5 +109,13 @@ test('read-only repository inspection produces a valid local source-only report'
   const report = inspectExperimentalSource(process.cwd());
   assert.equal(report.packageVersion, EXPERIMENTAL_VERSION);
   assert.equal(report.sourceReady, true);
+  const tracked = execFileSync('git',
+    ['ls-files', '-z', '--', 'test/**/*.test.ts', 'test/*.test.ts'], {
+      cwd: process.cwd(), encoding: 'utf8',
+    }).split('\0').filter(file => file.endsWith('.test.ts'));
+  assert.equal(report.trackedTypeScriptTests, new Set(tracked).size);
+  assert.equal(report.testInventoryEvidence, 'GIT_INDEX_ONLY_NOT_EXECUTION');
+  assert.equal(report.approvedPortableTestFiles, null);
+  assert.equal(report.notRunInPortableLane, null);
   assert.equal(report.fullCoreAccessVerified, false);
 });

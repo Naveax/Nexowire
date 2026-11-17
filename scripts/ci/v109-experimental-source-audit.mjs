@@ -31,6 +31,7 @@ const SHA = /^[a-f0-9]{40}$/;
 
 export function assessExperimentalSource({
   version, lockVersion, rootLockVersion, sourceSha, presentFiles,
+  trackedTypeScriptTests = null,
 }) {
   const files = presentFiles instanceof Set ? presentFiles : new Set(presentFiles ?? []);
   const missingSources = Object.entries(REQUIRED_SOURCE_FILES)
@@ -39,6 +40,8 @@ export function assessExperimentalSource({
   const validVersion = version === EXPERIMENTAL_VERSION
     && lockVersion === version && rootLockVersion === version;
   const validSource = typeof sourceSha === 'string' && SHA.test(sourceSha);
+  const indexedTests = Number.isSafeInteger(trackedTypeScriptTests) && trackedTypeScriptTests >= 0
+    ? trackedTypeScriptTests : null;
   return {
     release: EXPERIMENTAL_TAG,
     channel: 'EXPERIMENTAL_PREVIEW',
@@ -64,9 +67,16 @@ export function assessExperimentalSource({
     physicalCoreRequirements: [...CORE_PHYSICAL_GATES],
     physicalAcceptance: 'NOT_RUN',
     testLaneSourceSha: 'af6a83b8474500b48fe663129f5f1df2beb63e3e',
-    trackedTypeScriptTests: 635,
-    approvedPortableTestFiles: 29,
-    notRunInPortableLane: 606,
+    trackedTypeScriptTests: indexedTests,
+    testInventoryEvidence: indexedTests === null ? 'NOT_CHECKED_SOURCE_ONLY' : 'GIT_INDEX_ONLY_NOT_EXECUTION',
+    approvedPortableTestFiles: null,
+    notRunInPortableLane: null,
+    historicalPortableLane: {
+      sourceSha: 'af6a83b8474500b48fe663129f5f1df2beb63e3e',
+      trackedTypeScriptTests: 635,
+      approvedPortableTestFiles: 29,
+      notRunInPortableLane: 606,
+    },
     warning: 'Source presence, a running task, and an experimental label are not proof of elevated CORE effects.',
   };
 }
@@ -78,6 +88,11 @@ export function inspectExperimentalSource(rootDir) {
   const sourceSha = execFileSync('git', ['rev-parse', 'HEAD'], {
     cwd: root, encoding: 'utf8', windowsHide: true,
   }).trim();
+  const trackedPaths = execFileSync('git',
+    ['ls-files', '-z', '--', 'test/**/*.test.ts', 'test/*.test.ts'], {
+      cwd: root, encoding: 'utf8', windowsHide: true, maxBuffer: 4 * 1024 * 1024,
+    }).split('\0').filter(file => file.endsWith('.test.ts'));
+  const trackedTypeScriptTests = new Set(trackedPaths).size;
   const presentFiles = new Set();
   for (const file of Object.values(REQUIRED_SOURCE_FILES)) {
     try {
@@ -94,6 +109,7 @@ export function inspectExperimentalSource(rootDir) {
     rootLockVersion: lock.packages?.['']?.version,
     sourceSha,
     presentFiles,
+    trackedTypeScriptTests,
   });
 }
 
