@@ -99,12 +99,13 @@ jobs:
             test/delegated/k18/p006-evidence-classification.test.ts \
             test/delegated/k18/p007-transfer-replay-integrity.test.ts \
             test/delegated/k19/issue588-limits-inventory.test.ts \
+            test/delegated/k19/issue588-large-file-acceptance.test.ts \
             test/delegated/k19/p006-receiver-ack-reference.test.ts \
             test/delegated/pool-k17/markdown-anchors.test.ts \
             test/delegated/pool-k19/audit-physical-pass-labels.test.ts \
             > "$RUNNER_TEMP/nw-delegated-source-transfer.tap"
           cat "$RUNNER_TEMP/nw-delegated-source-transfer.tap"
-          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/nw-delegated-source-transfer.tap" 404
+          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/nw-delegated-source-transfer.tap" 409
       - name: Verify denied-admin 403 body privacy and retry status on actual source
         # Offline VM only: no HTTP request or real account credentials.
         shell: bash
