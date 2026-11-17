@@ -80,13 +80,16 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      # Trigger coverage is release-critical for stable and prerelease tags alike.
+      - name: Verify release trigger coverage on all package versions
+        run: node --test test/ci/release-path-coverage.test.mjs
       - name: Verify experimental source and deny fake CORE acceptance
         if: github.event_name == 'pull_request'
         shell: bash
         run: |
           version="$(node -p "require('./package.json').version")"
           if [[ "$version" == '1.0.9-exp.0' ]]; then
-            node --test test/ci/v109-experimental-source-audit.test.mjs test/ci/v109-core-readonly-preflight.test.mjs test/ci/release-path-coverage.test.mjs
+            node --test test/ci/v109-experimental-source-audit.test.mjs test/ci/v109-core-readonly-preflight.test.mjs
             node scripts/ci/v109-experimental-source-audit.mjs --json
           elif [[ "$version" == *-exp.* ]]; then
             echo "::error::Unknown experimental candidate: $version"

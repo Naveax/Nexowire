@@ -39,12 +39,17 @@ test('release readiness is triggered by changes in critical physical CORE and fi
   }
 });
 
-test('source-only experimental audit checks the release trigger regression on PRs',()=>{
+test('stable and experimental releases both run the release path coverage gate',()=>{
+  const step=workflow.split('      - name: Verify release trigger coverage on all package versions\n')[1]
+    ?.split('\n      - name:')[0];
+  assert.ok(step,'release path coverage requires a dedicated package job step');
+  assert.doesNotMatch(step,/^\s+if:/m,'stable tags must not skip the release path coverage');
+  assert.match(step,/^\s+run: node --test test\/ci\/release-path-coverage\.test\.mjs\s*$/m);
   const command=/node --test ([^\n]*)/.exec(
     /- name: Verify experimental source and deny fake CORE acceptance([\s\S]*?)\n      - name:/.exec(workflow)?.[1]??'',
   )?.[1];
   assert.ok(command,'missing candidate source audit node test command');
-  assert.match(command,/test\/ci\/release-path-coverage\.test\.mjs/);
+  assert.doesNotMatch(command,/test\/ci\/release-path-coverage\.test\.mjs/);
   assert.match(command,/test\/ci\/v109-core-readonly-preflight\.test\.mjs/);
   assert.match(workflow,/\n  push:\s*\n    tags:\s*\n      - "v\*"\s*\n/);
 });
