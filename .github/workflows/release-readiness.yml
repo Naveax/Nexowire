@@ -35,6 +35,26 @@ on:
       - "test/release-publication-policy.test.ts"
       - "skills/**"
       - "docs/RELEASE.md"
+      # Physical CORE preflight and the source-only audit are release gates.
+      - "scripts/Read-Nexowire-V109CoreReadiness.ps1"
+      - "scripts/ci/v109-experimental-source-audit.mjs"
+      - "test/ci/v109-core-readonly-preflight.test.mjs"
+      - "test/ci/v109-experimental-source-audit.test.mjs"
+      - "test/ci/release-path-coverage.test.mjs"
+      # Windows process ownership is part of packaging acceptance.
+      - "src/agent/process-launch-mode.ts"
+      - "src/agent/process-manager.ts"
+      - "src/agent/windows-job-owner.ts"
+      - "native/windows-job-owner.c"
+      - "scripts/build-windows-job-owner.ps1"
+      - "test/process-manager-tree-cleanup.test.ts"
+      - "test/ai05/personal-process-mode.test.ts"
+      # The bounded device copy path is covered by release package tests.
+      - "src/mcp/cross-device-file-transfer.ts"
+      - "src/mcp/create-server.ts"
+      - "test/cross-device-file-transfer.test.ts"
+      - "test/cross-device-mcp-transfer.e2e.test.ts"
+      - "test/delegated/k19/issue588-large-file-acceptance.test.ts"
       - "docs/releases/**"
       - ".github/workflows/release-readiness.yml"
       - ".github/workflows/publish-release.yml"
@@ -65,7 +85,7 @@ jobs:
         run: |
           version="$(node -p "require('./package.json').version")"
           if [[ "$version" == '1.0.9-exp.0' ]]; then
-            node --test test/ci/v109-experimental-source-audit.test.mjs test/ci/v109-core-readonly-preflight.test.mjs
+            node --test test/ci/v109-experimental-source-audit.test.mjs test/ci/v109-core-readonly-preflight.test.mjs test/ci/release-path-coverage.test.mjs
             node scripts/ci/v109-experimental-source-audit.mjs --json
           elif [[ "$version" == *-exp.* ]]; then
             echo "::error::Unknown experimental candidate: $version"
