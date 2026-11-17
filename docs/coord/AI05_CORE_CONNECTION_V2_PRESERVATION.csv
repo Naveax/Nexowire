@@ -128,7 +128,7 @@ source,source_sha,path,source_blob_sha,integrated_blob_sha,classification
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","test/postgres-monotonic-witness.test.ts","4f993827be9a4b49566036263420a19cb99a4089","4f993827be9a4b49566036263420a19cb99a4089","EXACT_SOURCE_BLOB"
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","test/privilege-boundary.test.ts","ff45abd62dc1406e272512bbf529205c2297e9ca","ff45abd62dc1406e272512bbf529205c2297e9ca","EXACT_SOURCE_BLOB"
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","test/privileged-broker-effect-admission.test.ts","eafdeb2b04b91d16723bbd358380b2590846b6b2","eafdeb2b04b91d16723bbd358380b2590846b6b2","EXACT_SOURCE_BLOB"
-"CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","test/process-manager-tree-cleanup.test.ts","d0af518ee51c8b57cd5d00c582383deac50a634a","d0af518ee51c8b57cd5d00c582383deac50a634a","EXACT_SOURCE_BLOB"
+"CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","test/process-manager-tree-cleanup.test.ts","d0af518ee51c8b57cd5d00c582383deac50a634a","5d6d68d6e598db7ff510a51831e27d4541bb15db","EVOLVED"
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","test/qa-broker-receipt-aba-p11.test.ts","8f47eff7f6f65bf7067c42bef8d58b384034e35e","8f47eff7f6f65bf7067c42bef8d58b384034e35e","EXACT_SOURCE_BLOB"
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","test/qa-core-ci-evidence-audit.test.ts","3edb20bb2a25e5f383d2640c738921b35878193a","3edb20bb2a25e5f383d2640c738921b35878193a","EXACT_SOURCE_BLOB"
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","test/qa-core-ci-github-audit.test.ts","0034ed174c4e1fcbe31aa01590a89be6b1a72a58","0034ed174c4e1fcbe31aa01590a89be6b1a72a58","EXACT_SOURCE_BLOB"
