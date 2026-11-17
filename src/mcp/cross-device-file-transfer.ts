@@ -16,6 +16,7 @@ export interface CrossDeviceFileTransferOps {
   readSource(offsetBytes:number,maxBytes:number):Promise<TransferRead>;
   writeStage(stage:string,content:string,offsetBytes:number,first:boolean):Promise<number>;
   hashStage(stage:string):Promise<string>;
+  hashDestination(destination:string):Promise<string>;
   commitStage(stage:string,destination:string):Promise<void>;
   cleanupStage(stage:string):Promise<void>;
 }
@@ -88,7 +89,20 @@ export async function transferCrossDeviceFile(
         'The destination staging digest does not match the source.');
     }
     await ops.commitStage(stage,destinationPath);
+    // Publishing can change the effective destination (or lose its final ACK).
+    // Never report COMPLETE solely from the digest of the temporary stage.
     created=false;
+    let destinationHash:string;
+    try {
+      destinationHash=(await ops.hashDestination(destinationPath)).toLowerCase();
+    } catch {
+      throw new CrossDeviceTransferError('TRANSFER_DESTINATION_READBACK_UNAVAILABLE',
+        'Destination was published but the final hash readback failed; verify before retrying.');
+    }
+    if(!hex.test(destinationHash)||destinationHash!==startingHash){
+      throw new CrossDeviceTransferError('TRANSFER_DESTINATION_HASH_MISMATCH',
+        'Destination was published but the final hash did not match; inspect before retrying.');
+    }
     return {state:'COMPLETE' as const,bytesTransferred,
       sha256:startingHash,chunkBytes,chunkCount:Math.max(1,Math.ceil(stat.size/chunkBytes)),
       destination:destinationPath};

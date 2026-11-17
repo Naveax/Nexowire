@@ -5609,6 +5609,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
             return Number(d.bytesWritten);
           },
           hashStage:(stage)=>hash(destination_device_id,stage),
+          hashDestination:(destination)=>hash(destination_device_id,destination),
           commitStage:async(stage,destination)=>{
             await remote('files.move',{
               source:stage,destination,overwrite:false,create_parents:false,

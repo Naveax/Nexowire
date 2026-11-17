@@ -135,6 +135,11 @@ test('full isolated transfer via native agent chunk reads and positional stage w
       data:{sha256:string}};
     return r.data.sha256;
    },
+   hashDestination:async(destination)=>{
+    const r=await executeCapability('files.hash',{path:destination},policy) as {
+      data:{sha256:string}};
+    return r.data.sha256;
+   },
    commitStage:async(stage,destination)=>{
     await executeCapability('files.move',{
       source:stage,destination,overwrite:false,atomic_no_overwrite:true

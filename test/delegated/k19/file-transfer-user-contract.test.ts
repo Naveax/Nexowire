@@ -49,6 +49,7 @@ function fixture(source: Buffer, options: {
       return bytes.length;
     },
     hashStage: async () => digest(staging ?? Buffer.alloc(0)),
+    hashDestination: async () => digest(destination ?? Buffer.alloc(0)),
     commitStage: async () => {
       await options.beforePublish?.();
       if (destination !== null) {

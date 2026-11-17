@@ -10,6 +10,7 @@ const goodId='d7020db6-8cf4-442b-b006-0f393cde2007';
 function fixture(bytes:Buffer,controls:{
   changeAfterRead?:boolean;badChunk?:boolean;badDestination?:boolean;
   rejectWrite?:boolean;rejectCommit?:boolean;truncatedWrite?:boolean;
+  badPublishedDigest?:boolean;failPublishedReadback?:boolean;
 }={}){
   const source=Buffer.from(bytes);
   let staged:Buffer|null=null;
@@ -39,6 +40,10 @@ function fixture(bytes:Buffer,controls:{
       return controls.truncatedWrite?b.length-1:b.length;
     },
     hashStage:async()=>controls.badDestination?'f'.repeat(64):hash(staged??Buffer.alloc(0)),
+    hashDestination:async()=>{
+      if(controls.failPublishedReadback)throw Error('synthetic destination hash unavailable');
+      return controls.badPublishedDigest?'f'.repeat(64):hash(destination??Buffer.alloc(0));
+    },
     commitStage:async()=>{if(controls.rejectCommit)throw Error('commit refused');
       destination=Buffer.from(staged??Buffer.alloc(0));staged=null;},
     cleanupStage:async()=>{cleaned++;staged=null;},
@@ -120,6 +125,22 @@ test('invalid transfer ID, destination, chunk limits fail before writing',async(
  await assert.rejects(transferCrossDeviceFile('dst',f.ops,{chunkBytes:90000}),
   /bounds are invalid/);
  assert.equal(f.writes.length,0);
+});
+test('post-publish destination SHA mismatch never returns COMPLETE or deletes published data', async()=>{
+ const bytes=Buffer.alloc(65000,17);
+ const f=fixture(bytes,{badPublishedDigest:true});
+ await assert.rejects(transferCrossDeviceFile('dst.bin',f.ops,{newId:()=>goodId}),
+  (e:unknown)=>e instanceof CrossDeviceTransferError&&e.code==='TRANSFER_DESTINATION_HASH_MISMATCH');
+ assert.deepEqual(f.destination,bytes);
+ assert.equal(f.cleaned,0,'Published destination must not be erased after an uncertain readback.');
+});
+test('lost destination hash readback is an explicit uncertain publish, not a successful transfer', async()=>{
+ const bytes=Buffer.alloc(230000,42);
+ const f=fixture(bytes,{failPublishedReadback:true});
+ await assert.rejects(transferCrossDeviceFile('dst.bin',f.ops,{newId:()=>goodId}),
+  (e:unknown)=>e instanceof CrossDeviceTransferError&&e.code==='TRANSFER_DESTINATION_READBACK_UNAVAILABLE');
+ assert.deepEqual(f.destination,bytes);
+ assert.equal(f.cleaned,0,'A published file is retained for independent verification.');
 });
 test('repeated fixed-offset chunks can be written without append duplication',async()=>{
  const bytes=Buffer.from('abcdef'.repeat(13000));

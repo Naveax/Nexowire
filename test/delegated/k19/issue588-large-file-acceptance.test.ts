@@ -86,6 +86,7 @@ function nativeFixture(sourcePath: string, sourcePolicy: PathPolicy,
       return Number(data.bytesWritten);
     },
     hashStage: stage => hash(stage, destinationPolicy),
+    hashDestination: destination => hash(destination, destinationPolicy),
     commitStage: async (stage, destination) => {
       atomicPublishes++;
       await capability('files.move', {
@@ -205,6 +206,7 @@ test('T-363: larger total sizes are rejected before I/O by current bounded helpe
     readSource: async () => {readCalls++; throw new Error('should not read');},
     writeStage: async () => {throw new Error('should not write');},
     hashStage: async () => 'a'.repeat(64),
+    hashDestination: async () => 'a'.repeat(64),
     commitStage: async () => {throw new Error('should not publish');},
     cleanupStage: async () => {throw new Error('should not cleanup');},
   };

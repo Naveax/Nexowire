@@ -48,7 +48,7 @@ test('two independent sandboxed Nexowire agents exchange bounded file chunks wit
  });
  const address=http.address();
  assert.ok(address&&typeof address==='object');
- let sourceReads=0,destinationWrites=0,atomicCommits=0;
+ let sourceReads=0,destinationWrites=0,atomicCommits=0,finalHashReads=0;
  const open=async(name:string,root:string,capabilities:string[])=>{
   const ws=new WebSocket('ws://127.0.0.1:'+address.port+'/agent',{
    headers:{Authorization:'Bearer two-device-token'}
@@ -62,6 +62,9 @@ test('two independent sandboxed Nexowire agents exchange bounded file chunks wit
    if(msg.type!=='request')return;
    if(name==='source'&&msg.capability==='files.read')sourceReads++;
    if(name==='destination'&&msg.capability==='files.write')destinationWrites++;
+   if(name==='destination'&&msg.capability==='files.hash'&&
+     typeof msg.input==='object'&&msg.input!==null&&
+     (msg.input as {path?:string}).path===destPath)finalHashReads++;
    if(name==='destination'&&msg.capability==='files.move'&&
      typeof msg.input==='object'&&msg.input!==null&&
      (msg.input as {atomic_no_overwrite?:boolean}).atomic_no_overwrite===true)atomicCommits++;
@@ -107,6 +110,7 @@ test('two independent sandboxed Nexowire agents exchange bounded file chunks wit
  assert.equal(sourceReads,5);
  assert.equal(destinationWrites,5);
  assert.equal(atomicCommits,1,'transfer must request atomic no-overwrite publication');
+ assert.equal(finalHashReads,1,'COMPLETE requires an independent final destination file hash readback');
  assert.equal(JSON.stringify(first).includes(file.subarray(0,50).toString('base64')),false);
  const second=await call();
  const rejected=second.structuredContent as {ok:boolean;error?:{code:string}};
