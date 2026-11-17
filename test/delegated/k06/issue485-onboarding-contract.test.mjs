@@ -38,12 +38,12 @@ test('#485: kurulum mesajı, README, sürüm notu ve paket sürümü aynı', () 
   const published = release.match(/latest published stable version is \[v(\d+\.\d+\.\d+)\]/)?.[1];
   assert.ok(published, 'published stable version not parseable');
   if (pkg.version !== published) {
-    // A documented, unpublished experimental candidate may coexist with the
-    // real stable installer. Never present that candidate as /releases/latest.
+    // Experimental package source may coexist with the stable installer.
+    // Published prereleases are never silently relabelled /releases/latest.
     assert.match(pkg.version, /^\d+\.\d+\.\d+-exp\.\d+$/);
     const experimental = read(`docs/releases/v${pkg.version.split('-')[0]}-experimental.md`);
     assert.ok(experimental.includes(`**Package version:** \`${pkg.version}\``));
-    assert.match(experimental, /NOT PUBLISHED/);
+    assert.match(experimental, /PUBLISHED PRERELEASE \(NOT STABLE\)/);
     assert.ok(experimental.includes(`Keep v${published} as the authorized stable version.`));
   }
   const asset = `https://github.com/Naveax/Nexowire/releases/download/v${published}/Nexowire-Setup.cmd`;

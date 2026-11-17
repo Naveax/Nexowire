@@ -42,7 +42,8 @@ test('experimental package and exact source inventory are recognized without cla
   assert.equal(result.release, EXPERIMENTAL_TAG);
   assert.equal(result.channel, 'EXPERIMENTAL_PREVIEW');
   assert.equal(result.stablePublishAuthorized, false);
-  assert.equal(result.publicReleasePublished, false);
+  assert.equal(result.publicReleasePublished, null);
+  assert.equal(result.publicationEvidence, 'NOT_CHECKED_SOURCE_ONLY');
   assert.equal(result.fullCoreAccessVerified, false);
   assert.equal(result.physicalCoreStatus, 'NOT_ATTESTED');
   assert.equal(result.physicalAcceptance, 'NOT_RUN');

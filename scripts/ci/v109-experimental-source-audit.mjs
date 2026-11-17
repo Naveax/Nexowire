@@ -55,7 +55,10 @@ export function assessExperimentalSource({
         }]),
     ),
     stablePublishAuthorized: false,
-    publicReleasePublished: false,
+    // Local source inspection has no live GitHub Release evidence. Unknown is
+    // not false: v1.0.9-exp.0 was published independently of this checkout.
+    publicReleasePublished: null,
+    publicationEvidence: 'NOT_CHECKED_SOURCE_ONLY',
     fullCoreAccessVerified: false,
     physicalCoreStatus: 'NOT_ATTESTED',
     physicalCoreRequirements: [...CORE_PHYSICAL_GATES],
