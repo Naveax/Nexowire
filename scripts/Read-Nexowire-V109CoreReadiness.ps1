@@ -37,6 +37,14 @@ function Read-DiskReserve {
     }
 }
 
+function ConvertTo-TaskResultHex {
+    param([Parameter(Mandatory=$true)][long]$Result)
+    # Task Scheduler records Win32/HRESULT-style unsigned 32-bit status codes.
+    # Displaying a code is not proof of current Broker effect admission.
+    $unsigned = [uint32]($Result -band [long]4294967295)
+    return ('0x{0:X8}' -f $unsigned)
+}
+
 function Read-TaskState {
     param([Parameter(Mandatory=$true)][string]$Name)
     try {
@@ -49,6 +57,7 @@ function Read-TaskState {
             principal = [string]$task.Principal.UserId
             runLevel = [string]$task.Principal.RunLevel
             lastResult = [long]$info.LastTaskResult
+            lastResultHex = ConvertTo-TaskResultHex -Result ([long]$info.LastTaskResult)
         }
     } catch {
         return [pscustomobject]@{
@@ -58,6 +67,7 @@ function Read-TaskState {
             principal = $null
             runLevel = 'UNKNOWN'
             lastResult = $null
+            lastResultHex = $null
         }
     }
 }

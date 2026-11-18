@@ -24,6 +24,22 @@ test('physical CORE observer uses read-only scheduled-task and loopback queries'
   ]) assert.doesNotMatch(script, forbidden);
 });
 
+test('Task Scheduler status is rendered as an unsigned eight-digit HRESULT without authority claims', {
+  skip: process.platform !== 'win32',
+}, () => {
+  const fn = /^function ConvertTo-TaskResultHex \{[\s\S]*?^\}/m.exec(script)?.[0];
+  assert.ok(fn, 'missing status formatter function');
+  const run = spawnSync('powershell.exe', [
+    '-NoProfile','-NonInteractive','-Command',
+    fn+'\n2147946720,267009,-1,0 | ForEach-Object { ConvertTo-TaskResultHex -Result $_ }',
+  ], {encoding:'utf8',timeout:15000,windowsHide:true});
+  assert.equal(run.status,0,run.stderr || run.error?.message);
+  assert.deepEqual(run.stdout.trim().split(/\r?\n/),[
+    '0x800710E0','0x00041301','0xFFFFFFFF','0x00000000',
+  ]);
+  assert.match(script,/Running and a loopback listener do not attest elevated CORE effect admission/);
+});
+
 test('disk reserve probes are read-only advisory results, not a migration approval', () => {
   assert.match(script, /function Read-DiskReserve/);
   assert.match(script, /AvailableFreeSpace/);
@@ -45,6 +61,15 @@ test('Windows preflight reports actual drive bytes without claiming physical SYS
   const report = JSON.parse(run.stdout);
   assert.equal(report.fullCoreAccessVerified, false);
   assert.equal(report.trustedSystemHubAcceptance, 'NOT_RUN');
+  for (const task of report.tasks) {
+    if (task.visibility === 'VISIBLE') {
+      assert.equal(task.lastResultHex, '0x' +
+        (task.lastResult >>> 0).toString(16).toUpperCase().padStart(8,'0'));
+    } else {
+      assert.equal(task.lastResult, null);
+      assert.equal(task.lastResultHex, null);
+    }
+  }
   for (const result of [
     report.diskReserve.systemStateVolume, report.diskReserve.userStateVolume,
   ]) {
