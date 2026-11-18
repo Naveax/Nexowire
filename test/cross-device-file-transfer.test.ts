@@ -89,6 +89,57 @@ test('rejects corrupt base64 source chunks without writing',async()=>{
   (e:unknown)=>e instanceof CrossDeviceTransferError&&e.code==='TRANSFER_CHUNK_INVALID');
  assert.equal(f.destination,null);assert.equal(f.cleaned,0);
 });
+test('rejects oversized remote Base64 before a bounded chunk can be decoded or staged',async()=>{
+  const bytes=Buffer.alloc(10,7);
+  const f=fixture(bytes);
+  const untrusted={...f.ops,readSource:async(offset:number)=>({
+    sourceBytes:bytes.length,offsetBytes:offset,bytesRead:bytes.length,
+    content:'A'.repeat(4*1024*1024),
+  })};
+  await assert.rejects(
+    transferCrossDeviceFile('dst.bin',untrusted,{newId:()=>goodId}),
+    (e:unknown)=>e instanceof CrossDeviceTransferError&&e.code==='TRANSFER_CHUNK_INVALID',
+  );
+  assert.equal(f.writes.length,0,'A malformed remote chunk must not reach writeStage.');
+  assert.equal(f.cleaned,0,'No staged resource was created before rejection.');
+});
+
+test('malformed hash response types fail closed with explicit transfer error codes',async()=>{
+  const bytes=Buffer.alloc(150,42);
+  const malformed=undefined as unknown as string;
+  const f=fixture(bytes);
+  await assert.rejects(transferCrossDeviceFile('dst.bin',{
+    ...f.ops,hashSource:async()=>malformed,
+  },{newId:()=>goodId}),
+  (e:unknown)=>e instanceof CrossDeviceTransferError&&e.code==='TRANSFER_SOURCE_HASH_UNAVAILABLE');
+  assert.equal(f.writes.length,0);
+
+  let hashCall=0;
+  const changed=fixture(bytes);
+  await assert.rejects(transferCrossDeviceFile('dst.bin',{
+    ...changed.ops,hashSource:async()=>++hashCall===1?hash(bytes):malformed,
+  },{newId:()=>goodId}),
+  (e:unknown)=>e instanceof CrossDeviceTransferError&&e.code==='TRANSFER_SOURCE_CHANGED');
+  assert.equal(changed.destination,null);
+  assert.equal(changed.cleaned,1);
+
+  const staged=fixture(bytes);
+  await assert.rejects(transferCrossDeviceFile('dst.bin',{
+    ...staged.ops,hashStage:async()=>malformed,
+  },{newId:()=>goodId}),
+  (e:unknown)=>e instanceof CrossDeviceTransferError&&e.code==='TRANSFER_HASH_MISMATCH');
+  assert.equal(staged.destination,null);
+  assert.equal(staged.cleaned,1);
+
+  const published=fixture(bytes);
+  await assert.rejects(transferCrossDeviceFile('dst.bin',{
+    ...published.ops,hashDestination:async()=>malformed,
+  },{newId:()=>goodId}),
+  (e:unknown)=>e instanceof CrossDeviceTransferError&&e.code==='TRANSFER_DESTINATION_HASH_MISMATCH');
+  assert.deepEqual(published.destination,bytes,'No published data is removed after a bad readback.');
+  assert.equal(published.cleaned,0);
+});
+
 test('incomplete write never commits and stage is cleaned',async()=>{
  const f=fixture(Buffer.alloc(50000,3),{truncatedWrite:true});
  await assert.rejects(transferCrossDeviceFile('dst.bin',f.ops,{newId:()=>goodId}),
