@@ -47,3 +47,32 @@ değiştirme. Aynı sürüm üzerinde altı test ve owner'ın mevcut 13 testi ye
 - Yalnız bağımsız `test/delegated/k04/**` dosyaları eklenir.
 - Gerçek 320/375px browser, NVDA, yetkili/403 hesap, Windows ve canlı API:
   **NOT_RUN**. Kaynak/VM testleri bunların yerine geçmez.
+
+## 19 Kasım / yeni negatif: eşzamanlı yanıtların sıra tersliği
+
+Owner #1160 `81028bf643e3dc3cb5b0ab3f9c609c239732a413` içindeki
+`web/admin.js` blob `c77b46d012f95039f3749edc6336fe43c2d616f6`
+iki `load()` çağrısı çakıştığında **son başlayan isteğin** sonucu ekranda
+kalacak biçimde korunmuyor. Bu sadece Node22 offline VM'de zorlanmış
+çakışma senaryosudur; mevcut ürün arayüzünde iki çağrının gerçekten aynı
+anda oluştuğu ve gerçek admin/Windows olayı **kanıtlanmadı**.
+
+Ölçümler: önce eski 200 geciktirildi, yeni 403 tamamlandı, sonra eski 200
+geldi. Sonuç `Yetki yetersiz` -> `Zero-spend aktif`, eski KPI geri döndü,
+uyarı paneli açık kaldı. Ters sırada eski 403 geç tamamlanınca başarılı
+200'ün üstüne `Yetki yetersiz` yazdı. İki vaka da kaynak kabulünde
+`0/2 PASS, exit 1` (beklenen RED). Bu bir auth bypass kanıtı değildir.
+
+```sh
+node --test test/delegated/k04/admin-concurrent-response.test.mjs
+node test/delegated/k04/admin-concurrent-response.mjs /exact/owner/web/admin.js
+```
+
+İlk komutta 5/5 fixture PASS (guarded/unguarded/credential negatifleri).
+İkinci komut owner blob'unda exit1; testte `fetch` tümüyle sentetik.
+Owner olası en küçük düzeltme: monoton istek sıra numarasıyla yalnız son
+`load()` çağrısının fetch/JSON tamamlanmasından sonraki ekran yazma, hata
+ve `aria-busy` değişikliklerine izin ver. Gerçek izin/oturum/API davranışına
+dokunmadan kaynak yeniden test edilmeli. K04 yalnız test/docs yoluna yazdı;
+owner `web/admin.js` veya ana `ci.yml` değiştirilmedi. Hosted exact test
+keşfi ve fiziksel admin/browser/Windows **ayrı NOT_RUN**.
