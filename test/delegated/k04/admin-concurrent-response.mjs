@@ -38,13 +38,16 @@ function dom() {
   return { nodes, snapshot };
 }
 
-export async function probeOutOfOrder(source, olderStatus, newerStatus) {
+export async function probeOutOfOrder(source, olderStatus, newerStatus, { delayOlderJson = false } = {}) {
   if (![200, 403].includes(olderStatus) || ![200, 403].includes(newerStatus) ||
       olderStatus === newerStatus) throw new RangeError('expected opposite 200/403 statuses');
+  if (delayOlderJson && olderStatus !== 200) throw new RangeError('delayed JSON requires older HTTP200');
   const ui = dom();
   const requests = [];
   let settleOlder;
   const olderPending = new Promise((resolve) => { settleOlder = resolve; });
+  let settleOlderJson;
+  const olderJsonPending = new Promise((resolve) => { settleOlderJson = resolve; });
   const response = (status) => status === 200
     ? { ok: true, status, json: async () => overview() }
     : { ok: false, status };
@@ -62,10 +65,15 @@ export async function probeOutOfOrder(source, olderStatus, newerStatus) {
     Intl,
   };
   const older = runInNewContext(source, context, { filename: 'web/admin.js', timeout: 1000 });
+  if (delayOlderJson) {
+    settleOlder({ ok: true, status: 200, json: () => olderJsonPending });
+    await Promise.resolve(); // older load has reached its awaited response.json().
+  }
   const newer = runInNewContext('load()', context, { filename: 'web/admin.js', timeout: 1000 });
   await newer;
   const latest = ui.snapshot();
-  settleOlder(response(olderStatus));
+  if (delayOlderJson) settleOlderJson(overview());
+  else settleOlder(response(olderStatus));
   await older;
   const afterLate = ui.snapshot();
   const expectedLatest = newerStatus === 200
@@ -84,6 +92,7 @@ export async function auditOutOfOrder(source) {
   const cases = [
     await probeOutOfOrder(source, 200, 403),
     await probeOutOfOrder(source, 403, 200),
+    await probeOutOfOrder(source, 200, 403, { delayOlderJson: true }),
   ];
   return { pass: cases.every((item) => item.pass), passed: cases.filter((item) => item.pass).length,
     total: cases.length, cases };
