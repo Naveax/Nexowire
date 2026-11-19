@@ -6,43 +6,65 @@
     "status": "completed",
     "conclusion": "success",
     "totalJobs": 7,
-    "log": "7 jobs completed; no nested K20 test path or assertion marker in run logs"
+    "log": "7 jobs completed; no nested K20 test path or assertion marker in run logs",
+    "attempt": 1
   },
   "jobs": [
     {
       "id": 1,
       "status": "completed",
-      "conclusion": "success"
+      "conclusion": "success",
+      "runId": 42474379692,
+      "attempt": 1,
+      "headSha": "52d452f717d891eeaf4c2b9aff3c6e1ea68369b0"
     },
     {
       "id": 2,
       "status": "completed",
-      "conclusion": "success"
+      "conclusion": "success",
+      "runId": 42474379692,
+      "attempt": 1,
+      "headSha": "52d452f717d891eeaf4c2b9aff3c6e1ea68369b0"
     },
     {
       "id": 3,
       "status": "completed",
-      "conclusion": "success"
+      "conclusion": "success",
+      "runId": 42474379692,
+      "attempt": 1,
+      "headSha": "52d452f717d891eeaf4c2b9aff3c6e1ea68369b0"
     },
     {
       "id": 4,
       "status": "completed",
-      "conclusion": "success"
+      "conclusion": "success",
+      "runId": 42474379692,
+      "attempt": 1,
+      "headSha": "52d452f717d891eeaf4c2b9aff3c6e1ea68369b0"
     },
     {
       "id": 5,
       "status": "completed",
-      "conclusion": "success"
+      "conclusion": "success",
+      "runId": 42474379692,
+      "attempt": 1,
+      "headSha": "52d452f717d891eeaf4c2b9aff3c6e1ea68369b0"
     },
     {
       "id": 6,
       "status": "completed",
-      "conclusion": "success"
+      "conclusion": "success",
+      "runId": 42474379692,
+      "attempt": 1,
+      "headSha": "52d452f717d891eeaf4c2b9aff3c6e1ea68369b0"
     },
     {
       "id": 7,
       "status": "completed",
-      "conclusion": "success"
+      "conclusion": "success",
+      "runId": 42474379692,
+      "attempt": 1,
+      "headSha": "52d452f717d891eeaf4c2b9aff3c6e1ea68369b0"
     }
   ],
   "newTests": [
