@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
+import { deflateSync } from 'node:zlib';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
-import { allowLocalWebAssetRequest, captureLocalStaticViews } from '../../../scripts/delegated/k10/browser-visual-smoke.mjs';
+import { allowLocalWebAssetRequest, captureLocalStaticViews, inspectPng } from '../../../scripts/delegated/k10/browser-visual-smoke.mjs';
 
 function disposable(t) {
   const dir = mkdtempSync(join(tmpdir(), 'nexowire-browser-proof-'));
@@ -145,4 +146,61 @@ test('#539 R11: static assets inside web are permitted; symlink escapes and HTTP
   }
   assert.equal(allowLocalWebAssetRequest('http://127.0.0.1:8080/', webRoot), false);
   assert.equal(allowLocalWebAssetRequest('file:///definitely-missing-private-file.txt', webRoot), false);
+});
+
+function k10Crc32(bytes) {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function k10PngChunk(type, bytes) {
+  const header = Buffer.alloc(4);
+  header.writeUInt32BE(bytes.length);
+  const payload = Buffer.concat([Buffer.from(type), bytes]);
+  const checksum = Buffer.alloc(4);
+  checksum.writeUInt32BE(k10Crc32(payload));
+  return Buffer.concat([header, payload, checksum]);
+}
+
+test('#485: unknown critical PNG chunk fails despite valid CRC, dimensions and pixel stream', () => {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(1);
+  ihdr.writeUInt32BE(1, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 6;
+  const png = Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    k10PngChunk('IHDR', ihdr),
+    k10PngChunk('ABCD', Buffer.from('unknown critical fixture')),
+    k10PngChunk('IDAT', deflateSync(Buffer.from([0, 17, 0, 0, 255]))),
+    k10PngChunk('IEND', Buffer.alloc(0)),
+  ]);
+  assert.match(inspectPng(png, 1, 1).reason, /critical PNG chunk/);
+  assert.equal(inspectPng(png, 1, 1).status, 'FAIL');
+});
+
+test('#485: IDAT interrupted by ancillary chunk fails while contiguous split IDAT passes', () => {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(1);
+  ihdr.writeUInt32BE(1, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 6;
+  const compressed = deflateSync(Buffer.from([0, 17, 0, 0, 255]));
+  const prefix = [
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    k10PngChunk('IHDR', ihdr),
+    k10PngChunk('IDAT', compressed.subarray(0, 3)),
+  ];
+  const suffix = [
+    k10PngChunk('IDAT', compressed.subarray(3)),
+    k10PngChunk('IEND', Buffer.alloc(0)),
+  ];
+  assert.equal(inspectPng(Buffer.concat([...prefix, ...suffix]), 1, 1).status, 'PASS');
+  const invalid = Buffer.concat([...prefix, k10PngChunk('tEXt', Buffer.from('k\\0v')), ...suffix]);
+  assert.match(inspectPng(invalid, 1, 1).reason, /nonconsecutive PNG IDAT/);
+  assert.equal(inspectPng(invalid, 1, 1).status, 'FAIL');
 });
