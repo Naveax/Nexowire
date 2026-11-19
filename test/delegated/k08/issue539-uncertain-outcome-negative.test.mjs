@@ -44,3 +44,19 @@ for (const item of cases) {
     }
   });
 }
+
+test('Q-465 control: an observed identity-boundary auth denial can be attributed to identity', () => {
+  const result = classifyFailure({ code: 'AUTH_REQUIRED', observedAt: 'identity', dispatched: false });
+  assert.equal(result.causeLayer, 'identity');
+  assert.equal(result.certainty, 'confirmed');
+  assert.equal(result.dispatchState, 'not_dispatched');
+  assert.equal(result.retrySafety, 'after_reauthorization');
+});
+
+test('Q-465 RED: an upstream-client AUTH_REQUIRED string alone cannot prove identity origin', () => {
+  const result = classifyFailure({ code: 'AUTH_REQUIRED', observedAt: 'upstream_client', dispatched: 'unknown' });
+  assert.equal(result.causeLayer, 'undetermined', 'An untrusted foreign code cannot establish identity source');
+  assert.equal(result.certainty, 'unknown');
+  assert.equal(result.dispatchState, 'unknown');
+  assert.equal(result.retrySafety, 'reconcile_first');
+});
