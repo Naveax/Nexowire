@@ -89,6 +89,50 @@ test('different user-profile volume cannot be falsely approved by healthy C: fre
   assert.equal(result.userProfileAvailableBytes,6n*1024n**3n);
 });
 
+test('validated legacy state root is probed even when elevated home is on another drive',async()=>{
+  const root='E:\\StateMount\\Nexowire\\hub';
+  const requests:string[]=[];
+  const read=async(target:string)=>{
+    requests.push(target);
+    const bytes=target===root?1n*1024n**3n:
+      SYSTEM_CUTOVER_RECOMMENDED_FREE_BYTES;
+    return {bsize:1,bavail:Number(bytes)};
+  };
+  await assert.rejects(
+    assertSystemCutoverDiskReserve(read,TEST_PROFILE,root),
+    /AI04_CUTOVER_DISK_RESERVE_INSUFFICIENT/,
+  );
+  assert.deepEqual(requests,[
+    SYSTEM_CUTOVER_STATE_PROBE_PATH,TEST_PROFILE,root,
+  ]);
+  requests.length=0;
+  const accepted=await assertSystemCutoverDiskReserve(async(target)=>{
+    requests.push(target);
+    return {bsize:1,bavail:Number(SYSTEM_CUTOVER_RECOMMENDED_FREE_BYTES)};
+  },TEST_PROFILE,root);
+  assert.equal(accepted.sourceStateProbePath,root);
+  assert.equal(accepted.sourceStateAvailableBytes,SYSTEM_CUTOVER_RECOMMENDED_FREE_BYTES);
+  assert.equal(accepted.recommendedReserveMet,true);
+  assert.deepEqual(requests,[SYSTEM_CUTOVER_STATE_PROBE_PATH,TEST_PROFILE,root]);
+  requests.length=0;
+  const sourceUnverifiable=async(target:string)=>{
+    requests.push(target);
+    if(target===root)throw new Error('source mount disappeared');
+    return {bsize:1,bavail:Number(SYSTEM_CUTOVER_RECOMMENDED_FREE_BYTES)};
+  };
+  await assert.rejects(
+    assertSystemCutoverDiskReserve(sourceUnverifiable,TEST_PROFILE,root),
+    /AI04_CUTOVER_DISK_RESERVE_UNVERIFIED/,
+  );
+  assert.deepEqual(requests,[SYSTEM_CUTOVER_STATE_PROBE_PATH,TEST_PROFILE,root]);
+  await assert.rejects(
+    assertSystemCutoverDiskReserve(
+      async()=>({bsize:1,bavail:Number(SYSTEM_CUTOVER_RECOMMENDED_FREE_BYTES)}),
+      TEST_PROFILE,''),
+    /AI04_CUTOVER_DISK_RESERVE_UNVERIFIED/,
+  );
+});
+
 test('ProgramData mount-point uses path resolution, not an assumed C: root probe',async()=>{
   const requests:string[]=[];
   const read=async(probePath:string)=>{
@@ -148,8 +192,12 @@ test('controlled migration checks disk twice, before artifacts and before legacy
   assert.match(first,/await assertSystemCutoverDiskReserve\(\)/);
   assert.ok(first.indexOf('assertSystemCutoverDiskReserve()')<
     first.indexOf('await absent(ROOT)'));
-  assert.match(second,/await assertSystemCutoverDiskReserve\(\)/);
-  assert.ok(second.indexOf('assertSystemCutoverDiskReserve()')>
+  const exactSourceCall='assertSystemCutoverDiskReserve(undefined,os.homedir(),journal.sourceRoot)';
+  assert.ok(first.includes('journal.sourceRoot=assertCanonicalHubStateSourcePath('));
+  assert.ok(first.includes(exactSourceCall));
+  assert.ok(first.indexOf(exactSourceCall)>first.indexOf('journal.sourceRoot=assertCanonicalHubStateSourcePath('));
+  assert.ok(second.includes(exactSourceCall));
+  assert.ok(second.indexOf(exactSourceCall)>
     second.indexOf('verifyWindowsPrivateAcl(JOURNAL)'));
 });
 

@@ -24,4 +24,9 @@ Parent #1160 exact HEAD: `fbcc9b4326044617eb21efd405da027f076dcca2`. This is a s
 
 The later dual-path change (based on #1160 source `489df3062cb48eb1f5b33109cb0a6a8ecb2d79c2`) keeps both lifecycle checks in place and additionally probes `C:\ProgramData` and `os.homedir()` at each checkpoint. Simulated D: profile low-space and ProgramData mount-point cases fail closed; the boundary tests use one-byte blocks so a one-byte deficit cannot be rounded up to PASS. Updated controlled-cutover and recovery target suite: **24 PASS / 0 FAIL / 0 SKIP** on Work-PC, TypeScript check PASS. These are source-only tests, not proof of physical SYSTEM migration.
 
+
+## Follow-up: authoritative legacy source-state volume
+
+A later source-only correction (parent commit \`1eea991ba3654482a9847cd743cb0771aa782d58\`) uses the validated \`NEXOWIRE_STATE_DIR\` from the persisted user Hub launcher, not just \`os.homedir()\`. This is necessary when the owner or elevated administrator profile is on a different volume from the legacy Hub state, including nested volume mount points. The cutover checks protected \`C:\ProgramData\`, current profile, and the canonical legacy source path before arming recovery and checks all three again immediately before stopping the user Hub. If any statfs probe fails or a volume has less than 4.1 GiB free, the cutover refuses. All three must meet the recommended 8 GiB for advisory green status. Distinct source volume regression: synthetic \`E:\StateMount\Nexowire\hub\` at 1 GiB is denied even when the other two locations have 8 GiB; an unreadable source mount is also denied. The change is a read-only source gate, not physical SYSTEM, DPAPI or rollback acceptance.
+
 No physical SYSTEM transition has been executed; `trustedSystemHubAcceptance=NOT_RUN` and `fullCoreAccessVerified=false` remain the operational truth.

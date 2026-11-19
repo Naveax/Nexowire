@@ -24,8 +24,10 @@ export interface CutoverDiskReserveObservation {
   root:string;
   systemStateProbePath:string;
   userProfileProbePath:string;
+  sourceStateProbePath:string|null;
   availableBytes:bigint;
   userProfileAvailableBytes:bigint;
+  sourceStateAvailableBytes:bigint|null;
   minimumFreeBytes:bigint;
   recommendedFreeBytes:bigint;
   recommendedReserveMet:boolean;
@@ -35,9 +37,13 @@ export interface CutoverDiskReserveObservation {
 export async function assertSystemCutoverDiskReserve(
   read:CutoverStatfsReader=(probePath)=>statfs(probePath),
   userProfilePath:string=os.homedir(),
+  sourceStatePath?:string,
 ):Promise<CutoverDiskReserveObservation>{
   if(typeof userProfilePath!=='string'||!userProfilePath.trim()||
-     userProfilePath.includes('\0')){
+     userProfilePath.includes('\0')||
+     (sourceStatePath!==undefined&&
+      (typeof sourceStatePath!=='string'||!sourceStatePath.trim()||
+       sourceStatePath.includes('\0')))){
     throw new Error('AI04_CUTOVER_DISK_RESERVE_UNVERIFIED');
   }
   const freeBytes=async(probePath:string):Promise<bigint>=>{
@@ -57,19 +63,30 @@ export async function assertSystemCutoverDiskReserve(
   // may be under a different local volume. Both need verified headroom.
   const availableBytes=await freeBytes(SYSTEM_CUTOVER_STATE_PROBE_PATH);
   const userProfileAvailableBytes=await freeBytes(userProfilePath);
+  // The authoritative legacy state root comes from the validated persisted
+  // launcher, not from the elevated account's home or its parent directory.
+  // Its volume can differ even from the owner's profile via mount points.
+  const sourceStateAvailableBytes=sourceStatePath===undefined?null:
+    await freeBytes(sourceStatePath);
   if(availableBytes<SYSTEM_CUTOVER_MINIMUM_FREE_BYTES||
-     userProfileAvailableBytes<SYSTEM_CUTOVER_MINIMUM_FREE_BYTES){
+     userProfileAvailableBytes<SYSTEM_CUTOVER_MINIMUM_FREE_BYTES||
+     (sourceStateAvailableBytes!==null&&
+      sourceStateAvailableBytes<SYSTEM_CUTOVER_MINIMUM_FREE_BYTES)){
     throw new Error('AI04_CUTOVER_DISK_RESERVE_INSUFFICIENT');
   }
   return {
     root:SYSTEM_CUTOVER_STATE_VOLUME,
     systemStateProbePath:SYSTEM_CUTOVER_STATE_PROBE_PATH,
     userProfileProbePath:userProfilePath,
+    sourceStateProbePath:sourceStatePath??null,
     availableBytes,
     userProfileAvailableBytes,
+    sourceStateAvailableBytes,
     minimumFreeBytes:SYSTEM_CUTOVER_MINIMUM_FREE_BYTES,
     recommendedFreeBytes:SYSTEM_CUTOVER_RECOMMENDED_FREE_BYTES,
     recommendedReserveMet:availableBytes>=SYSTEM_CUTOVER_RECOMMENDED_FREE_BYTES&&
-      userProfileAvailableBytes>=SYSTEM_CUTOVER_RECOMMENDED_FREE_BYTES,
+      userProfileAvailableBytes>=SYSTEM_CUTOVER_RECOMMENDED_FREE_BYTES&&
+      (sourceStateAvailableBytes===null||
+       sourceStateAvailableBytes>=SYSTEM_CUTOVER_RECOMMENDED_FREE_BYTES),
   };
 }

@@ -345,6 +345,9 @@ export async function controlledSystemHubCutover(
         throw new Error('AI04_EXISTING_OR_HIDDEN_SYSTEM_BOOT_TASK_DENIED');
       const env=parsePersistedHubLauncherEnvironment(await fs.readFile(LAUNCHER,'utf8'));
       journal.sourceRoot=assertCanonicalHubStateSourcePath(env.NEXOWIRE_STATE_DIR);
+      // The actual source may be a mount point independent of the user profile.
+      // Confirm it before registering any recovery artifact or stopping the Hub.
+      await assertSystemCutoverDiskReserve(undefined,os.homedir(),journal.sourceRoot);
       journal.port=Number(env.NEXOWIRE_HTTP_PORT??'43110');
       if(!Number.isInteger(journal.port)||journal.port<1||journal.port>65535)
         throw new Error('AI04_LEGACY_PORT_INVALID');
@@ -397,8 +400,9 @@ export async function controlledSystemHubCutover(
       verifyWindowsPrivateAcl(RECOVERY);
       verifyWindowsPrivateAcl(JOURNAL);
       // Other processes can consume space while the recovery task is armed.
-      // Recheck immediately before disabling the existing user Hub.
-      await assertSystemCutoverDiskReserve();
+      // Recheck the authoritative source path as well as the protected target
+      // immediately before disabling the existing user Hub.
+      await assertSystemCutoverDiskReserve(undefined,os.homedir(),journal.sourceRoot);
     },
     async quiesceLegacy(){
       await advance(journal,'QUIESCING');
