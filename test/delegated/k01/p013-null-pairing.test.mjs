@@ -51,24 +51,34 @@ function replaceOnce(text, before, after) {
   return text.replace(before, after);
 }
 
-test('W-581 #539: 403 JSON-null source RED; null-safe proposal preserves quota denial', async () => {
-  const bad = await run403(deny403, null);
-  assert.equal(bad.name, 'TypeError', 're-check owner: 403 null RED no longer reproduces');
-  assert.equal(bad.retryable, false);
-  const proposed = replaceOnce(deny403, "body.error === 'DEVICE_LIMIT_REACHED'", "body?.error === 'DEVICE_LIMIT_REACHED'");
-  assert.equal((await run403(proposed, null)).message, 'Bu cihaz bu hesaba bağlanamadı.');
-  assert.equal((await run403(proposed, {})).message, 'Bu cihaz bu hesaba bağlanamadı.');
-  assert.equal((await run403(proposed, { error: 'DEVICE_LIMIT_REACHED' })).message, 'Bu hesap için cihaz limiti dolu.');
+// Keep this source test useful both BEFORE and AFTER the owner fix.
+// A repaired owner source must not fail only because it no longer reproduces RED.
+test('W-581 #539: 403 JSON-null source and null-safe candidate preserve quota denial', async () => {
+  const actual = await run403(deny403, null);
+  assert.equal(actual.retryable, false);
+  const candidate = actual.name === 'TypeError'
+    ? replaceOnce(deny403, "body.error === 'DEVICE_LIMIT_REACHED'", "body?.error === 'DEVICE_LIMIT_REACHED'")
+    : deny403;
+  if (actual.name !== 'TypeError') {
+    assert.equal(actual.message, 'Bu cihaz bu hesaba bağlanamadı.', 'owner behavior changed unexpectedly');
+  }
+  assert.equal((await run403(candidate, null)).message, 'Bu cihaz bu hesaba bağlanamadı.');
+  assert.equal((await run403(candidate, {})).message, 'Bu cihaz bu hesaba bağlanamadı.');
+  assert.equal((await run403(candidate, { error: 'DEVICE_LIMIT_REACHED' })).message, 'Bu hesap için cihaz limiti dolu.');
 });
 
-test('W-581 #485: 200 JSON-null source RED; null guard preserves valid pairing', async () => {
-  const bad = await run200(success200, null);
-  assert.equal(bad.name, 'TypeError', 're-check owner: 200 null RED no longer reproduces');
-  const proposed = replaceOnce(success200,
-    "typeof body.pairingId !== 'string' ||", "!body || typeof body.pairingId !== 'string' ||");
-  assert.equal((await run200(proposed, null)).message, 'Bağlantı cevabı geçersiz.');
-  assert.equal((await run200(proposed, {})).message, 'Bağlantı cevabı geçersiz.');
-  assert.equal((await run200(proposed, { pairingId: 'pair', token: 'token' })).name, 'OK');
+test('W-581 #485: 200 JSON-null source and null-safe candidate preserve valid pairing', async () => {
+  const actual = await run200(success200, null);
+  const candidate = actual.name === 'TypeError'
+    ? replaceOnce(success200,
+      "typeof body.pairingId !== 'string' ||", "!body || typeof body.pairingId !== 'string' ||")
+    : success200;
+  if (actual.name !== 'TypeError') {
+    assert.equal(actual.message, 'Bağlantı cevabı geçersiz.', 'owner behavior changed unexpectedly');
+  }
+  assert.equal((await run200(candidate, null)).message, 'Bağlantı cevabı geçersiz.');
+  assert.equal((await run200(candidate, {})).message, 'Bağlantı cevabı geçersiz.');
+  assert.equal((await run200(candidate, { pairingId: 'pair', token: 'token' })).name, 'OK');
 });
 
 // Enable after owner fixes, so known-unfixed cases are never called PASS.
