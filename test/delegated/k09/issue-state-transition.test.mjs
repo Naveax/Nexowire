@@ -41,3 +41,11 @@ test('impossible dates and noncanonical timestamps cannot enter issue close/reop
     assert.throws(() => reconcileOpenIssues({ ...source, modifiedSinceNov7: [{ ...row, events }, source.modifiedSinceNov7[1]] }), /Invalid state event/);
   }
 });
+
+test('closed issue audit must reject nonpositive and nonnumeric event identities', () => {
+  const updated = source.modifiedSinceNov7.map((row) => ({ ...row }));
+  for (const number of [-7, '487', 0, 1.5]) {
+    const forged = { number, finalState: 'closed', events: [{ event: 'closed', at: '2026-11-08T12:14:44Z' }] };
+    assert.throws(() => reconcileOpenIssues({ ...source, modifiedSinceNov7: [forged, updated[1]] }), /Invalid updated issue identity/);
+  }
+});

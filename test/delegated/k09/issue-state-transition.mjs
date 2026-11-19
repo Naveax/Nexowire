@@ -41,6 +41,8 @@ export function reconcileOpenIssues(input = source) {
     throw new Error('Duplicate updated issue');
 
   const touched = input.modifiedSinceNov7.map((row) => {
+    if (!Number.isSafeInteger(row.number) || row.number < 1)
+      throw new Error('Invalid updated issue identity');
     if (!['open', 'closed'].includes(row.finalState) || !Array.isArray(row.events))
       throw new Error(`Invalid state for issue #${row.number}`);
     let state = 'open';
