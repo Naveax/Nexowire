@@ -59,10 +59,24 @@ test('P013 SOURCE_RED: directory ABA between lstat, realpath and open must deny 
       return native.open.call(fs, p, ...args);
     };
 
-    const markdown = await registry.read(name);
-    assert.equal(stage, 3, 'Guard must exercise lstat → realpath → open');
-    assert.doesNotMatch(markdown, /EXTERNAL_MARKER/,
-      'Opened file must stay inside the original trusted catalogue');
+    // A correct owner repair may reject at an earlier check instead of
+    // reaching all three interpositions. Rejection is a safe outcome, not RED.
+    // If loading succeeds, insist that the whole hostile sequence ran;
+    // otherwise an unexercised fixture could accidentally turn green.
+    let markdown;
+    let rejected = false;
+    try {
+      markdown = await registry.read(name);
+    } catch (error) {
+      assert.ok(error instanceof Error, 'Failure must be an explicit rejection');
+      rejected = true;
+    }
+    assert.ok(stage >= 1, 'Hostile filesystem swap must be exercised');
+    if (!rejected) {
+      assert.equal(stage, 3, 'An accepted read must exercise lstat → realpath → open');
+      assert.doesNotMatch(markdown, /EXTERNAL_MARKER/,
+        'Opened file must stay inside the original trusted catalogue');
+    }
   } finally {
     fs.lstat = native.lstat;
     fs.realpath = native.realpath;
