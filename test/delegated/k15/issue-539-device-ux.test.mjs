@@ -14,6 +14,7 @@ const appSource = readFileSync(
 const hasDeviceLabelFix = /const deviceLabel = device\.name \+ ' · cihaz '/.test(appSource);
 const hasLoadingReset = /function resetDashboardPresentation\(/.test(appSource);
 const hasDashboard403Policy = /if \(response\.status === 403\)/.test(appSource);
+const hasPairedDeviceStatusPill = /setPill\(onlineCount > 0 \? 'Cihaz çevrimiçi'/.test(appSource);
 const mcpSource = readFileSync(new URL('../../../src/mcp/create-server.ts', import.meta.url), 'utf8');
 const bootstrapStart = appSource.indexOf("$('folder-filter').addEventListener('change'");
 assert.ok(bootstrapStart > 0, 'UI bootstrap boundary must remain identifiable');
@@ -397,7 +398,8 @@ test('T-482/#485: AUTO preference with zero or ambiguous devices never claims a 
 });
 
 test('T-621/#485: successful account response with zero paired devices needs a recovery label', {
-  todo: 'main and #1068 mark an empty device dashboard as Bağlı; UI owner wording required',
+  todo: !hasPairedDeviceStatusPill &&
+    'main marks an empty device dashboard as Bağlı; owner pairing wording required',
 }, async () => {
   const h = harness();
   h.setFetch(async () => ({ok: true, status: 200, json: async () => snapshot([])}));
@@ -539,13 +541,18 @@ test('Q-227/#539: stale 503 cannot overwrite a newer successful device dashboard
     json: async () => snapshot([device({id: 'fresh-machine'})])});
   await newer;
   assert.deepEqual(h.cards().map(card => card.dataset.deviceId), ['fresh-machine']);
+  const acceptedPill = h.id('connection-pill').textContent;
+  assert.ok(acceptedPill.length > 0, 'latest successful response must show status');
+  assert.doesNotMatch(acceptedPill, /Bağlantı hatası|Kontrol ediliyor/);
+  assert.equal(h.id('error-panel').classList.contains('hidden'), true);
 
   // The late failed request is older than the already-visible latest success.
   // It must not convert a healthy session into a transport-error presentation.
   pending[0]({status: 503, ok: false});
   await older;
   assert.deepEqual(h.cards().map(card => card.dataset.deviceId), ['fresh-machine']);
-  assert.equal(h.id('connection-pill').textContent, 'Bağlı');
+  assert.equal(h.id('connection-pill').textContent, acceptedPill,
+    'stale 503 must preserve the latest successful status, regardless of copy');
   assert.equal(h.id('error-panel').classList.contains('hidden'), true);
 });
 
