@@ -22,7 +22,7 @@ test('T-107 empty sample set has no measured percentile or capacity estimate',()
   const summary=summarizeS5ScenarioResults([]);
   assert.deepEqual(summary,{
     measurementClassification:'UNKNOWN',capacityEstimate:null,
-    providerCapacityProven:false,scenarios:[],
+    capacityConfidenceInterval:null,providerCapacityProven:false,scenarios:[],
   });
 });
 
@@ -62,12 +62,40 @@ test('T-108 output order stable and never claims provider capacity',()=>{
   assert.equal(first.providerCapacityProven,false);
 });
 
-test('T-108 duplicate scenarios and missing measurement fields are rejected',()=>{
+test('T-108/W-683/W-684 invalid RSS, fairness, reservation and duplicate evidence fails closed',()=>{
+  const standard=sample();
   assert.throws(()=>summarizeS5ScenarioResults([sample(16),sample(16)]),/Duplicate/);
-  assert.throws(()=>summarizeS5ScenarioResults([{...sample(),elapsedMs:NaN}]),/Invalid/);
-  assert.throws(()=>summarizeS5ScenarioResults([{...sample(),
+  assert.throws(()=>summarizeS5ScenarioResults([{...standard,elapsedMs:NaN}]),/Invalid/);
+  assert.throws(()=>summarizeS5ScenarioResults([{...standard,
     memoryBytes:{rssStart:0,rssEnd:0,rssPeak:Infinity},
   }]),/Invalid/);
+  for(const rssPeak of [1.5,Number.MAX_SAFE_INTEGER+1]){
+    assert.throws(()=>summarizeS5ScenarioResults([{
+      ...standard,memoryBytes:{...standard.memoryBytes,rssPeak},
+    }]),/Invalid or non-monotonic scenario measurement/);
+  }
+  // Jain's fairness index is bounded by 1, and the benchmark counts
+  // reservations as a subset of attempted RPCs. Contradictory summaries
+  // must not be presented as observed evidence.
+  assert.throws(()=>summarizeS5ScenarioResults([{
+    ...standard,fairness:{...standard.fairness,jainIndex:1.001},
+  }]),/Invalid or non-monotonic scenario measurement/);
+  assert.throws(()=>summarizeS5ScenarioResults([{
+    ...standard,rpc:{...standard.rpc,reserved:standard.rpc.attempted+1},
+  }]),/Invalid or non-monotonic scenario measurement/);
+  for(const jainIndex of [0,0.5,1]){
+    const result=summarizeS5ScenarioResults([{
+      ...standard,fairness:{...standard.fairness,jainIndex},
+    }]);
+    assert.equal(result.scenarios[0]?.fairnessJain,jainIndex);
+  }
+  for(const rssPeak of [0,225_280,Number.MAX_SAFE_INTEGER]){
+    const result=summarizeS5ScenarioResults([{
+      ...standard,memoryBytes:{...standard.memoryBytes,rssPeak},
+    }]);
+    assert.equal(result.scenarios[0]?.rssPeakBytes,rssPeak);
+    assert.equal(result.capacityEstimate,null);
+  }
 });
 
 test('T-223 invalid nested JSON numbers are rejected instead of becoming null or zero',()=>{

@@ -31,9 +31,10 @@ export function summarizeS5ScenarioResults(results:readonly S5LoadResult[]){
     const finite=(n:number)=>Number.isFinite(n)&&n>=0;
     const {p50,p95,p99,max}=r.latencyMs;
     if(!integer(r.clients)||r.clients===0||!integer(r.rpc.attempted)||
-      !integer(r.rpc.reserved)||!integer(r.sockets.peak)||
+      !integer(r.rpc.reserved)||r.rpc.reserved>r.rpc.attempted||!integer(r.sockets.peak)||
       !integer(r.rpc.backpressure)||!finite(r.elapsedMs)||
-      !finite(r.memoryBytes.rssPeak)||!finite(r.fairness.jainIndex)||
+      !integer(r.memoryBytes.rssPeak)||!finite(r.fairness.jainIndex)||
+      r.fairness.jainIndex>1||
       ![p50,p95,p99,max].every(finite)||
       p50>p95||p95>p99||p99>max)
       throw new Error('Invalid or non-monotonic scenario measurement');
@@ -51,7 +52,8 @@ export function summarizeS5ScenarioResults(results:readonly S5LoadResult[]){
   if(new Set(scenarios.map(r=>r.clients)).size!==scenarios.length)
     throw new Error('Duplicate scenario client count');
   return {measurementClassification:scenarios.length?'LOCAL_SYNTHETIC_ONLY':'UNKNOWN',
-    capacityEstimate:null,providerCapacityProven:false,scenarios};
+    capacityEstimate:null,capacityConfidenceInterval:null,
+    providerCapacityProven:false,scenarios};
 }
 const safeSha=()=>{
   try{return execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim()}
