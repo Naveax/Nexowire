@@ -141,3 +141,23 @@ test("T-385: unrequested package checks are NOT_RUN; required missing metadata i
   assert.equal(required.result.ready, false);
   assert.ok(required.calls.some((probe) => probe.id === "python_packages"));
 });
+
+test("#539 R17 W-671: empty Windows OS identity must not be reported ready", async () => {
+  // An exit-0 CIM probe can still return unusable string fields. In the
+  // current source, checking only typeof allows an empty Caption or a blank
+  // Version to pass the mandatory OS gate and may mark the report ready.
+  for (const metadata of [
+    { Caption: "", Version: "10.0.26100" },
+    { Caption: "Windows 11", Version: "   " },
+  ]) {
+    const { result, check } = await diagnose("win32", {
+      ...windows,
+      os: ok(JSON.stringify(metadata)),
+    });
+    assert.equal(check("os").status, "unknown",
+      "blank OS identity must not pass a mandatory preflight gate");
+    assert.equal(check("os").code, "INSUFFICIENT_EVIDENCE");
+    assert.equal(result.ready, false, "unknown mandatory OS identity must block readiness");
+    assert.equal(result.origin, "synthetic_fixture");
+  }
+});
