@@ -43,6 +43,20 @@ test('T-649: matching baseline 41 is green assertions only; stale/head incomplet
     runId: 42474379692 }).verdict, 'COUNT_DRIFT_REPRODUCED');
 });
 
+test('W-537 fixed-count audit rejects cancelled, missing or unsafe TAP summaries', () => {
+  const input = { ...prior, runId: 42474379692 };
+  assert.equal(auditFixedCountGate({ ...input, tap: tap(41) }).verdict, 'NO_COUNT_DRIFT_PROVEN');
+  assert.equal(auditFixedCountGate({ ...input,
+    tap: tap(41).replace('# cancelled 0', '# cancelled 1') }).verdict, 'ASSERTIONS_RED');
+  assert.equal(auditFixedCountGate({ ...input,
+    tap: tap(41).replace('# cancelled 0\\n', '') }).verdict, 'UNKNOWN_TAP');
+  assert.equal(auditFixedCountGate({ ...input,
+    tap: `${tap(41)}# cancelled 0\\n` }).verdict, 'UNKNOWN_TAP');
+  const oversized = '# tests 9007199254740993\\n# pass 9007199254740993\\n' +
+    '# fail 0\\n# cancelled 0\\n# skipped 0\\n# todo 0\\n';
+  assert.equal(auditFixedCountGate({ ...input, tap: oversized }).verdict, 'UNKNOWN_TAP');
+});
+
 test('D-117: dynamic owner TAP count survives 41/48/50/52/55 drift while rejecting zero tests', () => {
   for (const n of [41,48,50,52,55]) {
     assert.equal(auditDynamicTapSummary(tap(n)).verdict,'DYNAMIC_COUNT_VALID');
