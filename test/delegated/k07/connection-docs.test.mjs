@@ -165,6 +165,31 @@ test('disconnection recovery is diagnostic-only and secret reveal stays separate
   assert.match(support, /raw `node connector` output must never appear/);
   assert.match(support, /If the relevant observation was not collected, use \*\*NOT_RUN\*\*/);
   assert.match(support, /new `onboard bootstrap --force` rotates credentials and is not a pairing recovery step/);
+
+  // An interrupted same-user bootstrap must resume, not rotate or silently overwrite state.
+  const interruptedResumeContract = (guide) => {
+    const findings = [];
+    if (!/If Windows restarts or the command is interrupted after protected state is created, rerun the same bootstrap command/.test(guide)) {
+      findings.push('same-command resume missing');
+    }
+    if (!/reuses the DPAPI-protected credentials instead of silently issuing duplicates/.test(guide)) {
+      findings.push('protected-credential reuse missing');
+    }
+    if (!/Conflicting port, device-name, state-directory, expired, revoked, or inconsistent credential state fails closed/.test(guide)) {
+      findings.push('conflicting-state fail-closed missing');
+    }
+    return findings;
+  };
+  assert.deepEqual(interruptedResumeContract(support), []);
+  const unsafeRetry = support.replace('rerun the same bootstrap command', 'rerun node bootstrap --force');
+  assert.deepEqual(interruptedResumeContract(unsafeRetry), ['same-command resume missing']);
+  const silentRotation = support.replace('reuses the DPAPI-protected credentials instead of silently issuing duplicates',
+    'silently rotates the existing credentials');
+  assert.deepEqual(interruptedResumeContract(silentRotation), ['protected-credential reuse missing']);
+  const ignoredMismatch = support.replace('Conflicting port, device-name, state-directory, expired, revoked, or inconsistent credential state fails closed',
+    'Conflicting state is ignored');
+  assert.deepEqual(interruptedResumeContract(ignoredMismatch), ['conflicting-state fail-closed missing']);
+
 });
 
 test('risk categories explicitly separate credential reveal, issuance and exposure', async () => {
