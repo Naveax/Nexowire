@@ -17,32 +17,39 @@ export const targetFiles = [
   'test/delegated/k19/issue588-limits-inventory.test.ts',
 ] as const;
 
-function explicitlyListedInWorkflow(file: string, yaml: string): boolean {
-  // Match an actual shell argument, not a substring of a different filename.
-  return yaml.split(/\s+/).some(token => token.replace(/\\$/, '') === file);
-}
-
-function discovered(file: string, expandedShellArgs: readonly string[], yaml: string): boolean {
-  return expandedShellArgs.includes(file) || explicitlyListedInWorkflow(file, yaml);
-}
-
-function expandedNpmTestPaths(): string[] {
-  const script = packageJson.scripts.test;
-  assert.equal(script, 'node --test --import tsx test/**/*.test.ts',
-    'npm test command changed: update the discovery proof before interpreting CI');
-  // CI invokes npm through a POSIX shell on Linux; this is the shell's expansion
-  // of the exact fixed wildcard, NOT Node's recursive globSync semantics.
-  return execFileSync('sh', ['-c', 'printf "%s\\n" test/**/*.test.ts'], {
-    cwd: root, encoding: 'utf8', timeout: 10_000,
-  }).trim().split('\n');
-}
-
-test('T-503: exact source tests are not covered by current npm glob or explicit CI commands', () => {
+/** Best-effort static detector for explicit node --test arguments in YAML run commands.
+ * Static discovery is NOT proof that a hosted job actually executed the file. */
+function executableRunCommands(yaml: string): string[] {
+  const commands: string[] = [];
+  let blockIndent: number | null = null;
+  let pending = '';
+  const flush = () => {
+    if (pending.trim()) commands.push(pending.trim());
+    pending = '';
+  };
+  for (const line of yaml.split(/\r?\n/)) {
+    const start = /^(\s*)(?:-\s*)?run:\s*(.*)$/.exec(line);
+    if (start) {
+      flush();
+      const value = (start[2] ?? '').trim();
+      blockIndent = /^[|>][-+]?$/.test(value) ? (start[1] ?? '').length : null;
+      if (blockIndent === null && value) commands.push(value);
+      continue;
+    }
+    if (blockIndent === null || !line.trim()) continue;
+    const indent = /^\s*/.exec(line)?.[0].length ?? 0;
+    if (indent <= blockIndent) {
+      flush();
+      blockIndent = null;
+      contintest('T-503: nested K19 tests are not selected by the POSIX npm test glob', () => {
   const expanded = expandedNpmTestPaths();
   assert.ok(expanded.some(path => path.endsWith('.test.ts')));
   for (const file of targetFiles) {
-    assert.equal(discovered(file, expanded, workflow), false,
-      `test discovery changed for ${file}: re-evaluate the hosted evidence`);
+    assert.equal(expanded.includes(file), false,
+      'nested file unexpectedly selected by npm test: re-evaluate coverage');
+    assert.equal(discovered(file, expanded, workflow),
+      explicitlyListedInWorkflow(file, workflow),
+      'only an explicit workflow run command may select this nested file');
   }
 });
 
@@ -52,19 +59,36 @@ test('K19 existing explicitly listed tests are detected (positive control)', () 
   assert.equal(discovered('test/delegated/k19/file-transfer-copy-reference.test.ts', expanded, workflow), true);
 });
 
-test('an explicit future workflow command would correctly change discovery to true', () => {
-  const expanded = expandedNpmTestPaths();
-  assert.equal(discovered(targetFiles[0], expanded,
-    `${workflow}\nnode --test --import tsx ${targetFiles[0]}\n`), true);
+test('workflow comment and echo-only text cannot masquerade as test execution', () => {
+  const target = targetFiles[0];
+  const spoof = [
+    `# node --test --import tsx ${target}`,
+    `- name: ${target}`,
+    `- run: echo ${target}`,
+    '  run: |',
+    `    # node --test --import tsx ${target}`,
+    `    echo ${target}`,
+  ].join('\n');
+  assert.equal(explicitlyListedInWorkflow(target, spoof), false);
+  assert.equal(explicitlyListedInWorkflow(target, `- run: node --test --import tsx ${target}`), true);
+  assert.equal(explicitlyListedInWorkflow(target, `- run: |\n    node --test --import tsx \\\n      ${target}`), true);
 });
 
-test('green CI is never proof of a nested test without its own discovery path', () => {
+test('an explicit future workflow command changes source-discovery status, not hosted PASS', () => {
+  const expanded = expandedNpmTestPaths();
+  const oldYaml = '- run: echo no-test-invocation';
+  const withCall = `${oldYaml}\n- run: node --test --import tsx ${targetFiles[0]}\n`;
+  assert.equal(discovered(targetFiles[0], expanded, oldYaml), false);
+  assert.equal(discovered(targetFiles[0], expanded, withCall), true);
+});
+
+test('green CI and selected source path are separate from per-file hosted execution', () => {
   const expanded = expandedNpmTestPaths();
   const ci = { completed: true, conclusion: 'success', jobs: 7 };
   assert.equal(ci.conclusion, 'success');
   assert.equal(ci.jobs, 7);
-  assert.equal(discovered(targetFiles[1], expanded, workflow), false);
-  // Host job success and test-file discovery are independent evidence levels.
-  const testEvidence = discovered(targetFiles[1], expanded, workflow) ? 'DISCOVERED' : 'NOT_RUN';
-  assert.equal(testEvidence, 'NOT_RUN');
+  const sourceListed = discovered(targetFiles[1], expanded, workflow);
+  const hostedTestRun = false; // No run/job ID or TAP for this PR's test is supplied by a source scan.
+  assert.equal(sourceListed, explicitlyListedInWorkflow(targetFiles[1], workflow));
+  assert.equal(hostedTestRun, false);
 });
