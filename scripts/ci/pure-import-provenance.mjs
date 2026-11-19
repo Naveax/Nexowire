@@ -1,5 +1,5 @@
 /**
- * Read-only source and import provenance gate for twenty-six independently reviewed,
+ * Read-only source and import provenance gate for twenty-seven independently reviewed,
  * pure-contract root suites. Does NOT approve any other tests.
  */
 import {execFileSync} from 'node:child_process';
@@ -18,6 +18,7 @@ const EXPECTED=Object.freeze({
   'test/task-os-sandbox-policy-p07.test.ts':'387ce6e5351678d5c19afb5f293d2083d8d54829',
   'test/bridge-guardian-policy.test.ts':'e45398adeaa4b3840889027e532013e4f69aa23a',
   'test/product-pairing.test.ts':'1d2f8738bb4eebeac1094231644e496280f15492',
+  'test/github-app-manifest.test.ts':'2c6608e65c6b86fc0064edbb9540ffa6143f8a5c',
   'test/daily-quota-proposal.test.ts':'2f4abf418858d3bfd507d9e6f7593c18a767f455',
   'test/product-usage-ledger.test.ts':'970a9502cadd2e1df37839e866646fba471db8cc',
   'test/progress-supervisor.test.ts':'a6f62bbc58657585d516e36f7caf26fa36acce7b',
@@ -45,6 +46,7 @@ const EXPECTED=Object.freeze({
   'src/agent/bridge-guardian-policy.ts':'61fc71fe63a4103b7028f7214f07e00c190fc812',
   'src/protocol/admin-bridge-intent.ts':'2b083e49d0612f0573790a4edf0d2594803d7a02',
   'src/product/pairing.ts':'7528c7902f5b63fce98187721325098a88735c5d',
+  'src/product/github-app-manifest.ts':'eaeda3495cd0492df04bd01567a29aeafe80f08e',
   'src/product/daily-quota-proposal.ts':'779be3e17cdfe7c02edc8818b6acf257c1677084',
   'src/product/usage-ledger.ts':'0e1fd3e8c966ecc4743e3b949964d4e703f9e68c',
   'src/agent/progress-supervisor.ts':'c407c72667df20bb844ef0eb7e9ca736d257a69c',
@@ -78,6 +80,7 @@ export const PURE_ENTRYPOINTS=Object.freeze([
   'test/task-os-sandbox-policy-p07.test.ts',
   'test/bridge-guardian-policy.test.ts',
   'test/product-pairing.test.ts',
+  'test/github-app-manifest.test.ts',
   'test/daily-quota-proposal.test.ts',
   'test/product-usage-ledger.test.ts',
   'test/progress-supervisor.test.ts',

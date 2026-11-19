@@ -12,12 +12,12 @@ import {readTestInventory} from '../../scripts/ci/test-inventory.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const getSource=()=>Object.fromEntries(Object.keys(PURE_REVIEWED_FILES).map(f=>
   [f,readFileSync(path.join(root,...f.split('/')))]));
-test('commit-pinned local import graph includes twenty-six reviewed suites and thirty-one source dependencies',()=>{
+test('commit-pinned local import graph includes twenty-seven reviewed suites and thirty-two source dependencies',()=>{
   const result=attestPureImportProvenance(root);
   assert.equal(result.sourceCommitSha,readTestInventory(root).report.commitSha);
-  assert.equal(result.reviewedTestFileCount,26);
-  assert.equal(result.reviewedDependencyFileCount,31);
-  assert.equal(result.directAndTransitiveLocalSourceFiles.length,57);
+  assert.equal(result.reviewedTestFileCount,27);
+  assert.equal(result.reviewedDependencyFileCount,32);
+  assert.equal(result.directAndTransitiveLocalSourceFiles.length,59);
   assert.deepEqual(result.externalPackagesReviewedAsDirectImports,
     ['node:assert/strict','node:crypto','node:test','zod']);
   assert.equal(result.physicalWindowsAcceptance,'NOT_INFERRED');
