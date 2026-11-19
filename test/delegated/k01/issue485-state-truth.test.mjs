@@ -10,6 +10,11 @@ const script = process.env.K01_CONNECT_REF
   ? execFileSync('git', ['show', `${process.env.K01_CONNECT_REF}:web/connect.js`], { encoding: 'utf8' })
   : readFileSync('web/connect.js', 'utf8');
 
+// Historical proposal tests target the old integration; do not misclassify
+// an already-ported owner #1160 fix as a new source regression.
+const ownerSourcePortedUx = script.includes('const INSTALLER_RELEASE_ASSETS =') &&
+  script.includes("let visibleError = '';");
+
 function candidateSource(before, after) {
   // A test-only in-memory proposal, never a write to owner #1068 web source.
   assert.equal(script.split(before).length, 2, 'owner source changed; inspect before updating candidate');
@@ -339,7 +344,9 @@ test('T-398 OPEN NEGATIVE: 429 Retry-After should not be identical to 503 error'
     '429 has Retry-After but currently shows the same generic error as HTTP 503');
 });
 
-test('T-535 #485: same owner response is RED before and GREEN after minimal in-memory validation', async () => {
+test('T-535 #485: historical in-memory pairing validation proposal', {
+  skip: ownerSourcePortedUx && 'owner integration already ports trimmed field validation',
+}, async () => {
   const proposed = candidateSource(
     "typeof body.pairingId !== 'string' ||\n        typeof body.token !== 'string'",
     "typeof body.pairingId !== 'string' || !body.pairingId.trim() ||\n" +
@@ -366,7 +373,9 @@ test('T-535 #485: same owner response is RED before and GREEN after minimal in-m
   assert.equal(new URL(valid.navigations[0]).searchParams.get('pairing_id'), 'valid-pair');
 });
 
-test('T-536 #539: rate-limit message is RED on owner but GREEN in minimal in-memory candidate', async () => {
+test('T-536 #539: historical in-memory rate-limit presentation proposal', {
+  skip: ownerSourcePortedUx && 'owner integration already distinguishes 429 and 503',
+}, async () => {
   const proposed = candidateSource(
     "        throw new Error('Bağlantı hazırlanamadı.');",
     `        if (pairing.status === 429) {
@@ -392,7 +401,9 @@ test('T-536 #539: rate-limit message is RED on owner but GREEN in minimal in-mem
   assert.equal(serviceDown.get('error-message').textContent, 'Bağlantı hazırlanamadı.');
 });
 
-test('R-001 #539: malformed Retry-After values do not become a misleading wait hint', async () => {
+test('R-001 #539: historical in-memory malformed Retry-After proposal', {
+  skip: ownerSourcePortedUx && 'owner integration already validates malformed Retry-After',
+}, async () => {
   // Only the in-memory UI candidate is exercised here; production #1068 is still RED.
   // Existing T-536 checks that a valid Retry-After: 15 is displayed.
   const proposed = candidateSource(
@@ -427,8 +438,17 @@ test('R-001 #539: malformed Retry-After values do not become a misleading wait h
   }
 });
 
-test('T-537 #485: installer CTA is pinned to 1.0.7 rather than mislabelled as latest 1.0.8', async () => {
+test('T-537 #485: installer CTA matches the pinned source generation and avoids false signing claims', async () => {
   const f = await boot();
+  if (ownerSourcePortedUx) {
+    const assets = 'https://github.com/Naveax/Nexowire/releases/download/v1.0.8/';
+    assert.equal(f.get('download-installer').href, assets + 'Nexowire-Setup.cmd');
+    assert.equal(f.get('verify-installer').href, assets + 'SHA256SUMS-Windows');
+    assert.match(f.get('install-command').value, /releases\/download\/v1\.0\.8\/Nexowire-Setup\.cmd/);
+    assert.match(f.get('install-note').textContent, /v1\.0\.8/);
+    assert.match(f.get('install-note').textContent, /SHA-256.*yayıncı imzası değildir/);
+    return;
+  }
   assert.match(f.get('download-installer').href,
     /\/blob\/96315d5dd4986fffbd24a96859309271d2a88ffe\/installers\/Nexowire-Setup\.cmd$/);
   assert.match(f.get('install-note').textContent, /v1\.0\.7/);
@@ -446,6 +466,45 @@ test('T-538 #539: successful navigation cannot be followed by a second in-page p
   assert.equal(f.navigations.length, 1);
   assert.equal(f.requests.filter(({ path }) => path === '/api/v1/pairing').length, 1);
   // The actual browser leaves the page on navigation; no real network race was run.
+});
+
+// Issue #539/R01: HTTP 403 is terminal even if a backend returns valid JSON null.
+// Exact #1160 source @ web/connect.js blob 3937291d dereferences body.error
+// after json(), which can be null. This is test-only, not an owner source edit.
+test('W-423 OPEN NEGATIVE: JSON-null HTTP 403 must retain terminal denial messaging', {
+  skip: process.env.K01_RUN_NULL_403_NEGATIVE !== '1' && 'pending owner #1160 body?.error fix',
+}, async () => {
+  const f = await boot({ query: search(),
+    pairing: async () => Response.json(null, { status: 403 }) });
+  await f.get('approve').dispatch('click');
+  assert.equal(f.navigations.length, 0);
+  assert.equal(f.get('connect-pill').textContent, 'Hata');
+  assert.equal(f.get('approve').disabled, true);
+  assert.equal(f.get('error-message').textContent, 'Bu cihaz bu hesaba bağlanamadı.',
+    'JSON null must be treated as a generic permission denial, not a caught TypeError');
+});
+
+test('W-423 #539: in-memory null-safe 403 denial preserves known quota behavior', {
+  skip: !ownerSourcePortedUx && 'requires #1160 integration source for terminal 403 semantics',
+}, async () => {
+  const null403 = async () => Response.json(null, { status: 403 });
+  const baseline = await boot({ query: search(), pairing: null403 });
+  await baseline.get('approve').dispatch('click');
+  assert.equal(baseline.get('error-message').textContent, 'Beklenmeyen bağlantı hatası.',
+    'owner source must reproduce the existing null-body fallback first');
+  assert.equal(baseline.get('approve').disabled, true);
+  const proposed = candidateSource("body.error === 'DEVICE_LIMIT_REACHED'",
+    "body?.error === 'DEVICE_LIMIT_REACHED'");
+  const corrected = await boot({ query: search(), pairing: null403, source: proposed });
+  await corrected.get('approve').dispatch('click');
+  assert.equal(corrected.get('error-message').textContent, 'Bu cihaz bu hesaba bağlanamadı.');
+  assert.equal(corrected.get('approve').disabled, true);
+  assert.equal(corrected.navigations.length, 0);
+  const quota = await boot({ query: search(), source: proposed,
+    pairing: async () => Response.json({ error: 'DEVICE_LIMIT_REACHED' }, { status: 403 }) });
+  await quota.get('approve').dispatch('click');
+  assert.equal(quota.get('error-message').textContent, 'Bu hesap için cihaz limiti dolu.');
+  assert.equal(quota.get('approve').disabled, true);
 });
 
 test('T-539 OPEN NEGATIVE: synthetic failed fetch must not disclose a token in the error panel', {
@@ -479,7 +538,9 @@ test('D-003 #539 OPEN NEGATIVE: expired pairing session 401 must differ from ser
     'session expiration needs an actionable login/session explanation, not a transient-service message');
 });
 
-test('D-005 #539: 401 session-expiry UI proposal is distinct in memory, not in owner source', async () => {
+test('D-005 #539: historical in-memory session-expiry UI proposal', {
+  skip: ownerSourcePortedUx && 'owner integration already distinguishes 401 from 503',
+}, async () => {
   const proposed = candidateSource(
     '        if (pairing.status === 403) {',
     `        if (pairing.status === 401) {
@@ -498,7 +559,9 @@ test('D-005 #539: 401 session-expiry UI proposal is distinct in memory, not in o
   // This proposal changes only the displayed message, not the auth/session flow.
 });
 
-test('D-005 #485: unexpected exception UI fallback can hide fixture token and preserve known error', async () => {
+test('D-005 #485: historical in-memory unexpected-exception UI proposal', {
+  skip: ownerSourcePortedUx && 'owner integration already maps unexpected error text',
+}, async () => {
   const ownerRetryable = script.includes('        retryable,\n      );');
   const oldCall = `      showError(
         error instanceof Error ? error.message : String(error),
