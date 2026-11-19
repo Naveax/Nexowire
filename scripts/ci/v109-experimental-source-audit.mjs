@@ -1,5 +1,5 @@
 import { readFileSync, lstatSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { readTestInventory } from './test-inventory.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -68,7 +68,8 @@ export function assessExperimentalSource({
     physicalAcceptance: 'NOT_RUN',
     testLaneSourceSha: 'af6a83b8474500b48fe663129f5f1df2beb63e3e',
     trackedTypeScriptTests: indexedTests,
-    testInventoryEvidence: indexedTests === null ? 'NOT_CHECKED_SOURCE_ONLY' : 'GIT_INDEX_ONLY_NOT_EXECUTION',
+    // A bare count supplied to this pure assessor is NOT independently verified.
+    testInventoryEvidence: indexedTests === null ? 'NOT_CHECKED_SOURCE_ONLY' : 'CALLER_SUPPLIED_COUNT_NOT_EXECUTION',
     approvedPortableTestFiles: null,
     notRunInPortableLane: null,
     historicalPortableLane: {
@@ -85,14 +86,11 @@ export function inspectExperimentalSource(rootDir) {
   const root = path.resolve(rootDir);
   const pkg = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
   const lock = JSON.parse(readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
-  const sourceSha = execFileSync('git', ['rev-parse', 'HEAD'], {
-    cwd: root, encoding: 'utf8', windowsHide: true,
-  }).trim();
-  const trackedPaths = execFileSync('git',
-    ['ls-files', '-z', '--', 'test/**/*.test.ts', 'test/*.test.ts'], {
-      cwd: root, encoding: 'utf8', windowsHide: true, maxBuffer: 4 * 1024 * 1024,
-    }).split('\0').filter(file => file.endsWith('.test.ts'));
-  const trackedTypeScriptTests = new Set(trackedPaths).size;
+  // HEAD SHA and test inventory must describe the same immutable tree. The
+  // shared inventory rejects staged blobs or modified tracked TS test files.
+  const {report: testInventory} = readTestInventory(root);
+  const sourceSha = testInventory.commitSha;
+  const trackedTypeScriptTests = testInventory.trackedTsTestFiles;
   const presentFiles = new Set();
   for (const file of Object.values(REQUIRED_SOURCE_FILES)) {
     try {
@@ -103,7 +101,7 @@ export function inspectExperimentalSource(rootDir) {
       if (error?.code !== 'ENOENT') throw error;
     }
   }
-  return assessExperimentalSource({
+  const assessment = assessExperimentalSource({
     version: pkg.version,
     lockVersion: lock.version,
     rootLockVersion: lock.packages?.['']?.version,
@@ -111,6 +109,7 @@ export function inspectExperimentalSource(rootDir) {
     presentFiles,
     trackedTypeScriptTests,
   });
+  return {...assessment, testInventoryEvidence: 'GIT_HEAD_TREE_RECONCILED_NOT_EXECUTION'};
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {

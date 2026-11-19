@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import {
   EXPERIMENTAL_TAG,
@@ -64,13 +66,55 @@ test('experimental package and exact source inventory are recognized without cla
   ));
 });
 
-test('source index count is descriptive and cannot silently claim test execution', () => {
+test('release notes identify historical portable-lane counts instead of pretending current full TS coverage', () => {
+  const doc = readFileSync(new URL('../../docs/releases/v1.0.9-experimental.md', import.meta.url), 'utf8');
+  assert.match(doc, /historical source base/);
+  assert.match(doc, /635\/29\/606 figures describe only the/);
+  assert.match(doc, /not proven never to have run in another workflow/);
+  assert.match(doc, /exact-source execution receipt and coverage reconciliation/);
+  assert.match(doc, /moving #1160 head/);
+  assert.doesNotMatch(doc, /All 606 other tracked TS test files are still NOT_RUN/);
+});
+
+test('a caller-supplied count is not an immutable-source or execution receipt', () => {
   const result = assessExperimentalSource({...input(), trackedTypeScriptTests: 649});
   assert.equal(result.trackedTypeScriptTests, 649);
-  assert.equal(result.testInventoryEvidence, 'GIT_INDEX_ONLY_NOT_EXECUTION');
+  assert.equal(result.testInventoryEvidence, 'CALLER_SUPPLIED_COUNT_NOT_EXECUTION');
   assert.equal(result.approvedPortableTestFiles, null);
   assert.equal(result.notRunInPortableLane, null);
   assert.equal(assessExperimentalSource({...input(), trackedTypeScriptTests: -1}).trackedTypeScriptTests, null);
+});
+
+test('release audit rejects modified or staged TypeScript tests under an unchanged HEAD SHA', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'nx-v109-source-inventory-'));
+  const call = (...args) => execFileSync('git', args, {
+    cwd:dir, encoding:'utf8', timeout:12000, windowsHide:true,
+  });
+  const testFile = path.join(dir,'test','fixture.test.ts');
+  try {
+    mkdirSync(path.join(dir,'test'));
+    writeFileSync(path.join(dir,'package.json'), JSON.stringify({version:EXPERIMENTAL_VERSION}));
+    writeFileSync(path.join(dir,'package-lock.json'), JSON.stringify({
+      version:EXPERIMENTAL_VERSION, packages:{'':{version:EXPERIMENTAL_VERSION}},
+    }));
+    writeFileSync(testFile, 'export const n = 1;\n');
+    call('init','-q');
+    call('add','--','package.json','package-lock.json','test/fixture.test.ts');
+    call('-c','user.name=Nexowire CI','-c','user.email=ci@example.invalid',
+      'commit','-qm','create synthetic source');
+    const committed = inspectExperimentalSource(dir);
+    assert.equal(committed.trackedTypeScriptTests,1);
+    assert.equal(committed.testInventoryEvidence,'GIT_HEAD_TREE_RECONCILED_NOT_EXECUTION');
+    assert.equal(committed.sourceSha,call('rev-parse','HEAD').trim());
+    writeFileSync(testFile, 'export const n = 2;\n');
+    assert.throws(()=>inspectExperimentalSource(dir),
+      /TEST_INVENTORY_TRACKED_TEST_WORKTREE_DIRTY/);
+    call('add','--','test/fixture.test.ts');
+    assert.throws(()=>inspectExperimentalSource(dir),
+      /TEST_INVENTORY_INDEX_HEAD_TREE_MISMATCH/);
+  } finally {
+    rmSync(dir,{recursive:true,force:true,maxRetries:5,retryDelay:100});
+  }
 });
 
 test('missing package/lock version agreement blocks the candidate', () => {
@@ -114,7 +158,7 @@ test('read-only repository inspection produces a valid local source-only report'
       cwd: process.cwd(), encoding: 'utf8',
     }).split('\0').filter(file => file.endsWith('.test.ts'));
   assert.equal(report.trackedTypeScriptTests, new Set(tracked).size);
-  assert.equal(report.testInventoryEvidence, 'GIT_INDEX_ONLY_NOT_EXECUTION');
+  assert.equal(report.testInventoryEvidence, 'GIT_HEAD_TREE_RECONCILED_NOT_EXECUTION');
   assert.equal(report.approvedPortableTestFiles, null);
   assert.equal(report.notRunInPortableLane, null);
   assert.equal(report.fullCoreAccessVerified, false);
