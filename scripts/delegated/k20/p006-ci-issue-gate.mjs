@@ -62,7 +62,7 @@ export function auditFixedCountGate({ workflow, tap, expectedFile, head, runHead
     throw new TypeError('Workflow, TAP, exact PR/run HEAD and positive run ID required');
   }
   const commandLines = workflow.split('\n').filter(line => line.includes(expectedFile));
-  const pinned = Object.fromEntries(['tests', 'pass', 'fail', 'skipped', 'todo'].map(key => {
+  const pinned = Object.fromEntries(['tests', 'pass', 'fail', 'cancelled', 'skipped', 'todo'].map(key => {
     const matches = commandLines.flatMap(line =>
       [...line.matchAll(new RegExp(`grep\\s+-qx\\s+['"]# ${key} (\\d+)['"]`, 'g'))]
         .map(x => Number(x[1])));
@@ -73,9 +73,9 @@ export function auditFixedCountGate({ workflow, tap, expectedFile, head, runHead
     const values = [...normalized.matchAll(new RegExp(`^# ${key} (\\d+)$`, 'gm'))].map(x => Number(x[1]));
     return [key, values.length === 1 ? values[0] : null];
   }));
-  const complete = Object.values(summary).every(value => value !== null);
+  const complete = Object.values(summary).every(Number.isSafeInteger);
   const assertionsGreen = complete && summary.tests > 0 && summary.tests === summary.pass &&
-    summary.fail === 0 && summary.skipped === 0 && summary.todo === 0;
+    summary.fail === 0 && summary.cancelled === 0 && summary.skipped === 0 && summary.todo === 0;
   const countDrift = assertionsGreen && pinned.tests.length === 1 && pinned.pass.length === 1 &&
     (pinned.tests[0] !== summary.tests || pinned.pass[0] !== summary.pass);
   const verdict = head !== runHead ? 'STALE_HEAD' : !complete ? 'UNKNOWN_TAP' :
