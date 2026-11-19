@@ -635,3 +635,58 @@ An exact SHA, workflow/job-log and test-path receipt is still needed.
 No manual dispatch or rerun.
 Owner release, physical installer / login / pairing and upstream
 main integration remain **NO-GO**; issue #485 and #539 stay open.
+
+
+## P013 follow-up: fix K01 false RED after owner repair
+
+The first `p013-null-pairing.test.mjs` from `fd39c698` made its **two
+source-red evidence tests** assert that original owner code **must**
+throw `TypeError`. Once #1160 adopts the proposed `body?.error`
+and `!body ||` fixes, those baseline assertions would fail **despite
+correct owner behavior**; a future repaired owner would show false RED.
+This is an actual QA test defect, not a new product bug.
+
+**Narrow owned test fix:** existing open
+[#1114](https://github.com/Naveax/Nexowire/pull/1114), code commit
+[`b23a55edd7827c9e1345603b250343e434cdb60d`](https://github.com/SinsiVinci/Nexowire-fork/commit/b23a55edd7827c9e1345603b250343e434cdb60d),
+`test/delegated/k01/p013-null-pairing.test.mjs` Git blob
+`97a2c2edb36710bb4ea65f2704eb5e3a347aca62`. The source tests
+now distinguish unrepaired (`TypeError`, use in-memory candidate)
+from repaired (expected classifiable message, no replacement),
+while preserving 403 quota and valid-200 positive controls. Explicit
+`K01_REQUIRE_NULL_FIX=1` acceptance gates remain strictly failing
+on unfixed code.
+
+**Executed local Node v22.16.0 results (no false PASS):**
+`K01_CONNECT_SOURCE_PATH=<fixture> node --test p013-null-pairing.test.mjs`
+against literal 403/200 fragments of owner
+`web/connect.js@3937291dcfb731ecc6fb1323c6771fc19983d577`:
+exit 0, TAP 4 tests / 2 PASS / 2 SKIP / 0 FAIL.
+With `K01_REQUIRE_NULL_FIX=1` on the same unfixed fragments:
+exit 1, TAP 2 PASS / 2 **FAIL** / 0 SKIP, an expected acceptance RED.
+A separately crafted **hypothetical repaired** fragment fixture
+(where exactly `body.error` → `body?.error` and
+`typeof body.pairingId` is guarded by `!body ||`) yielded
+exit 0, TAP 2 PASS / 2 SKIP; with acceptance enabled, exit 0,
+**4 PASS / 0 FAIL / 0 SKIP**. The test file run locally and committed
+file have matching Git blob `97a2c2ed`.
+
+All four local runs execute only **source fragments** in Node, not the
+full pinned owner `git show`, browser, credential flow, signed
+installer, or live device. The fixed fragment is a simulation, **not
+an owner commit or a product fix**. Full owner-source execution
+and physical acceptance remain **NOT_RUN**.
+
+**Exact hosted distinction:** previous #1114 HEAD `b98b05fc...` CI
+[44616602032](https://github.com/Naveax/Nexowire/actions/runs/44616602032)
+completed **success** (seven generic jobs), but Node 24 job
+`135886980192` and Node 22 job `135886980726` logs explicitly
+**do not contain** either `test/delegated/k01/p013-null-pairing.test.mjs`
+or `issue485-state-truth.test.mjs`, so new K01 nested tests were
+**HOSTED_NOT_RUN** even though the workflow was green.
+After the code commit, exact #1114 HEAD `b23a55ed...` CI
+[44619051609](https://github.com/Naveax/Nexowire/actions/runs/44619051609)
+was **queued** at check time, not PASS. Existing workflow dispatch
+was not restarted. Owner #1160 source blob `3937291d` remained
+unfixed in this check, owner PR HEAD `06a9df635b6731c02170ca3583ba6de2b8b909dd`.
+No new PR, main merge, issue close, CI workflow source or owner code edit.
