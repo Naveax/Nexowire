@@ -1,8 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import {execFileSync} from 'node:child_process';
+import {mkdirSync,mkdtempSync,writeFileSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
-import {APPROVED_ROOT_TEST_FILES,assertExpectedCommit,commandForApprovedRootFile,createPortableRootReceipt}
+import {APPROVED_ROOT_TEST_FILES,REVIEWED_ROOT_GIT_BLOBS,assertReviewedRootGitBlobs,assertExpectedCommit,commandForApprovedRootFile,createPortableRootReceipt}
   from '../../scripts/ci/portable-root-execution-receipt.mjs';
 import {readTestInventory} from '../../scripts/ci/test-inventory.mjs';
 
@@ -59,6 +62,44 @@ test('fixed root allowlist binds to exact checked-in test inventory',()=>{
   }
   assert.throws(()=>commandForApprovedRootFile('test/agent-native-remote-cas-live.test.ts'),
     /PORTABLE_ROOT_RECEIPT_FILE_NOT_APPROVED/);
+});
+
+test('reviewed Git blob pins deny modified test source and unknown approval before execution',()=>{
+  const {entries}=readTestInventory(root);
+  assert.doesNotThrow(()=>assertReviewedRootGitBlobs(entries));
+  assert.equal(Object.keys(REVIEWED_ROOT_GIT_BLOBS).length,APPROVED_ROOT_TEST_FILES.length);
+  for(const file of ['test/version.test.ts','test/release-attestation-policy.test.ts']){
+    const changed=entries.map(e=>e.path===file?{...e,blob:'0'.repeat(40)}:e);
+    assert.throws(()=>assertReviewedRootGitBlobs(changed),
+      /PORTABLE_ROOT_RECEIPT_REVIEWED_SOURCE_BLOB_CHANGED/);
+  }
+  const absent=entries.filter(e=>e.path!=='test/version.test.ts');
+  assert.throws(()=>assertReviewedRootGitBlobs(absent),
+    /PORTABLE_ROOT_RECEIPT_REVIEWED_SOURCE_BLOB_CHANGED/);
+});
+
+test('a filename-allowlisted but unreviewed Git checkout cannot spawn any test process',()=>{
+  const temp=mkdtempSync(path.join(tmpdir(),'nexowire-reviewed-blob-preexec-'));
+  try{
+    mkdirSync(path.join(temp,'test'));
+    for(const file of APPROVED_ROOT_TEST_FILES)
+      writeFileSync(path.join(temp,file),'import test from "node:test"; test("unreviewed",()=>{});\n');
+    const git=(...args)=>execFileSync('git',args,{
+      cwd:temp,encoding:'utf8',windowsHide:true,timeout:12000,
+    });
+    git('init','-q');
+    git('add','--','test');
+    git('-c','user.name=Nexowire Test','-c','user.email=ci@example.invalid',
+      'commit','-qm','synthetic unreviewed checkout');
+    let processes=0;
+    assert.throws(()=>createPortableRootReceipt(temp,()=>{
+      processes++;
+      return {status:0,stdout:PASS_TAP,stderr:''};
+    }),/PORTABLE_ROOT_RECEIPT_REVIEWED_SOURCE_BLOB_CHANGED/);
+    assert.equal(processes,0,'Git blob review must precede the first runner call');
+  } finally {
+    rmSync(temp,{recursive:true,force:true,maxRetries:5,retryDelay:150});
+  }
 });
 
 test('only successful exact-file TAP subprocesses produce a source-bound receipt',()=>{
