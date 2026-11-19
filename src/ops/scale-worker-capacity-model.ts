@@ -79,7 +79,16 @@ export function maxActiveUsersUnderBudget(
 ):number {
   const empty=estimateScaleWorkerDemand({...input,activeUsers:0});
   if (!empty.withinBudget) return 0;
-  const one=estimateScaleWorkerDemand({...input,activeUsers:1});
+  let one:ScaleWorkerCapacityResult;
+  try {
+    one=estimateScaleWorkerDemand({...input,activeUsers:1});
+  } catch (error) {
+    // A valid one-user demand can exceed safe arithmetic and therefore
+    // the maximum representable budget. No user fits in that case.
+    if(error instanceof Error &&
+       error.message==='capacity result must be a non-negative safe integer')return 0;
+    throw error;
+  }
   if (one.estimatedWorkerRequests===empty.estimatedWorkerRequests) {
     // Zero per-user requests; this model has no finite capacity-bound user ceiling.
     return Number.MAX_SAFE_INTEGER;
@@ -88,7 +97,17 @@ export function maxActiveUsersUnderBudget(
   let hi=Math.min(input.workerRequestBudgetPerDay+1,Number.MAX_SAFE_INTEGER);
   while(lo<hi) {
     const mid=lo+Math.ceil((hi-lo)/2);
-    const within=estimateScaleWorkerDemand({...input,activeUsers:mid}).withinBudget;
+    let within:boolean;
+    try {
+      within=estimateScaleWorkerDemand({...input,activeUsers:mid}).withinBudget;
+    } catch (error) {
+      // Midpoints may overflow Number.MAX_SAFE_INTEGER while the answer
+      // is still representable. Treat arithmetic overflow as over-budget
+      // only after the input was validated by the zero-user estimate.
+      if(error instanceof Error &&
+         error.message==='capacity result must be a non-negative safe integer')within=false;
+      else throw error;
+    }
     if (within) lo=mid;
     else hi=mid-1;
   }

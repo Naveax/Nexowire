@@ -1,5 +1,5 @@
 /**
- * Read-only source and import provenance gate for twenty-seven independently reviewed,
+ * Read-only source and import provenance gate for twenty-eight independently reviewed,
  * pure-contract root suites. Does NOT approve any other tests.
  */
 import {execFileSync} from 'node:child_process';
@@ -30,6 +30,7 @@ const EXPECTED=Object.freeze({
   'test/owner-public-wss-stream-flow-staging.test.ts':'a6c5d85e137e30237de8e3e3a72362f37b388751',
 'test/scale-elastic-capacity-model.test.ts':'ce9012cd2048eef83c31535f8b35a4fd8ddcbbaf',
   'test/scale-s5-cost-envelope.test.ts':'4bbf0f7949be9c86c48fda1a7ce1470adc64b868',
+  'test/scale-worker-capacity-overflow.test.ts':'5a9e16fb2aad7fd3dbce9ff34989d7affa51664f',
   'test/scale-s5-resource-reconciliation.test.ts':'bd60b7b10bc22be4219155b165e401de34b4d277',
   'test/scale-s5-durable-object-cost.test.ts':'b483dddfb16d683fed0b5fa898ce446bcf992618',
   'test/scale-s5-chunk-receipt-audit.test.ts':'1b70d6bc7112d2e21c2ebdf165a237a68fe51848',
@@ -59,6 +60,7 @@ const EXPECTED=Object.freeze({
   'src/product/owner-public-wss-stream-flow-proposal.ts':'0b0784299b8f17904695263b130bfb13eacb66c1',
 'src/ops/scale-elastic-capacity-model.ts':'0671e7e568510de58af8377b3f0e8775a1f1b791',
   'src/ops/scale-s5-cost-envelope.ts':'2c01c3e9fda8e04aa7c6a2fe5e4f50c9cdac9b22',
+  'src/ops/scale-worker-capacity-model.ts':'5d9f122d5df70397f42be758311ad7d35733235a',
   'src/ops/scale-s5-resource-reconciliation.ts':'4b6cfc9850ee2a130317b8d030fc35f5772550ab',
   'src/ops/scale-s5-durable-object-cost.ts':'c2e2a897d21cfd2c388213de2437bad345411454',
   'src/ops/scale-s5-chunk-receipt-audit.ts':'e381342b779999026bf0f15e0c8205192c503fa9',
@@ -92,6 +94,7 @@ export const PURE_ENTRYPOINTS=Object.freeze([
   'test/owner-public-wss-stream-flow-staging.test.ts',
 'test/scale-elastic-capacity-model.test.ts',
   'test/scale-s5-cost-envelope.test.ts',
+  'test/scale-worker-capacity-overflow.test.ts',
   'test/scale-s5-resource-reconciliation.test.ts',
   'test/scale-s5-durable-object-cost.test.ts',
   'test/scale-s5-chunk-receipt-audit.test.ts',
