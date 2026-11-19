@@ -117,8 +117,8 @@ test('long operation ID, Unicode device name and URL have separate wrap guards',
 // status-wrap breakpoint. An unbroken status/UNKNOWN token must not force
 // the flex status rail to max-content width. The real browser must still be
 // checked separately; this is a targeted source contract on the owner CSS.
-test('621/768px device status and long Unicode pill cannot force horizontal overflow', { skip }, () => {
-  for (const width of [621, 768]) {
+test('621/768/1280px device status and long Unicode pill cannot force horizontal overflow', { skip }, () => {
+  for (const width of [621, 768, 1280]) {
     const status = (property) =>
       value(rules, '.device-header .status', property, width) ??
       value(rules, '.status', property, width);
@@ -129,13 +129,15 @@ test('621/768px device status and long Unicode pill cannot force horizontal over
     assert.notEqual(status('flex'), 'none',
       `${width}px status must not force a non-shrinking flex rail`);
   }
-  const pill = (property) =>
-    value(rules, '.topbar .pill', property, 621) ??
-    value(rules, '.pill', property, 621);
-  assert.equal(pill('white-space'), 'normal',
-    '621px topbar Unicode pill must not force a nowrap width');
-  assert.equal(pill('overflow-wrap'), 'anywhere',
-    '621px topbar Unicode pill must wrap unbroken text');
+  for (const width of [621, 768]) {
+    const pill = (property) =>
+      value(rules, '.topbar .pill', property, width) ??
+      value(rules, '.pill', property, width);
+    assert.equal(pill('white-space'), 'normal',
+      `${width}px topbar Unicode pill must not force a nowrap width`);
+    assert.equal(pill('overflow-wrap'), 'anywhere',
+      `${width}px topbar Unicode pill must wrap unbroken text`);
+  }
 });
 
 test('high-contrast keyboard focus uses a forced-color system outline', { skip }, () => {
