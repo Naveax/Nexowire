@@ -198,6 +198,9 @@ export function renderSetupScript(input: {
 
   const buildId =
     version + '-' + sourceSha.slice(0, 12);
+  const shortcutName = version.includes('-')
+    ? 'Nexowire Experimental.lnk'
+    : 'Nexowire.lnk';
   const assetUrl =
     'https://github.com/' +
     repository +
@@ -209,12 +212,19 @@ export function renderSetupScript(input: {
     "$ErrorActionPreference = 'Stop';",
     "$ProgressPreference = 'SilentlyContinue';",
     "if (-not (Test-Path -LiteralPath $env:NX_INSTALL)) {",
-    "  $web = New-Object System.Net.WebClient;",
-    "  try { $web.DownloadFile($env:NX_PAYLOAD_URL, $env:NX_ZIP) } finally { $web.Dispose() };",
+    // CI artifacts may precede the matching tagged GitHub release.
+    // Prefer the sibling checksum-pinned ZIP and never trust an old tag
+    // merely because it uses the same semantic version.
+    "  if (Test-Path -LiteralPath $env:NX_LOCAL_ZIP -PathType Leaf) {",
+    "    [System.IO.File]::Copy($env:NX_LOCAL_ZIP, $env:NX_ZIP, $false);",
+    "  } else {",
+    "    $web = New-Object System.Net.WebClient;",
+    "    try { $web.DownloadFile($env:NX_PAYLOAD_URL, $env:NX_ZIP) } finally { $web.Dispose() };",
+    "  };",
     "  $sha = [System.Security.Cryptography.SHA256]::Create();",
     "  $stream = [System.IO.File]::OpenRead($env:NX_ZIP);",
     "  try { $actual = ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-', '').ToLowerInvariant() } finally { $stream.Dispose(); $sha.Dispose() };",
-    "  if ($actual -ne $env:NX_PAYLOAD_SHA256) { throw 'Nexowire payload checksum mismatch.' };",
+    "  if ($actual -ne $env:NX_PAYLOAD_SHA256) { throw 'Nexowire payload checksum mismatch. Use the matching ZIP beside Nexowire-Setup.cmd or the correct published release.' };",
     "  New-Item -ItemType Directory -Force -Path $env:NX_EXTRACT | Out-Null;",
     "  Add-Type -AssemblyName System.IO.Compression.FileSystem;",
     "  [System.IO.Compression.ZipFile]::ExtractToDirectory($env:NX_ZIP, $env:NX_EXTRACT);",
@@ -229,13 +239,19 @@ export function renderSetupScript(input: {
     // decoded source uses Windows' own Shell Link API; no downloaded helper.
     "Add-Type -TypeDefinition ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" +
       Buffer.from(windowsShortcutInterop, 'utf8').toString('base64') + "')));",
-    "$shortcutPath = Join-Path ([Environment]::GetFolderPath('Programs')) 'Nexowire.lnk';",
+    "$shortcutPath = Join-Path ([Environment]::GetFolderPath('Programs')) '" + shortcutName + "';",
     "$shortcut = @{ TargetPath = (Join-Path $env:WINDIR 'System32\\wscript.exe'); Arguments = ([char]34 + $launcher + [char]34) };",
     "[NexowireShortcut]::Save($shortcutPath, $shortcut.TargetPath, $shortcut.Arguments, $env:NX_INSTALL);",
-    "$autoNode = Join-Path $env:NX_INSTALL 'runtime\\node.exe';",
-    "$autoCli = Join-Path $env:NX_INSTALL 'app\\dist\\src\\cli.js';",
-    "& $autoNode $autoCli update auto install | Out-Null;",
-    "if ($LASTEXITCODE -ne 0) { throw 'Nexowire hourly auto-update task registration failed.' };",
+    // Preview builds must not silently register a stable-channel hourly
+    // updater. Stable releases keep their existing update behavior.
+    ...(version.includes('-')
+      ? ["Write-Output 'Nexowire experimental preview: automatic updates disabled';"]
+      : [
+          "$autoNode = Join-Path $env:NX_INSTALL 'runtime\\node.exe';",
+          "$autoCli = Join-Path $env:NX_INSTALL 'app\\dist\\src\\cli.js';",
+          "& $autoNode $autoCli update auto install | Out-Null;",
+          "if ($LASTEXITCODE -ne 0) { throw 'Nexowire hourly auto-update task registration failed.' };",
+        ]),
     "Start-Process -FilePath $shortcut.TargetPath -ArgumentList $shortcut.Arguments -WorkingDirectory $env:NX_INSTALL;",
     "Remove-Item -LiteralPath $env:NX_TMP -Recurse -Force -ErrorAction SilentlyContinue;",
   ].join(' ');
@@ -248,6 +264,7 @@ export function renderSetupScript(input: {
     'set "NX_BUILD_ID=' + buildId + '"',
     'set "NX_PAYLOAD_SHA256=' + checksum + '"',
     'set "NX_PAYLOAD_URL=' + assetUrl + '"',
+    'set "NX_LOCAL_ZIP=%~dp0Nexowire-Windows-x64.zip"',
     'set "NX_TMP=%TEMP%\\Nexowire-Setup-%RANDOM%%RANDOM%"',
     'set "NX_ZIP=%NX_TMP%\\Nexowire-Windows-x64.zip"',
     'set "NX_EXTRACT=%NX_TMP%\\extract"',
@@ -295,6 +312,19 @@ function runNpmCi(cwd: string): void {
   );
 }
 
+/** Use Windows PowerShell 5.1/.NET Framework's supported two-argument API. */
+export function nodeRuntimeExtractionPowerShell(
+  archive: string,
+  extracted: string,
+): string {
+  return [
+    "$ErrorActionPreference='Stop'",
+    'Add-Type -AssemblyName System.IO.Compression.FileSystem',
+    '[System.IO.Compression.ZipFile]::ExtractToDirectory(' +
+      psLiteral(archive) + ', ' + psLiteral(extracted) + ')',
+  ].join('; ');
+}
+
 async function downloadNodeRuntime(
   tempRoot: string,
   nodeVersion: string,
@@ -307,6 +337,7 @@ async function downloadNodeRuntime(
   const sums = path.join(tempRoot, 'SHASUMS256.txt');
   const extracted = path.join(tempRoot, 'node-runtime');
 
+  // Fetch only; untrusted ZIP bytes must not be extracted before SHA-256.
   runPowerShell(
     [
       "$ErrorActionPreference='Stop'",
@@ -319,11 +350,6 @@ async function downloadNodeRuntime(
         psLiteral(base + '/SHASUMS256.txt') +
         ' -OutFile ' +
         psLiteral(sums),
-      'Expand-Archive -LiteralPath ' +
-        psLiteral(archive) +
-        ' -DestinationPath ' +
-        psLiteral(extracted) +
-        ' -Force',
     ].join('; '),
   );
 
@@ -342,6 +368,13 @@ async function downloadNodeRuntime(
     expected,
     'Official Node runtime archive checksum mismatch.',
   );
+
+  // The signed release archive hash is verified BEFORE any ZIP entry is read.
+  // Windows PowerShell 5.1 Expand-Archive can invoke an unavailable .NET
+  // ExtractToDirectory(3 args) overload on hosted Windows; use the two-arg
+  // framework API directly on a fresh, dedicated extraction directory.
+  await fs.mkdir(extracted, { recursive: true });
+  runPowerShell(nodeRuntimeExtractionPowerShell(archive, extracted));
 
   const runtimeRoot = path.join(
     extracted,

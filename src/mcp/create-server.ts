@@ -5550,7 +5550,9 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         destination_device_id: z.string().min(1).max(128),
         source_path: z.string().min(1).max(4096),
         destination_path: z.string().min(1).max(4000),
-        max_bytes: z.number().int().min(1).max(8_388_608).optional(),
+        // Larger files remain explicitly opt-in. Each remote read/write stays
+        // 48 KiB; the helper's independent 64 MiB ceiling still applies.
+        max_bytes: z.number().int().min(1).max(16_777_216).optional(),
         create_parents: z.boolean().default(false),
       },
     },
@@ -5609,6 +5611,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
             return Number(d.bytesWritten);
           },
           hashStage:(stage)=>hash(destination_device_id,stage),
+          hashDestination:(destination)=>hash(destination_device_id,destination),
           commitStage:async(stage,destination)=>{
             await remote('files.move',{
               source:stage,destination,overwrite:false,create_parents:false,

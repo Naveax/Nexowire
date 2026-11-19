@@ -49,10 +49,11 @@ import type { RunbookStore } from './runbook-store.js';
 import type { PrivilegedBrokerClient } from './privileged-broker-client.js';
 import { inspectWindowsUacStatus } from './windows-uac-status.js';
 import { privilegeRequirement } from '../security/privilege.js';
-import {executeCoreWindowsMutation,assertCoreSandboxRouteUnavailable,
+import {executeCoreWindowsMutation,prepareCoreWindowsMutation,assertCoreSandboxRouteUnavailable,
   assertCoreOtherNativeEffectUnavailable,type CoreWindowsDispatchAdmission}
   from './core-windows-mutation-dispatch.js';
 import { detectWsl } from './wsl-detection.js';
+import { NEXOWIRE_VERSION } from '../version.js';
 import { executeLiveUpdateCapability } from '../update/live-update.js';
 
 const ShellExecInputSchema = z.object({
@@ -2318,6 +2319,26 @@ export async function executeCapability(
     // the caller's mutable input or a late-swapped context Broker reference.
     const broker=context.privilegedBroker!;
     const brokerExecute=broker.execute.bind(broker);
+    // Authenticated Broker health and a fresh local owner CORE grant are
+    // required before using the separate one-use Broker admission route.
+    // If absent, keep the existing signed external CAS path fail-closed.
+    if(!context.coreWindowsDispatch && context.accessMode==='full' &&
+       context.coreConsole && context.requestId &&
+       z.string().uuid().safeParse(context.requestId).success){
+      context.requestSignal?.throwIfAborted();
+      const health=await broker.probe();
+      if(health.reachable && health.elevated &&
+         health.version===NEXOWIRE_VERSION &&
+         health.localOwnerAdmissionConfigured===true){
+        const current=await context.coreConsole.status('full');
+        context.requestSignal?.throwIfAborted();
+        if(current.active===true && current.localEnrolled===true &&
+           current.state==='ACTIVE_LOCAL_OWNER'){
+          const prepared=prepareCoreWindowsMutation(capability,input);
+          return await brokerExecute(prepared.capability,prepared.input,context.requestId);
+        }
+      }
+    }
     return await executeCoreWindowsMutation(capability,input,
       context.coreWindowsDispatch,
       async approvedInput=>await brokerExecute(capability,approvedInput,

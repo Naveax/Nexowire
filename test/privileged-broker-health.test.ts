@@ -2,10 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   startPrivilegedBroker,
+  isWindowsProcessElevated,
 } from '../src/agent/privileged-broker.js';
 
 test(
-  'privileged broker health is authenticated and reports elevated readiness',
+  'privileged broker health authenticates and reports actual token elevation',
   { skip: process.platform !== 'win32' },
   async () => {
     const token = 'health-token-0123456789';
@@ -31,7 +32,9 @@ test(
         version?: string;
       };
       assert.equal(health.ok, true);
-      assert.equal(health.elevated, true);
+      // requireElevation:false is fixture startup permission, NOT an OS
+      // HIGH-token grant. Compare against the independent Windows token probe.
+      assert.equal(health.elevated, isWindowsProcessElevated());
       assert.match(health.version ?? '', /^\d+\.\d+\.\d+$/);
 
       const wrongMethod = await fetch(handle.url + '/health', {

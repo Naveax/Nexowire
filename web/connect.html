@@ -72,11 +72,11 @@
       </div>
     </section>
 
-    <section class="card connect-card hidden" id="pair-panel" aria-label="Cihaz eşleştirme onayı">
+    <section class="card connect-card hidden" id="pair-panel" aria-label="Cihaz eşleştirme onayı" aria-busy="true">
       <span class="label">Bağlanmak isteyen cihaz</span>
       <strong id="device-name">—</strong>
       <small id="platform">Hazırlanıyor</small>
-      <div class="connect-copy">
+      <div class="connect-copy" role="status" aria-live="polite" aria-atomic="true">
         <h2 id="status-title">Hesap kontrol ediliyor</h2>
         <p id="status-text" class="subtle">Gerekirse giriş ekranı otomatik açılır.</p>
       </div>
@@ -85,9 +85,10 @@
       <a class="secondary connect-cancel" href="/">Vazgeç ve panele dön</a>
     </section>
 
-    <section id="error-panel" class="error-panel hidden" role="alert">
-      <strong>Bağlantı tamamlanamadı.</strong>
+    <section id="error-panel" class="error-panel hidden" role="alert" aria-labelledby="error-title" tabindex="-1">
+      <strong id="error-title">Bağlantı tamamlanamadı.</strong>
       <p id="error-message"></p>
+      <p id="retry-hint"></p>
       <a href="/" class="secondary connect-cancel">Kontrol paneline dön</a>
     </section>
   </main>

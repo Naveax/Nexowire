@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+import {modelExitedHubWriter} from '../idempotency/fixtures/model-exited-hub-writer.js';
 import {
   IdempotencyStore, IdempotencyStoreError, operationFingerprint,
 } from '../../src/operations/idempotency-store.js';
@@ -30,7 +31,9 @@ test('CLEAN-10: concurrent duplicate key retains one UUID and restart UNKNOWN to
   assert.match(operationId, /^[a-f0-9-]{36}$/i);
   assert.ok(admissions.every(item => item.record.operationId === operationId));
 
-  // A crash during an in-progress mutation is not proof of failure.
+  // A second object in the SAME process is not a restart. Model an exited
+  // predecessor before claiming and fencing its uncertain reservation.
+  modelExitedHubWriter(root);
   const restarted = new IdempotencyStore(root);
   await restarted.initialize();
   const unknown = await restarted.begin(request);

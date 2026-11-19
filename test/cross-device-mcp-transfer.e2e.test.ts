@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test,{type TestContext} from 'node:test';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {promises as fs} from 'node:fs';
@@ -20,13 +20,14 @@ import {executeCapability} from '../src/agent/executors.js';
 import {PathPolicy} from '../src/agent/path-policy.js';
 const sha=(data:Buffer)=>createHash('sha256').update(data).digest('hex');
 
-test('two independent sandboxed Nexowire agents exchange bounded file chunks without MCP payload exposure',async(t)=>{
+async function runTwoAgentTransfer(t:TestContext,benchmarkBytes:number){
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-two-devices-'));
  const sourceRoot=path.join(root,'src'),destRoot=path.join(root,'dst');
  await fs.mkdir(sourceRoot);await fs.mkdir(destRoot);
  const sourcePath=path.join(sourceRoot,'payload.bin');
  const destPath=path.join(destRoot,'final.bin');
- const file=Buffer.alloc(220*1024);for(let i=0;i<file.length;i++)file[i]=i%241;
+ assert.ok(Number.isSafeInteger(benchmarkBytes)&&benchmarkBytes>=1&&benchmarkBytes<=16*1024*1024);
+ const file=Buffer.alloc(benchmarkBytes);for(let i=0;i<file.length;i++)file[i]=i%241;
  await fs.writeFile(sourcePath,file);
  const http=createServer(),broker=new AgentBroker();
  const wss=attachAgentWebSocketServer(http,broker,'two-device-token');
@@ -48,7 +49,7 @@ test('two independent sandboxed Nexowire agents exchange bounded file chunks wit
  });
  const address=http.address();
  assert.ok(address&&typeof address==='object');
- let sourceReads=0,destinationWrites=0,atomicCommits=0;
+ let sourceReads=0,destinationWrites=0,atomicCommits=0,finalHashReads=0;
  const open=async(name:string,root:string,capabilities:string[])=>{
   const ws=new WebSocket('ws://127.0.0.1:'+address.port+'/agent',{
    headers:{Authorization:'Bearer two-device-token'}
@@ -62,6 +63,9 @@ test('two independent sandboxed Nexowire agents exchange bounded file chunks wit
    if(msg.type!=='request')return;
    if(name==='source'&&msg.capability==='files.read')sourceReads++;
    if(name==='destination'&&msg.capability==='files.write')destinationWrites++;
+   if(name==='destination'&&msg.capability==='files.hash'&&
+     typeof msg.input==='object'&&msg.input!==null&&
+     (msg.input as {path?:string}).path===destPath)finalHashReads++;
    if(name==='destination'&&msg.capability==='files.move'&&
      typeof msg.input==='object'&&msg.input!==null&&
      (msg.input as {atomic_no_overwrite?:boolean}).atomic_no_overwrite===true)atomicCommits++;
@@ -91,12 +95,22 @@ test('two independent sandboxed Nexowire agents exchange bounded file chunks wit
  assert.equal(broker.has('source'),true);
  assert.equal(broker.has('destination'),true);
  const tools=await client.listTools();
- assert.ok(tools.tools.some(x=>x.name==='file_transfer_between_devices'));
+ const transferTool=tools.tools.find(x=>x.name==='file_transfer_between_devices');
+ assert.ok(transferTool);
+ const transferLimit=(transferTool.inputSchema.properties as Record<string,unknown>)?.max_bytes as
+   {type?:string;minimum?:number;maximum?:number}|undefined;
+ assert.equal(transferLimit?.maximum,16_777_216,
+   'The public MCP schema must reject a whole-file bound above 16 MiB.');
+ assert.equal(transferLimit?.minimum,1);
  const call=()=>client.callTool({name:'file_transfer_between_devices',arguments:{
   source_device_id:'source',destination_device_id:'destination',
-  source_path:sourcePath,destination_path:destPath,max_bytes:1024*1024
+  source_path:sourcePath,destination_path:destPath,max_bytes:Math.max(1024*1024,file.length)
  }});
+ const started=performance.now();
  const first=await call();
+ if(benchmarkBytes>220*1024){
+   console.log('MCP_BOUNDED_16MIB_TRANSFER_BENCH_MS='+Math.round(performance.now()-started));
+ }
  const body=first.structuredContent as {
    ok:boolean;data?:{bytesTransferred:number;sha256:string};error?:{code:string}
  };
@@ -104,9 +118,10 @@ test('two independent sandboxed Nexowire agents exchange bounded file chunks wit
  assert.equal(body.data?.bytesTransferred,file.length);
  assert.equal(body.data?.sha256,sha(file));
  assert.deepEqual(await fs.readFile(destPath),file);
- assert.equal(sourceReads,5);
- assert.equal(destinationWrites,5);
+ assert.equal(sourceReads,Math.ceil(file.length/(48*1024)));
+ assert.equal(destinationWrites,Math.ceil(file.length/(48*1024)));
  assert.equal(atomicCommits,1,'transfer must request atomic no-overwrite publication');
+ assert.equal(finalHashReads,1,'COMPLETE requires an independent final destination file hash readback');
  assert.equal(JSON.stringify(first).includes(file.subarray(0,50).toString('base64')),false);
  const second=await call();
  const rejected=second.structuredContent as {ok:boolean;error?:{code:string}};
@@ -119,4 +134,8 @@ test('two independent sandboxed Nexowire agents exchange bounded file chunks wit
  }});
  assert.equal((bad.structuredContent as {ok:boolean}).ok,false);
  await assert.rejects(fs.stat(path.join(destRoot,'other.bin')));
-});
+}
+test('two independent sandboxed Nexowire agents exchange bounded file chunks without MCP payload exposure',
+ async(t)=>runTwoAgentTransfer(t,220*1024));
+test('16 MiB explicit opt-in transfers through MCP and two synthetic Agents with final hash receipt',
+ async(t)=>runTwoAgentTransfer(t,16*1024*1024));

@@ -38,6 +38,6 @@ test('valid local heading passes; missing target and anchor fail', () => {
 });
 
 test('symlink outside checkout is not accepted as a local help page', () => {
-  const r = fixture('<a href="outside">Yardım</a>', root => symlinkSync(tmpdir(), join(root, 'outside')));
+  const r = fixture('<a href="outside">Yardım</a>', root => symlinkSync(tmpdir(), join(root, 'outside'), process.platform === 'win32' ? 'junction' : 'dir'));
   assert.equal(r.findings[0].problem, 'symlink-outside-repository');
 });

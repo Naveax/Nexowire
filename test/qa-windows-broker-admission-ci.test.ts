@@ -55,11 +55,26 @@ test('CI keeps Node check phases in package order and schedules Windows Broker Q
   const nodeRuns=[...job('test').matchAll(/^\s+(?:-\s*)?run:\s*(.*?)\s*$/gm)].map(m=>m[1]);
   const check=pkg.scripts.check;
   assert.ok(check);
-  const expected=check.split(/\s*&&\s*/);
-  const begin=nodeRuns.indexOf('npm ci');
+  const expected=[
+    'npm run typecheck',
+    'npm run continuation:check',
+    'npm run ai-screen:launch-audit',
+    'npm test',
+  ];
+  assert.deepEqual(check.split(/\s*&&\s*/),expected,
+    'The consolidated check must retain all verification phases in order');
+  const executableRuns=nodeRuns.filter((run):run is string=>
+    typeof run==='string' && run.startsWith('npm '));
+  const begin=executableRuns.indexOf('npm ci');
   assert.notEqual(begin,-1);
-  assert.deepEqual(nodeRuns.slice(begin+1,begin+1+expected.length),expected);
-  assert.equal(nodeRuns[begin+1+expected.length],'npm run build');
+  const afterInstall=executableRuns.slice(begin+1);
+  if(afterInstall[0]==='npm run check'){
+    assert.equal(afterInstall[1],'npm run build',
+      'The consolidated check must run before the build');
+  }else{
+    assert.deepEqual(afterInstall.slice(0,expected.length),expected);
+    assert.equal(afterInstall[expected.length],'npm run build');
+  }
   assert.match(job('browser-live'),
     /^\s+run:\s*node --import tsx scripts\/qa-windows-broker-admission\.ts\s*$/m);
 });

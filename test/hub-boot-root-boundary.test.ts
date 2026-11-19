@@ -157,8 +157,9 @@ test('Hub Boot installer never overwrites an existing SYSTEM task and limits rol
   const nonce=install.indexOf("randomUUID()");
   const rollback=install.indexOf('hubBootRollbackTaskOwnershipGuard');
   const stop=install.indexOf('Stop-ScheduledTask -TaskName $boot',rollback);
-  assert.ok(firstGuard>=0 && firstGuard<firstRead);
-  assert.ok(firstRead<nonce && nonce<recheck && recheck<register);
+  // The caller-supplied recovery marker is validated before any file or token mutation.
+  assert.ok(nonce>=0 && nonce<firstGuard);
+  assert.ok(firstGuard<firstRead && firstRead<recheck && recheck<register);
   assert.ok(register<rollback && rollback<stop);
   assert.match(install,/Description \$marker\|Out-Null/);
   assert.doesNotMatch(install.slice(register,register+260),/-Force/);

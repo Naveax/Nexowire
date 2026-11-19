@@ -6,11 +6,29 @@
   <meta name="color-scheme" content="dark">
   <title>Nexowire Admin</title>
   <link rel="stylesheet" href="./styles.css">
+  <style>
+    /* Admin-only presentation; keep shared styles.css owned by the web layout team. */
+    .admin-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .admin-metric { min-width: 0; }
+    .admin-metric h2 { margin: 0 0 8px; }
+    .admin-metric strong {
+      display: block; font-size: clamp(20px, 2.5vw, 30px);
+      line-height: 1.25; font-variant-numeric: tabular-nums;
+      overflow-wrap: anywhere;
+    }
+    .admin-metric small { display: block; margin-top: 8px; line-height: 1.4; overflow-wrap: anywhere; }
+    .admin-status { min-width: 0; max-width: 65%; white-space: normal; overflow-wrap: anywhere; text-align: right; }
+    .admin-error { overflow-wrap: anywhere; }
+    @media (max-width: 620px) {
+      .admin-metrics { grid-template-columns: minmax(0, 1fr); }
+      .admin-status { max-width: 50%; }
+    }
+  </style>
 </head>
 <body>
   <header class="topbar">
     <div class="brand">Nexowire <span class="accent">Admin</span></div>
-    <div id="admin-pill" class="pill muted">Yükleniyor</div>
+    <div id="admin-pill" class="pill muted admin-status" role="status" aria-live="polite" aria-atomic="true">Yükleniyor</div>
   </header>
 
   <main class="shell">
@@ -22,15 +40,27 @@
       </div>
     </section>
 
-    <section class="grid metrics">
-      <article class="card"><span class="label">Kullanıcılar</span><strong id="users">—</strong><small id="users-detail">—</small></article>
-      <article class="card"><span class="label">Online cihaz</span><strong id="online-devices">—</strong><small id="devices-total">—</small></article>
-      <article class="card"><span class="label">24s çağrı</span><strong id="calls">—</strong><small id="success-rate">—</small></article>
-      <article class="card"><span class="label">Owner spend</span><strong id="owner-spend">—</strong><small id="capacity">—</small></article>
+    <section id="admin-metrics" class="grid metrics admin-metrics" aria-label="Yönetim metrikleri" aria-busy="true">
+      <article class="card admin-metric" aria-labelledby="metric-users-label">
+        <h2 id="metric-users-label" class="label">Kullanıcılar</h2>
+        <strong id="users">—</strong><small id="users-detail">—</small>
+      </article>
+      <article class="card admin-metric" aria-labelledby="metric-devices-label">
+        <h2 id="metric-devices-label" class="label">Online cihaz</h2>
+        <strong id="online-devices">—</strong><small id="devices-total">—</small>
+      </article>
+      <article class="card admin-metric" aria-labelledby="metric-calls-label">
+        <h2 id="metric-calls-label" class="label">24s çağrı</h2>
+        <strong id="calls">—</strong><small id="success-rate">—</small>
+      </article>
+      <article class="card admin-metric" aria-labelledby="metric-spend-label">
+        <h2 id="metric-spend-label" class="label">Owner spend</h2>
+        <strong id="owner-spend">—</strong><small id="capacity">—</small>
+      </article>
     </section>
 
-    <section id="admin-error" class="error-panel hidden">
-      <strong>Admin verisi alınamadı.</strong>
+    <section id="admin-error" class="error-panel admin-error hidden" role="alert" aria-labelledby="admin-error-title" aria-describedby="admin-error-message">
+      <strong id="admin-error-title">Admin verisi alınamadı.</strong>
       <p id="admin-error-message"></p>
     </section>
   </main>

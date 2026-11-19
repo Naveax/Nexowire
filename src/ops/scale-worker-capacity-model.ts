@@ -73,24 +73,31 @@ export function estimateScaleWorkerDemand(input:ScaleWorkerDemand):ScaleWorkerCa
   };
 }
 
-/** No allocation/load; binary-search maximum active users under fixed assumptions. */
+/** Exact BigInt planning: no allocations, I/O or hosted quota mutation. */
 export function maxActiveUsersUnderBudget(
   input:Omit<ScaleWorkerDemand,'activeUsers'>,
 ):number {
-  const empty=estimateScaleWorkerDemand({...input,activeUsers:0});
-  if (!empty.withinBudget) return 0;
-  const one=estimateScaleWorkerDemand({...input,activeUsers:1});
-  if (one.estimatedWorkerRequests===empty.estimatedWorkerRequests) {
-    // Zero per-user requests; this model has no finite capacity-bound user ceiling.
-    return Number.MAX_SAFE_INTEGER;
+  // Validate every input first; the public return type stays a safe integer.
+  const calls=BigInt(natural(input.hostedToolCallsPerUserPerDay,'hostedToolCallsPerUserPerDay'));
+  const auth=BigInt(natural(input.authWorkerRequestsPerTool,'authWorkerRequestsPerTool'));
+  const charge=BigInt(natural(input.chargeWorkerRequestsPerTool,'chargeWorkerRequestsPerTool'));
+  const other=BigInt(natural(input.otherWorkerRequestsPerUserPerDay,'otherWorkerRequestsPerUserPerDay'));
+  const fixed=BigInt(natural(input.fixedWorkerRequestsPerDay,'fixedWorkerRequestsPerDay'));
+  const retry=BigInt(natural(input.retryPermille,'retryPermille'));
+  const budget=BigInt(natural(input.workerRequestBudgetPerDay,'workerRequestBudgetPerDay'));
+  if(retry>1000n) throw new Error('retryPermille must be <= 1000');
+  const perUser=calls*(auth+charge)+other;
+  const billed=(users:bigint):bigint=>{
+    const subtotal=fixed+users*perUser;
+    return subtotal+(subtotal*retry+999n)/1000n;
+  };
+  if(billed(0n)>budget)return 0;
+  if(perUser===0n)return Number.MAX_SAFE_INTEGER;
+  let lo=0n,hi=BigInt(Number.MAX_SAFE_INTEGER);
+  while(lo<hi){
+    const mid=(lo+hi+1n)/2n;
+    if(billed(mid)<=budget)lo=mid;
+    else hi=mid-1n;
   }
-  let lo=0;
-  let hi=Math.min(input.workerRequestBudgetPerDay+1,Number.MAX_SAFE_INTEGER);
-  while(lo<hi) {
-    const mid=lo+Math.ceil((hi-lo)/2);
-    const within=estimateScaleWorkerDemand({...input,activeUsers:mid}).withinBudget;
-    if (within) lo=mid;
-    else hi=mid-1;
-  }
-  return lo;
+  return Number(lo);
 }

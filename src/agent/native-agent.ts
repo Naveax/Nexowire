@@ -111,6 +111,21 @@ export function reconnectWaitMs(
   return Math.min(30_000, Math.max(250, Math.round(boundedBase * factor)));
 }
 
+/** Bound opening handshake even if TCP accepts but no HTTP 101 ever arrives.
+ * Without this deadline the Agent cannot rotate to a healthy local/remote Hub. */
+export const HUB_HANDSHAKE_TIMEOUT_MS=10_000;
+export function openHubTransportSocket(
+  hubUrl:string,
+  headers?:Record<string,string>,
+  handshakeTimeoutMs=HUB_HANDSHAKE_TIMEOUT_MS,
+):WebSocket{
+  if(!Number.isSafeInteger(handshakeTimeoutMs)||
+      handshakeTimeoutMs<250||handshakeTimeoutMs>30_000)
+    throw new Error('Hub handshake timeout must be between 250 and 30000 milliseconds');
+  return new WebSocket(hubUrl,{handshakeTimeout:handshakeTimeoutMs,
+    ...(headers?{headers}:{})});
+}
+
 export function parseHubEndpoints(
   env: NodeJS.ProcessEnv,
 ): string[] {
@@ -619,7 +634,7 @@ export async function runNativeAgent(
   while (!stopped) {
     const hubUrl = hubEndpoints[endpointIndex]!;
     const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
-    const socket = new WebSocket(hubUrl, headers ? { headers } : undefined);
+    const socket = openHubTransportSocket(hubUrl, headers);
     currentSocket = socket;
     let openedAt: number | undefined;
     let closeCode: number | undefined;

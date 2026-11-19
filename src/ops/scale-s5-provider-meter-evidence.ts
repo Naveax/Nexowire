@@ -38,6 +38,12 @@ function utc(v:string){
   if(typeof v!=='string'||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{3})?Z$/.test(v))throw new Error('Invalid UTC ISO timestamp');
   const n=Date.parse(v);
   if(!Number.isFinite(n))throw new Error('Invalid UTC timestamp');
+  // Date.parse may normalize invalid calendar days (Feb 30 -> Mar 2) or
+  // 24:00 to the following day. Preserve the exact strict UTC source claim.
+  const normalized=v.includes('.')?v:v.replace(/Z$/,'.000Z');
+  if(new Date(n).toISOString()!==normalized){
+    throw new Error('Invalid UTC timestamp');
+  }
   return n;
 }
 function ref(v:string){

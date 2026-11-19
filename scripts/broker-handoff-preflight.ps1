@@ -107,7 +107,11 @@ try {
   $taskState = [string]$task.State
   $taskHighest = [string]$task.Principal.RunLevel -eq 'Highest'
   try {
-    $taskLastResult = [int](Get-ScheduledTaskInfo -TaskName $TaskName -ErrorAction Stop).LastTaskResult
+    # LastTaskResult is UInt32; casting high-bit HRESULTs to Int32 loses evidence.
+    $info=Get-ScheduledTaskInfo -TaskName $TaskName -ErrorAction Stop
+    if ($null -ne $info.LastTaskResult) {
+      $taskLastResult = [long]$info.LastTaskResult
+    }
   } catch { }
   # Only metadata. No launcher contents, protected secrets or arguments returned.
   $argsText = [string]$task.Actions[0].Arguments

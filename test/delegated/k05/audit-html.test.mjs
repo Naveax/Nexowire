@@ -65,9 +65,14 @@ test('T-027: role status/alert, valid live properties and missing aria reference
   assert.ok(rules('<input aria-label="Kod" aria-describedby="no-description">').includes('broken-reference'));
 });
 
-test('T-027: error panels without announcements are findings, not false PASS', () => {
-  const admin = auditHtml(source('web/admin.html'), 'web/admin.html');
-  assert.deepEqual(admin.findings.map((item) => item.rule), ['silent-error-panel']);
+test('T-027: real admin error announces, and removing its role fails closed', () => {
+  const adminHtml = source('web/admin.html');
+  assert.match(adminHtml, /<section id="admin-error"[^>]*role="alert"/);
+  const admin = auditHtml(adminHtml, 'web/admin.html');
+  assert.deepEqual(admin.findings.map(({ rule }) => rule), []);
+  const brokenAdmin = adminHtml.replace(/(<section id="admin-error"[^>]*) role="alert"/, '$1');
+  assert.notEqual(brokenAdmin, adminHtml, 'negative mutation must remove the actual role');
+  assert.ok(auditHtml(brokenAdmin, 'web/admin.html').findings.some(({ rule }) => rule === 'silent-error-panel'));
   assert.ok(rules('<section class="error-panel">Hata</section>').includes('silent-error-panel'));
   assert.deepEqual(rules('<section class="error-panel" role="alert">Hata</section>'), []);
 });

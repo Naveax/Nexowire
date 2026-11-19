@@ -50,11 +50,16 @@ export class PrivilegedBrokerClient {
     version: string | null;
     /** null when the Broker is unavailable or has not advertised this field. */
     effectAdmissionConfigured?: boolean | null;
+    /** Only a trusted opt-in protected Broker launcher may advertise this. */
+    localOwnerAdmissionConfigured?: boolean | null;
   }> {
     const controller = new AbortController();
+    // The Windows /health endpoint verifies the actual token via a bounded
+    // PowerShell process (up to 15 s). Keep client-side health transport
+    // bounded, but allow that attestation to finish on slower Windows hosts.
     const timer = setTimeout(
       () => controller.abort(),
-      Math.min(this.timeoutMs, 5_000),
+      Math.min(this.timeoutMs, 20_000),
     );
     try {
       const response = await fetch(
@@ -73,6 +78,7 @@ export class PrivilegedBrokerClient {
           elevated: false,
           version: null,
           effectAdmissionConfigured: null,
+          localOwnerAdmissionConfigured: null,
         };
       }
       const body = await response.json() as {
@@ -80,6 +86,7 @@ export class PrivilegedBrokerClient {
         elevated?: boolean;
         version?: unknown;
         effectAdmissionConfigured?: unknown;
+        localOwnerAdmissionConfigured?: unknown;
       };
       return {
         reachable: body.ok === true,
@@ -95,6 +102,10 @@ export class PrivilegedBrokerClient {
           body.ok === true && typeof body.effectAdmissionConfigured === 'boolean'
             ? body.effectAdmissionConfigured
             : null,
+        localOwnerAdmissionConfigured:
+          body.ok === true && typeof body.localOwnerAdmissionConfigured === 'boolean'
+            ? body.localOwnerAdmissionConfigured
+            : null,
       };
     } catch {
       return {
@@ -102,6 +113,7 @@ export class PrivilegedBrokerClient {
         elevated: false,
         version: null,
         effectAdmissionConfigured: null,
+        localOwnerAdmissionConfigured: null,
       };
     } finally {
       clearTimeout(timer);

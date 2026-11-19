@@ -38,6 +38,39 @@ test('the original DPAPI/pre-logon Hub tests keep their independent 15-minute st
   assert.doesNotMatch(step, /continue-on-error:\s*true|--test-skip-pattern|if:\s*false/);
 });
 
+
+const release = readFileSync(new URL('../.github/workflows/release-readiness.yml', import.meta.url), 'utf8')
+  .replace(/\r\n/g, '\n');
+
+const protectedBootGuardTests = [
+  'test/hub-boot-hidden-task-visibility.test.ts',
+  'test/hub-boot-install-task-absence.test.ts',
+  'test/hub-boot-status-legacy-user.test.ts',
+  'test/windows-unattended-reboot-readiness.test.ts',
+  'test/qa-ci-browser-live-timeout.test.ts',
+];
+
+function assertProtectedBootWindowsStep(document: string, requiresWindowsCondition: boolean): void {
+  const anchor = '      - name: Verify protected SYSTEM Hub task presence and no-overwrite guards\n';
+  const start = document.indexOf(anchor);
+  assert.ok(start >= 0, 'missing hosted protected SYSTEM task absence regressions');
+  const next = document.indexOf('\n      - ', start + anchor.length);
+  assert.ok(next > start, 'protected SYSTEM guard must remain a separate step');
+  const step = document.slice(start, next);
+  if (requiresWindowsCondition) assert.match(step, /^        if: runner.os == 'Windows'$/m);
+  assert.match(step, /^        timeout-minutes: 7$/m);
+  assert.match(step, /^        run: node --test --import tsx --test-concurrency=1 /m);
+  for (const file of protectedBootGuardTests) {
+    assert.ok(step.includes(file), 'missing protected Hub test: ' + file);
+  }
+  assert.doesNotMatch(step, /continue-on-error:\s*true|--test-skip-pattern|if:\s*false/);
+}
+
+test('hosted Windows CI and Release execute protected Hub task visibility guards', () => {
+  assertProtectedBootWindowsStep(browserLiveJob(), false);
+  assertProtectedBootWindowsStep(release, true);
+});
+
 test('other Windows native and adversarial checks remain present under the bounded job', () => {
   const job = browserLiveJob();
   for (const step of [

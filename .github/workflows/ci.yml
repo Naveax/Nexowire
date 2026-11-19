@@ -40,6 +40,120 @@ jobs:
           NEXOWIRE_CLOUDFLARED_TEST_BINARY="$binary" node --test --import tsx test/clean13-cloudflared-official-launch.test.ts
           echo "NEXOWIRE_CLOUDFLARED_TEST_BINARY=$binary" >> "$GITHUB_ENV"
       - run: npm run check
+      - name: Verify reviewed delegated source and transfer tests (explicit files)
+        # Existing npm test Bash ** expansion omits root and deep paths.
+        # This bounded lane is NOT full TS coverage or physical CORE acceptance.
+        shell: bash
+        timeout-minutes: 12
+        run: |
+          set -euo pipefail
+          node --test --test-reporter=tap --import tsx --test-concurrency=1 \
+            scripts/delegated/k14/pagination-integrity.test.mjs \
+            test/delegated/k01/connect-state.test.ts \
+            test/delegated/k02/responsive-css.test.ts \
+            test/delegated/k02/mobile-unknown-wrap.contract.test.mjs \
+            test/delegated/k02/browser-screenshot-evidence.test.mjs \
+            test/delegated/k02/platform-evidence-gate.test.mjs \
+            test/delegated/k03/panel-states.test.mjs \
+            test/delegated/k03/dashboard-honest-state.test.mjs \
+            test/delegated/k04/admin-a11y.test.mjs \
+            test/delegated/k04/admin-denial-sequence.test.mjs \
+            test/delegated/k04/admin-auth-boundary.test.mjs \
+            test/delegated/k05/audit-owner-web.test.mjs \
+            test/delegated/k05/audit-p005-evidence.test.mjs \
+            test/delegated/k05/audit-p006-ui.test.mjs \
+            test/delegated/k05/verify-ui-test-provenance.test.mjs \
+            test/delegated/k04/verify-ui-single-head.test.mjs \
+            test/connect-onboarding.test.ts \
+            test/connect-web.test.ts \
+            test/delegated/k06/browser-ci-evidence-gate.test.mjs \
+            test/delegated/k06/connect-error-display.test.mjs \
+            test/delegated/k06/issue485-onboarding-contract.test.mjs \
+            test/delegated/k06/p005-pairing-recovery.test.mjs \
+            test/delegated/k06/p006-installer-provenance.test.mjs \
+            test/delegated/k06/release-link-audit.test.mjs \
+            test/delegated/k07/onboarding-link-integrity.test.mjs \
+            test/delegated/k07/pairing-recovery-guide.test.mjs \
+            test/delegated/k09/roadmap-evidence.test.mjs \
+            test/delegated/k09/issue539-coverage.test.mjs \
+            test/delegated/k09/handoff-drift.test.mjs \
+            test/delegated/k09/issue-closing-language.test.mjs \
+            test/delegated/k09/issue-state-transition.test.mjs \
+            test/delegated/k09/issue780-evidence.test.mjs \
+            test/delegated/k09/scale-phase-proof.test.mjs \
+            test/delegated/k10/hosted-browser-evidence-audit.test.mjs \
+            test/delegated/k10/hosted-connect-three-state.test.mjs \
+            test/delegated/k11/issue-487-commercial-unknown.test.ts \
+            test/delegated/k11/issue-487-meter-acceptance.test.ts \
+            test/delegated/k11/p005-s5-evidence.test.ts \
+            test/delegated/k11/p006-cost-boundary.test.ts \
+            test/delegated/k13/p005-main-ci-inventory.test.mjs \
+            test/delegated/k13/p005-pr-ci-coverage.test.mjs \
+            test/delegated/k13/p006-ci-gates.test.mjs \
+            test/delegated/k16/environment-doctor-contract.test.ts \
+            test/delegated/k17/p006-skill-source-evidence.test.ts \
+            test/delegated/k18/capacity-evidence-compat.test.ts \
+            test/delegated/k18/ingest-ack-loss.test.ts \
+            test/delegated/k18/p006-ack-digest-readback.test.ts \
+            test/delegated/k18/p006-ci-discovery-audit.test.ts \
+            test/delegated/k18/p006-evidence-classification.test.ts \
+            test/delegated/k18/p007-transfer-replay-integrity.test.ts \
+            test/delegated/k19/issue588-limits-inventory.test.ts \
+            test/delegated/k19/issue588-large-file-acceptance.test.ts \
+            test/delegated/k19/p006-receiver-ack-reference.test.ts \
+            test/delegated/pool-k17/markdown-anchors.test.ts \
+            test/delegated/pool-k19/audit-physical-pass-labels.test.ts \
+            > "$RUNNER_TEMP/nw-delegated-source-transfer.tap"
+          cat "$RUNNER_TEMP/nw-delegated-source-transfer.tap"
+          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/nw-delegated-source-transfer.tap" 409
+      - name: Verify denied-admin 403 body privacy and retry status on actual source
+        # Offline VM only: no HTTP request or real account credentials.
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          node test/delegated/k04/admin-auth-boundary.mjs web/admin.js
+      - name: Verify admin HTTP 401/403/503 denial sequence on actual source
+        # Offline VM source check, not authenticated browser/admin acceptance.
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          node test/delegated/k04/admin-denial-sequence.mjs web/admin.js web/admin.html
+      - name: Verify K02 responsive CSS source and overflow contracts
+        # Exact blob from #1101; tested against current HEAD web/styles.css.
+        # Source assertions only, NOT real browser zoom or Windows GUI.
+        shell: bash
+        timeout-minutes: 3
+        env:
+          NEXOWIRE_REQUIRE_UI_INTEGRATION: '1'
+        run: |
+          set -euo pipefail
+          node --test --test-reporter=tap \
+            test/delegated/k02/issue-485-539-ui.contract.test.mjs \
+            > "$RUNNER_TEMP/nw-k02-responsive.tap"
+          cat "$RUNNER_TEMP/nw-k02-responsive.tap"
+          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/nw-k02-responsive.tap" 6
+      - name: Verify K03 offline console grant and Broker command-progress contracts
+        # Two SHA-reviewed original K03 fixtures from #1103, explicit tests.
+        # Not real Windows input, Hub command authority or physical acceptance.
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          node --test --test-reporter=tap \
+            test/delegated/k03/console-grant-view.test.mjs \
+            test/delegated/k03/bridge-command-progress.test.mjs \
+            > "$RUNNER_TEMP/nw-k03-console-grant.tap"
+          cat "$RUNNER_TEMP/nw-k03-console-grant.tap"
+          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/nw-k03-console-grant.tap" 10
+      - name: Verify K01-K04 source tests on one exact Git HEAD
+        # Source-only invariant: no browser, Agent, Hub or CORE launched.
+        shell: bash
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          node test/delegated/k04/verify-ui-single-head.mjs "$GITHUB_WORKSPACE"
       - name: AI-05 exact 0020/0021/0022, D1 authority, atomic no-replay and SQLite migration
         shell: bash
         timeout-minutes: 18
@@ -82,8 +196,8 @@ jobs:
           grep -qx '# skipped 0' "$RUNNER_TEMP/nw-batch3.tap"
           grep -qx '# todo 0' "$RUNNER_TEMP/nw-batch3.tap"
       - name: Verify delegated K20 evidence audits and safe URL offline QA
-        # npm test excludes .mjs. Reject missing/partial TAP while allowing
-        # the K20 suite to grow beyond its original 41 assertions.
+        # npm test excludes .mjs. Require the current K20 80-test inventory,
+        # including 39 P006/P007 cases; reject missing/partial TAP.
         shell: bash
         run: |
           set -euo pipefail
@@ -93,7 +207,7 @@ jobs:
             test/delegated/pool-k07/safe-url-language.test.mjs \
             > "$RUNNER_TEMP/nw-k20-qa.tap"
           cat "$RUNNER_TEMP/nw-k20-qa.tap"
-          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/nw-k20-qa.tap" 41
+          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/nw-k20-qa.tap" 80
       - name: Verify delegated K14 offline PR and integration audit QA
         # npm test excludes .mjs. Require explicit TAP with zero skipped/TODO.
         shell: bash
@@ -101,15 +215,16 @@ jobs:
           node --test --test-reporter=tap --import tsx --test-concurrency=1 \
             scripts/delegated/k14/integration-report.test.mjs \
             scripts/delegated/k14/pr-overlap.test.mjs \
+            scripts/delegated/k14/p006-issue-closing-gates.test.mjs \
+            scripts/delegated/k14/p007-59-pr-gates.test.mjs \
+            scripts/delegated/k14/p008-ci-delta-gates.test.mjs \
+            scripts/delegated/k14/p009-acceptance-evidence-gates.test.mjs \
+            scripts/delegated/k14/p010-live-delta-gates.test.mjs \
             scripts/delegated/pool-k14/pr-kind.test.mjs \
             scripts/delegated/pr-summary-k14/pr-summary.test.mjs \
             > "$RUNNER_TEMP/nw-k14-audit.tap"
           cat "$RUNNER_TEMP/nw-k14-audit.tap"
-          grep -qx '# tests 32' "$RUNNER_TEMP/nw-k14-audit.tap"
-          grep -qx '# pass 32' "$RUNNER_TEMP/nw-k14-audit.tap"
-          grep -qx '# fail 0' "$RUNNER_TEMP/nw-k14-audit.tap"
-          grep -qx '# skipped 0' "$RUNNER_TEMP/nw-k14-audit.tap"
-          grep -qx '# todo 0' "$RUNNER_TEMP/nw-k14-audit.tap"
+          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/nw-k14-audit.tap" 110
       - name: Verify K10 offline web shell and QA24 integration DAG
         # npm test excludes .mjs; QA24 historical snapshot does not prove live CORE.
         shell: bash
@@ -203,6 +318,18 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - name: Verify isolated Windows taskkill process-tree uncertainty (18 explicit tests)
+        # Windows Job/tree cleanup source contract, synthetic subprocess events
+        # only. No actual PIDs, tasks, services or user processes are signaled.
+        shell: pwsh
+        timeout-minutes: 4
+        run: |
+          $tapFile = Join-Path $env:RUNNER_TEMP 'nexowire-k16-taskkill.tap'
+          node --test --test-reporter=tap --import tsx --test-concurrency=1 test/delegated/k16/windows-taskkill-contract.test.ts > $tapFile
+          if ($LASTEXITCODE -ne 0) { throw 'K16 taskkill mock regression failed' }
+          Get-Content -LiteralPath $tapFile
+          node scripts/ci/assert-tap-summary.mjs $tapFile 18
+          if ($LASTEXITCODE -ne 0) { throw 'K16 taskkill TAP verification failed' }
       - name: Verify real Windows authorized CAS command/write and no-CAS fail-closed behavior
         timeout-minutes: 5
         run: node --test --test-concurrency=1 --import tsx test/agent-native-remote-cas-live.test.ts test/agent-readonly-without-cas.test.ts
@@ -326,6 +453,10 @@ jobs:
         shell: pwsh
         run: ./scripts/coord-build-wal-namespace-probe.ps1
       - name: Physical Windows Job Object regressions
+        # Never inherit an operator's personal local-owner shell profile here:
+        # native Job containment must be exercised rather than silently skipped.
+        env:
+          NEXOWIRE_CORE_APPROVAL_MODE: native
         run: node --test --import tsx --test-concurrency=1 test/windows-job-owner.test.ts test/windows-job-helper-trust.test.ts test/windows-job-helper-acl-publisher.test.ts test/windows-job-attestation-spoof.test.ts test/windows-job-duplicate-handle-risk.test.ts test/windows-job-breakaway.test.ts test/windows-job-hostile-nested.test.ts test/windows-job-named-handle-caveat.test.ts test/windows-job-capacity-128.test.ts test/process-manager-tree-cleanup.test.ts test/process-manager.test.ts
       - name: Verify AI-09 Windows Agent guardian receipt retention
         # Exercises the Win32-only mocked OS readback cases; no real Task or process mutation.
@@ -336,6 +467,9 @@ jobs:
       - name: Verify Windows DPAPI and pre-logon Hub contracts
         timeout-minutes: 15
         run: node --test --import tsx --test-concurrency=1 test/windows-dpapi-secret.test.ts test/protected-secret-files.test.ts test/hub-lifecycle.test.ts
+      - name: Verify protected SYSTEM Hub task presence and no-overwrite guards
+        timeout-minutes: 7
+        run: node --test --import tsx --test-concurrency=1 test/hub-boot-hidden-task-visibility.test.ts test/hub-boot-install-task-absence.test.ts test/hub-boot-status-legacy-user.test.ts test/windows-unattended-reboot-readiness.test.ts test/qa-ci-browser-live-timeout.test.ts
       - name: Verify structured Windows controls
         run: node --test --import tsx test/windows-control.test.ts
         env:
@@ -556,7 +690,9 @@ jobs:
           path: ${{ runner.temp }}/connection-v2-native-git-dag.json
           if-no-files-found: error
   connection-v2-clean10-windows:
-    if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'coord/connection-v2-release-candidate-') || startsWith(github.head_ref, 'coord/ai05-core-connection-v2-windows-'))
+    # The exact AI-01..AI-06 integration PR must exercise the real native Job
+    # QA02 branch on Windows, not accept Linux-only / SKIP evidence as proof.
+    if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'coord/connection-v2-release-candidate-') || startsWith(github.head_ref, 'coord/ai05-core-connection-v2-windows-') || github.head_ref == 'integration/ai01-ai06-candidate-20261109')
     runs-on: windows-latest
     timeout-minutes: 25
     strategy:
@@ -577,6 +713,10 @@ jobs:
         run: ./scripts/build-windows-job-owner.ps1
       - name: Run QA-02 output ordering and CLEAN-10 no-replay oracle without skip
         shell: pwsh
+        # Force the disposable hosted runner into the native Job code path.
+        # The personal local-owner profile must not silently SKIP this gate.
+        env:
+          NEXOWIRE_CORE_APPROVAL_MODE: native
         run: |
           node --test --import tsx --test-concurrency=1 test/qa-02-windows-output-ordering.test.ts test/qa-02-error-contract-no-replay.test.ts test/clean-10/idempotency-reservation-negative.test.ts test/clean-10/timeout-reconnect-no-replay.test.ts test/clean-10/runbook-unknown-acceptance-red.test.ts test/clean-10/round3-semantic-effect-reservation.test.ts
           if ($LASTEXITCODE -ne 0) { throw 'CLEAN10_NO_REPLAY_RED' }

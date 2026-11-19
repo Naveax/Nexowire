@@ -6,10 +6,9 @@ const state = params.get('state') ?? '';
 const deviceId = params.get('deviceId') ?? '';
 const deviceName = params.get('deviceName') ?? '';
 const platform = params.get('platform') ?? '';
-// Pin the already tested Unicode-safe bootstrap; branch cleanup must not break downloads.
-const INSTALLER_REF = '96315d5dd4986fffbd24a96859309271d2a88ffe';
-const INSTALLER_VIEW = 'https://github.com/Naveax/Nexowire/blob/' + INSTALLER_REF + '/installers/';
-const INSTALLER_RAW = 'https://raw.githubusercontent.com/Naveax/Nexowire/' + INSTALLER_REF + '/installers/';
+// Pin the verified published stable installer assets, not an archived source-tree bootstrap.
+// Update this alongside the release asset snapshot and installation contracts.
+const INSTALLER_RELEASE_ASSETS = 'https://github.com/Naveax/Nexowire/releases/download/v1.0.8/';
 const RELEASE_PAGE = 'https://github.com/Naveax/Nexowire/releases/latest';
 let chatgptAddress = '';
 
@@ -22,12 +21,12 @@ function detectedOS(ua = navigator.userAgent) {
 const installers = {
   windows: {
     heading: 'Windows kurulumu',
-    description: 'Windows 10/11 x64: açılan GitHub sayfasında Download raw ile indir ve dosyaya çift tıkla. Node.js, npm, Git veya PowerShell 7 gerekmez. Tarayıcıda giriş yapıp BAĞLA’ya bas.',
-    command: "Invoke-WebRequest -Uri '" + INSTALLER_RAW + "Nexowire-Setup.cmd' -OutFile \"$env:USERPROFILE\\Downloads\\Nexowire-Setup.cmd\"",
-    url: INSTALLER_VIEW + 'Nexowire-Setup.cmd',
+    description: 'Windows 10/11 x64: resmî GitHub Release kurucusunu indir ve dosyaya çift tıkla. Node.js, npm, Git veya PowerShell 7 gerekmez. Tarayıcıda giriş yapıp BAĞLA’ya bas.',
+    command: "Invoke-WebRequest -Uri '" + INSTALLER_RELEASE_ASSETS + "Nexowire-Setup.cmd' -OutFile \"$env:USERPROFILE\\Downloads\\Nexowire-Setup.cmd\"",
+    url: INSTALLER_RELEASE_ASSETS + 'Nexowire-Setup.cmd',
     label: 'Windows kurucusunu aç ↗',
-    checksum: INSTALLER_VIEW + 'SHA256SUMS-Windows',
-    note: 'Depodaki düzeltilmiş kurucu, yayımlanmış v1.0.7 paketini doğrulayarak kullanır. Yönetici olarak çalıştırman gerekmez. İstersen kopyalama düğmesiyle yalnızca indirme komutunu alabilirsin.',
+    checksum: INSTALLER_RELEASE_ASSETS + 'SHA256SUMS-Windows',
+    note: 'Resmî v1.0.8 GitHub Release kurucusu ve aynı yayının SHA256SUMS-Windows dosyası kullanılır. SHA-256 bütünlük kontrolüdür, yayıncı imzası değildir. İstersen kopyalama düğmesiyle yalnızca indirme komutunu alabilirsin.',
   },
   macos: {
     heading: 'macOS kurulumu',
@@ -117,8 +116,12 @@ async function loadChatGPTSetup() {
     $('chatgpt-address').value = chatgptAddress;
     $('copy-chatgpt-address').disabled = false;
     $('chatgpt-status').textContent = 'Bu adresi ChatGPT’deki sunucu alanına yapıştır. Kimlik doğrulama: OAuth.';
-  } catch {
-    $('chatgpt-status').textContent = httpStatus >= 400
+  } catch (error) {
+    $('chatgpt-status').textContent = error?.name === 'TimeoutError'
+      ? 'Bağlantı adresi 5 saniye içinde alınamadı. Sayfayı yenile; sunucu adresini tahmin etme.'
+      : error?.name === 'AbortError'
+      ? 'Bağlantı adresi isteği durduruldu. Yeniden denemek için sayfayı yenile.'
+      : httpStatus >= 400
       ? 'Bağlantı adresi alınamadı (HTTP ' + httpStatus + '). Hizmete erişimi kontrol et; Windows kurulumunu tekrarlama.'
       : 'Bağlantı adresi alınamadı. Sayfayı yenile veya bağlantı bilgisini aç. Rastgele adresle ilerleme.';
   }
@@ -144,10 +147,21 @@ function showError(message, retryable = false) {
   setPill('Hata', 'bad');
   $('error-message').textContent = message;
   $('error-panel').classList.remove('hidden');
+  $('pair-panel').setAttribute('aria-busy', 'false');
   const approve = $('approve');
   approve.disabled = !retryable;
   approve.textContent = retryable ? 'TEKRAR DENE' : 'BAĞLA';
   approve.dataset.busy = 'false';
+  $('retry-hint').textContent = retryable
+    ? 'Tekrar denemek için TEKRAR DENE düğmesine bas.'
+    : 'Bağlantıyı kontrol ettikten sonra bu sayfayı yenile veya kontrol paneline dön.';
+  if (retryable) {
+    approve.setAttribute('aria-describedby', 'error-message retry-hint');
+    approve.focus();
+  } else {
+    approve.removeAttribute('aria-describedby');
+    $('error-panel').focus();
+  }
 }
 
 function validatedLoopbackCallback() {
@@ -212,6 +226,7 @@ async function loadAccount() {
   $('status-text').textContent =
     'Ekstra erişim ayarı gerekmez. BAĞLA dediğinde cihaz hesabına eklenir ve bağlantı otomatik hazırlanır.';
   $('approve').disabled = false;
+  $('pair-panel').setAttribute('aria-busy', 'false');
   setPill('Hazır', 'good');
 
   $('approve').addEventListener('click', async () => {
@@ -221,12 +236,16 @@ async function loadAccount() {
     approve.dataset.busy = 'true';
     approve.disabled = true;
     approve.textContent = 'BAĞLANIYOR…';
+    approve.removeAttribute('aria-describedby');
     $('error-panel').classList.add('hidden');
+    $('pair-panel').setAttribute('aria-busy', 'true');
     setPill('Bağlanıyor', 'muted');
     $('status-title').textContent = 'Bağlanıyor';
     $('status-text').textContent =
       'Başka bir ayar yapmana gerek yok.';
 
+    let retryable = true;
+    let visibleError = '';
     try {
       const pairing = await fetch('/api/v1/pairing', {
         method: 'POST',
@@ -240,7 +259,27 @@ async function loadAccount() {
 
       if (!pairing.ok) {
         const body = await pairing.json().catch(() => ({}));
+        if (pairing.status === 401) {
+          retryable = false;
+          visibleError = 'Oturumun sona erdi. GitHub ile yeniden giriş yapıp bağlantıyı dene.';
+          throw new Error('Oturum sona erdi.');
+        }
+        if (pairing.status === 429) {
+          const retryAfter = pairing.headers.get('retry-after');
+          const seconds = retryAfter !== null && /^[1-9][0-9]{0,3}$/.test(retryAfter)
+            ? Number(retryAfter) : null;
+          const wait = seconds !== null && seconds <= 3600
+            ? `${seconds} saniye bekle.` : 'Biraz bekle.';
+          visibleError = 'Çok fazla bağlantı isteği. ' + wait;
+          throw new Error('İstek sınırına ulaşıldı.');
+        }
+        if (pairing.status === 503) {
+          // Do not echo upstream 503 payloads; preserve a safe retry path.
+          visibleError = 'Bağlantı hizmeti geçici olarak kullanılamıyor. Biraz sonra tekrar dene.';
+          throw new Error('Servis geçici olarak kullanılamıyor.');
+        }
         if (pairing.status === 403) {
+          retryable = false;
           throw new Error(
             body.error === 'DEVICE_LIMIT_REACHED'
               ? 'Bu hesap için cihaz limiti dolu.'
@@ -252,8 +291,8 @@ async function loadAccount() {
 
       const body = await pairing.json();
       if (
-        typeof body.pairingId !== 'string' ||
-        typeof body.token !== 'string'
+        typeof body.pairingId !== 'string' || !body.pairingId.trim() ||
+        typeof body.token !== 'string' || !body.token.trim()
       ) {
         throw new Error('Bağlantı cevabı geçersiz.');
       }
@@ -263,20 +302,21 @@ async function loadAccount() {
       callback.searchParams.set('token', body.token);
       window.location.replace(callback.toString());
     } catch (error) {
-      showError(
-        error instanceof Error ? error.message : String(error),
-        true,
-      );
-      $('status-title').textContent = 'Tekrar deneyebilirsin';
+      const rawMessage = error instanceof Error ? error.message : '';
+      const known = new Set([
+        'Bağlantı hazırlanamadı.', 'Bağlantı cevabı geçersiz.',
+        'Bu hesap için cihaz limiti dolu.', 'Bu cihaz bu hesaba bağlanamadı.',
+      ]);
+      showError(visibleError || (known.has(rawMessage) ? rawMessage : 'Beklenmeyen bağlantı hatası.'), retryable);
+      $('status-title').textContent = retryable ? 'Tekrar deneyebilirsin' : 'Bağlantı durduruldu';
       $('status-text').textContent =
-        'Ayarları değiştirmen gerekmez.';
+        retryable ? 'Ayarları değiştirmen gerekmez.' : 'Hata açıklamasını kontrol et.';
     }
   });
 }
 
-loadAccount().catch((error) => {
-  showError(
-    error instanceof Error ? error.message : String(error),
-    false,
-  );
+loadAccount().catch(() => {
+  $('status-title').textContent = 'Hesap doğrulanamadı';
+  $('status-text').textContent = 'Sayfayı yenilemeden önce bağlantını kontrol et.';
+  showError('Hesap doğrulanamadı. Bağlantıyı kontrol edip yeniden dene.', false);
 });

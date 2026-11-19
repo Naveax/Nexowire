@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>#485 / #539 — dar ekran ölçüm fikstürü</title>
+  <link rel="stylesheet" href="../../../web/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><strong>Nexowire</strong></div>
+    <div class="topbar-right"><span class="pill" role="status">UNKNOWN — BAĞLANTI_DOGRULANMADI_🖥️🧪_999999999999999999999999999999999999999</span></div>
+  </header>
+  <main class="shell connect-shell">
+    <section class="card connect-card" aria-label="Eşleştirme belirsizliği">
+      <div class="connect-title-row">
+        <h2>Bağlantı sonucu henüz doğrulanmadı</h2>
+        <span class="pill">UNKNOWN</span>
+      </div>
+      <strong id="device-name">İŞİİŞİ-🖥️-ÖZEL_CİHAZ_ADI_😀😀😀_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA</strong>
+      <div class="connect-copy" role="status" aria-live="polite" aria-atomic="true">
+        <h2 id="status-title">UNKNOWN — Başarı kanıtı yok</h2>
+        <p id="status-text" class="subtle">UNKNOWN: https://invalid.example.test/uzun-adres/ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ</p>
+      </div>
+      <button id="retry" class="primary">Tekrar dene</button>
+    </section>
+    <section class="error-panel" id="error-panel" role="alert">
+      <h2>Hata bilgisi</h2>
+      <p id="error-message">Geri dönüş doğrulanmadı: https://invalid.example.test/operation/ÇOK_UZUN_İŞLEM_KİMLİĞİ_9999999999999999999999999999999999999999999999999999</p>
+      <div class="error-actions" role="group" aria-label="Kurtarma eylemleri">
+        <button id="retry-error" class="secondary">Bağlantıyı yeniden deneyerek kurtarma işlemini başlat</button>
+        <a id="support-action" class="secondary" href="#measurement-output">Destek ve işlem kanıtlarını incele</a>
+      </div>
+    </section>
+    <section class="device-list" id="devices" aria-label="Cihazlar">
+      <article class="device"><div class="device-header"><span class="device-name">🖥️ Kullanıcı cihazı</span><span class="status">UNKNOWN — operasyon sonucu bekleniyor</span></div></article>
+      <article class="device"><span class="device-name">Çok uzun hata tanımı</span></article>
+    </section>
+    <section class="utility-grid"><div class="utility-panel">Tanılama</div><div class="utility-panel">Yardım</div></section>
+    <pre id="measurement-output" role="status" aria-live="polite"></pre>
+  </main>
+  <script>
+    (() => {
+      const identifiers = ['device-name', 'status-title', 'status-text', 'error-message', 'retry', 'retry-error', 'support-action'];
+      const visible = (el) => {
+        const style = getComputedStyle(el);
+        const rect = el.getBoundingClientRect();
+        return style.display !== 'none' && style.visibility !== 'hidden' &&
+          Number(style.opacity) > 0 && rect.width > 0 && rect.height > 0;
+      };
+      function measure() {
+        const elements = identifiers.map((id) => document.getElementById(id));
+        const overflow = elements.filter((el) => el.scrollWidth > el.clientWidth + 1)
+          .map((el) => el.id);
+        const status = document.getElementById('status-text');
+        const title = document.getElementById('status-title');
+        const recovery = ['retry-error', 'support-action'].map((id) => document.getElementById(id));
+        const offscreenRecoveryIds = recovery.filter((el) => {
+          const rect = el.getBoundingClientRect();
+          return rect.left < 0 || rect.right > innerWidth || !visible(el);
+        }).map((el) => el.id);
+        const result = {
+          viewport: innerWidth,
+          documentScrollWidth: document.documentElement.scrollWidth,
+          horizontalPageOverflow: document.documentElement.scrollWidth > innerWidth + 1,
+          overflowIds: overflow,
+          offscreenRecoveryIds,
+          recoveryActionsVisible: offscreenRecoveryIds.length === 0,
+          unknownVisible: visible(status) && visible(title) &&
+            status.textContent.includes('UNKNOWN') && title.textContent.includes('UNKNOWN') &&
+            !title.textContent.includes('Başarılı'),
+          focusTarget: document.activeElement?.id || null,
+          forcedColors: matchMedia('(forced-colors: active)').matches,
+          reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
+          deviceNameWrap: getComputedStyle(document.getElementById('device-name')).overflowWrap,
+        };
+        window.__nexowireK02ViewportEvidence = result;
+        document.getElementById('measurement-output').textContent = JSON.stringify(result, null, 2);
+        return result;
+      }
+      window.nexowireK02Measure = measure;
+      addEventListener('load', measure);
+      addEventListener('resize', measure);
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,309 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - name: Verify delegated batch-2 offline MJS and TS negative QA
+        # npm test discovers .test.ts only. These source MJS checks must execute,
+        # rather than counting a green CI that never ran them.
+        run: >-
+          node --test --import tsx --test-concurrency=1
+          scripts/delegated/versions-k09/version-reference-report.test.mjs
+          test/delegated/html-meta-k05/check-meta.test.mjs
+          test/delegated/pool-k02/suspicious-mcp-url.test.mjs
+          test/delegated/pool-k04/probe-runner.test.mjs
+          test/delegated/pool-k20/github-pagination-audit.test.mjs
+          test/delegated/k19/file-transfer-copy-reference.test.ts
+          test/delegated/k19/file-transfer-user-contract.test.ts
+      - name: Verify delegated batch-3 offline accessibility and MCP error QA
+        # npm test excludes .mjs. A green process exit with TODO cases is not a pass.
+        shell: bash
+        run: |
+          node --test --test-reporter=tap --import tsx --test-concurrency=1 \
+            test/delegated/k05/audit-html.test.mjs \
+            test/delegated/k05/dynamic-id-contract.test.mjs \
+            test/delegated/pool-k05/touch-evidence.test.mjs \
+            test/delegated/mcp-ux-k08/mcp-error-language.test.mjs \
+            > "$RUNNER_TEMP/nw-batch3.tap"
+          cat "$RUNNER_TEMP/nw-batch3.tap"
+          grep -qx '# tests 37' "$RUNNER_TEMP/nw-batch3.tap"
+          grep -qx '# pass 37' "$RUNNER_TEMP/nw-batch3.tap"
+          grep -qx '# fail 0' "$RUNNER_TEMP/nw-batch3.tap"
+          grep -qx '# skipped 0' "$RUNNER_TEMP/nw-batch3.tap"
+          grep -qx '# todo 0' "$RUNNER_TEMP/nw-batch3.tap"
+      - name: Verify delegated K20 evidence audits and safe URL offline QA
+        # npm test excludes .mjs; require a real TAP run with zero TODO/SKIP.
+        shell: bash
+        run: |
+          node --test --test-reporter=tap --import tsx --test-concurrency=1 \
+            test/delegated/k20/*.test.mjs \
+            test/delegated/pool-k07/safe-url-language.test.mjs \
+            > "$RUNNER_TEMP/nw-k20-qa.tap"
+          cat "$RUNNER_TEMP/nw-k20-qa.tap"
+          grep -qx '# tests 41' "$RUNNER_TEMP/nw-k20-qa.tap"
+          grep -qx '# pass 41' "$RUNNER_TEMP/nw-k20-qa.tap"
+          grep -qx '# fail 0' "$RUNNER_TEMP/nw-k20-qa.tap"
+          grep -qx '# skipped 0' "$RUNNER_TEMP/nw-k20-qa.tap"
+          grep -qx '# todo 0' "$RUNNER_TEMP/nw-k20-qa.tap"
+      - name: Verify delegated K14 offline PR and integration audit QA
+        # npm test excludes .mjs. Require explicit TAP with zero skipped/TODO.
+        shell: bash
+        run: |
+          node --test --test-reporter=tap --import tsx --test-concurrency=1 \
+            scripts/delegated/k14/integration-report.test.mjs \
+            scripts/delegated/k14/pr-overlap.test.mjs \
+            scripts/delegated/pool-k14/pr-kind.test.mjs \
+            scripts/delegated/pr-summary-k14/pr-summary.test.mjs \
+            > "$RUNNER_TEMP/nw-k14-audit.tap"
+          cat "$RUNNER_TEMP/nw-k14-audit.tap"
+          grep -qx '# tests 32' "$RUNNER_TEMP/nw-k14-audit.tap"
+          grep -qx '# pass 32' "$RUNNER_TEMP/nw-k14-audit.tap"
+          grep -qx '# fail 0' "$RUNNER_TEMP/nw-k14-audit.tap"
+          grep -qx '# skipped 0' "$RUNNER_TEMP/nw-k14-audit.tap"
+          grep -qx '# todo 0' "$RUNNER_TEMP/nw-k14-audit.tap"
+      - name: Verify K10 offline web shell and QA24 integration DAG
+        # npm test excludes .mjs; QA24 historical snapshot does not prove live CORE.
+        shell: bash
+        run: |
+          node --test --test-reporter=tap --import tsx --test-concurrency=1 \
+            test/delegated/k10/offline-web-smoke.test.mjs \
+            test/delegated/pool-k10/browser-evidence-inventory.test.mjs \
+            test/qa-24-integration-dag.test.ts \
+            > "$RUNNER_TEMP/nw-k10-qa24.tap"
+          cat "$RUNNER_TEMP/nw-k10-qa24.tap"
+          grep -qx '# tests 28' "$RUNNER_TEMP/nw-k10-qa24.tap"
+          grep -qx '# pass 28' "$RUNNER_TEMP/nw-k10-qa24.tap"
+          grep -qx '# fail 0' "$RUNNER_TEMP/nw-k10-qa24.tap"
+          grep -qx '# skipped 0' "$RUNNER_TEMP/nw-k10-qa24.tap"
+          grep -qx '# todo 0' "$RUNNER_TEMP/nw-k10-qa24.tap"
+      - name: Verify isolated S5 transport, quota, and offline cost reports
+        # 57 real TS assertions, including negative bounds, stale metrics and UNKNOWN handling.
+        # Local loopback/SQLite + synthetic price fixtures, NOT provider capacity or billing acceptance.
+        shell: bash
+        run: |
+          node --test --test-reporter=tap --import tsx --test-concurrency=1 \
+            test/delegated/k18/s5-report-contract.test.ts \
+            test/delegated/k18/telemetry-fixtures.test.ts \
+            test/delegated/k18/transport-metrics-parser.test.ts \
+            test/delegated/k18/transport-metrics-report.test.ts \
+            test/delegated/k12/loopback-contract.test.ts \
+            test/delegated/k12/loopback-teardown.test.ts \
+            test/delegated/pool-k12/unknown-versus-zero.test.ts \
+            test/delegated/csv-units-k11/s5-csv-locale.test.ts \
+            test/delegated/k11/cost-report.test.ts \
+            test/delegated/k11/s5-cost-acceptance-regressions.test.ts \
+            test/delegated/pool-k11/s5-canonical-units.test.ts \
+            > "$RUNNER_TEMP/nw-s5-qa-k111218.tap"
+          cat "$RUNNER_TEMP/nw-s5-qa-k111218.tap"
+          grep -qx '# tests 57' "$RUNNER_TEMP/nw-s5-qa-k111218.tap"
+          grep -qx '# pass 57' "$RUNNER_TEMP/nw-s5-qa-k111218.tap"
+          grep -qx '# fail 0' "$RUNNER_TEMP/nw-s5-qa-k111218.tap"
+          grep -qx '# skipped 0' "$RUNNER_TEMP/nw-s5-qa-k111218.tap"
+          grep -qx '# todo 0' "$RUNNER_TEMP/nw-s5-qa-k111218.tap"
+      - name: Verify delegated K06 K07 K08 onboarding and MCP docs (32 exact tests)
+        # Nested .mjs docs checks are excluded by npm test; never infer pass without execution.
+        shell: bash
+        run: |
+          node --test --test-reporter=tap --import tsx --test-concurrency=1 \
+            test/delegated/k07/connection-docs.test.mjs \
+            test/delegated/k07/self-host-docs.test.mjs \
+            test/delegated/platform-k07/command-matrix.test.mjs \
+            test/delegated/k08/mcp-doc-contract.test.mjs \
+            test/delegated/k08/mcp-doc-fences-endpoints.test.mjs \
+            test/delegated/k08/mcp-output-language.test.mjs \
+            test/delegated/k06/readme-install-p002.test.mjs \
+            test/delegated/k06/windows-install-docs.test.mjs \
+            > "$RUNNER_TEMP/nw-k060708-docs.tap"
+          cat "$RUNNER_TEMP/nw-k060708-docs.tap"
+          grep -qx '# tests 32' "$RUNNER_TEMP/nw-k060708-docs.tap"
+          grep -qx '# pass 32' "$RUNNER_TEMP/nw-k060708-docs.tap"
+          grep -qx '# fail 0' "$RUNNER_TEMP/nw-k060708-docs.tap"
+          grep -qx '# skipped 0' "$RUNNER_TEMP/nw-k060708-docs.tap"
+          grep -qx '# todo 0' "$RUNNER_TEMP/nw-k060708-docs.tap"
+      - name: Verify coordinator PR dependency and exact-head CI gates
+        run: node --test --import tsx test/qa-v108-integration-gates.test.ts
+      - run: npm run build
+
+  browser-live:
+    runs-on: windows-latest
+    # Fail the entire hosted Windows job if the runner stops reporting progress.
+    # This never turns a timeout into success and keeps all negative tests active.
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Verify recycled WAL and consecutive journal process restarts
+        timeout-minutes: 5
+        run: node --test --import tsx --test-concurrency=1 test/qa-journal-wal-recycle-p11.test.ts test/agent-operation-wal-integrity.test.ts test/agent-journal-restart-regression.test.ts test/agent-journal-owner-incarnation.test.ts test/native-agent-startup-diagnostic.test.ts
+      - name: Verify update startup acknowledgement and data-preserving rollback
+        timeout-minutes: 5
+        run: node --test --import tsx --test-concurrency=1 test/live-update-startup-acceptance.test.ts test/windows-launcher-encoding.test.ts
+      - name: Verify Windows rollback fixture and preflight handoff safety
+        timeout-minutes: 7
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tests = @('test/machine-update-rollback-integrity.test.ts', 'test/broker-handoff-preflight.test.ts')
+          # Both supported Node major versions are pre-cached on the hosted Windows image.
+          # Require the real toolcache binary, do not download or silently skip Node 22.
+          $cacheRoot = Join-Path $env:RUNNER_TOOL_CACHE 'node'
+          $node22 = Get-ChildItem -LiteralPath $cacheRoot -Directory -ErrorAction Stop |
+            Where-Object { $_.Name -match '^22\.' } |
+            Sort-Object { [version]$_.Name } -Descending |
+            Select-Object -First 1
+          if ($null -eq $node22) { throw 'WINDOWS_NODE22_NOT_CACHED' }
+          $node22Exe = Join-Path $node22.FullName 'x64/node.exe'
+          if (-not (Test-Path -LiteralPath $node22Exe -PathType Leaf)) { throw 'WINDOWS_NODE22_EXE_MISSING' }
+          $version22 = & $node22Exe --version
+          if ($LASTEXITCODE -ne 0 -or $version22 -notmatch '^v22\.') { throw 'WINDOWS_NODE22_VERSION_UNVERIFIED' }
+          Write-Host "Windows focused Node 22: $version22"
+          & $node22Exe --test --import tsx --test-concurrency=1 @tests
+          if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_NODE22_FOCUSED_RED' }
+          $version24 = & node --version
+          if ($LASTEXITCODE -ne 0 -or $version24 -notmatch '^v24\.') { throw 'WINDOWS_NODE24_VERSION_UNVERIFIED' }
+          Write-Host "Windows focused Node 24: $version24"
+          & node --test --import tsx --test-concurrency=1 @tests
+          if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_NODE24_FOCUSED_RED' }
+      - name: Verify CORE console admission and local consent cancellation
+        run: node --test --import tsx --test-concurrency=1 test/core-console-enrollment-policy.test.ts test/core-console-admission.test.ts test/core-console-provider.integration.test.ts test/windows-core-console-native.test.ts test/windows-console-grant.test.ts test/privileged-broker-lifecycle.test.ts
+      - name: Compile native Windows Job guardian
+        shell: pwsh
+        run: ./scripts/build-windows-job-owner.ps1
+      - name: Verify disposable Windows WAL namespace kernel identity
+        shell: pwsh
+        run: ./scripts/coord-build-wal-namespace-probe.ps1
+      - name: Physical Windows Job Object regressions
+        run: node --test --import tsx --test-concurrency=1 test/windows-job-owner.test.ts test/windows-job-capacity-128.test.ts test/process-manager-tree-cleanup.test.ts test/process-manager.test.ts
+      - name: Verify AI-09 Windows Agent guardian receipt retention
+        # Exercises the Win32-only mocked OS readback cases; no real Task or process mutation.
+        timeout-minutes: 7
+        run: node --test --import tsx --test-concurrency=1 test/native-agent-task-job-ownership.test.ts
+      - name: Verify Windows native-agent singleton lease on a real runner
+        run: node --test --import tsx test/native-agent-singleton.test.ts
+      - name: Verify Windows DPAPI and pre-logon Hub contracts
+        timeout-minutes: 15
+        run: node --test --import tsx --test-concurrency=1 test/windows-dpapi-secret.test.ts test/protected-secret-files.test.ts test/hub-lifecycle.test.ts
+      - name: Verify structured Windows controls
+        run: node --test --import tsx test/windows-control.test.ts
+        env:
+          NEXOWIRE_LIVE_WINDOWS_SERVICE_TEST: "1"
+      - name: Verify Windows environment controls
+        run: node --test --import tsx test/windows-environment.test.ts
+      - name: Verify browser lockfile ownership and bounded Windows cleanup
+        run: node --test --import tsx test/browser-session-cleanup.test.ts
+      - run: node --test --import tsx test/browser-live.test.ts
+      - name: Verify private file-picker adversarial boundaries
+        run: node --test --import tsx test/private-desktop-adversarial-acceptance.test.ts
+      - name: Verify private worker fails closed outside NexowirePrivate
+        run: node --test --import tsx test/private-worker-desktop-attestation.test.ts
+      - name: Verify one-shot private shell worker denies owner Default desktop
+        run: node --test --import tsx test/private-shell-oneshot-desktop-gate.test.ts
+      - run: node --test --import tsx test/durable-process.test.ts
+      - name: Verify independent cross-project negative acceptance gates
+        run: node --test --import tsx test/qa-final-acceptance-negative.test.ts test/qa-agent-journal-negative.test.ts test/qa-shell-outcome-negative.test.ts test/qa-artifact-integrity-negative.test.ts test/qa-pr-intake-negative.test.ts
+
+  linux-native-live:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: node --test --import tsx test/linux-native-agent-live.test.ts
+        env:
+          NEXOWIRE_LIVE_LINUX_AGENT_TEST: "1"
+      - run: node --test --import tsx test/relay-native-agent-live.test.ts
+        env:
+          NEXOWIRE_LIVE_RELAY_AGENT_TEST: "1"
+
+  wsl2-live:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install real Ubuntu WSL2 distro
+        uses: Vampire/setup-wsl@d1da7f2c0322a5ee4f24975344f67fc0f5baf364
+        with:
+          distribution: Ubuntu-24.04
+          wsl-version: 2
+          use-cache: "true"
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Verify Nexowire wsl.exec against real WSL2
+        run: node --test --import tsx test/wsl-live.test.ts
+        env:
+          NEXOWIRE_LIVE_WSL_TEST: "1"
+          NEXOWIRE_WSL_TEST_DISTRO: Ubuntu-24.04
+
+  security-operational-live:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Verify HTTPS OIDC scopes and live credential revocation
+        run: node --test --import tsx test/security-operational-live.test.ts
+        env:
+          NEXOWIRE_LIVE_SECURITY_TEST: "1"
+
+  macos-agent-lifecycle-live:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Verify first-party LaunchAgent lifecycle
+        run: node --test --import tsx test/native-agent-lifecycle.test.ts test/macos-agent-lifecycle-live.test.ts
+        env:
+          NEXOWIRE_LIVE_MACOS_AGENT_LIFECYCLE_TEST: "1"
+      - name: Verify real macOS native-agent core capabilities
+        run: node --test --import tsx test/macos-native-agent-live.test.ts
+        env:
+          NEXOWIRE_LIVE_MACOS_AGENT_TEST: "1"
+      - name: Verify real Keychain stdin write lifecycle
+        run: node --test --import tsx test/platform-secret-store.test.ts test/macos-keychain-live.test.ts
+        env:
+          NEXOWIRE_LIVE_MACOS_KEYCHAIN_TEST: "1"

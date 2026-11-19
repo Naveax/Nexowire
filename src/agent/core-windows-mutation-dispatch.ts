@@ -24,6 +24,8 @@ interface ActiveEffect {
   capability: string;
   fingerprint: string;
   active: boolean;
+  /** Set only by the explicitly locally enrolled Broker execution path. */
+  localBroker?: boolean;
 }
 const activeEffect = new AsyncLocalStorage<ActiveEffect>();
 
@@ -176,11 +178,36 @@ export function assertCoreWindowsMutationAdmission(
 ):void{
   if(privilegeRequirement(capability,input)!=='elevated')return;
   const state=activeEffect.getStore();
-  if(!CORE_EXECUTOR_DISPATCH_ENABLED||
-     !state?.active||state.capability!==capability||
-     state.fingerprint!==coreWindowsEffectFingerprint(capability,input)){
+  if(!state?.active||state.capability!==capability)
     deny('CORE_DISPATCH_EXTERNAL_ADMISSION_REQUIRED');
-  }
+  // Native Windows executors can validate/canonicalize the input before
+  // invoking this guard. The local Broker scope uses the frozen source bytes
+  // and a separate per-request owner admission, not a parser-level hash.
+  if(state.localBroker===true)return;
+  if(!CORE_EXECUTOR_DISPATCH_ENABLED||
+     state.fingerprint!==coreWindowsEffectFingerprint(capability,input))
+    deny('CORE_DISPATCH_EXTERNAL_ADMISSION_REQUIRED');
+}
+
+/**
+ * Scope one authorized local-owner Broker callback. The HTTP boundary MUST
+ * authenticate the caller, verify an ACTIVE_LOCAL_OWNER grant, reserve the
+ * stable operation UUID durably, and re-probe the high-integrity token before
+ * entering this scope. This function neither authorizes a caller nor grants
+ * privileges. It only lets the already-elevated Broker reach its OS executor.
+ * The independent external dispatch path remains fail-closed by default.
+ */
+export async function executeLocallyEnrolledBrokerEffect<T>(
+  capability:string,input:unknown,
+  run:(frozenInput:unknown)=>Promise<T>,
+):Promise<T>{
+  if(process.platform!=='win32'||privilegeRequirement(capability,input)!=='elevated')
+    deny('CORE_LOCAL_BROKER_EFFECT_NOT_ELIGIBLE');
+  const prepared=prepareCoreWindowsMutation(capability,input);
+  const state:ActiveEffect={capability:prepared.capability,
+    fingerprint:prepared.fingerprint,active:true,localBroker:true};
+  try{return await activeEffect.run(state,()=>run(prepared.input));}
+  finally{state.active=false;}
 }
 
 /**
