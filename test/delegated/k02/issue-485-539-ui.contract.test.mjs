@@ -113,6 +113,24 @@ test('long operation ID, Unicode device name and URL have separate wrap guards',
   assert.notEqual(value(broken, '.device-header .status', 'overflow-wrap', 375), 'anywhere');
 });
 
+// #539 mobile overflow: a 621px viewport is just above the old 620px
+// status-wrap breakpoint. An unbroken status/UNKNOWN token must not force
+// the flex status rail to max-content width. The real browser must still be
+// checked separately; this is a targeted source contract on the owner CSS.
+test('621/768px device status can shrink and wrap unbroken Unicode text', { skip }, () => {
+  for (const width of [621, 768]) {
+    const declaration = (property) =>
+      value(rules, '.device-header .status', property, width) ??
+      value(rules, '.status', property, width);
+    assert.equal(declaration('white-space'), 'normal',
+      `${width}px status cannot retain nowrap above the 620px breakpoint`);
+    assert.equal(declaration('overflow-wrap'), 'anywhere',
+      `${width}px unbroken status must be allowed to wrap`);
+    assert.notEqual(declaration('flex'), 'none',
+      `${width}px status must not force a non-shrinking flex rail`);
+  }
+});
+
 test('high-contrast keyboard focus uses a forced-color system outline', { skip }, () => {
   for (const selector of ['button:focus-visible', 'select:focus-visible',
     'textarea:focus-visible', '.bridge-toggle:focus-visible']) {
