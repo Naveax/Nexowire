@@ -80,7 +80,7 @@ export const REVIEWED_ROOT_GIT_BLOBS = Object.freeze({
   'test/scale-s5-durable-object-cost.test.ts':'b483dddfb16d683fed0b5fa898ce446bcf992618',
   'test/scale-s5-chunk-receipt-audit.test.ts':'1b70d6bc7112d2e21c2ebdf165a237a68fe51848',
   'test/scale-transport-metrics.test.ts':'7a5cf2d1fac5cdff68f33367bef682edb972c092',
-  'test/scale-s5-provider-meter-evidence.test.ts':'4950286aea128fa34aa279dfc2cd17a12e190297',
+  'test/scale-s5-provider-meter-evidence.test.ts':'995e600846f2d314cedb1bdb571220b13c98868f',
   'test/security-tokens.test.ts':'92ea5c61df1c707f2970e1305a34b56d5cf7b8e0',
   'test/scale-s5-staging-acceptance.test.ts':'b381c0cc734d7a29f650bf922beb168074817e3d',
   'test/core-elevation-effective-truth-matrix.test.ts':'09d970538d6ce22b20edb25c9da1fcbed8929c4c',

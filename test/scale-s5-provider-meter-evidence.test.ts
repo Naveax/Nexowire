@@ -53,3 +53,36 @@ test('Cross resource, backwards clock, decreasing and invalid meter counters fai
   assert.throws(()=>compareS5CloudflareWindows(a,b,-1));
   assert.throws(()=>compareS5CloudflareWindows(a,b,1.5));
 });
+
+test('rejects calendar-normalized provider timestamps instead of silently moving the sampling window',()=>{
+  const before=start();
+  const valid={
+    ...before,capturedAtUtc:'2026-10-19T10:00:00.123Z',
+  };
+  const later={
+    ...valid,capturedAtUtc:'2026-10-19T10:00:10.123Z',
+    workerRequests:1010,
+  };
+  assert.equal(compareS5CloudflareWindows(valid,later,10).intervalSeconds,10);
+  const base={
+    ...before,capturedAtUtc:'2026-02-28T10:00:00Z',
+  };
+  for(const invalid of [
+    '2026-02-30T10:00:00Z',
+    '2026-04-31T10:00:00Z',
+    '2025-02-29T10:00:00.123Z',
+    '2026-11-20T24:00:00Z',
+  ]){
+    assert.throws(
+      ()=>compareS5CloudflareWindows(base,{...base,capturedAtUtc:invalid},1),
+      /Invalid UTC timestamp/,
+    );
+  }
+  const leap={
+    ...before,capturedAtUtc:'2024-02-29T10:00:00Z',
+  };
+  const leapLater={
+    ...leap,capturedAtUtc:'2024-02-29T10:00:01Z',
+  };
+  assert.equal(compareS5CloudflareWindows(leap,leapLater,1).intervalSeconds,1);
+});
