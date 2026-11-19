@@ -484,17 +484,21 @@ test('W-423 OPEN NEGATIVE: JSON-null HTTP 403 must retain terminal denial messag
     'JSON null must be treated as a generic permission denial, not a caught TypeError');
 });
 
-test('W-423 #539: in-memory null-safe 403 denial preserves known quota behavior', {
+test('W-423 #539: 403 null guard or owner fix preserves quota denial', {
   skip: !ownerSourcePortedUx && 'requires #1160 integration source for terminal 403 semantics',
 }, async () => {
   const null403 = async () => Response.json(null, { status: 403 });
   const baseline = await boot({ query: search(), pairing: null403 });
   await baseline.get('approve').dispatch('click');
-  assert.equal(baseline.get('error-message').textContent, 'Beklenmeyen bağlantı hatası.',
-    'owner source must reproduce the existing null-body fallback first');
+  const originalMessage = baseline.get('error-message').textContent;
+  assert.ok(['Beklenmeyen bağlantı hatası.', 'Bu cihaz bu hesaba bağlanamadı.'].includes(originalMessage),
+    'owner 403 semantics changed: inspect actual denial instead of assuming the old RED');
   assert.equal(baseline.get('approve').disabled, true);
-  const proposed = candidateSource("body.error === 'DEVICE_LIMIT_REACHED'",
-    "body?.error === 'DEVICE_LIMIT_REACHED'");
+  // Never force a stale RED after owner repairs the source.
+  const proposed = originalMessage === 'Beklenmeyen bağlantı hatası.'
+    ? candidateSource("body.error === 'DEVICE_LIMIT_REACHED'",
+      "body?.error === 'DEVICE_LIMIT_REACHED'")
+    : script;
   const corrected = await boot({ query: search(), pairing: null403, source: proposed });
   await corrected.get('approve').dispatch('click');
   assert.equal(corrected.get('error-message').textContent, 'Bu cihaz bu hesaba bağlanamadı.');
@@ -521,17 +525,22 @@ test('W-423 OPEN NEGATIVE: JSON-null HTTP 200 must show malformed pairing respon
     'JSON null must be classified as malformed pairing data, not an unexpected TypeError');
 });
 
-test('W-423 #485: in-memory null-safe 200 keeps valid pairing success', {
+test('W-423 #485: 200 null guard or owner fix preserves valid pairing', {
   skip: !ownerSourcePortedUx && 'requires current owner #1160 source shape',
 }, async () => {
   const null200 = async () => Response.json(null, { status: 200 });
   const baseline = await boot({ query: search(), pairing: null200 });
   await baseline.get('approve').dispatch('click');
-  assert.equal(baseline.get('error-message').textContent, 'Beklenmeyen bağlantı hatası.');
-  const proposed = candidateSource(
-    "typeof body.pairingId !== 'string' || !body.pairingId.trim() ||",
-    "!body || typeof body.pairingId !== 'string' || !body.pairingId.trim() ||",
-  );
+  const originalMessage = baseline.get('error-message').textContent;
+  assert.ok(['Beklenmeyen bağlantı hatası.', 'Bağlantı cevabı geçersiz.'].includes(originalMessage),
+    'owner 200 semantics changed: inspect malformed response instead of assuming the old RED');
+  // Once the actual owner source is repaired, test the real guard, not a duplicate patch.
+  const proposed = originalMessage === 'Beklenmeyen bağlantı hatası.'
+    ? candidateSource(
+      "typeof body.pairingId !== 'string' || !body.pairingId.trim() ||",
+      "!body || typeof body.pairingId !== 'string' || !body.pairingId.trim() ||",
+    )
+    : script;
   const corrected = await boot({ query: search(), pairing: null200, source: proposed });
   await corrected.get('approve').dispatch('click');
   assert.equal(corrected.navigations.length, 0);
