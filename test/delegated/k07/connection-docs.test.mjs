@@ -28,6 +28,15 @@ function slug(title) {
     .trim().replace(/\s+/g, '-');
 }
 
+function contradictorySystemIdentityClaims(markdown) {
+  const plain = markdown.replace(/`/g, '');
+  const checks = [
+    /\bCurrentUser DPAPI\s+(?:is|becomes)\s+(?:equivalent to|identical to|interchangeable with|the same as)\s+LocalMachine DPAPI\b/i,
+    /\b(?:nexowire\s+)?node bootstrap\s+(?:automatically\s+)?(?:migrates?|installs?|converts?)\s+(?:the\s+)?(?:Hub\s+to\s+)?SYSTEM(?:\s+Hub)?\b/i,
+  ];
+  return checks.filter((check) => check.test(plain)).map((check) => check.source);
+}
+
 test('hosted OAuth, local loopback and self-host Funnel are distinct URL families', async () => {
   const doc = await read('docs/SELF_HOST.md');
   const table = section(doc, '## Choose the right address (do not guess an endpoint)');
@@ -92,6 +101,20 @@ test('platform descriptions do not present unverified Linux/macOS as Windows boo
   ]) assert.ok(identityBoundary.includes(term), `Missing SYSTEM identity boundary: ${term}`);
   assert.match(identityBoundary, /Do not run this same-user bootstrap under SYSTEM/);
   assert.match(identityBoundary, /not.*completion evidence/);
+  assert.deepEqual(contradictorySystemIdentityClaims(identityBoundary), []);
+  const misleading = [
+    'CurrentUser DPAPI is equivalent to LocalMachine DPAPI.',
+    'CurrentUser DPAPI is interchangeable with LocalMachine DPAPI.',
+    'nexowire node bootstrap automatically migrates the Hub to SYSTEM.',
+    'node bootstrap installs the SYSTEM Hub.',
+  ];
+  for (const claim of misleading) {
+    assert.notDeepEqual(contradictorySystemIdentityClaims(identityBoundary + '\n' + claim), [],
+      `Unsafe cross-identity statement accepted: ${claim}`);
+  }
+  assert.deepEqual(contradictorySystemIdentityClaims(
+    'Do not run this same-user bootstrap under SYSTEM, copy CurrentUser DPAPI files to ProgramData.'), []);
+
 
   const firstRun = section(doc, '## One-command Windows bootstrap (changes local state)');
   const commands = [...firstRun.matchAll(/^nexowire node bootstrap[^\n]+$/gm)].map((m) => m[0]);
