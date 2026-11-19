@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { redactDiagnosticText } from '../../../src/protocol/error-contract-v2.ts';
 
 // Dependency-free/source-only: no live Hub, Agent, provider, protected console or secrets.
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -87,4 +88,27 @@ test('negative: removing source-of-truth and no-replay warnings fails our accept
   checkCopy(diagnostic);
   assert.throws(() => checkCopy(diagnostic.replace('**not** proof', 'proof')));
   assert.throws(() => checkCopy(diagnostic.replace('auto-replay after a timeout', 'immediately retry')));
+});
+
+test('W-573 RED: streamable MCP HTTP 500 error envelope must not expose synthetic Bearer text', () => {
+  const http = read('src/mcp/http.ts');
+  // Execute ONLY the source-owned catch response body, not the router or transport.
+  // No real network, auth token, Hub, provider or MCP invocation.
+  const match = http.match(/catch \(error\) \{\s*if \(!res\.headersSent\) \{([\s\S]*?)\n\s{6}\}\n\s{4}\}\n\s{2}\}\);/);
+  assert.ok(match, 'MCP streamable HTTP 500 response path must be available for review');
+  const fake = 'NW_FAKE_TEST_BEARER_0123456789';
+  const res = {
+    headersSent: false,
+    statusCode: 0,
+    body: null,
+    status(code) { this.statusCode = code; return this; },
+    json(body) { this.body = body; return this; },
+  };
+  // Provide the real redactor if the owner updates the catch handler to call it.
+  const handle = new Function('res', 'error', 'redactDiagnosticText', match[1]);
+  handle(res, new Error(`Bearer ${fake}`), redactDiagnosticText);
+  assert.equal(res.statusCode, 500);
+  assert.equal(res.body?.error?.code, -32603);
+  assert.doesNotMatch(JSON.stringify(res.body), new RegExp(fake),
+    'An MCP HTTP 500 response must never echo the synthetic bearer value');
 });
