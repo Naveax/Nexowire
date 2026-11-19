@@ -4,6 +4,8 @@
  * Windows actions. This is not coverage of the full tracked test inventory.
  */
 import {spawnSync} from 'node:child_process';
+import {createHash} from 'node:crypto';
+import {lstatSync,readFileSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {readTestInventory} from './test-inventory.mjs';
@@ -121,22 +123,47 @@ export function assertReviewedRootGitBlobs(entries) {
 }
 
 /**
+ * The reviewed Git tree must also match bytes on disk. An index/HEAD match
+ * alone does not attest a checkout after a concurrent modification.
+ */
+export function assertReviewedRootWorktreeBytes(file,bytes) {
+  if(!APPROVED_ROOT_TEST_FILES.includes(file))deny('FILE_NOT_APPROVED');
+  if(!Buffer.isBuffer(bytes))deny('WORKTREE_BYTES_REQUIRED');
+  const actual=createHash('sha1').update('blob '+bytes.length+'\0').update(bytes).digest('hex');
+  if(actual!==REVIEWED_ROOT_GIT_BLOBS[file])deny('WORKTREE_BLOB_CHANGED');
+}
+
+function assertOnDiskApprovedSource(repoRoot,file,readBytes) {
+  const abs=path.resolve(repoRoot,...file.split('/'));
+  const stat=lstatSync(abs);
+  if(!stat.isFile()||stat.isSymbolicLink())deny('WORKTREE_NOT_REGULAR');
+  assertReviewedRootWorktreeBytes(file,readBytes(abs));
+}
+
+/**
  * The runner injection exists for isolated negative unit tests. Production CLI
  * always calls the real Node spawnSync and emits a receipt only after all files
  * exit zero with full zero-SKIP TAP footer acceptance.
  */
-export function createPortableRootReceipt(repoRoot, runner=spawnSync, expectedCommitSha=null) {
+export function createPortableRootReceipt(repoRoot, runner=spawnSync, expectedCommitSha=null, readBytes=readFileSync) {
   const {entries,report}=readTestInventory(repoRoot);
   if(expectedCommitSha!==null) assertExpectedCommit(report.commitSha,expectedCommitSha);
   // Fail BEFORE the first child process if any approved file changed since
   // its explicit source review. A filename allowlist alone is insufficient.
   assertReviewedRootGitBlobs(entries);
   const known=new Map(entries.map(entry=>[entry.path,entry]));
+  // Check all approved on-disk sources before the first subprocess; also
+  // check again immediately before each individual test launches.
+  for(const file of APPROVED_ROOT_TEST_FILES){
+    if(!known.has(file))deny('SOURCE_ALLOWLIST_NOT_TRACKED');
+    assertOnDiskApprovedSource(repoRoot,file,readBytes);
+  }
   const files=[];
   let testsPassed=0;
   for(const file of APPROVED_ROOT_TEST_FILES) {
     if(!/^test\/[^/]+\.test\.ts$/.test(file) || !known.has(file))
       deny('SOURCE_ALLOWLIST_NOT_TRACKED');
+    assertOnDiskApprovedSource(repoRoot,file,readBytes);
     const args=commandForApprovedRootFile(file);
     const execution=runner(process.execPath,args,{
       cwd:repoRoot,encoding:'utf8',windowsHide:true,

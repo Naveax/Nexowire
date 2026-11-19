@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
-import {mkdirSync,mkdtempSync,writeFileSync,rmSync} from 'node:fs';
+import {mkdirSync,mkdtempSync,writeFileSync,rmSync,readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
-import {APPROVED_ROOT_TEST_FILES,REVIEWED_ROOT_GIT_BLOBS,assertReviewedRootGitBlobs,assertExpectedCommit,commandForApprovedRootFile,createPortableRootReceipt}
+import {APPROVED_ROOT_TEST_FILES,REVIEWED_ROOT_GIT_BLOBS,assertReviewedRootGitBlobs,assertReviewedRootWorktreeBytes,assertExpectedCommit,commandForApprovedRootFile,createPortableRootReceipt}
   from '../../scripts/ci/portable-root-execution-receipt.mjs';
 import {readTestInventory} from '../../scripts/ci/test-inventory.mjs';
 
@@ -129,6 +129,35 @@ test('only successful exact-file TAP subprocesses produce a source-bound receipt
   assert.equal(receipt.physicalWindowsAcceptance,'NOT_INFERRED');
   assert.deepEqual(receipt.files.map(f=>f.path),EXPECTED);
   assert.ok(receipt.files.every(f=>/^[a-f0-9]{40}$/.test(f.gitBlobSha)));
+});
+
+test('actual checkout bytes are hash-attested before the first test process',()=>{
+  const first=APPROVED_ROOT_TEST_FILES[0];
+  const absolute=path.resolve(root,...first.split('/'));
+  assert.doesNotThrow(()=>assertReviewedRootWorktreeBytes(first,readFileSync(absolute)));
+  assert.throws(()=>assertReviewedRootWorktreeBytes(first,Buffer.from('unreviewed on-disk replacement')),
+    /PORTABLE_ROOT_RECEIPT_WORKTREE_BLOB_CHANGED/);
+  assert.throws(()=>assertReviewedRootWorktreeBytes(first,'not raw bytes'),
+    /PORTABLE_ROOT_RECEIPT_WORKTREE_BYTES_REQUIRED/);
+  let processes=0;
+  assert.throws(()=>createPortableRootReceipt(root,()=>{
+    processes++;
+    return {status:0,stdout:PASS_TAP,stderr:''};
+  },null,file=>file===absolute?Buffer.from('unreviewed checkout'):readFileSync(file)),
+    /PORTABLE_ROOT_RECEIPT_WORKTREE_BLOB_CHANGED/);
+  assert.equal(processes,0);
+});
+
+test('per-file reread detects a changed checkout after prior child exits',()=>{
+  const second=path.resolve(root,...APPROVED_ROOT_TEST_FILES[1].split('/'));
+  let processes=0;
+  assert.throws(()=>createPortableRootReceipt(root,()=>{
+    processes++;
+    return {status:0,stdout:PASS_TAP,stderr:''};
+  },null,file=>processes>0&&file===second?
+    Buffer.from('mid-run content changed'):readFileSync(file)),
+  /PORTABLE_ROOT_RECEIPT_WORKTREE_BLOB_CHANGED/);
+  assert.equal(processes,1,'second test must not execute after its source changes');
 });
 
 test('PR SHA expected-head mismatch is rejected before executing any test process',()=>{
