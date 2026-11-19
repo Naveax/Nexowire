@@ -64,7 +64,7 @@ const EXPECTED=Object.freeze({
   'src/ops/scale-s5-resource-reconciliation.ts':'4b6cfc9850ee2a130317b8d030fc35f5772550ab',
   'src/ops/scale-s5-durable-object-cost.ts':'c2e2a897d21cfd2c388213de2437bad345411454',
   'src/ops/scale-s5-chunk-receipt-audit.ts':'e381342b779999026bf0f15e0c8205192c503fa9',
-  'src/ops/scale-transport-metrics.ts':'5a3dc9c36e0dda54d2d448e95e6d2e2f3dcfb828',
+  'src/ops/scale-transport-metrics.ts':'bb79ba0635f862dfb19f92b9d4a461bc185cde48',
   'src/ops/scale-s5-provider-meter-evidence.ts':'ffdcf7e513a3eb58a49d008f4c57c580941c95cb',
   'src/security/tokens.ts':'8587293f920b7910388e432baf2b84239b02c782',
   'src/ops/scale-s5-staging-acceptance.ts':'4b1cc45ad5150bf82e90dd4edff425e85acb605b',
