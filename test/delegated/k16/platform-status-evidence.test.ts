@@ -161,3 +161,19 @@ test("#539 R17 W-671: empty Windows OS identity must not be reported ready", asy
     assert.equal(result.origin, "synthetic_fixture");
   }
 });
+
+test("#539 R17 W-671: empty Linux OS identity must not be reported ready", async () => {
+  // Linux NAME is also parsed as a string, even when the value is empty.
+  // Exit 0 alone must not promote an unusable OS identity to readiness.
+  for (const name of ["", "   "]) {
+    const { result, check } = await diagnose("linux", {
+      ...linux,
+      os: ok('NAME="' + name + '"\nVERSION_ID="24.04"'),
+    });
+    assert.equal(check("os").status, "unknown",
+      "blank Linux NAME must not pass a mandatory OS preflight gate");
+    assert.equal(check("os").code, "INSUFFICIENT_EVIDENCE");
+    assert.equal(result.ready, false);
+    assert.equal(result.origin, "synthetic_fixture");
+  }
+});
