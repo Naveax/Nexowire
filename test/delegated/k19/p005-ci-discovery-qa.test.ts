@@ -53,9 +53,12 @@ function executableRunCommands(yaml: string): string[] {
 }
 
 function explicitlyListedInWorkflow(file: string, yaml: string): boolean {
-  return executableRunCommands(yaml).some(command =>
-    /\bnode\b.*\s--test(?:\s|$)/.test(command) &&
-    command.split(/\s+/).includes(file));
+  return executableRunCommands(yaml).some(command => {
+    const args = command.trim().split(/\s+/);
+    // A printed or quoted example is not an executable Node test command.
+    // Keep this conservative: only direct `node --test` commands count.
+    return args[0] === 'node' && args.includes('--test') && args.includes(file);
+  });
 }
 
 function discovered(file: string, expandedShellArgs: readonly string[], yaml: string): boolean {
@@ -123,4 +126,10 @@ test('green CI and selected source path are separate from per-file hosted execut
   const hostedTestRun = false; // No run/job ID or TAP for this PR's test is supplied by a source scan.
   assert.equal(sourceListed, explicitlyListedInWorkflow(targetFiles[1], workflow));
   assert.equal(hostedTestRun, false);
+});
+
+test('K19: shell echo of node test command must not count as execution', () => {
+  const target = targetFiles[0];
+  const fake = `- run: echo node --test --import tsx ${target}`;
+  assert.equal(explicitlyListedInWorkflow(target, fake), false);
 });
