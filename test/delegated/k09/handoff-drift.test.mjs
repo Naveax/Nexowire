@@ -53,3 +53,11 @@ test('impossible open/merged and malformed merged_at cannot masquerade as merged
   assert.throws(() => reconcileHandoff([{ ...observations[0], mergedAt: '' }]), /Invalid pull request state/);
   assert.throws(() => reconcileHandoff([{ ...observations[0], mergedAt: '2026-02-31T00:00:00Z' }]), /Invalid pull request state/);
 });
+
+test('issue and PR handoff identities must be positive canonical integers', () => {
+  for (const row of [observations[0], observations[1]]) {
+    for (const number of [0, -7]) {
+      assert.throws(() => reconcileHandoff([{ ...row, number }]), /Invalid identity/);
+    }
+  }
+});

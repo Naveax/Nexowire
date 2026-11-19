@@ -30,7 +30,7 @@ export function reconcileHandoff(observationsToAudit) {
     const key = `${row.type}:${row.number}`;
     if (seen.has(key)) throw new Error(`Duplicate handoff identity: ${key}`);
     seen.add(key);
-    if (!['issue', 'pull_request'].includes(row.type) || !Number.isSafeInteger(row.number))
+    if (!['issue', 'pull_request'].includes(row.type) || !Number.isSafeInteger(row.number) || row.number < 1)
       throw new Error(`Invalid identity: ${key}`);
 
     if (row.type === 'issue') {
