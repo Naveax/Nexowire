@@ -49,11 +49,11 @@ test('W-537 fixed-count audit rejects cancelled, missing or unsafe TAP summaries
   assert.equal(auditFixedCountGate({ ...input,
     tap: tap(41).replace('# cancelled 0', '# cancelled 1') }).verdict, 'ASSERTIONS_RED');
   assert.equal(auditFixedCountGate({ ...input,
-    tap: tap(41).replace('# cancelled 0\\n', '') }).verdict, 'UNKNOWN_TAP');
+    tap: tap(41).replace('# cancelled 0\n', '') }).verdict, 'UNKNOWN_TAP');
   assert.equal(auditFixedCountGate({ ...input,
-    tap: `${tap(41)}# cancelled 0\\n` }).verdict, 'UNKNOWN_TAP');
-  const oversized = '# tests 9007199254740993\\n# pass 9007199254740993\\n' +
-    '# fail 0\\n# cancelled 0\\n# skipped 0\\n# todo 0\\n';
+    tap: `${tap(41)}# cancelled 0\n` }).verdict, 'UNKNOWN_TAP');
+  const oversized = '# tests 9007199254740993\n# pass 9007199254740993\n' +
+    '# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n';
   assert.equal(auditFixedCountGate({ ...input, tap: oversized }).verdict, 'UNKNOWN_TAP');
 });
 
