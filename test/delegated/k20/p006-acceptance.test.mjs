@@ -57,7 +57,7 @@ test('W-537 fixed-count audit rejects cancelled, missing or unsafe TAP summaries
   assert.equal(auditFixedCountGate({ ...input, tap: oversized }).verdict, 'UNKNOWN_TAP');
 });
 
-test('W-725: explicit TAP not ok overrides forged green totals for dynamic and fixed gates', () => {
+test('W-695: explicit TAP not ok overrides forged green totals for dynamic and fixed gates', () => {
   const failed = 'TAP version 13\nnot ok 1 - critical assertion failed\n' + tap(1);
   assert.equal(auditDynamicTapSummary(failed).verdict, 'RED_TAP');
   assert.equal(auditFixedCountGate({ ...prior, tap: failed, runId: 42474379692 }).verdict,
