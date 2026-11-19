@@ -18,8 +18,10 @@ export function auditDynamicTapSummary(tap) {
     return [name, all.length === 1 ? Number(all[0][1]) : null];
   }));
   const complete = Object.values(values).every(Number.isSafeInteger);
+  // A contradictory TAP assertion must not be certified by a forged green footer.
+  const failedAssertion = /^[ \t]*not ok[ \t]+\d+(?:[ \t]+-|[ \t]*$)/m.test(normalized);
   return { verdict: !complete ? 'UNTRUSTED_OR_INCOMPLETE_TAP' :
-    values.tests > 0 && values.pass === values.tests && values.fail === 0 &&
+    !failedAssertion && values.tests > 0 && values.pass === values.tests && values.fail === 0 &&
     values.cancelled === 0 && values.skipped === 0 && values.todo === 0 ? 'DYNAMIC_COUNT_VALID' : 'RED_TAP',
   values, ownerAcceptance: false };
 }
@@ -74,7 +76,8 @@ export function auditFixedCountGate({ workflow, tap, expectedFile, head, runHead
     return [key, values.length === 1 ? values[0] : null];
   }));
   const complete = Object.values(summary).every(Number.isSafeInteger);
-  const assertionsGreen = complete && summary.tests > 0 && summary.tests === summary.pass &&
+  const failedAssertion = /^[ \t]*not ok[ \t]+\d+(?:[ \t]+-|[ \t]*$)/m.test(normalized);
+  const assertionsGreen = complete && !failedAssertion && summary.tests > 0 && summary.tests === summary.pass &&
     summary.fail === 0 && summary.cancelled === 0 && summary.skipped === 0 && summary.todo === 0;
   const countDrift = assertionsGreen && pinned.tests.length === 1 && pinned.pass.length === 1 &&
     (pinned.tests[0] !== summary.tests || pinned.pass[0] !== summary.pass);
