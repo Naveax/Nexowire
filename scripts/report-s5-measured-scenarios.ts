@@ -32,11 +32,20 @@ export function summarizeS5ScenarioResults(results:readonly S5LoadResult[]){
     const {p50,p95,p99,max}=r.latencyMs;
     if(!integer(r.clients)||r.clients===0||!integer(r.rpc.attempted)||
       !integer(r.rpc.reserved)||!integer(r.sockets.peak)||
-      !integer(r.rpc.backpressure)||!finite(r.elapsedMs)||
+      !integer(r.rpc.backpressure)||!integer(r.rpc.duplicate)||
+      !integer(r.rpc.rateLimited)||!integer(r.rpc.other)||
+      !finite(r.elapsedMs)||
       !finite(r.memoryBytes.rssPeak)||!finite(r.fairness.jainIndex)||
       ![p50,p95,p99,max].every(finite)||
       p50>p95||p95>p99||p99>max)
       throw new Error('Invalid or non-monotonic scenario measurement');
+    // The load producer partitions every attempted RPC into exactly one
+    // terminal outcome. Never present impossible synthetic acceptance counts
+    // as a measured result. BigInt prevents loss of precision at safe bounds.
+    const accounted=BigInt(r.rpc.reserved)+BigInt(r.rpc.duplicate)+
+      BigInt(r.rpc.rateLimited)+BigInt(r.rpc.backpressure)+BigInt(r.rpc.other);
+    if(accounted!==BigInt(r.rpc.attempted))
+      throw new Error('Unbalanced synthetic RPC outcomes');
     // The fixture records one latency for every completed attempt; a report
     // without attempts cannot prove percentiles, even if it contains zeroes.
     if(r.rpc.attempted===0)throw new Error('Missing latency samples');
