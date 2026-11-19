@@ -33,6 +33,11 @@ test('Windows PowerShell extractor pins the two-argument .NET ZIP API and quotes
   assert.doesNotMatch(command,/Expand-Archive|ExtractToDirectory\([^)]*,[^)]*,/);
 });
 
+test('release workflow executes the native ZIP regression on a Windows runner',()=>{
+  const yaml=readFileSync(fileURLToPath(new URL('../../.github/workflows/release-readiness.yml',import.meta.url)),'utf8');
+  assert.match(yaml,/Verify native Windows PowerShell 5\.1 ZIP extraction compatibility\n\s+if: runner\.os == 'Windows'\n\s+timeout-minutes: 3\n\s+run: node --test --import tsx test\/ci\/windows-node-runtime-extraction\.test\.ts/);
+});
+
 test('real Windows PowerShell 5.1 can extract an isolated disposable ZIP', {
   skip:process.platform!=='win32',
 },()=>{

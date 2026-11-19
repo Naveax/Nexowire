@@ -121,6 +121,10 @@ jobs:
         if: runner.os == 'Windows'
         timeout-minutes: 7
         run: node --test --import tsx --test-concurrency=1 test/hub-boot-hidden-task-visibility.test.ts test/hub-boot-install-task-absence.test.ts test/hub-boot-status-legacy-user.test.ts test/windows-unattended-reboot-readiness.test.ts test/qa-ci-browser-live-timeout.test.ts
+      - name: Verify native Windows PowerShell 5.1 ZIP extraction compatibility
+        if: runner.os == 'Windows'
+        timeout-minutes: 3
+        run: node --test --import tsx test/ci/windows-node-runtime-extraction.test.ts
       - name: Build Windows one-click user bundle
         if: runner.os == 'Windows'
         shell: pwsh
