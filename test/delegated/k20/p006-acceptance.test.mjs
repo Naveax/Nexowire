@@ -57,6 +57,19 @@ test('W-537 fixed-count audit rejects cancelled, missing or unsafe TAP summaries
   assert.equal(auditFixedCountGate({ ...input, tap: oversized }).verdict, 'UNKNOWN_TAP');
 });
 
+test('W-725: explicit TAP not ok overrides forged green totals for dynamic and fixed gates', () => {
+  const failed = 'TAP version 13\nnot ok 1 - critical assertion failed\n' + tap(1);
+  assert.equal(auditDynamicTapSummary(failed).verdict, 'RED_TAP');
+  assert.equal(auditFixedCountGate({ ...prior, tap: failed, runId: 42474379692 }).verdict,
+    'ASSERTIONS_RED');
+  const nested = 'TAP version 13\n    not ok 1 - nested failed assertion\n' + tap(1);
+  assert.equal(auditDynamicTapSummary(nested).verdict, 'RED_TAP');
+  assert.equal(auditFixedCountGate({ ...prior, tap: nested, runId: 42474379692 }).verdict,
+    'ASSERTIONS_RED');
+  assert.equal(auditDynamicTapSummary('TAP version 13\nok 1 - success\n' + tap(1)).verdict,
+    'DYNAMIC_COUNT_VALID');
+});
+
 test('D-117: dynamic owner TAP count survives 41/48/50/52/55 drift while rejecting zero tests', () => {
   for (const n of [41,48,50,52,55]) {
     assert.equal(auditDynamicTapSummary(tap(n)).verdict,'DYNAMIC_COUNT_VALID');
