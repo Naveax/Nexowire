@@ -49,3 +49,11 @@ test('closed issue audit must reject nonpositive and nonnumeric event identities
     assert.throws(() => reconcileOpenIssues({ ...source, modifiedSinceNov7: [forged, updated[1]] }), /Invalid updated issue identity/);
   }
 });
+
+test('future-dated fake issue closure cannot precede the recorded observation date', () => {
+  const forged = { number: 424242, finalState: 'closed', events: [
+    { event: 'closed', at: '2030-02-01T00:00:00Z' },
+  ] };
+  assert.throws(() => reconcileOpenIssues({ ...source, modifiedSinceNov7: [forged], updatedQueryCount: 1 }), /after observation/);
+  assert.throws(() => reconcileOpenIssues({ ...source, observed: '2026-02-31' }), /Invalid observation date/);
+});

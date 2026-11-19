@@ -30,6 +30,14 @@ function isCanonicalUtcTimestamp(value) {
 }
 
 export function reconcileOpenIssues(input = source) {
+  const observationStart = typeof input.observed === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(input.observed)
+    ? Date.parse(`${input.observed}T00:00:00Z`) : NaN;
+  if (!Number.isFinite(observationStart) ||
+      new Date(observationStart).toISOString().slice(0, 10) !== input.observed)
+    throw new Error('Invalid observation date');
+  // A date-only observation permits evidence through that UTC calendar day,
+  // but cannot contain future state transitions.
+  const observationEndExclusive = observationStart + 24 * 60 * 60 * 1000;
   const ids = input.currentOpenIssues;
   if (!Array.isArray(ids) || ids.length !== 22 || new Set(ids).size !== ids.length ||
       ids.some((n) => !Number.isSafeInteger(n) || n < 1))
@@ -51,6 +59,8 @@ export function reconcileOpenIssues(input = source) {
       if (!['closed', 'reopened'].includes(event.event) ||
           !isCanonicalUtcTimestamp(event.at) || event.at <= last)
         throw new Error(`Invalid state event for issue #${row.number}`);
+      if (Date.parse(event.at) >= observationEndExclusive)
+        throw new Error(`Issue #${row.number} state event is after observation date`);
       const expected = state === 'open' ? 'closed' : 'reopened';
       if (event.event !== expected) throw new Error(`Non-alternating state transition for issue #${row.number}`);
       state = event.event === 'closed' ? 'closed' : 'open';
