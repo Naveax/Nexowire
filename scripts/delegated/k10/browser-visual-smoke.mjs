@@ -31,6 +31,8 @@ export function inspectPng(pathOrBytes, width, height) {
   let dimensions = null;
   let channels = 0;
   let sawIend = false;
+  let sawIdat = false;
+  let idatClosed = false;
   const compressed = [];
   while (offset + 12 <= data.length) {
     const length = data.readUInt32BE(offset);
@@ -40,6 +42,12 @@ export function inspectPng(pathOrBytes, width, height) {
     const expectedCrc = data.readUInt32BE(next - 4);
     if (crc32(data, offset + 4, next - 4) !== expectedCrc) return { status: 'FAIL', reason: `invalid ${type} CRC` };
     if (dimensions === null && type !== 'IHDR') return { status: 'FAIL', reason: 'IHDR must be first' };
+    if (!/^[A-Za-z]{4}$/.test(type)) return { status: 'FAIL', reason: 'invalid PNG chunk type' };
+    if (/^[A-Z]/.test(type) && !['IHDR', 'PLTE', 'IDAT', 'IEND'].includes(type)) {
+      return { status: 'FAIL', reason: 'unrecognized critical PNG chunk' };
+    }
+    if (type !== 'IDAT' && sawIdat) idatClosed = true;
+    if (type === 'PLTE' && sawIdat) return { status: 'FAIL', reason: 'PLTE follows IDAT' };
     if (type === 'IHDR') {
       if (dimensions || length !== 13) return { status: 'FAIL', reason: 'invalid or duplicated IHDR' };
       const actualWidth = data.readUInt32BE(offset + 8);
@@ -53,7 +61,11 @@ export function inspectPng(pathOrBytes, width, height) {
       dimensions = { width: actualWidth, height: actualHeight };
       channels = colorType === 6 ? 4 : 3;
     }
-    if (type === 'IDAT') compressed.push(data.subarray(offset + 8, next - 4));
+    if (type === 'IDAT') {
+      if (idatClosed) return { status: 'FAIL', reason: 'nonconsecutive PNG IDAT chunks' };
+      sawIdat = true;
+      compressed.push(data.subarray(offset + 8, next - 4));
+    }
     if (type === 'IEND') {
       if (length !== 0 || next !== data.length) return { status: 'FAIL', reason: 'invalid PNG end/trailing bytes' };
       sawIend = true;
