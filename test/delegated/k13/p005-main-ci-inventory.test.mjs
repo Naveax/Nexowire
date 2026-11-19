@@ -120,3 +120,22 @@ test('a backup suffix does not impersonate a selected test', () => {
   const result=auditMainCiSource({ciSource:'run: node --test '+path+'.bak',npmTestCommand:'',paths:[path]});
   assert.deepEqual(result.no_known_invocation,[path]);
 });
+
+
+test('folded YAML >- passes test paths as real node --test arguments', () => {
+  const a = 'test/delegated/k13/p005-main-ci-inventory.test.mjs';
+  const b = 'test/delegated/k13/p005-pr-ci-coverage.test.mjs';
+  const decoy = 'test/delegated/k20/printed-only.test.mjs';
+  const ciSource = '  - name: QA\n    run: >-\n      node --test\n      '+a+'\n      '+b+'\n      echo '+decoy;
+  const out = auditMainCiSource({ ciSource, npmTestCommand:'', paths:[a,b,decoy] });
+  assert.equal(out.explicit_source,2);
+  assert.deepEqual(out.no_known_invocation,[decoy]);
+});
+
+test('folded YAML echo-only mentions never become test invocations', () => {
+  const path = 'test/delegated/k09/roadmap-evidence.test.mjs';
+  const ciSource = 'run: >-\n  echo node --test '+path+'\n  echo '+path;
+  const out = auditMainCiSource({ ciSource, npmTestCommand:'', paths:[path] });
+  assert.equal(out.explicit_source,0);
+  assert.deepEqual(out.no_known_invocation,[path]);
+});

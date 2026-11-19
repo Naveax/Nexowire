@@ -26,11 +26,13 @@ export function auditMainCiSource({ ciSource, npmTestCommand, paths }) {
   const commands = [];
   let blockIndent = null;
   let continued = false;
+  let folded = false;
   for (const raw of ciSource.split(/\r?\n/)) {
     if (/^\s*#/.test(raw) || !raw.trim()) continue;
     const run = /^(\s*)(?:-\s+)?run:\s*(.*)$/.exec(raw);
     if (run) {
       blockIndent = /^[|>][-+]?\s*$/.test(run[2]) ? run[1].length : null;
+      folded = /^>[-+]?\s*$/.test(run[2]);
       continued = false;
       if (/^node\s+--test\b/.test(run[2].trim())) commands.push(run[2].trim());
       continue;
@@ -41,10 +43,10 @@ export function auditMainCiSource({ ciSource, npmTestCommand, paths }) {
     const shell = raw.trim();
     if (/^node\s+--test\b/.test(shell)) {
       commands.push(shell);
-      continued = shell.endsWith('\\');
+      continued = folded || shell.endsWith('\\');
     } else if (continued && /^test\//.test(shell)) {
       commands.push(shell);
-      continued = shell.endsWith('\\');
+      continued = folded || shell.endsWith('\\');
     } else continued = false;
   }
   const invoked = new Set(commands.join(' ').match(/test\/[A-Za-z0-9_./*+-]+\.test\.(?:ts|mjs)(?![\w.-])/g) ?? []);
