@@ -117,9 +117,13 @@ export function auditHostedAcceptance({ head, run, jobs = [], newTests = [], phy
     throw new TypeError('Exact PR HEAD and test path/marker declarations required');
   }
   const runCurrent = Boolean(run && exact(run.headSha) && run.headSha === head && positive(run.id));
-  const jobIds = jobs.map(x => x.id);
-  const jobsValid = jobs.length > 0 && jobIds.every(positive) && new Set(jobIds).size === jobIds.length &&
-    (run?.totalJobs === undefined || run.totalJobs === jobs.length);
+  // Each successful job must belong to this exact run, attempt and source
+  // commit. Otherwise mixed/stale pages can manufacture a false green receipt.
+  const jobIds = jobs.map(x => x?.id);
+  const jobsValid = positive(run?.attempt) && positive(run?.totalJobs) &&
+    jobs.length === run.totalJobs && jobIds.every(positive) &&
+    new Set(jobIds).size === jobIds.length &&
+    jobs.every(x => x.runId === run.id && x.attempt === run.attempt && x.headSha === head);
   const allGreen = runCurrent && jobsValid && run.status === 'completed' &&
     run.conclusion === 'success' && jobs.every(x => x.status === 'completed' && x.conclusion === 'success');
   const executed = runCurrent && typeof run.log === 'string' ? run.log : '';
