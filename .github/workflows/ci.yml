@@ -120,6 +120,18 @@ jobs:
         run: |
           set -euo pipefail
           node test/delegated/k04/admin-denial-sequence.mjs web/admin.js web/admin.html
+      - name: Verify K03 offline console grant and Broker display contracts
+        # Port one reviewed, read-only VM regression from #1103. This does
+        # not call a live device or prove effective Windows input control.
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          node --test --test-reporter=tap \
+            test/delegated/k03/console-grant-view.test.mjs \
+            > "$RUNNER_TEMP/nw-k03-console-grant.tap"
+          cat "$RUNNER_TEMP/nw-k03-console-grant.tap"
+          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/nw-k03-console-grant.tap" 4
       - name: Verify K01-K04 source tests on one exact Git HEAD
         # Source-only invariant: no browser, Agent, Hub or CORE launched.
         shell: bash
