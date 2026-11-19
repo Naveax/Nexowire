@@ -1,0 +1,963 @@
+{
+  "timestamp": "2026-11-08 Europe/Istanbul, read-only GitHub API snapshot",
+  "source": "SinsiVinci/Nexowire-fork ekip/PR_DENETIM_20261108.md",
+  "sourceBlobSha": "ab2f2ff0bdfddbecf6a4acea54a123a39d76b33a",
+  "protocol": "V006",
+  "pano": "P007",
+  "ownerCi": {
+    "pr": 1096,
+    "head": "ada951d08a96d5d7ba62c07c63be01942ef4f7d0",
+    "mainWorkflowBlob": "90185b6f4297bc3e4feaca44817ed6a8248bd4be",
+    "ownerWorkflowBlob": "d2139519914504218f8c728eb7663a40d4e9ac39",
+    "ownerHelperBlob": "38786c04295e41d9cdb7d511821a8d1064026fc1",
+    "ownerFloorCount": 41,
+    "requiredMissingPathsInMain": 7,
+    "requiredMissingPathsInOwnerBranch": 4
+  },
+  "prs": [
+    {
+      "number": 1010,
+      "recordedSha": "3f6a226e4244d3a599d9631adf69bb40bf1f4c92",
+      "liveSha": "3f6a226e4244d3a599d9631adf69bb40bf1f4c92",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K02",
+      "oldRun": null,
+      "err": false,
+      "liveRun": {
+        "id": 41337736249,
+        "status": "completed",
+        "conclusion": "action_required"
+      }
+    },
+    {
+      "number": 1011,
+      "recordedSha": "6e740dfe919e5f615655f68815b078447915ce6f",
+      "liveSha": "6e740dfe919e5f615655f68815b078447915ce6f",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K01",
+      "oldRun": null,
+      "err": false,
+      "liveRun": {
+        "id": 41337712422,
+        "status": "completed",
+        "conclusion": "action_required"
+      }
+    },
+    {
+      "number": 1015,
+      "recordedSha": "2d448f69a996feeefcfa4b657af7f5249ba94681",
+      "liveSha": "2d448f69a996feeefcfa4b657af7f5249ba94681",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K04",
+      "oldRun": null,
+      "err": false,
+      "liveRun": {
+        "id": 41338010341,
+        "status": "completed",
+        "conclusion": "action_required"
+      }
+    },
+    {
+      "number": 1016,
+      "recordedSha": "96fa340b477915dc95dd4d8275c981b0a3b37f89",
+      "liveSha": "96fa340b477915dc95dd4d8275c981b0a3b37f89",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K03",
+      "oldRun": null,
+      "err": false,
+      "liveRun": {
+        "id": 41337745754,
+        "status": "completed",
+        "conclusion": "action_required"
+      }
+    },
+    {
+      "number": 1030,
+      "recordedSha": "bc97cd84c7b224cdfe140a77a7f9200d6bcf50e4",
+      "liveSha": "bc97cd84c7b224cdfe140a77a7f9200d6bcf50e4",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K17",
+      "oldRun": null,
+      "err": false,
+      "liveRun": {
+        "id": 41338216468,
+        "status": "completed",
+        "conclusion": "action_required"
+      }
+    },
+    {
+      "number": 1035,
+      "recordedSha": "e0de00624b1de3c0564ebc37e2c50ae914259a4f",
+      "liveSha": "e0de00624b1de3c0564ebc37e2c50ae914259a4f",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K08",
+      "oldRun": null,
+      "err": false,
+      "liveRun": {
+        "id": 41338306321,
+        "status": "completed",
+        "conclusion": "action_required"
+      }
+    },
+    {
+      "number": 1099,
+      "recordedSha": "2ae40bd36a3e97b8544102a96b4e63673f6a5fd0",
+      "liveSha": "2ae40bd36a3e97b8544102a96b4e63673f6a5fd0",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K09",
+      "oldRun": "42410030914",
+      "err": false,
+      "liveRun": {
+        "id": 42410030914,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1100,
+      "recordedSha": "6d8a555c371c323bb73d858053cd2794dde54152",
+      "liveSha": "6d8a555c371c323bb73d858053cd2794dde54152",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K07",
+      "oldRun": "42485195932",
+      "err": false,
+      "liveRun": {
+        "id": 42485195932,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1101,
+      "recordedSha": "3d4408e84b50e7787dec922a0332ddb35156e700",
+      "liveSha": "3d4408e84b50e7787dec922a0332ddb35156e700",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K02",
+      "oldRun": "42410091949",
+      "err": false,
+      "liveRun": {
+        "id": 42410091949,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1103,
+      "recordedSha": "697ea5e50fa5051451704e877d401dd2c1df7de9",
+      "liveSha": "4d581bef3ca0ca26f626d6ecd499832f0af10e2c",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K03",
+      "oldRun": "42481152564",
+      "err": false,
+      "liveRun": {
+        "id": 42500656198,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1104,
+      "recordedSha": "247be5e246ae19b0237841950f8c680ce10bfcf0",
+      "liveSha": "247be5e246ae19b0237841950f8c680ce10bfcf0",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K04",
+      "oldRun": "42410125818",
+      "err": false,
+      "liveRun": {
+        "id": 42410125818,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1105,
+      "recordedSha": "06620d5a84f87bf6c06e7146c2dd052d95304c93",
+      "liveSha": "d75e00028e25357d4ec875055603b40a28d04dcc",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K16",
+      "oldRun": "42485362697",
+      "err": false,
+      "liveRun": {
+        "id": 42500686653,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1106,
+      "recordedSha": "37530c9553d8e6746a0774a5500236ad6c2bc78e",
+      "liveSha": "83329c31b6f814e6912381c0df522ff575aee417",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K08",
+      "oldRun": "42485671743",
+      "err": false,
+      "liveRun": {
+        "id": 42500920781,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1107,
+      "recordedSha": "fed3b1c67a413a175e67593f87203e8610840d79",
+      "liveSha": "fed3b1c67a413a175e67593f87203e8610840d79",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K18",
+      "oldRun": "42410160885",
+      "err": false,
+      "liveRun": {
+        "id": 42410160885,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1108,
+      "recordedSha": "85cee5223a8b6f26b6f2ac04699df5b7f70933c2",
+      "liveSha": "85cee5223a8b6f26b6f2ac04699df5b7f70933c2",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K06",
+      "oldRun": "42485584753",
+      "err": false,
+      "liveRun": {
+        "id": 42485584753,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1109,
+      "recordedSha": "d14a24c52243371d1111634d26ea0e256164b7ac",
+      "liveSha": "d14a24c52243371d1111634d26ea0e256164b7ac",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K12",
+      "oldRun": "42485197012",
+      "err": false,
+      "liveRun": {
+        "id": 42485197012,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1110,
+      "recordedSha": "21cda33666c65e8d74676db54debd0f0be575cf3",
+      "liveSha": "49b73758b2739015d21f51c7272ce6b032fc9b98",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K15",
+      "oldRun": "42485528886",
+      "err": false,
+      "liveRun": {
+        "id": 42500611545,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1111,
+      "recordedSha": "c5119a65a914ec339ad1c362ba9ba1ca19e339b4",
+      "liveSha": "c5119a65a914ec339ad1c362ba9ba1ca19e339b4",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K19",
+      "oldRun": "42410254755",
+      "err": false,
+      "liveRun": {
+        "id": 42410254755,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1112,
+      "recordedSha": "3ca2cd12f003768ac66dea0f242b6b8007587101",
+      "liveSha": "3ca2cd12f003768ac66dea0f242b6b8007587101",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K13",
+      "oldRun": "42411620884",
+      "err": false,
+      "liveRun": {
+        "id": 42411620884,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1113,
+      "recordedSha": "079cef00aaabc093fe400b47ef71e65144dff0f6",
+      "liveSha": "079cef00aaabc093fe400b47ef71e65144dff0f6",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K17",
+      "oldRun": "42474111487",
+      "err": false,
+      "liveRun": {
+        "id": 42474111487,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1114,
+      "recordedSha": "0366113952f8a006432a3370ffc4933fc4c9f40d",
+      "liveSha": "edd73b575fdbe1eb38f8b47b43a098a1aa35e957",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K01",
+      "oldRun": "42485193172",
+      "err": false,
+      "liveRun": {
+        "id": 42514666903,
+        "status": "in_progress",
+        "conclusion": null
+      }
+    },
+    {
+      "number": 1115,
+      "recordedSha": "2a74d9d2c0c42265c4ee27494eb530059904c0b3",
+      "liveSha": "2a74d9d2c0c42265c4ee27494eb530059904c0b3",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K05",
+      "oldRun": "42410556545",
+      "err": false,
+      "liveRun": {
+        "id": 42410556545,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1116,
+      "recordedSha": "0f3916ecd3d3ff0db5d7a1743b007e52a0cd16aa",
+      "liveSha": "0f3916ecd3d3ff0db5d7a1743b007e52a0cd16aa",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K10",
+      "oldRun": "42411883766",
+      "err": false,
+      "liveRun": {
+        "id": 42411883766,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1117,
+      "recordedSha": "822b4247dc7066897ac6427723e1c4c99083c1e4",
+      "liveSha": "822b4247dc7066897ac6427723e1c4c99083c1e4",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K14",
+      "oldRun": "42410614643",
+      "err": false,
+      "liveRun": {
+        "id": 42410614643,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1118,
+      "recordedSha": "d51d9d4c2c25797405227bad223039c6b31055d2",
+      "liveSha": "d51d9d4c2c25797405227bad223039c6b31055d2",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K20",
+      "oldRun": "42411030903",
+      "err": false,
+      "liveRun": {
+        "id": 42411030903,
+        "status": "completed",
+        "conclusion": "failure"
+      }
+    },
+    {
+      "number": 1119,
+      "recordedSha": "6515f3777e510a6f62c8bc6cf9333d2fbe67877e",
+      "liveSha": "6515f3777e510a6f62c8bc6cf9333d2fbe67877e",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K18",
+      "oldRun": "42411734969",
+      "err": false,
+      "liveRun": {
+        "id": 42411734969,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1120,
+      "recordedSha": "f6ae93d8746f5b753618cbbb5f1f1b2a73ef2090",
+      "liveSha": "f6ae93d8746f5b753618cbbb5f1f1b2a73ef2090",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K04",
+      "oldRun": "42411741316",
+      "err": false,
+      "liveRun": {
+        "id": 42411741316,
+        "status": "completed",
+        "conclusion": "failure"
+      }
+    },
+    {
+      "number": 1121,
+      "recordedSha": "1b97d6341c036e1eadde491be1abfe743c716b7c",
+      "liveSha": "1b97d6341c036e1eadde491be1abfe743c716b7c",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K16",
+      "oldRun": "42411781654",
+      "err": false,
+      "liveRun": {
+        "id": 42411781654,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1122,
+      "recordedSha": "aaa96bde77bd6c4a03bc6b653be268727ee44f18",
+      "liveSha": "aaa96bde77bd6c4a03bc6b653be268727ee44f18",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K05",
+      "oldRun": "42411789831",
+      "err": false,
+      "liveRun": {
+        "id": 42411789831,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1123,
+      "recordedSha": "eed5becc5bb107a26e0c789f81ca9dd9c4230e0e",
+      "liveSha": "eed5becc5bb107a26e0c789f81ca9dd9c4230e0e",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K14",
+      "oldRun": "42411869504",
+      "err": false,
+      "liveRun": {
+        "id": 42411869504,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1124,
+      "recordedSha": "4d1a3dc32bd8c6718392ec743769c5409e114f3c",
+      "liveSha": "4d1a3dc32bd8c6718392ec743769c5409e114f3c",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K19",
+      "oldRun": "42411882607",
+      "err": false,
+      "liveRun": {
+        "id": 42411882607,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1125,
+      "recordedSha": "fdea20a8758dc734f65ad3fd2f9001dfe4438235",
+      "liveSha": "fdea20a8758dc734f65ad3fd2f9001dfe4438235",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K07",
+      "oldRun": "42473850499",
+      "err": false,
+      "liveRun": {
+        "id": 42473850499,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1126,
+      "recordedSha": "332e211e8894bfa6222ecc9c0e03b89463b8acd0",
+      "liveSha": "332e211e8894bfa6222ecc9c0e03b89463b8acd0",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K02",
+      "oldRun": "42412128181",
+      "err": false,
+      "liveRun": {
+        "id": 42412128181,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1127,
+      "recordedSha": "32f76f575c4baf68c4c3c105bbcc7726c3999610",
+      "liveSha": "32f76f575c4baf68c4c3c105bbcc7726c3999610",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K09",
+      "oldRun": "42411927416",
+      "err": false,
+      "liveRun": {
+        "id": 42411927416,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1128,
+      "recordedSha": "5f2b654d4c23d55a1ff3dd141f2117cb9e7f0872",
+      "liveSha": "5f2b654d4c23d55a1ff3dd141f2117cb9e7f0872",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K08",
+      "oldRun": "42411934421",
+      "err": false,
+      "liveRun": {
+        "id": 42411934421,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1129,
+      "recordedSha": "eb89ea72f73a7549cd44831537c1ccd5093efe3d",
+      "liveSha": "eb89ea72f73a7549cd44831537c1ccd5093efe3d",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K06",
+      "oldRun": "42411941305",
+      "err": false,
+      "liveRun": {
+        "id": 42411941305,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1130,
+      "recordedSha": "8a5bc56ebe1004595e4cebbd5bc363fe51892534",
+      "liveSha": "8a5bc56ebe1004595e4cebbd5bc363fe51892534",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K20",
+      "oldRun": "42412252743",
+      "err": false,
+      "liveRun": {
+        "id": 42412252743,
+        "status": "completed",
+        "conclusion": "failure"
+      }
+    },
+    {
+      "number": 1131,
+      "recordedSha": "a670647298d878d71f60e3a4af1a660ac2a30c37",
+      "liveSha": "a670647298d878d71f60e3a4af1a660ac2a30c37",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K02",
+      "oldRun": "42485080370",
+      "err": false,
+      "liveRun": {
+        "id": 42485080370,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1132,
+      "recordedSha": "1f1d912b164a01485abdf3b56cfe62fa37752955",
+      "liveSha": "1f1d912b164a01485abdf3b56cfe62fa37752955",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K05",
+      "oldRun": "42473898223",
+      "err": false,
+      "liveRun": {
+        "id": 42473898223,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1133,
+      "recordedSha": "98beceafb1ef6715ae44dff56fdb70fb2ed0351d",
+      "liveSha": "98beceafb1ef6715ae44dff56fdb70fb2ed0351d",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K04",
+      "oldRun": "42474138400",
+      "err": false,
+      "liveRun": {
+        "id": 42474138400,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1134,
+      "recordedSha": "ec640fc144b1fe10e4a4490f353fd753eeaf3ad5",
+      "liveSha": "ec640fc144b1fe10e4a4490f353fd753eeaf3ad5",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K13",
+      "oldRun": "42474504806",
+      "err": false,
+      "liveRun": {
+        "id": 42474504806,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1136,
+      "recordedSha": "ed5fa137bc875e613691e13d1b72a8df9ebf9d56",
+      "liveSha": "ed5fa137bc875e613691e13d1b72a8df9ebf9d56",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K19",
+      "oldRun": "42474024855",
+      "err": false,
+      "liveRun": {
+        "id": 42474024855,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1137,
+      "recordedSha": "4869fe31ff47c97220c73af66a4eab5d3c73f027",
+      "liveSha": "4869fe31ff47c97220c73af66a4eab5d3c73f027",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K09",
+      "oldRun": "42474070651",
+      "err": false,
+      "liveRun": {
+        "id": 42474070651,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1138,
+      "recordedSha": "6f2505bb183f60ad9967e50db9f73a6223e2e96d",
+      "liveSha": "47c3151935f01d59991471ac2ce656683f7434c4",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K02",
+      "oldRun": "42485261561",
+      "err": false,
+      "liveRun": {
+        "id": 42500475673,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1139,
+      "recordedSha": "51d8400430dd0b78bee6afb300cfe44ac67e560d",
+      "liveSha": "51d8400430dd0b78bee6afb300cfe44ac67e560d",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K18",
+      "oldRun": "42474146267",
+      "err": false,
+      "liveRun": {
+        "id": 42474146267,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1140,
+      "recordedSha": "ec1f38d8db3a74eb8fe300218fc4190a2a591ac2",
+      "liveSha": "ec1f38d8db3a74eb8fe300218fc4190a2a591ac2",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K14",
+      "oldRun": "42474586650",
+      "err": false,
+      "liveRun": {
+        "id": 42474586650,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1141,
+      "recordedSha": "a13dd68d0585d5f4b2617beb121702a2db7850ea",
+      "liveSha": "a13dd68d0585d5f4b2617beb121702a2db7850ea",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K20",
+      "oldRun": "42474379692",
+      "err": false,
+      "liveRun": {
+        "id": 42474379692,
+        "status": "completed",
+        "conclusion": "failure"
+      }
+    },
+    {
+      "number": 1142,
+      "recordedSha": "550a6497fec85fddb0cfc1702e5b6556d8621d6a",
+      "liveSha": "fa7659a5f86fbacb6a12fbdfbf5efac27229a40e",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K10",
+      "oldRun": "42485334997",
+      "err": false,
+      "liveRun": {
+        "id": 42500875212,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1143,
+      "recordedSha": "7b7601a08fa42d7b31da1880081dda8bd88e52df",
+      "liveSha": "4f58339704fa9a2a7f0ab886d6d99aa3ce8a2bcc",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K03",
+      "oldRun": "42485233191",
+      "err": false,
+      "liveRun": {
+        "id": 42500503091,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1144,
+      "recordedSha": "bece6bfeaea4b501349aa03ff15c185666a99fd5",
+      "liveSha": "bece6bfeaea4b501349aa03ff15c185666a99fd5",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K04",
+      "oldRun": "42485243315",
+      "err": false,
+      "liveRun": {
+        "id": 42485243315,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1145,
+      "recordedSha": "ae1898e68fecf72b31fa3f8f0ab2b917d3222b38",
+      "liveSha": "3f270754f4126325667b2a6adbd4b7e091ceebd6",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K09",
+      "oldRun": "42485293926",
+      "err": false,
+      "liveRun": {
+        "id": 42500730440,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1146,
+      "recordedSha": "7b3ba76538dc4e0beb5cb329fb1e9661291cc018",
+      "liveSha": "8980e181d16a5ab184cccf97405cfc0af4067922",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K05",
+      "oldRun": "42485334829",
+      "err": false,
+      "liveRun": {
+        "id": 42500820630,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1147,
+      "recordedSha": "3e60a55a9a88d83a7c8f14319112945ebd7df445",
+      "liveSha": "709639e80ec322d6735650d38688dce8a3d0c2ca",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K19",
+      "oldRun": "42485370999",
+      "err": false,
+      "liveRun": {
+        "id": 42500690813,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1148,
+      "recordedSha": "27173833437d5753d59586f118e05618d6845c71",
+      "liveSha": "5b0f98c2f41ac332b02d8b8fc78beff9e5efda7d",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K11",
+      "oldRun": "42485407658",
+      "err": false,
+      "liveRun": {
+        "id": 42500530505,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1149,
+      "recordedSha": "5d5d186545b1c6e1e57f35eb35d2175890369087",
+      "liveSha": "b6b5e60ba93f1a40fab432fedc06d334971a6c37",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K13",
+      "oldRun": "42485529477",
+      "err": false,
+      "liveRun": {
+        "id": 42514702344,
+        "status": "in_progress",
+        "conclusion": null
+      }
+    },
+    {
+      "number": 1150,
+      "recordedSha": "fb7e4cadcccfd0e073aa1ab28f1f55d61ab85f35",
+      "liveSha": "f3413ec840a82cb13c68a364c1a1ed4f663343d2",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K17",
+      "oldRun": "42485540131",
+      "err": false,
+      "liveRun": {
+        "id": 42500691692,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1151,
+      "recordedSha": "472908f3812f513d990fc2990550144519fdb980",
+      "liveSha": "20694deb5ce84aa13143bee3f100785f2c0c3574",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K18",
+      "oldRun": "42485886835",
+      "err": false,
+      "liveRun": {
+        "id": 42500672525,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "number": 1152,
+      "recordedSha": "7a18e1b5b8a7ffe86e3f42a17d8d5170cedcf129",
+      "liveSha": "e90d0cc952f3897a52df0464465e536c9c8a9aad",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K20",
+      "oldRun": "42486164254",
+      "err": false,
+      "liveRun": {
+        "id": 42500899555,
+        "status": "completed",
+        "conclusion": "failure"
+      }
+    },
+    {
+      "number": 1153,
+      "recordedSha": "a34c2e6ca9a241434cb3e5677586f47936ebafbf",
+      "liveSha": "ab77ab99257c584c03de767c8a55ed1be2fff709",
+      "prState": "open",
+      "draft": true,
+      "merged": false,
+      "owner": "K14",
+      "oldRun": "42486357049",
+      "err": false,
+      "liveRun": {
+        "id": 42501593766,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    }
+  ]
+}
