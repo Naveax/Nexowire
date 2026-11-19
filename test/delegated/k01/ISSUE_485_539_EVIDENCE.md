@@ -562,3 +562,76 @@ gaps (HTTP 403 null, HTTP 200 null) are `UNIQUE_FIX_ADAYI`.
 Prior four UI error classification fixes are `OWNER_PORTED`, with
 explicit Node22/24 CI evidence as recorded above.
 #1160 is not upstream main; #485/#539 still open, physical NO-GO.
+
+
+## P013 / W-581–W-586 — executable null response QA gate
+
+**Current owner / upstream:** #1160 remains OPEN/DRAFT at
+`06a9df635b6731c02170ca3583ba6de2b8b909dd`. Its
+`web/connect.js` blob is **unchanged**
+`3937291dcfb731ecc6fb1323c6771fc19983d577`
+from previously inspected owner HEAD `81028bf643e3dc3cb5b0ab3f9c609c239732a413`.
+Upstream main still `52d452f717d891eeaf4c2b9aff3c6e1ea68369b0`.
+No source change to the protected owner PR was made.
+
+**Concrete new QA artifact:** existing Draft [#1114](https://github.com/Naveax/Nexowire/pull/1114),
+commit [fd39c698ebe4aa2448d5d0e704daabbf010b07b1](https://github.com/SinsiVinci/Nexowire-fork/commit/fd39c698ebe4aa2448d5d0e704daabbf010b07b1).
+New `test/delegated/k01/p013-null-pairing.test.mjs` Git blob
+`d5c3196f7039394cdd273515f53f9d740967bdad`.
+This standalone Node test extracts the **actual source branch text** using exact string anchors,
+accepts `K01_CONNECT_REF` to read a pinned owner commit via `git show`, and
+optionally verifies its Git blob SHA with `K01_EXPECT_BLOB`.
+It executes the extracted 403 and 200 classification branches, including
+positive `{}` and valid pairing control cases, not the full UI.
+
+**Reproducible owner-check command in a repo checkout:**
+
+```sh
+K01_CONNECT_REF=06a9df635b6731c02170ca3583ba6de2b8b909dd \
+K01_EXPECT_BLOB=3937291dcfb731ecc6fb1323c6771fc19983d577 \
+node --test test/delegated/k01/p013-null-pairing.test.mjs
+```
+
+Then, **only to expose expected owner failure**,
+`K01_REQUIRE_NULL_FIX=1` enables two intentionally failing acceptance gates.
+Do not label them PASS while the source is unfixed.
+
+**Actual local test execution:** With `K01_CONNECT_SOURCE_PATH` set to a
+local fixture consisting of the **literal two excerpts copied from owner source blob**
+`3937291d`, Node **v22.16.0** ran
+`node --test /mnt/data/nexowire_k01/p013-null-pairing.test.mjs`,
+exit **0**, TAP **4 total / 2 PASS / 2 SKIP / 0 FAIL**.
+Setting `K01_REQUIRE_NULL_FIX=1` on the same fixture returned exit **1**,
+TAP **4 total / 2 PASS / 2 FAIL / 0 SKIP** (expected RED).
+The committed file content and locally executed file have matching
+Git blob `d5c3196f7039394cdd273515f53f9d740967bdad`.
+**Limitation:** local material is a fragment-only fixture rather than an actual
+full `git show` checkout of the owner; the source SHA was independently
+checked in GitHub. The exact pinned-owner command above is **NOT_RUN** in
+this environment because GitHub DNS was unavailable. Browser, Windows,
+Agent, Hub and two-device tests remain **NOT_RUN**.
+
+**W-581/W-583/W-585 source distinction:**
+- HTTP 403 + valid JSON null: `body.error` dereference raises
+  `TypeError`, terminal `retryable=false` preserved, but intended
+  generic `Bu cihaz bu hesaba bağlanamadı.` message is lost.
+- HTTP 200 + valid JSON null: `body.pairingId` dereference raises
+  `TypeError`; intended `Bağlantı cevabı geçersiz.` message is lost,
+  and callback navigation still does not occur.
+- Proposed minimum owner-only changes: `body?.error` in 403 branch
+  and `!body ||` before 200 `body.pairingId` checks.
+  Test-only in-memory substitutions preserve the 403 quota message,
+  the 200 invalid object rejection and the valid ID/token happy path.
+
+**W-582/W-584:** Separate 401/429/503 and raw diagnostic guards are already
+OWNER_PORTED into #1160 and have explicit Node22/24 CI tests
+on older `81028bf6` as documented above. No duplicate code was created.
+
+**CI coverage:** #1114 new exact code HEAD `fd39c698ebe4aa2448d5d0e704daabbf010b07b1`
+automatically triggered [run 44616385373](https://github.com/Naveax/Nexowire/actions/runs/44616385373),
+initially **queued**; it is not evidence of the new test executing.
+Previous #1114 `.test.mjs` files were not discovered by required workflows.
+An exact SHA, workflow/job-log and test-path receipt is still needed.
+No manual dispatch or rerun.
+Owner release, physical installer / login / pairing and upstream
+main integration remain **NO-GO**; issue #485 and #539 stay open.
