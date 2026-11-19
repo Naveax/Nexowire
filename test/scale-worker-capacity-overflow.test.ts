@@ -45,3 +45,35 @@ test('input validation remains strict while capacity overflow is treated as over
     authWorkerRequestsPerTool:0,
   }),Number.MAX_SAFE_INTEGER);
 });
+
+test('zero-charge tool volume does not impose a phantom Worker request limit',()=>{
+  const assumptions={
+    ...base,workerRequestBudgetPerDay:1_000_000_000,
+    hostedToolCallsPerUserPerDay:Number.MAX_SAFE_INTEGER,
+    authWorkerRequestsPerTool:0,
+    otherWorkerRequestsPerUserPerDay:939,
+    fixedWorkerRequestsPerDay:2204,
+    retryPermille:410,
+  };
+  const result=maxActiveUsersUnderBudget(assumptions);
+  const requests=(users:bigint)=>{
+    const baseRequests=2204n+939n*users;
+    return baseRequests+(baseRequests*410n+999n)/1000n;
+  };
+  assert.equal(result,755_290);
+  assert.ok(requests(BigInt(result))<=1_000_000_000n);
+  assert.ok(requests(BigInt(result)+1n)>1_000_000_000n);
+});
+
+test('fixed overhead plus retries above budget returns zero at safe-integer edge',()=>{
+  assert.equal(maxActiveUsersUnderBudget({
+    ...base,workerRequestBudgetPerDay:Number.MAX_SAFE_INTEGER,
+    fixedWorkerRequestsPerDay:Number.MAX_SAFE_INTEGER,
+    retryPermille:1,
+  }),0);
+  assert.equal(maxActiveUsersUnderBudget({
+    ...base,workerRequestBudgetPerDay:1_000,
+    fixedWorkerRequestsPerDay:1_000,
+    retryPermille:0,
+  }),0);
+});
