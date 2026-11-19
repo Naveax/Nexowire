@@ -139,3 +139,20 @@ test('folded YAML echo-only mentions never become test invocations', () => {
   assert.equal(out.explicit_source,0);
   assert.deepEqual(out.no_known_invocation,[path]);
 });
+
+
+test('shell operators and inline comments never confer fake test execution source', () => {
+  const real = 'test/delegated/k13/p005-main-ci-inventory.test.mjs';
+  const ghost = 'test/delegated/k09/roadmap-evidence.test.mjs';
+  const cases = [
+    ['inline chained echo', 'run: node --test ' + real + ' && echo ' + ghost],
+    ['inline comment', 'run: node --test ' + real + ' # ' + ghost],
+    ['literal block chained echo', 'run: |\n  node --test ' + real + '; echo ' + ghost],
+    ['folded block chained echo', 'run: >-\n  node --test ' + real + ' && echo ' + ghost],
+  ];
+  for (const [name, ciSource] of cases) {
+    const result = auditMainCiSource({ ciSource, npmTestCommand: '', paths: [real, ghost] });
+    assert.equal(result.explicit_source, 1, name);
+    assert.deepEqual(result.no_known_invocation, [ghost], name);
+  }
+});
