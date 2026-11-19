@@ -248,6 +248,36 @@ test('D-139: changed SHA with prior success run cannot be accepted; incomplete/d
   assert.throws(()=>auditCurrentPrInventory([{...one,liveRun:{...one.liveRun,status:'queued',conclusion:'success'}}],1),/invalid/i);
 });
 
+test('W-724: CI run from stale PR HEAD cannot appear source-fresh or verified', () => {
+  const original = p007.prs.find(x => x.number === 1010);
+  assert.equal(original.recordedSha, original.liveSha);
+  const valid = {...original,liveRun:{...original.liveRun,status:'completed',
+    conclusion:'success',head_sha:original.liveSha}};
+  const exact = auditCurrentPrInventory([valid],1);
+  assert.deepEqual(exact.runHeadMismatch,[]);
+  assert.deepEqual(exact.runHeadUnverified,[]);
+  assert.equal(exact.ciRunHeadEvidence,'HEAD_MATCHED_ONLY');
+  assert.equal(exact.sourceInventoryStale,false);
+  assert.equal(exact.accepted,false);
+
+  const stale = {...valid,liveRun:{...valid.liveRun,head_sha:'a'.repeat(40)}};
+  const red = auditCurrentPrInventory([stale],1);
+  assert.deepEqual(red.runHeadMismatch,[original.number]);
+  assert.equal(red.sourceInventoryStale,true);
+  assert.equal(red.ciRunHeadEvidence,'STALE_HEAD');
+  assert.equal(red.counts.success,1); // reported status, never proven coverage
+  assert.equal(red.accepted,false);
+
+  const missing = auditCurrentPrInventory([original],1);
+  assert.deepEqual(missing.runHeadUnverified,[original.number]);
+  assert.equal(missing.ciRunHeadEvidence,'UNVERIFIED');
+  assert.equal(missing.accepted,false);
+  assert.throws(()=>auditCurrentPrInventory([{...valid,liveRun:{
+    ...valid.liveRun,headSha:'b'.repeat(40)}}],1),/Conflicting CI run HEAD/);
+  assert.throws(()=>auditCurrentPrInventory([{...valid,liveRun:{
+    ...valid.liveRun,head_sha:'broken'}}],1),/Invalid CI run HEAD/);
+});
+
 const SHA = snapshot.upstreamMain;
 const goodRun = {id:42474379692,headSha:SHA,attempt:1,totalJobs:7,status:'completed',conclusion:'success'};
 const jobs = Array.from({length:7}, (_,i) => ({id:i+1,runId:goodRun.id,
