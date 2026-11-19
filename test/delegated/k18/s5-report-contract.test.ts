@@ -62,12 +62,25 @@ test('T-108 output order stable and never claims provider capacity',()=>{
   assert.equal(first.providerCapacityProven,false);
 });
 
-test('T-108 duplicate scenarios and missing measurement fields are rejected',()=>{
+test('T-108/W-683 invalid RSS bytes, missing measurements and duplicate scenarios fail closed',()=>{
+  const standard=sample();
   assert.throws(()=>summarizeS5ScenarioResults([sample(16),sample(16)]),/Duplicate/);
-  assert.throws(()=>summarizeS5ScenarioResults([{...sample(),elapsedMs:NaN}]),/Invalid/);
-  assert.throws(()=>summarizeS5ScenarioResults([{...sample(),
+  assert.throws(()=>summarizeS5ScenarioResults([{...standard,elapsedMs:NaN}]),/Invalid/);
+  assert.throws(()=>summarizeS5ScenarioResults([{...standard,
     memoryBytes:{rssStart:0,rssEnd:0,rssPeak:Infinity},
   }]),/Invalid/);
+  for(const rssPeak of [1.5,Number.MAX_SAFE_INTEGER+1]){
+    assert.throws(()=>summarizeS5ScenarioResults([{
+      ...standard,memoryBytes:{...standard.memoryBytes,rssPeak},
+    }]),/Invalid or non-monotonic scenario measurement/);
+  }
+  for(const rssPeak of [0,225_280,Number.MAX_SAFE_INTEGER]){
+    const result=summarizeS5ScenarioResults([{
+      ...standard,memoryBytes:{...standard.memoryBytes,rssPeak},
+    }]);
+    assert.equal(result.scenarios[0]?.rssPeakBytes,rssPeak);
+    assert.equal(result.capacityEstimate,null);
+  }
 });
 
 test('T-223 invalid nested JSON numbers are rejected instead of becoming null or zero',()=>{
@@ -79,21 +92,5 @@ test('T-223 invalid nested JSON numbers are rejected instead of becoming null or
     assert.throws(()=>summarizeS5ScenarioResults([{
       ...normal,cpuMs:{...normal.cpuMs,user:value},
     }]),/nonfinite/);
-  }
-});
-
-test('W-683 #487 RSS byte counters reject fractional and unsafe integers',()=>{
-  const standard=sample();
-  for(const invalid of [1.5,Number.MAX_SAFE_INTEGER+1]){
-    assert.throws(()=>summarizeS5ScenarioResults([{
-      ...standard,memoryBytes:{...standard.memoryBytes,rssPeak:invalid},
-    }]),/Invalid or non-monotonic scenario measurement/);
-  }
-  for(const bytes of [0,225_280,Number.MAX_SAFE_INTEGER]){
-    const result=summarizeS5ScenarioResults([{
-      ...standard,memoryBytes:{...standard.memoryBytes,rssPeak:bytes},
-    }]);
-    assert.equal(result.scenarios[0]?.rssPeakBytes,bytes);
-    assert.equal(result.capacityEstimate,null);
   }
 });
