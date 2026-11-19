@@ -24,6 +24,8 @@ export function auditMainCiSource({ ciSource, npmTestCommand, paths }) {
   // Only actual node --test shell commands establish source-call evidence.
   // Mentions in echo, YAML labels and unexecuted prose must not count.
   const commands = [];
+  // Shell operators and trailing comments are not test path arguments.
+  const firstShellCommand = line => line.split(/\s*(?:&&|\|\||;|\|)\s*|\s+#/, 1)[0];
   let blockIndent = null;
   let continued = false;
   let folded = false;
@@ -34,7 +36,7 @@ export function auditMainCiSource({ ciSource, npmTestCommand, paths }) {
       blockIndent = /^[|>][-+]?\s*$/.test(run[2]) ? run[1].length : null;
       folded = /^>[-+]?\s*$/.test(run[2]);
       continued = false;
-      if (/^node\s+--test\b/.test(run[2].trim())) commands.push(run[2].trim());
+      if (/^node\s+--test\b/.test(run[2].trim())) commands.push(firstShellCommand(run[2].trim()));
       continue;
     }
     if (blockIndent === null) continue;
@@ -42,11 +44,11 @@ export function auditMainCiSource({ ciSource, npmTestCommand, paths }) {
     if (indent <= blockIndent) { blockIndent = null; continued = false; continue; }
     const shell = raw.trim();
     if (/^node\s+--test\b/.test(shell)) {
-      commands.push(shell);
-      continued = folded || shell.endsWith('\\');
+      commands.push(firstShellCommand(shell));
+      continued = firstShellCommand(shell) === shell && (folded || shell.endsWith('\\'));
     } else if (continued && /^test\//.test(shell)) {
-      commands.push(shell);
-      continued = folded || shell.endsWith('\\');
+      commands.push(firstShellCommand(shell));
+      continued = firstShellCommand(shell) === shell && (folded || shell.endsWith('\\'));
     } else continued = false;
   }
   const invoked = new Set(commands.join(' ').match(/test\/[A-Za-z0-9_./*+-]+\.test\.(?:ts|mjs)(?![\w.-])/g) ?? []);
