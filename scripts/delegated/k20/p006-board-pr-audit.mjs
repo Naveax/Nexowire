@@ -91,6 +91,8 @@ export function auditCurrentPrInventory(entries, expectedCount = 59) {
   const seen = new Set();
   const headDrift = [];
   const runDrift = [];
+  const runHeadMismatch = [];
+  const runHeadUnverified = [];
   const counts = { success: 0, failure: 0, action_required: 0, in_progress: 0, other: 0 };
   for (const x of entries) {
     if (!Number.isSafeInteger(x?.number) || x.number < 1 || seen.has(x.number) ||
@@ -107,6 +109,16 @@ export function auditCurrentPrInventory(entries, expectedCount = 59) {
         (run.status !== 'completed' && run.conclusion !== null)) {
       throw new TypeError(`Invalid current CI run for PR #${x.number}`);
     }
+    // A green run from another commit cannot verify this PR's current HEAD.
+    // Historic snapshots lack run.head_sha, so retain their reported counts
+    // but explicitly classify their CI source attribution as unverified.
+    const runHead = run.headSha ?? run.head_sha ?? null;
+    if (runHead !== null && !SHA.test(runHead))
+      throw new TypeError(`Invalid CI run HEAD for PR #${x.number}`);
+    if (run.headSha != null && run.head_sha != null && run.headSha !== run.head_sha)
+      throw new TypeError(`Conflicting CI run HEAD fields for PR #${x.number}`);
+    if (runHead === null) runHeadUnverified.push(x.number);
+    else if (runHead !== x.liveSha) runHeadMismatch.push(x.number);
     if (x.recordedSha !== x.liveSha) headDrift.push(x.number);
     if (x.oldRun !== null && (!/^\d+$/.test(x.oldRun) || +x.oldRun !== run.id))
       runDrift.push(x.number);
@@ -115,6 +127,9 @@ export function auditCurrentPrInventory(entries, expectedCount = 59) {
     else counts.other++;
   }
   return { observed: entries.length, expectedCount, complete: entries.length === expectedCount,
-    headDrift, runDrift, counts, sourceInventoryStale: headDrift.length > 0,
+    headDrift, runDrift, runHeadMismatch, runHeadUnverified, counts,
+    sourceInventoryStale: headDrift.length > 0 || runHeadMismatch.length > 0,
+    ciRunHeadEvidence: runHeadMismatch.length ? 'STALE_HEAD' :
+      runHeadUnverified.length ? 'UNVERIFIED' : 'HEAD_MATCHED_ONLY',
     hostedTestDiscovery: 'NOT_VERIFIED', accepted: false };
 }
