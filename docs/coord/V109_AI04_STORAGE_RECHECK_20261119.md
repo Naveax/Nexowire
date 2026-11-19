@@ -6,9 +6,9 @@ Parent #1160 exact HEAD: `fbcc9b4326044617eb21efd405da027f076dcca2`. This is a s
 
 ## Read-only gate
 
-- `src/hub/system-cutover-disk-reserve.ts`: measures free bytes on the protected state destination volume `C:\` via Node `fs.promises.statfs`. The check is read-only, uses `BigInt` for byte arithmetic, and fails closed on invalid/inaccessible filesystem metadata.
+- `src/hub/system-cutover-disk-reserve.ts`: measures free bytes via Node `fs.promises.statfs` on the **actual protected state parent path** `C:\ProgramData` and the **owner's actual profile path** returned by `os.homedir()`. This also handles mount points and different source/destination volumes, which probing the drive root `C:\` alone cannot establish. The checks are read-only, use `BigInt` for byte arithmetic, and fail closed on invalid/inaccessible filesystem metadata in either location.
 - Operational floor: **4.1 GiB**. A lower value throws `AI04_CUTOVER_DISK_RESERVE_INSUFFICIENT`. Failed or malformed filesystem probes throw `AI04_CUTOVER_DISK_RESERVE_UNVERIFIED`.
-- Recommended headroom remains **8 GiB**, reported separately and *not* confused with physical cutover acceptance.
+- Recommended headroom remains **8 GiB on both paths**, reported separately from the hard 4.1 GiB floor and *not* confused with physical cutover acceptance. A low source-volume reserve is not ignored when the protected destination has ample space.
 - `scripts/ai04-controlled-system-hub-cutover.ts` checks disk **before recovery artifacts are created** and again after recovery task verification **before the old user Hub is disabled**. The second check catches space consumed between these stages.
 - These checks do not replace sufficient space during the offline SQLite/credential state copy; hardware, protected ACLs, actual SYSTEM DPAPI, rollback, reboot and second-device acceptance remain independently required.
 
@@ -19,5 +19,9 @@ Parent #1160 exact HEAD: `fbcc9b4326044617eb21efd405da027f076dcca2`. This is a s
 - AI-07 physical gates, AI-04 source contracts and preservation: 36/36 PASS.
 - TypeScript typecheck and build: PASS.
 - Source only; hosted exact-head GitHub CI must be checked on the resulting commit separately.
+
+## Follow-up: source and destination volume coverage
+
+The later dual-path change (based on #1160 source `489df3062cb48eb1f5b33109cb0a6a8ecb2d79c2`) keeps both lifecycle checks in place and additionally probes `C:\ProgramData` and `os.homedir()` at each checkpoint. Simulated D: profile low-space and ProgramData mount-point cases fail closed; the boundary tests use one-byte blocks so a one-byte deficit cannot be rounded up to PASS. Updated controlled-cutover and recovery target suite: **24 PASS / 0 FAIL / 0 SKIP** on Work-PC, TypeScript check PASS. These are source-only tests, not proof of physical SYSTEM migration.
 
 No physical SYSTEM transition has been executed; `trustedSystemHubAcceptance=NOT_RUN` and `fullCoreAccessVerified=false` remain the operational truth.

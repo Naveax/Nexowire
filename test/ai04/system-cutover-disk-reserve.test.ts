@@ -2,46 +2,112 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {statfs} from 'node:fs/promises';
+import os from 'node:os';
 import {
   assertSystemCutoverDiskReserve,
   SYSTEM_CUTOVER_MINIMUM_FREE_BYTES,
   SYSTEM_CUTOVER_RECOMMENDED_FREE_BYTES,
   SYSTEM_CUTOVER_STATE_VOLUME,
+  SYSTEM_CUTOVER_STATE_PROBE_PATH,
 } from '../../src/hub/system-cutover-disk-reserve.js';
 
-const BLOCK_BYTES=4096n;
-function atLeast(bytes:bigint){
-  return async(root:string)=>{
-    assert.equal(root,'C:\\');
+// One-byte synthetic blocks retain exact boundary behavior, including 1 byte
+// below the minimum (a 4 KiB fixture would round that value up to a PASS).
+const BLOCK_BYTES=1n;
+const TEST_PROFILE='C:\\Users\\fixture';
+const OTHER_VOLUME_PROFILE='D:\\Profiles\\fixture';
+
+function syntheticVolumes(systemBytes:bigint,userBytes:bigint,profile=TEST_PROFILE){
+  const seen:string[]=[];
+  const read=async(probePath:string)=>{
+    seen.push(probePath);
+    assert.ok([SYSTEM_CUTOVER_STATE_PROBE_PATH,profile].includes(probePath),
+      'Unexpected statfs target: '+probePath);
+    const bytes=probePath===SYSTEM_CUTOVER_STATE_PROBE_PATH?systemBytes:userBytes;
     return {bsize:Number(BLOCK_BYTES),bavail:Number((bytes+BLOCK_BYTES-1n)/BLOCK_BYTES)};
   };
+  return {read,seen,profile};
 }
 
-test('8 GiB recommended reserve is reported, not mistaken for SYSTEM acceptance',async()=>{
-  const available=SYSTEM_CUTOVER_RECOMMENDED_FREE_BYTES;
-  const result=await assertSystemCutoverDiskReserve(atLeast(available));
+test('8 GiB recommended reserve requires both actual filesystem paths',async()=>{
+  const sample=syntheticVolumes(
+    SYSTEM_CUTOVER_RECOMMENDED_FREE_BYTES,
+    SYSTEM_CUTOVER_RECOMMENDED_FREE_BYTES,
+  );
+  const result=await assertSystemCutoverDiskReserve(sample.read,sample.profile);
   assert.equal(result.root,SYSTEM_CUTOVER_STATE_VOLUME);
-  assert.equal(result.availableBytes,available);
+  assert.equal(result.systemStateProbePath,SYSTEM_CUTOVER_STATE_PROBE_PATH);
+  assert.equal(result.userProfileProbePath,TEST_PROFILE);
+  assert.equal(result.availableBytes,SYSTEM_CUTOVER_RECOMMENDED_FREE_BYTES);
+  assert.equal(result.userProfileAvailableBytes,SYSTEM_CUTOVER_RECOMMENDED_FREE_BYTES);
   assert.equal(result.recommendedReserveMet,true);
   assert.equal(result.minimumFreeBytes,SYSTEM_CUTOVER_MINIMUM_FREE_BYTES);
+  assert.deepEqual(sample.seen,[SYSTEM_CUTOVER_STATE_PROBE_PATH,TEST_PROFILE]);
 });
 
-test('operational minimum and advisory 8 GiB threshold are separate',async()=>{
-  const result=await assertSystemCutoverDiskReserve(
-    atLeast(SYSTEM_CUTOVER_MINIMUM_FREE_BYTES),
+test('operational floor and advisory 8 GiB threshold are separate for both paths',async()=>{
+  const sample=syntheticVolumes(
+    SYSTEM_CUTOVER_MINIMUM_FREE_BYTES,
+    SYSTEM_CUTOVER_MINIMUM_FREE_BYTES,
   );
+  const result=await assertSystemCutoverDiskReserve(sample.read,sample.profile);
   assert.ok(result.availableBytes>=SYSTEM_CUTOVER_MINIMUM_FREE_BYTES);
+  assert.ok(result.userProfileAvailableBytes>=SYSTEM_CUTOVER_MINIMUM_FREE_BYTES);
   assert.equal(result.recommendedReserveMet,false);
-  await assert.rejects(assertSystemCutoverDiskReserve(
-    async()=>({bsize:1,bavail:Number(SYSTEM_CUTOVER_MINIMUM_FREE_BYTES-1n)}),
-  ),/AI04_CUTOVER_DISK_RESERVE_INSUFFICIENT/);
-  await assert.rejects(assertSystemCutoverDiskReserve(
-    async()=>({bsize:4096,bavail:0}),
-  ),/AI04_CUTOVER_DISK_RESERVE_INSUFFICIENT/);
+  for(const [sys,user] of [
+    [SYSTEM_CUTOVER_MINIMUM_FREE_BYTES-1n,SYSTEM_CUTOVER_RECOMMENDED_FREE_BYTES],
+    [SYSTEM_CUTOVER_RECOMMENDED_FREE_BYTES,SYSTEM_CUTOVER_MINIMUM_FREE_BYTES-1n],
+    [0n,SYSTEM_CUTOVER_RECOMMENDED_FREE_BYTES],
+    [SYSTEM_CUTOVER_RECOMMENDED_FREE_BYTES,0n],
+  ] as const){
+    const probe=syntheticVolumes(sys,user);
+    await assert.rejects(assertSystemCutoverDiskReserve(probe.read,probe.profile),
+      /AI04_CUTOVER_DISK_RESERVE_INSUFFICIENT/);
+  }
 });
 
-test('failed and malformed statfs responses deny migration without any write',async()=>{
-  for(const read of [
+test('different user-profile volume cannot be falsely approved by healthy C: free space',async()=>{
+  const lowSource=syntheticVolumes(
+    SYSTEM_CUTOVER_RECOMMENDED_FREE_BYTES,1n*1024n**3n,
+    OTHER_VOLUME_PROFILE,
+  );
+  await assert.rejects(
+    assertSystemCutoverDiskReserve(lowSource.read,OTHER_VOLUME_PROFILE),
+    /AI04_CUTOVER_DISK_RESERVE_INSUFFICIENT/,
+  );
+  assert.deepEqual(lowSource.seen,[
+    SYSTEM_CUTOVER_STATE_PROBE_PATH,OTHER_VOLUME_PROFILE,
+  ]);
+  const advisorySource=syntheticVolumes(
+    SYSTEM_CUTOVER_RECOMMENDED_FREE_BYTES,6n*1024n**3n,
+    OTHER_VOLUME_PROFILE,
+  );
+  const result=await assertSystemCutoverDiskReserve(
+    advisorySource.read,OTHER_VOLUME_PROFILE,
+  );
+  assert.equal(result.recommendedReserveMet,false);
+  assert.equal(result.userProfileAvailableBytes,6n*1024n**3n);
+});
+
+test('ProgramData mount-point uses path resolution, not an assumed C: root probe',async()=>{
+  const requests:string[]=[];
+  const read=async(probePath:string)=>{
+    requests.push(probePath);
+    const bytes=probePath===SYSTEM_CUTOVER_STATE_PROBE_PATH
+      ? 2n*1024n**3n : SYSTEM_CUTOVER_RECOMMENDED_FREE_BYTES;
+    return {bsize:4096,bavail:Number(bytes/4096n)};
+  };
+  await assert.rejects(
+    assertSystemCutoverDiskReserve(read,TEST_PROFILE),
+    /AI04_CUTOVER_DISK_RESERVE_INSUFFICIENT/,
+  );
+  assert.equal(requests[0],'C:\\ProgramData');
+  assert.ok(!requests.includes('C:\\'),
+    'C: root can conceal a redirected protected state mount point');
+});
+
+test('failed and malformed statfs responses on either path deny without any write',async()=>{
+  for(const bad of [
     async()=>{throw new Error('native statfs unavailable');},
     async()=>null as never,
     async()=>({bsize:0,bavail:4000000}),
@@ -49,9 +115,23 @@ test('failed and malformed statfs responses deny migration without any write',as
     async()=>({bsize:Number.NaN,bavail:123}),
     async()=>({bsize:4096,bavail:Number.MAX_SAFE_INTEGER+1}),
   ]){
-    await assert.rejects(assertSystemCutoverDiskReserve(read),
-      /AI04_CUTOVER_DISK_RESERVE_UNVERIFIED/);
+    await assert.rejects(
+      assertSystemCutoverDiskReserve(bad,TEST_PROFILE),
+      /AI04_CUTOVER_DISK_RESERVE_UNVERIFIED/,
+    );
+    await assert.rejects(
+      assertSystemCutoverDiskReserve(async(p)=>p===SYSTEM_CUTOVER_STATE_PROBE_PATH
+        ? {bsize:4096,bavail:Number(SYSTEM_CUTOVER_RECOMMENDED_FREE_BYTES/4096n)}
+        : bad(),TEST_PROFILE),
+      /AI04_CUTOVER_DISK_RESERVE_UNVERIFIED/,
+    );
   }
+  await assert.rejects(
+    assertSystemCutoverDiskReserve(syntheticVolumes(
+      SYSTEM_CUTOVER_RECOMMENDED_FREE_BYTES,SYSTEM_CUTOVER_RECOMMENDED_FREE_BYTES,
+    ).read,''),
+    /AI04_CUTOVER_DISK_RESERVE_UNVERIFIED/,
+  );
 });
 
 test('controlled migration checks disk twice, before artifacts and before legacy quiescence',()=>{
@@ -73,20 +153,31 @@ test('controlled migration checks disk twice, before artifacts and before legacy
     second.indexOf('verifyWindowsPrivateAcl(JOURNAL)'));
 });
 
-test('real Windows state-volume probe accepts or denies according to actual headroom',{
+test('real Windows path probes accept or deny according to frozen native headroom',{
   skip:process.platform!=='win32',
 },async()=>{
-  // Freeze one actual native read: concurrent runner disk churn must not turn a
-  // correct low-space refusal into a flaky test-suite failure.
-  const native=await statfs(SYSTEM_CUTOVER_STATE_VOLUME);
-  const observed=BigInt(native.bsize)*BigInt(native.bavail);
-  const read=async()=>native;
-  if(observed<SYSTEM_CUTOVER_MINIMUM_FREE_BYTES){
-    await assert.rejects(assertSystemCutoverDiskReserve(read),
+  // Freeze actual native readbacks. Concurrent CI disk churn cannot turn
+  // correct low-space refusal into a test failure.
+  const userPath=os.homedir();
+  const system=await statfs(SYSTEM_CUTOVER_STATE_PROBE_PATH);
+  const user=await statfs(userPath);
+  const sysBytes=BigInt(system.bsize)*BigInt(system.bavail);
+  const userBytes=BigInt(user.bsize)*BigInt(user.bavail);
+  const read=async(probe:string)=>{
+    if(probe===SYSTEM_CUTOVER_STATE_PROBE_PATH)return system;
+    if(probe===userPath)return user;
+    throw new Error('unexpected probe');
+  };
+  if(sysBytes<SYSTEM_CUTOVER_MINIMUM_FREE_BYTES||
+     userBytes<SYSTEM_CUTOVER_MINIMUM_FREE_BYTES){
+    await assert.rejects(assertSystemCutoverDiskReserve(read,userPath),
       /AI04_CUTOVER_DISK_RESERVE_INSUFFICIENT/);
   }else{
-    const result=await assertSystemCutoverDiskReserve(read);
-    assert.equal(result.root,SYSTEM_CUTOVER_STATE_VOLUME);
-    assert.equal(result.availableBytes,observed);
+    const result=await assertSystemCutoverDiskReserve(read,userPath);
+    assert.equal(result.availableBytes,sysBytes);
+    assert.equal(result.userProfileAvailableBytes,userBytes);
+    assert.equal(result.recommendedReserveMet,
+      sysBytes>=SYSTEM_CUTOVER_RECOMMENDED_FREE_BYTES&&
+      userBytes>=SYSTEM_CUTOVER_RECOMMENDED_FREE_BYTES);
   }
 });
