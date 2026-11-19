@@ -508,3 +508,57 @@ Any repaired source still requires exact-SHA explicit tests and owner review;
 installed Windows, browser, real account, Agent/Hub, two-PC pairing and
 release acceptance remain **PHYSICAL_NOT_RUN**. Issue #539/R01
 (and parent #485) stay OPEN.
+
+
+## P012 follow-up — 200 OK with JSON-null pairing body
+
+Source pin is still owner [#1160](https://github.com/Naveax/Nexowire/pull/1160)
+HEAD `81028bf643e3dc3cb5b0ab3f9c609c239732a413`,
+`web/connect.js` blob `3937291dcfb731ecc6fb1323c6771fc19983d577`.
+At lines 292–298, HTTP-200 pairing success parses `pairing.json()`
+and then reads `body.pairingId`. A standards-valid
+`Response.json(null, {status:200})` produces `null` and causes a
+TypeError at the unguarded dereference. The catch then labels the
+response `Beklenmeyen bağlantı hatası.` rather than the existing
+`Bağlantı cevabı geçersiz.` contract. This does **not** navigate or
+successfully pair; it is an error-origin/malformed-response classification
+bug, distinct from the 403 null-body case.
+
+A **narrow Node 22 execution** of the source condition plus its existing
+user-message mapping, transcribed from the exact owner blob, produced
+`2/2 TAP PASS` **reproduction** (not a product-fix PASS):
+1. 403 null displays unexpected error; 403 `{}` and quota object keep their appropriate denial strings
+2. 200 null displays unexpected error; 200 `{}` gives invalid-pairing string; a valid ID/token succeeds
+
+Command: `node --test /mnt/data/nexowire-qa/k01-null-bodies.test.mjs`.
+Separately, native Node 22 verified
+`Response.json(null,{status:200|403}).json()` resolves `null`, so
+the fixture is a valid JSON response, not a JSON parse exception. The
+two TAP tests use a **transcribed limited source excerpt**, not a checkout
+of the complete repository or end-to-end browser/Agent/Hub. Do not
+substitute these results for running the full K01 `.test.mjs`.
+
+Existing [#1114](https://github.com/Naveax/Nexowire/pull/1114)
+test-only commit [46dba1b](https://github.com/SinsiVinci/Nexowire-fork/commit/46dba1bccc804f8d3f819030f7b21a7a1f1eec8f)
+adds opt-in `K01_RUN_NULL_200_NEGATIVE=1` and an owner-#1160
+in-memory candidate comparison. The narrow suggested owner fix is to
+null-check the successfully parsed pairing body before reading
+`body.pairingId`; retain valid response navigation and missing-field
+rejection. This is owner code, so **K01 did not edit it**.
+
+For the preceding HEAD `3ad60de`, CI run
+[44607883406](https://github.com/Naveax/Nexowire/actions/runs/44607883406)
+was still in_progress until superseded and then completed/cancelled after
+the next commit; its test(22)/test(24) jobs were success but neither
+explicitly called `test/delegated/k01/issue485-state-truth.test.mjs`.
+New exact HEAD `46dba1b` automatically started
+[run 44609049069](https://github.com/Naveax/Nexowire/actions/runs/44609049069)
+and was **in_progress** at audit time. No rerun manually triggered.
+The full Node K01 suite, both opt-in 403/200 tests, and real
+browser/Windows/two-PC behavior remain **NOT_RUN** for this new HEAD.
+
+**Decision:** two narrow, reproducible owner-source error classification
+gaps (HTTP 403 null, HTTP 200 null) are `UNIQUE_FIX_ADAYI`.
+Prior four UI error classification fixes are `OWNER_PORTED`, with
+explicit Node22/24 CI evidence as recorded above.
+#1160 is not upstream main; #485/#539 still open, physical NO-GO.
