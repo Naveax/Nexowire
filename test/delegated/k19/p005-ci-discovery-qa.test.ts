@@ -22,6 +22,7 @@ export const targetFiles = [
 function executableRunCommands(yaml: string): string[] {
   const commands: string[] = [];
   let blockIndent: number | null = null;
+  let hereDocEnd: string | null = null;
   let pending = '';
   const flush = () => {
     if (pending.trim()) commands.push(pending.trim());
@@ -31,6 +32,7 @@ function executableRunCommands(yaml: string): string[] {
     const start = /^(\s*)(?:-\s*)?run:\s*(.*)$/.exec(line);
     if (start) {
       flush();
+      hereDocEnd = null;
       const value = (start[2] ?? '').trim();
       blockIndent = /^[|>][-+]?$/.test(value) ? (start[1] ?? '').length : null;
       if (blockIndent === null && value) commands.push(value);
@@ -41,10 +43,18 @@ function executableRunCommands(yaml: string): string[] {
     if (indent <= blockIndent) {
       flush();
       blockIndent = null;
+      hereDocEnd = null;
       continue;
     }
     const code = line.trim();
+    // Here-document bodies are shell input data, not executable test commands.
+    if (hereDocEnd !== null) {
+      if (code === hereDocEnd) hereDocEnd = null;
+      continue;
+    }
     if (code.startsWith('#')) continue;
+    const hereDoc = /(?:^|\s)<<-?\s*(?:'([A-Za-z_]\w*)'|"([A-Za-z_]\w*)"|([A-Za-z_]\w*))(?:\s|$)/.exec(code);
+    if (hereDoc) hereDocEnd = hereDoc[1] ?? hereDoc[2] ?? hereDoc[3] ?? null;
     pending += (pending ? ' ' : '') + code.replace(/\\$/, '');
     if (!code.endsWith('\\')) flush();
   }
@@ -149,4 +159,16 @@ test('K19: shell comments and chained echo cannot forge a nested test invocation
   }
   assert.equal(explicitlyListedInWorkflow(target,
     `- run: node --test --import tsx ${target}`), true);
+});
+
+
+test('K19: a here-document printed in a YAML run block cannot spoof test execution', () => {
+  const target = targetFiles[0];
+  for (const marker of ["'SAMPLE'", '"SAMPLE"', 'SAMPLE']) {
+    const yaml = `- run: |\n    cat <<${marker}\n    node --test --import tsx ${target}\n    SAMPLE`;
+    assert.equal(explicitlyListedInWorkflow(target, yaml), false, marker);
+    assert.equal(explicitlyListedInWorkflow(target,
+      `${yaml}\n    node --test --import tsx ${target}`), true,
+      'a subsequent real command must still be discovered');
+  }
 });
