@@ -33,7 +33,7 @@ export function summarizeS5ScenarioResults(results:readonly S5LoadResult[]){
     if(!integer(r.clients)||r.clients===0||!integer(r.rpc.attempted)||
       !integer(r.rpc.reserved)||!integer(r.sockets.peak)||
       !integer(r.rpc.backpressure)||!finite(r.elapsedMs)||
-      !finite(r.memoryBytes.rssPeak)||!finite(r.fairness.jainIndex)||
+      !integer(r.memoryBytes.rssPeak)||!finite(r.fairness.jainIndex)||
       ![p50,p95,p99,max].every(finite)||
       p50>p95||p95>p99||p99>max)
       throw new Error('Invalid or non-monotonic scenario measurement');

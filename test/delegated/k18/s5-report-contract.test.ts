@@ -81,3 +81,19 @@ test('T-223 invalid nested JSON numbers are rejected instead of becoming null or
     }]),/nonfinite/);
   }
 });
+
+test('W-683 #487 RSS byte counters reject fractional and unsafe integers',()=>{
+  const standard=sample();
+  for(const invalid of [1.5,Number.MAX_SAFE_INTEGER+1]){
+    assert.throws(()=>summarizeS5ScenarioResults([{
+      ...standard,memoryBytes:{...standard.memoryBytes,rssPeak:invalid},
+    }]),/Invalid or non-monotonic scenario measurement/);
+  }
+  for(const bytes of [0,225_280,Number.MAX_SAFE_INTEGER]){
+    const result=summarizeS5ScenarioResults([{
+      ...standard,memoryBytes:{...standard.memoryBytes,rssPeak:bytes},
+    }]);
+    assert.equal(result.scenarios[0]?.rssPeakBytes,bytes);
+    assert.equal(result.capacityEstimate,null);
+  }
+});
