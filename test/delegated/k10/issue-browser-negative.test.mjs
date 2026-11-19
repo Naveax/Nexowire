@@ -23,6 +23,25 @@ test('#539 R11: missing browser package never claims screenshot PASS or creates 
   assert.ok(!JSON.stringify(result).includes('PASS'));
 });
 
+test('#539 R11 / #485: module import errors redact raw message and code canaries', async (t) => {
+  const dir = disposable(t);
+  for (const variant of ['message', 'code']) {
+    const stub = join(dir, `import-fails-${variant}.mjs`);
+    const privateMessage = 'file:///fixture-private/import-secret.mjs token=fixture-import-canary';
+    writeFileSync(stub, variant === 'message'
+      ? `throw new Error(${JSON.stringify(privateMessage)});`
+      : `const error = new Error(${JSON.stringify(privateMessage)});
+error.code = 'ERR_FIXTURE_SECRET_CANARY'; throw error;`);
+    const report = await captureLocalStaticViews({
+      outputDir: join(dir, 'screenshots'), playwrightModule: pathToFileURL(stub).href,
+    });
+    assert.equal(report.status, 'NOT_RUN');
+    assert.match(report.reason, /Playwright is unavailable/);
+    assert.deepEqual(report.scenarios, []);
+    assert.doesNotMatch(JSON.stringify(report), /fixture-private|import-secret|fixture-import-canary|ERR_FIXTURE_SECRET_CANARY/);
+  }
+});
+
 test('#539 R11 / #485: browser startup failure redacts local path and bearer-like data', async (t) => {
   const dir = disposable(t);
   const stub = join(dir, 'launch-fails.mjs');
