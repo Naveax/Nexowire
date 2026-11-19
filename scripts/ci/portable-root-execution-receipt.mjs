@@ -12,6 +12,8 @@ import {assertTapSummary} from './assert-tap-summary.mjs';
 export const APPROVED_ROOT_TEST_FILES=Object.freeze([
   'test/version.test.ts',
   'test/release-tag.test.ts',
+  'test/release-publication-policy.test.ts',
+  'test/release-attestation-policy.test.ts',
   'test/ai07-physical-cutover-gate.test.ts',
   'test/capability-policy.test.ts',
   'test/device-routing-policy-store.test.ts',

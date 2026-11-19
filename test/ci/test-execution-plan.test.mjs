@@ -65,6 +65,25 @@ test('an approved filename with changed Git blob is no longer approved',()=>{
   assert.throws(()=>createTestExecutionPlan(changed,derived),
     /TEST_EXECUTION_PLAN_REVIEWED_SOURCE_BLOB_CHANGED/);
 });
+test('newly reviewed release-policy tests are pinned to exact original Git blobs',()=>{
+  const reviewed=[
+    ['test/release-publication-policy.test.ts','d12ab1f03b7ffff8fc6d75552ada812d16b46436'],
+    ['test/release-attestation-policy.test.ts','e1f12b6bceb5d437a8b46e194c953e83bc6aa923'],
+  ];
+  const plan=createTestExecutionPlan(entries,report,2);
+  const tracked=new Map(entries.map(e=>[e.path,e.blob]));
+  const actual=new Map(plan.reviewedPortableShards.flatMap(g=>g.files)
+    .map(e=>[e.path,e.gitBlobSha]));
+  for(const [file,blob] of reviewed) {
+    assert.equal(tracked.get(file),blob);
+    assert.equal(actual.get(file),blob);
+    const drift=entries.map(e=>e.path===file?{...e,blob:'0'.repeat(40)}:e);
+    assert.throws(()=>createTestExecutionPlan(
+      drift,summarizeTestFiles(drift,report.commitSha),
+    ),/TEST_EXECUTION_PLAN_REVIEWED_SOURCE_BLOB_CHANGED/);
+  }
+});
+
 test('CI requires an explicitly matched expected PR source HEAD',()=>{
   const env={...process.env,CI:'true'};
   delete env.NEXOWIRE_EXPECTED_COMMIT_SHA;

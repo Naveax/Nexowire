@@ -13,6 +13,8 @@ const workflow=readFileSync(resolve(root,'.github/workflows/portable-root-test-s
 const approved=Object.freeze([
   'test/version.test.ts',
   'test/release-tag.test.ts',
+  'test/release-publication-policy.test.ts',
+  'test/release-attestation-policy.test.ts',
   'test/ai07-physical-cutover-gate.test.ts',
   'test/capability-policy.test.ts',
   'test/device-routing-policy-store.test.ts',
@@ -43,7 +45,7 @@ const approved=Object.freeze([
   'test/core-elevation-effective-truth-matrix.test.ts',
 ]);
 
-test('portable root smoke invokes only thirty reviewed isolated policy and source contracts',()=>{
+test('portable root smoke invokes only thirty-two reviewed isolated policy and source contracts',()=>{
   const target=workflow.match(/^      - name: Execute allowlisted root tests and reconcile source-bound coverage\n        timeout-minutes: 7\n        env:\n          NEXOWIRE_EXPECTED_COMMIT_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}\n        run: (.+)$/m);
   assert.ok(target,'missing separate timeout-bounded pure-contract step');
   const tokens=target[1].trim().split(/\s+/);

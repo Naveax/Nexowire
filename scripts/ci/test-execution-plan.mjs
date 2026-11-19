@@ -14,6 +14,8 @@ const APPROVAL = Object.freeze([...APPROVED_ROOT_TEST_FILES].sort());
 const REVIEWED_GIT_BLOBS = Object.freeze({
   'test/version.test.ts':'c06489c8b3b877b061ed89d06872347e67cc9940',
   'test/release-tag.test.ts':'7855f8cdcda3c29f8035358e25777f7f4904d857',
+  'test/release-publication-policy.test.ts':'d12ab1f03b7ffff8fc6d75552ada812d16b46436',
+  'test/release-attestation-policy.test.ts':'e1f12b6bceb5d437a8b46e194c953e83bc6aa923',
   'test/ai07-physical-cutover-gate.test.ts':'7e92c75c744575f1b4acbf5e8054b6bc7fbb88a9',
   'test/capability-policy.test.ts':'60bb307b4121304a24a7bde63218139139f769f4',
   'test/device-routing-policy-store.test.ts':'f1a39bbec8d0d7623ebef5e72a9d0e185e62ce49',
