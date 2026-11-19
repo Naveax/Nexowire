@@ -14,6 +14,15 @@ A self-hosted node runs the Nexowire Hub and local Native Agent under the **same
 
 For a separate deployment plan (including non-Windows/manual operator paths), see [Deployment Onboarding](DEPLOYMENT_ONBOARDING.md). That planning flow is **not** the Windows one-command node bootstrap.
 
+### Same-user bootstrap is not SYSTEM Hub migration
+
+`nexowire node bootstrap` is the **same interactive Windows user's** self-host route: its Scheduled Tasks and sealed credentials use **CurrentUser DPAPI**. It does **not** migrate the Hub to the separate **SYSTEM (SID S-1-5-18)** identity, create or validate a **LocalMachine DPAPI** credential envelope, move the protected SQLite state, or certify startup before sign-in.
+
+The owner-controlled SYSTEM Hub cutover is a distinct [#1161](https://github.com/Naveax/Nexowire/issues/1161) operation. A successful per-user bootstrap, `Running` task, source-only CI check, or SYSTEM staging script is **not** its completion evidence. Protected-state migration, task/ACL ownership, real boot/reboot, authenticated recovery and rollback remain **NO-GO / PHYSICAL_NOT_RUN** until the separately authorized Windows owner verifies them.
+
+Do not run this same-user bootstrap under SYSTEM, copy CurrentUser DPAPI files to ProgramData, delete the existing Hub state, or elevate the command as a shortcut for the SYSTEM migration. Those actions belong to the owner-approved cutover and rollback procedure, not this guide.
+
+
 ## Choose the right address (do not guess an endpoint)
 
 | Situation | Address source | Authentication | Boundary |

@@ -85,6 +85,14 @@ test('platform descriptions do not present unverified Linux/macOS as Windows boo
   assert.match(doctor, /unavailable optional tools are warnings/);
   assert.match(doctor, /physicalAcceptance.*NOT_TESTED/);
 
+  const identityBoundary = section(doc, '### Same-user bootstrap is not SYSTEM Hub migration');
+  for (const term of [
+    'CurrentUser DPAPI', 'SYSTEM (SID S-1-5-18)', 'LocalMachine DPAPI',
+    'protected SQLite state', '#1161', 'NO-GO / PHYSICAL_NOT_RUN',
+  ]) assert.ok(identityBoundary.includes(term), `Missing SYSTEM identity boundary: ${term}`);
+  assert.match(identityBoundary, /Do not run this same-user bootstrap under SYSTEM/);
+  assert.match(identityBoundary, /not.*completion evidence/);
+
   const firstRun = section(doc, '## One-command Windows bootstrap (changes local state)');
   const commands = [...firstRun.matchAll(/^nexowire node bootstrap[^\n]+$/gm)].map((m) => m[0]);
   assert.equal(commands[0], 'nexowire node bootstrap --device-name work-pc',
