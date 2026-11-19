@@ -106,15 +106,24 @@ test('#539 R11: static assets inside web are permitted; symlink escapes and HTTP
   const webRoot = join(dir, 'web');
   mkdirSync(webRoot);
   const safeCss = join(webRoot, 'styles.css');
-  const outside = join(dir, 'secrets.txt');
+  const outsideDir = join(dir, 'outside-dir');
+  mkdirSync(outsideDir);
+  const outside = join(outsideDir, 'secrets.txt');
   writeFileSync(safeCss, 'body{}');
   writeFileSync(outside, 'private');
-  const link = join(webRoot, 'linked-secrets.txt');
-  symlinkSync(outside, link);
+  // Windows unprivileged runners cannot reliably create file symlinks.
+  // An external-directory junction checks realpath escape without that privilege.
+  const linkedDir = join(webRoot, 'linked-outside-dir');
+  symlinkSync(outsideDir, linkedDir, process.platform === 'win32' ? 'junction' : 'dir');
   assert.equal(allowLocalWebAssetRequest(pathToFileURL(safeCss).href, webRoot), true);
   assert.equal(allowLocalWebAssetRequest('data:text/plain,fixture', webRoot), true);
   assert.equal(allowLocalWebAssetRequest(pathToFileURL(outside).href, webRoot), false);
-  assert.equal(allowLocalWebAssetRequest(pathToFileURL(link).href, webRoot), false);
+  assert.equal(allowLocalWebAssetRequest(pathToFileURL(join(linkedDir, 'secrets.txt')).href, webRoot), false);
+  if (process.platform !== 'win32') {
+    const link = join(webRoot, 'linked-secrets.txt');
+    symlinkSync(outside, link);
+    assert.equal(allowLocalWebAssetRequest(pathToFileURL(link).href, webRoot), false);
+  }
   assert.equal(allowLocalWebAssetRequest('http://127.0.0.1:8080/', webRoot), false);
   assert.equal(allowLocalWebAssetRequest('file:///definitely-missing-private-file.txt', webRoot), false);
 });
