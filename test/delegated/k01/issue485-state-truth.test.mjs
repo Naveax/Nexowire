@@ -507,6 +507,42 @@ test('W-423 #539: in-memory null-safe 403 denial preserves known quota behavior'
   assert.equal(quota.get('approve').disabled, true);
 });
 
+// Issue #485/#539: a successful HTTP 200 with valid JSON null is not a usable
+// pairing response. #1160 currently dereferences body.pairingId without a null guard.
+test('W-423 OPEN NEGATIVE: JSON-null HTTP 200 must show malformed pairing response', {
+  skip: process.env.K01_RUN_NULL_200_NEGATIVE !== '1' && 'pending owner #1160 response-body guard',
+}, async () => {
+  const f = await boot({ query: search(),
+    pairing: async () => Response.json(null, { status: 200 }) });
+  await f.get('approve').dispatch('click');
+  assert.equal(f.navigations.length, 0);
+  assert.equal(f.get('connect-pill').textContent, 'Hata');
+  assert.equal(f.get('error-message').textContent, 'Bağlantı cevabı geçersiz.',
+    'JSON null must be classified as malformed pairing data, not an unexpected TypeError');
+});
+
+test('W-423 #485: in-memory null-safe 200 keeps valid pairing success', {
+  skip: !ownerSourcePortedUx && 'requires current owner #1160 source shape',
+}, async () => {
+  const null200 = async () => Response.json(null, { status: 200 });
+  const baseline = await boot({ query: search(), pairing: null200 });
+  await baseline.get('approve').dispatch('click');
+  assert.equal(baseline.get('error-message').textContent, 'Beklenmeyen bağlantı hatası.');
+  const proposed = candidateSource(
+    "typeof body.pairingId !== 'string' || !body.pairingId.trim() ||",
+    "!body || typeof body.pairingId !== 'string' || !body.pairingId.trim() ||",
+  );
+  const corrected = await boot({ query: search(), pairing: null200, source: proposed });
+  await corrected.get('approve').dispatch('click');
+  assert.equal(corrected.navigations.length, 0);
+  assert.equal(corrected.get('error-message').textContent, 'Bağlantı cevabı geçersiz.');
+  const valid = await boot({ query: search(), source: proposed,
+    pairing: async () => Response.json({ pairingId: 'pair-valid', token: 'token-valid' }) });
+  await valid.get('approve').dispatch('click');
+  assert.equal(valid.navigations.length, 1);
+  assert.equal(new URL(valid.navigations[0]).searchParams.get('pairing_id'), 'pair-valid');
+});
+
 test('T-539 OPEN NEGATIVE: synthetic failed fetch must not disclose a token in the error panel', {
   skip: process.env.K01_RUN_OPEN_NEGATIVES !== '1' && 'owner displays raw fetch error.message',
 }, async () => {
