@@ -235,8 +235,9 @@ test('D-139: changed SHA with prior success run cannot be accepted; incomplete/d
 });
 
 const SHA = snapshot.upstreamMain;
-const jobs = Array.from({length:7}, (_,i) => ({id:i+1, status:'completed',conclusion:'success'}));
-const goodRun = {id:42474379692,headSha:SHA,status:'completed',conclusion:'success'};
+const goodRun = {id:42474379692,headSha:SHA,attempt:1,totalJobs:7,status:'completed',conclusion:'success'};
+const jobs = Array.from({length:7}, (_,i) => ({id:i+1,runId:goodRun.id,
+  attempt:goodRun.attempt,headSha:SHA,status:'completed',conclusion:'success'}));
 const nested = [{path:'test/delegated/k20/p006-acceptance.test.mjs',marker:'T-653: hosted proof sentinel'}];
 
 test('T-653: all 7 jobs green with zero newly-executed test markers never passes gate', () => {
@@ -288,9 +289,24 @@ test('T-654: stale exact HEAD, empty jobs and failed jobs cannot inherit green a
   assert.equal(auditHostedAcceptance({head:SHA,run:{...goodRun,totalJobs:8},jobs,newTests:nested}).ci,
     'JOBS_MISSING');
   assert.equal(auditHostedAcceptance({head:SHA,run:goodRun,
-    jobs:[...jobs.slice(0,6),{id:7,status:'completed',conclusion:'failure'}],newTests:nested}).ci,
+    jobs:[...jobs.slice(0,6),{...jobs[6],conclusion:'failure'}],newTests:nested}).ci,
     'CI_NOT_GREEN');
   assert.equal(auditHostedAcceptance({head:SHA,run:null,newTests:nested}).ci,'NOT_RUN');
+});
+
+test('W-537: successful jobs from foreign run, attempt, or SHA cannot synthesize a green CI', () => {
+  const fake = cases => auditHostedAcceptance({head:SHA,run:goodRun,jobs:cases,newTests:nested}).ci;
+  assert.equal(fake(jobs), 'REPORTED_ALL_GREEN');
+  assert.equal(fake(jobs.map((j,i) => i === 6 ? {...j,runId:999} : j)), 'JOBS_MISSING');
+  assert.equal(fake(jobs.map((j,i) => i === 6 ? {...j,attempt:2} : j)), 'JOBS_MISSING');
+  assert.equal(fake(jobs.map((j,i) => i === 6 ? {...j,headSha:'a'.repeat(40)} : j)), 'JOBS_MISSING');
+  assert.equal(fake(jobs.map((j,i) => i === 6 ? {...j,runId:undefined} : j)), 'JOBS_MISSING');
+  assert.equal(fake(jobs.map((j,i) => i === 6 ? {...j,attempt:undefined} : j)), 'JOBS_MISSING');
+  assert.equal(fake(jobs.map((j,i) => i === 6 ? {...j,headSha:undefined} : j)), 'JOBS_MISSING');
+  assert.equal(auditHostedAcceptance({head:SHA,run:{...goodRun,attempt:undefined},
+    jobs,newTests:nested}).ci, 'JOBS_MISSING');
+  assert.equal(auditHostedAcceptance({head:SHA,run:{...goodRun,totalJobs:undefined},
+    jobs,newTests:nested}).ci, 'JOBS_MISSING');
 });
 
 test('T-654: declared physical PASS is not silently assumed; installed SHA mismatch stays NOT_RUN', () => {
