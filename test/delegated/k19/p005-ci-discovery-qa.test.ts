@@ -57,7 +57,11 @@ function explicitlyListedInWorkflow(file: string, yaml: string): boolean {
     const args = command.trim().split(/\s+/);
     // A printed or quoted example is not an executable Node test command.
     // Keep this conservative: only direct `node --test` commands count.
-    return args[0] === 'node' && args.includes('--test') && args.includes(file);
+    // Only tokens in the initial node command are executable test arguments.
+    // A later shell comment/echo, pipeline or chained command is not evidence.
+    const boundary = args.findIndex(token => token.startsWith('#') || /[;&|]/.test(token));
+    const invoked = boundary < 0 ? args : args.slice(0, boundary);
+    return invoked[0] === 'node' && invoked.includes('--test') && invoked.includes(file);
   });
 }
 
@@ -132,4 +136,17 @@ test('K19: shell echo of node test command must not count as execution', () => {
   const target = targetFiles[0];
   const fake = `- run: echo node --test --import tsx ${target}`;
   assert.equal(explicitlyListedInWorkflow(target, fake), false);
+});
+test('K19: shell comments and chained echo cannot forge a nested test invocation', () => {
+  const target = targetFiles[0];
+  for (const fake of [
+    `- run: node --test --import tsx # ${target}`,
+    `- run: node --test --import tsx ; echo ${target}`,
+    `- run: node --test --import tsx && echo ${target}`,
+    `- run: node --test --import tsx | echo ${target}`,
+  ]) {
+    assert.equal(explicitlyListedInWorkflow(target, fake), false, fake);
+  }
+  assert.equal(explicitlyListedInWorkflow(target,
+    `- run: node --test --import tsx ${target}`), true);
 });
