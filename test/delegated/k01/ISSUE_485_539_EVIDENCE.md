@@ -444,3 +444,67 @@ browser/Windows/Agent/Hub/OAuth/installer/two-PC pairing. No new unique
 source RED was demonstrated on #1160, so this audit makes **NO_DELTA**
 to production and adds no redundant negative fixture.
 #485/#539 acceptance and upstream main merge are still open owner gates.
+
+
+## P012 / W-423 new RED: JSON-null HTTP 403 error mapping
+
+**Source owner/current exact SHA (19 Nov 2026):** owner integration
+[#1160](https://github.com/Naveax/Nexowire/pull/1160) remains
+OPEN/DRAFT `81028bf643e3dc3cb5b0ab3f9c609c239732a413`,
+`web/connect.js` blob `3937291dcfb731ecc6fb1323c6771fc19983d577`.
+The 403 branch around lines 281–287 parses the JSON body with
+`await pairing.json().catch(() => ({}))` and immediately reads
+`body.error`. **Valid JSON `null` is not a parse failure**, so
+`pairing.json()` returns `null` and the dereference raises a
+`TypeError`, rather than the intended generic terminal 403 denial.
+The surrounding catch at 304–313 falls back to
+`Beklenmeyen bağlantı hatası.` instead of
+`Bu cihaz bu hesaba bağlanamadı.`. A 403 still disables retry; this is
+an error-origin/truthfulness problem, **not a claimed authorization bypass**.
+The existing owner `test/delegated/k01/connect-state.test.ts` exercises
+403 quota with an object body, but not valid JSON `null`.
+
+**Reproduction, source excerpt executed directly (not browser):**
+the exact 403 code block taken from blob `3937291d` was evaluated with
+three parsed-body values:
+
+| Parsed 403 body | Original executed branch | retryable |
+| --- | --- | --- |
+| `null` | `TypeError: Cannot read properties of null (reading 'error')` | false |
+| `{}` | `Error: Bu cihaz bu hesaba bağlanamadı.` | false |
+| `{error:'DEVICE_LIMIT_REACHED'}` | `Error: Bu hesap için cihaz limiti dolu.` | false |
+
+A **test-only** single-token replacement `body.error` →
+`body?.error` in this same branch classified the `null` case as
+`Bu cihaz bu hesaba bağlanamadı.` while preserving quota semantics
+in the extracted source. Owner must evaluate and implement any production
+fix; no `web/**` or auth source was edited.
+
+**New K01 test-only commit:** 
+[\`d7774e040f212fba6f40d9866747e9d0dd352db2\`](https://github.com/SinsiVinci/Nexowire-fork/commit/d7774e040f212fba6f40d9866747e9d0dd352db2)
+on existing [#1114](https://github.com/Naveax/Nexowire/pull/1114).
+Added the opt-in `K01_RUN_NULL_403_NEGATIVE=1` 403-null RED gate
+and owner-specific in-memory before/after candidate gate;
+the default fixture leaves the known-broken RED **SKIP**, not PASS.
+Five old in-memory proposals are now SKIP against a recognized already-ported
+#1160 source rather than producing a misleading fail; historical old-main
+behavior is retained. Installer CTA test now checks owner-pinned **v1.0.8**
+release assets and checksum note versus historical main's v1.0.7 bootstrap,
+avoiding false regressions from a release-source change.
+
+**Execution state:** V8 parsed the updated `.mjs` successfully after
+isolated import removal (**syntax-only PASS**, not Node test execution).
+The full Node suite and new 403-null test are **NOT_RUN** on the updated
+commit, because the local container cannot resolve `github.com`; the
+actual #1114 CI workflow does not select this nested K01 MJS in the
+previous HEAD. New exact #1114 HEAD `d7774e040f212fba6f40d9866747e9d0dd352db2`
+automatically started [run 44607615460](https://github.com/Naveax/Nexowire/actions/runs/44607615460),
+observed **in_progress** (no rerun requested). Re-check job
+command/output before claiming any hosted test result.
+
+**Disposition:** `UNIQUE_FIX_ADAYI` only for the specific null-JSON 403
+classification gap. The previous four UI fixes remain `OWNER_PORTED`.
+Any repaired source still requires exact-SHA explicit tests and owner review;
+installed Windows, browser, real account, Agent/Hub, two-PC pairing and
+release acceptance remain **PHYSICAL_NOT_RUN**. Issue #539/R01
+(and parent #485) stay OPEN.
