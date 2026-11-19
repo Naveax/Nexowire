@@ -196,6 +196,9 @@ export async function collectSnapshot(get, { includeCi = false, onlyNumbers = nu
     if (fresh[i].head?.sha !== selected[i].head.sha || fresh[i].base?.sha !== selected[i].base?.sha) {
       throw new Error(`PR #${selected[i].number} changed HEAD/base during inspection; retry`);
     }
+    if (fresh[i].state !== selected[i].state || fresh[i].draft !== selected[i].draft) {
+      throw new Error(`PR #${selected[i].number} changed state/draft during inspection; retry`);
+    }
   }
   return buildReport({ upstreamSha, forkSha, comparison, prs });
 }

@@ -65,7 +65,7 @@ test('live collector filters non-fork heads and performs no writes', async () =>
     if (path.includes('/branches/main')) return { commit: { sha: A } };
     if (path.includes('/pulls?')) return [{ number: 1, head: { sha: B, repo: { full_name: 'SinsiVinci/Nexowire-fork' } }, user: { login: 'SinsiVinci' }, base: { sha: A } }, { number: 2, head: { sha: C, repo: { full_name: 'Naveax/Nexowire' } } }];
     if (path.includes('/pulls/1/files')) return [{ filename: 'docs/readme.md' }];
-    if (path.endsWith('/pulls/1')) return { number: 1, head: { sha: B }, base: { sha: A } };
+    if (path.endsWith('/pulls/1')) return { number: 1, state: 'open', draft: true, head: { sha: B }, base: { sha: A } };
     throw new Error(`Unexpected read: ${path}`);
   };
   const report = await collectSnapshot(get);
@@ -90,4 +90,23 @@ test('dated 23-PR exact SHA fixture preserves zero-job merge block', async () =>
   assert.equal(report.prs.length, 23);
   assert.equal(report.overlaps.length, 0);
   assert.ok(report.prs.every(pr => pr.ci === 'ACTION_REQUIRED_EMPTY_JOBS' && pr.mergeReady === false));
+});
+
+test('collector fails closed when a PR closes or leaves Draft during a HEAD-stable inspection', async () => {
+  for (const mutation of [{ state: 'closed', draft: true }, { state: 'open', draft: false }]) {
+    const get = async path => {
+      if (path.includes('/branches/main')) return { commit: { sha: A } };
+      if (path.includes('/pulls?')) return [{
+        number: 1, state: 'open', draft: true,
+        head: { sha: B, repo: { full_name: 'SinsiVinci/Nexowire-fork' } },
+        base: { sha: A },
+      }];
+      if (path.includes('/pulls/1/files')) return [{ filename: 'a.md' }];
+      if (path.endsWith('/pulls/1')) return {
+        number: 1, ...mutation, head: { sha: B }, base: { sha: A },
+      };
+      throw new Error('Unexpected path');
+    };
+    await assert.rejects(collectSnapshot(get), /changed state\/draft during inspection/);
+  }
 });
