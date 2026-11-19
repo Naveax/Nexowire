@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {statfs} from 'node:fs/promises';
 import {
   assertSystemCutoverDiskReserve,
   SYSTEM_CUTOVER_MINIMUM_FREE_BYTES,
@@ -72,10 +73,20 @@ test('controlled migration checks disk twice, before artifacts and before legacy
     second.indexOf('verifyWindowsPrivateAcl(JOURNAL)'));
 });
 
-test('real Windows state-volume measurement is read-only and explicit',{
+test('real Windows state-volume probe accepts or denies according to actual headroom',{
   skip:process.platform!=='win32',
 },async()=>{
-  const result=await assertSystemCutoverDiskReserve();
-  assert.equal(result.root,'C:\\');
-  assert.ok(result.availableBytes>=SYSTEM_CUTOVER_MINIMUM_FREE_BYTES);
+  // Freeze one actual native read: concurrent runner disk churn must not turn a
+  // correct low-space refusal into a flaky test-suite failure.
+  const native=await statfs(SYSTEM_CUTOVER_STATE_VOLUME);
+  const observed=BigInt(native.bsize)*BigInt(native.bavail);
+  const read=async()=>native;
+  if(observed<SYSTEM_CUTOVER_MINIMUM_FREE_BYTES){
+    await assert.rejects(assertSystemCutoverDiskReserve(read),
+      /AI04_CUTOVER_DISK_RESERVE_INSUFFICIENT/);
+  }else{
+    const result=await assertSystemCutoverDiskReserve(read);
+    assert.equal(result.root,SYSTEM_CUTOVER_STATE_VOLUME);
+    assert.equal(result.availableBytes,observed);
+  }
 });
