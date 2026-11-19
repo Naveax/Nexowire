@@ -24,6 +24,7 @@ import {
   SYSTEM_STATE_ROOT,SYSTEM_CUTOVER_RECEIPT,
 } from '../src/hub/system-hub-state-cutover.js';
 import {postHealthSystemHubDisposition,runRecoverableSystemHubCutover} from '../src/hub/system-cutover-orchestrator.js';
+import {assertSystemCutoverDiskReserve} from '../src/hub/system-cutover-disk-reserve.js';
 import {
   prepareProtectedOfflineSystemHubStateCopy,assertInteractiveHubTaskDisabledReadOnly,
 } from './ai04-prepare-system-hub-state-copy.js';
@@ -328,6 +329,8 @@ export async function controlledSystemHubCutover(
   };
   return await runRecoverableSystemHubCutover({
     async preflight(){
+      // No recovery artifacts or user Hub changes when the state volume is full.
+      await assertSystemCutoverDiskReserve();
       trustedAncestors();
       assertWindowsPrivilegedRuntimeTrusted({
         executable:process.execPath,cliEntrypoint:process.argv[1]!,
@@ -393,6 +396,9 @@ export async function controlledSystemHubCutover(
         throw new Error('AI04_RECOVERY_TASK_CHANGED_BEFORE_QUIESCE');
       verifyWindowsPrivateAcl(RECOVERY);
       verifyWindowsPrivateAcl(JOURNAL);
+      // Other processes can consume space while the recovery task is armed.
+      // Recheck immediately before disabling the existing user Hub.
+      await assertSystemCutoverDiskReserve();
     },
     async quiesceLegacy(){
       await advance(journal,'QUIESCING');
