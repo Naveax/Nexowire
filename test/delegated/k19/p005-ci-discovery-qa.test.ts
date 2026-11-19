@@ -41,7 +41,39 @@ function executableRunCommands(yaml: string): string[] {
     if (indent <= blockIndent) {
       flush();
       blockIndent = null;
-      contintest('T-503: nested K19 tests are not selected by the POSIX npm test glob', () => {
+      continue;
+    }
+    const code = line.trim();
+    if (code.startsWith('#')) continue;
+    pending += (pending ? ' ' : '') + code.replace(/\\$/, '');
+    if (!code.endsWith('\\')) flush();
+  }
+  flush();
+  return commands;
+}
+
+function explicitlyListedInWorkflow(file: string, yaml: string): boolean {
+  return executableRunCommands(yaml).some(command =>
+    /\bnode\b.*\s--test(?:\s|$)/.test(command) &&
+    command.split(/\s+/).includes(file));
+}
+
+function discovered(file: string, expandedShellArgs: readonly string[], yaml: string): boolean {
+  return expandedShellArgs.includes(file) || explicitlyListedInWorkflow(file, yaml);
+}
+
+function expandedNpmTestPaths(): string[] {
+  const script = packageJson.scripts.test;
+  assert.equal(script, 'node --test --import tsx test/**/*.test.ts',
+    'npm test command changed: update the discovery proof before interpreting CI');
+  // CI invokes npm through a POSIX shell on Linux; this is the shell's expansion
+  // of the exact fixed wildcard, NOT Node's recursive globSync semantics.
+  return execFileSync('sh', ['-c', 'printf "%s\\n" test/**/*.test.ts'], {
+    cwd: root, encoding: 'utf8', timeout: 10_000,
+  }).trim().split('\n');
+}
+
+test('T-503: nested K19 tests are not selected by the POSIX npm test glob', () => {
   const expanded = expandedNpmTestPaths();
   assert.ok(expanded.some(path => path.endsWith('.test.ts')));
   for (const file of targetFiles) {
