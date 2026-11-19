@@ -37,7 +37,7 @@ test('T-649: matching baseline 41 is green assertions only; stale/head incomplet
   assert.equal(mismatch.verdict, 'STALE_HEAD');
   assert.equal(auditFixedCountGate({ ...prior, tap: 'broken', runId: 42474379692 }).verdict,
     'UNKNOWN_TAP');
-  assert.equal(auditFixedCountGate({ ...prior, tap: '# tests 2\n# pass 1\n# fail 1\n# skipped 0\n# todo 0\n',
+  assert.equal(auditFixedCountGate({ ...prior, tap: '# tests 2\n# pass 1\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n',
     runId: 42474379692 }).verdict, 'ASSERTIONS_RED');
   assert.equal(auditFixedCountGate({ ...prior, tap: tap(52).split('\n').map(s => s && `2026-11-08T11:14:36.00Z ${s}`).join('\n'),
     runId: 42474379692 }).verdict, 'COUNT_DRIFT_REPRODUCED');
