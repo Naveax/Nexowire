@@ -42,6 +42,7 @@ export const APPROVED_ROOT_TEST_FILES=Object.freeze([
   'test/security-tokens.test.ts',
   'test/scale-s5-staging-acceptance.test.ts',
   'test/core-elevation-effective-truth-matrix.test.ts',
+  'test/core-console-enrollment-policy.test.ts',
 ]);
 
 export const REVIEWED_ROOT_GIT_BLOBS = Object.freeze({
@@ -77,6 +78,7 @@ export const REVIEWED_ROOT_GIT_BLOBS = Object.freeze({
   'test/security-tokens.test.ts':'92ea5c61df1c707f2970e1305a34b56d5cf7b8e0',
   'test/scale-s5-staging-acceptance.test.ts':'b381c0cc734d7a29f650bf922beb168074817e3d',
   'test/core-elevation-effective-truth-matrix.test.ts':'09d970538d6ce22b20edb25c9da1fcbed8929c4c',
+  'test/core-console-enrollment-policy.test.ts':'416167d7389f722d378f6fcd2b9ed61da813713b',
 });
 const MAX_TEST_MILLIS=7*60*1000;
 const MAX_LOG_BYTES=2*1024*1024;
