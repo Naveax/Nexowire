@@ -120,6 +120,20 @@ jobs:
         run: |
           set -euo pipefail
           node test/delegated/k04/admin-denial-sequence.mjs web/admin.js web/admin.html
+      - name: Verify K02 responsive CSS source and overflow contracts
+        # Exact blob from #1101; tested against current HEAD web/styles.css.
+        # Source assertions only, NOT real browser zoom or Windows GUI.
+        shell: bash
+        timeout-minutes: 3
+        env:
+          NEXOWIRE_REQUIRE_UI_INTEGRATION: '1'
+        run: |
+          set -euo pipefail
+          node --test --test-reporter=tap \
+            test/delegated/k02/issue-485-539-ui.contract.test.mjs \
+            > "$RUNNER_TEMP/nw-k02-responsive.tap"
+          cat "$RUNNER_TEMP/nw-k02-responsive.tap"
+          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/nw-k02-responsive.tap" 6
       - name: Verify K03 offline console grant and Broker command-progress contracts
         # Two SHA-reviewed original K03 fixtures from #1103, explicit tests.
         # Not real Windows input, Hub command authority or physical acceptance.
