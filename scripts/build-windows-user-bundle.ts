@@ -312,6 +312,19 @@ function runNpmCi(cwd: string): void {
   );
 }
 
+/** Use Windows PowerShell 5.1/.NET Framework's supported two-argument API. */
+export function nodeRuntimeExtractionPowerShell(
+  archive: string,
+  extracted: string,
+): string {
+  return [
+    "$ErrorActionPreference='Stop'",
+    'Add-Type -AssemblyName System.IO.Compression.FileSystem',
+    '[System.IO.Compression.ZipFile]::ExtractToDirectory(' +
+      psLiteral(archive) + ', ' + psLiteral(extracted) + ')',
+  ].join('; ');
+}
+
 async function downloadNodeRuntime(
   tempRoot: string,
   nodeVersion: string,
@@ -324,6 +337,7 @@ async function downloadNodeRuntime(
   const sums = path.join(tempRoot, 'SHASUMS256.txt');
   const extracted = path.join(tempRoot, 'node-runtime');
 
+  // Fetch only; untrusted ZIP bytes must not be extracted before SHA-256.
   runPowerShell(
     [
       "$ErrorActionPreference='Stop'",
@@ -336,11 +350,6 @@ async function downloadNodeRuntime(
         psLiteral(base + '/SHASUMS256.txt') +
         ' -OutFile ' +
         psLiteral(sums),
-      'Expand-Archive -LiteralPath ' +
-        psLiteral(archive) +
-        ' -DestinationPath ' +
-        psLiteral(extracted) +
-        ' -Force',
     ].join('; '),
   );
 
@@ -359,6 +368,13 @@ async function downloadNodeRuntime(
     expected,
     'Official Node runtime archive checksum mismatch.',
   );
+
+  // The signed release archive hash is verified BEFORE any ZIP entry is read.
+  // Windows PowerShell 5.1 Expand-Archive can invoke an unavailable .NET
+  // ExtractToDirectory(3 args) overload on hosted Windows; use the two-arg
+  // framework API directly on a fresh, dedicated extraction directory.
+  await fs.mkdir(extracted, { recursive: true });
+  runPowerShell(nodeRuntimeExtractionPowerShell(archive, extracted));
 
   const runtimeRoot = path.join(
     extracted,
