@@ -27,3 +27,31 @@ if (leaked) {
 } else {
   console.log('PASS: synthetic Cookie/Set-Cookie values masked at redactor boundary.');
 }
+
+
+// W-723: common secret-bearing HTTP header ALIASES are distinct from the
+// previously reported Cookie case. Each value is synthetic; no header is sent.
+const aliasMarker = 'NW_SYNTHETIC_ALIAS_VALUE_0123456789';
+const aliases = ['x-api-key', 'Proxy-Authorization', 'X-Auth-Token'];
+const aliasResult = redactDiagnosticValue({
+  headers: Object.fromEntries(aliases.map(name => [name, aliasMarker])),
+});
+const exposedAliases = aliases.filter(name =>
+  String(aliasResult.headers[name]).includes(aliasMarker));
+const aliasBaseline = redactDiagnosticValue({
+  headers: { Authorization: aliasMarker, 'Api-Key': aliasMarker, 'X-Request-ID': 'request-123' },
+});
+assert.equal(String(aliasBaseline.headers.Authorization).includes(aliasMarker), false,
+  'Existing Authorization header control must stay masked');
+assert.equal(String(aliasBaseline.headers['Api-Key']).includes(aliasMarker), false,
+  'Existing Api-Key header control must stay masked');
+assert.equal(aliasBaseline.headers['X-Request-ID'], 'request-123',
+  'Non-sensitive request correlation must not be erased');
+
+if (exposedAliases.length > 0) {
+  console.error(`RED: ${exposedAliases.join(', ')} header alias value(s) remain unmasked.`);
+  console.error('Scope: synthetic redactor object only. Incoming headers to MCP response NOT_PROVEN.');
+  process.exitCode = 1;
+} else {
+  console.log('PASS: secret-bearing header alias values masked at redactor boundary.');
+}
