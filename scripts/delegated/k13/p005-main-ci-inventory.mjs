@@ -21,12 +21,37 @@ export function listDelegatedTests(repoRoot) {
 // This checks which paths the *source text* names; it never asserts that a
 // GitHub Actions runner actually executed the tests or completed a device gate.
 export function auditMainCiSource({ ciSource, npmTestCommand, paths }) {
-  const activeCi = ciSource.split(/\r?\n/)
-    .filter(line => !/^\s*#/.test(line)).join('\n');
-  const k20Wildcard = activeCi.includes('test/delegated/k20/*.test.mjs');
+  // Only actual node --test shell commands establish source-call evidence.
+  // Mentions in echo, YAML labels and unexecuted prose must not count.
+  const commands = [];
+  let blockIndent = null;
+  let continued = false;
+  for (const raw of ciSource.split(/\r?\n/)) {
+    if (/^\s*#/.test(raw) || !raw.trim()) continue;
+    const run = /^(\s*)(?:-\s+)?run:\s*(.*)$/.exec(raw);
+    if (run) {
+      blockIndent = /^[|>][-+]?\s*$/.test(run[2]) ? run[1].length : null;
+      continued = false;
+      if (/^node\s+--test\b/.test(run[2].trim())) commands.push(run[2].trim());
+      continue;
+    }
+    if (blockIndent === null) continue;
+    const indent = raw.match(/^\s*/)[0].length;
+    if (indent <= blockIndent) { blockIndent = null; continued = false; continue; }
+    const shell = raw.trim();
+    if (/^node\s+--test\b/.test(shell)) {
+      commands.push(shell);
+      continued = shell.endsWith('\\');
+    } else if (continued && /^test\//.test(shell)) {
+      commands.push(shell);
+      continued = shell.endsWith('\\');
+    } else continued = false;
+  }
+  const invoked = new Set(commands.join(' ').match(/test\/[A-Za-z0-9_./*+-]+\.test\.(?:ts|mjs)(?![\w.-])/g) ?? []);
+  const k20Wildcard = invoked.has('test/delegated/k20/*.test.mjs');
   const npmOneDirGlob = /(?:^|\s)test\/\*\*\/\*\.test\.ts(?:\s|$)/.test(npmTestCommand);
   const items = [...paths].sort().map(path => {
-    const explicit = activeCi.includes(path) ||
+    const explicit = invoked.has(path) ||
       (k20Wildcard && /^test\/delegated\/k20\/[^/]+\.test\.mjs$/.test(path));
     // npm uses a non-interactive POSIX shell on Linux. Unless globstar has
     // been explicitly enabled, ** is a single path component, not recursion.

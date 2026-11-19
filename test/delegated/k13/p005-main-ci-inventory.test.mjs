@@ -80,3 +80,43 @@ test('branch-scoped discovery workflow is read-only and pins two Node versions a
   assert.match(workflow, /test\/delegated\/k13\/main-ci-evidence-gate\.test\.mjs/);
   assert.doesNotMatch(workflow, /pull_request_target|secrets\.|contents: write|id-token: write/);
 });
+
+
+test('echo-only YAML path cannot claim explicit CI source call', () => {
+  const ghost = 'test/delegated/k09/roadmap-evidence.test.mjs';
+  const ciSource = 'name: '+ghost+'\nrun: echo node --test '+ghost+'\nrun: npm run check';
+  const result = auditMainCiSource({ciSource,npmTestCommand:'node --test --import tsx test/**/*.test.ts',paths:[ghost]});
+  assert.equal(result.explicit_source,0);
+  assert.deepEqual(result.no_known_invocation,[ghost]);
+});
+
+test('real inline node --test beats echo decoy', () => {
+  const real='test/delegated/k05/audit-html.test.mjs', ghost='test/delegated/k09/roadmap-evidence.test.mjs';
+  const ciSource='run: echo '+ghost+'\nrun: node --test '+real;
+  const result=auditMainCiSource({ciSource,npmTestCommand:'',paths:[real,ghost]});
+  assert.equal(result.explicit_source,1);
+  assert.deepEqual(result.no_known_invocation,[ghost]);
+});
+
+test('multiline test arguments count but later echo does not', () => {
+  const a='test/delegated/k05/audit-html.test.mjs', b='test/delegated/k11/p005-s5-evidence.test.ts';
+  const ghost='test/delegated/k09/roadmap-evidence.test.mjs';
+  const ciSource='run: |\n  node --test --import tsx \\\n    '+a+' \\\n    '+b+'\n  echo '+ghost;
+  const result=auditMainCiSource({ciSource,npmTestCommand:'',paths:[a,b,ghost]});
+  assert.equal(result.explicit_source,2);
+  assert.deepEqual(result.no_known_invocation,[ghost]);
+});
+
+test('k20 wildcard requires actual node --test invocation', () => {
+  const path='test/delegated/k20/triage-open-issues.test.mjs';
+  const fake=auditMainCiSource({ciSource:'run: echo test/delegated/k20/*.test.mjs',npmTestCommand:'',paths:[path]});
+  assert.deepEqual(fake.no_known_invocation,[path]);
+  const real=auditMainCiSource({ciSource:'run: node --test test/delegated/k20/*.test.mjs',npmTestCommand:'',paths:[path]});
+  assert.equal(real.explicit_source,1);
+});
+
+test('a backup suffix does not impersonate a selected test', () => {
+  const path='test/delegated/k09/roadmap-evidence.test.mjs';
+  const result=auditMainCiSource({ciSource:'run: node --test '+path+'.bak',npmTestCommand:'',paths:[path]});
+  assert.deepEqual(result.no_known_invocation,[path]);
+});
