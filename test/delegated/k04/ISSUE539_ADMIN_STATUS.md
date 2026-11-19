@@ -76,3 +76,70 @@ ve `aria-busy` değişikliklerine izin ver. Gerçek izin/oturum/API davranışı
 dokunmadan kaynak yeniden test edilmeli. K04 yalnız test/docs yoluna yazdı;
 owner `web/admin.js` veya ana `ci.yml` değiştirilmedi. Hosted exact test
 keşfi ve fiziksel admin/browser/Windows **ayrı NOT_RUN**.
+
+## P013 W-599…W-604 — last-request-wins taslak ve gerçek CI ayrımı (20 Kasım)
+
+- Güncel owner [#1160](https://github.com/Naveax/Nexowire/pull/1160) source HEAD
+  `06a9df635b6731c02170ca3583ba6de2b8b909dd`; `web/admin.js` blob
+  **`c77b46d012f95039f3749edc6336fe43c2d616f6`** önceki RED ile eş.
+- Üç deterministik eşzamanlı durum: eski HTTP 200 sonra yeni HTTP 403,
+  eski HTTP 403 sonra yeni HTTP 200 ve *ilk fetch dönmüş ama ilk
+  `response.json()` hâlâ bekliyorken* yeni HTTP 403. Gerçek owner kaynak
+  üçünde de **0/3 PASS**. Source değiştirmeden beş korumalı/korumasız
+  test ile daha önce test edilmeyen JSON gecikmesi için üç negatif/pozitif
+  kontrol eklendi; V8 VM-uyumlu hafızaiçi koşu **8/8 PASS**, ürün **0/3**.
+  Bu V8 koşusu `node --test` veya hosted CI kanıtı değildir.
+
+Owner için **öneri, uygulanmış kaynak düzeltmesi DEĞİL**: yalnız `web/admin.js`
+içindeki `load()` durum yazımını son isteğe sınırla. Aşağıdaki parça
+source SHA `c77b46...` üstünde hafızaiçi uygulanıp üç senaryoda **3/3**
+geçti; sözleşme/gerçek browser/Node22-24 CI kabulü henüz yok.
+
+```diff
++let activeRequest = 0;
+ async function load() {
++  const requestId = ++activeRequest;
+   showLoading();
+   let httpStatus = null;
+   try {
+     const response = await fetch('/api/v1/admin/overview', {
+       credentials: 'include',
+       headers: { Accept: 'application/json' },
+     });
++    if (requestId !== activeRequest) return;
+     if (!response.ok) {
+       httpStatus = response.status;
+       throw new Error('HTTP ' + response.status);
+     }
+     const data = await response.json();
++    if (requestId !== activeRequest) return;
+     if (!isOverview(data)) throw new Error('Yönetim özeti eksik veya geçersiz');
+     // unchanged KPI / status rendering
+   } catch (error) {
++    if (requestId !== activeRequest) return;
+     // unchanged denial mapping and error display
+   } finally {
+-    $('admin-metrics').setAttribute('aria-busy', 'false');
++    if (requestId === activeRequest) $('admin-metrics').setAttribute('aria-busy', 'false');
+   }
+ }
+```
+
+**Neden üç ayrı guard?** İlk `await fetch` sonrası kontrol eski HTTP
+yanıtını, `await response.json` sonrası kontrol geç ayrıştırılan eski
+başarıyı, `catch/finally` guard'ları eski hata veya `aria-busy` temizliğini
+engeller. Bu yalnız UI presentation çözümüdür; gerçek yetki veya sunucu
+denetimi değişmez. Owner uygulamadan önce çözümü kendi QA/CI'sında doğrular.
+
+**CI W-602:** #1104 `90f28d7867212562551c2de388161606bde3ae2c`
+[run 44609496987](https://github.com/Naveax/Nexowire/actions/runs/44609496987)
+`completed/success` (7 job success); Node22/24 job logu `135862102306`/
+`135862102208` tam tarandığında `admin-concurrent-response.test.mjs`,
+`admin-denial-redaction.test.mjs`, `issue539-admin-status-probe.test.mjs`
+**çağrılmamış**. Bu üç nested MJS için **HOSTED_NOT_RUN**; genel green
+kabul değildir. Yeni HEAD'e ait otomatik CI ayrıca sonuçlanmadan PASS değil.
+
+Gerçek iki-istek çakışmasının normal kullanıcı ekranında tetiklenebilirliği,
+fiziksel Windows/admin login/browser/NVDA, protected owner Work-PC
+**NOT_RUN**. #539/#1006 issue close, #1160 kaynak değişimi ve yeni CI
+test callsite owner/ŞEF kararına bırakılır.
