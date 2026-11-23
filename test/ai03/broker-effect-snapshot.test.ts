@@ -11,6 +11,7 @@ import {prepareCoreWindowsMutation}
 // This is scoped coverage, not a replacement for AI-08 full test discovery.
 import '../core-console-admission.test.js';
 import '../privileged-broker-effect-admission.test.js';
+import '../core-windows-mutation-dispatch.test.js';
 
 const id='de935b67-516b-411e-948b-37ae22072f41';
 const denied=(code:string)=>(e:unknown)=>e instanceof Error &&
