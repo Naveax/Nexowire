@@ -46,7 +46,10 @@ function parseArgs(args: readonly string[]): {
   const downloadSource = argValue(args, '--download-source') ?? 'fixture';
   if (downloadSource !== 'fixture' && downloadSource !== 'github') fail('Invalid smoke download source.');
   const scenario = argValue(args, '--scenario') ?? 'install';
-  if (!['install', 'checksum-mismatch', 'upgrade-preserve', 'upgrade-checksum-mismatch'].includes(scenario)) fail('Invalid smoke scenario.');
+  if (scenario !== 'install' && scenario !== 'checksum-mismatch' &&
+      scenario !== 'upgrade-preserve' && scenario !== 'upgrade-checksum-mismatch') {
+    fail('Invalid smoke scenario.');
+  }
   if (scenario !== 'install' && downloadSource !== 'fixture') fail('Upgrade and checksum fault injection require the isolated fixture.');
   const publicSourceSha = argValue(args, '--public-source-sha');
   if (downloadSource === 'github' && !/^[a-f0-9]{40}$/.test(publicSourceSha ?? '')) {
