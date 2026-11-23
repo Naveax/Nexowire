@@ -584,14 +584,14 @@ test('Proxy-backed reserve/commit receipts refuse before verifier and effect',as
         if(!receipt)return null;
         if(shape==='nested-binding'){
           return {...receipt,
-            binding:new Proxy(receipt.binding,trapHandler)}
+            binding:new Proxy<BrokerVerifiedEffectBinding>(receipt.binding,trapHandler)}
         }
         if(shape==='revoked'){
-          const rev=Proxy.revocable(receipt,trapHandler);
+          const rev=Proxy.revocable<BrokerEffectReceipt>(receipt,trapHandler);
           rev.revoke();
           return rev.proxy;
         }
-        return new Proxy(receipt,trapHandler);
+        return new Proxy<BrokerEffectReceipt>(receipt,trapHandler);
       };
       if(stage==='begin'){
         f.authority.begin=async(...args)=>malicious(await begin(...args));
