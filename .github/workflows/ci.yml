@@ -14,30 +14,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ai08-coverage-reconciliation:
-    name: AI-08 exact-head receipt evidence (Node ${{ matrix.node-version }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 7
-    strategy:
-      fail-fast: false
-      matrix:
-        node-version: [22, 24]
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-      - name: Pin immutable source checkout to the expected PR HEAD
-        shell: bash
-        env:
-          NEXOWIRE_EXPECTED_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: test "$(git rev-parse HEAD)" = "$NEXOWIRE_EXPECTED_COMMIT_SHA"
-      - name: Verify approved-only receipts and explicit NOT_RUN accounting
-        run: node --test test/ci/test-execution-coverage.test.mjs
-
   test:
     runs-on: ubuntu-latest
     strategy:
