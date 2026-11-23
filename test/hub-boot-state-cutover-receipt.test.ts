@@ -233,14 +233,28 @@ test('SYSTEM receipt verifier checks actual ProgramData free space twice before 
   const begin=code.indexOf('export async function verifyProtectedSystemHubCutoverReadOnly(');
   const section=code.slice(begin);
   const receipt=section.indexOf('const raw=ReceiptSchema.parse(');
-  const budgetA=section.indexOf('await assertProtectedTargetDiskBudget(raw.totalBytes)');
+  const budgetA=section.indexOf('await assertProtectedTargetDiskBudget(raw.totalBytes,source)');
   const writer=section.indexOf('await assertNoSourceWriterReadOnly(source)');
   const digest=section.indexOf('const firstSource=await captureHubStateDigestReadOnly(source)');
-  const budgetB=section.lastIndexOf('await assertProtectedTargetDiskBudget(raw.totalBytes)');
+  const budgetB=section.lastIndexOf('await assertProtectedTargetDiskBudget(raw.totalBytes,source)');
   const done=section.indexOf('return SYSTEM_STATE_ROOT');
   assert.ok(begin>=0&&receipt>=0&&receipt<budgetA&&budgetA<writer&&writer<digest);
   assert.ok(budgetB>digest&&budgetB<done);
   assert.match(code,/HUB_BOOT_SYSTEM_STATE_DISK_SPACE_INSUFFICIENT/);
+});
+
+test('protected disk gate checks source mount and target state volume at both windows',()=>{
+  const code=readFileSync(new URL('../src/hub/system-hub-state-cutover.ts',import.meta.url),'utf8');
+  const gateStart=code.indexOf('async function assertProtectedTargetDiskBudget(');
+  const verifierStart=code.indexOf('export async function verifyProtectedSystemHubCutoverReadOnly(');
+  assert.ok(gateStart>=0&&verifierStart>gateStart);
+  const gate=code.slice(gateStart,verifierStart);
+  assert.match(gate,/assertSystemCutoverDiskReserve\\(undefined,os\\.homedir\\(\\),sourceRoot\\)/);
+  assert.match(gate,/fs\\.statfs\\(SYSTEM_STATE_ROOT,/);
+  assert.match(gate,/SYSTEM_CUTOVER_MINIMUM_FREE_BYTES\\+2n\\*BigInt\\(bytes\\)/);
+  assert.doesNotMatch(gate,/fs\\.statfs\\('C:/);
+  const verifier=code.slice(verifierStart);
+  assert.equal(verifier.split('await assertProtectedTargetDiskBudget(raw.totalBytes,source)').length-1,2);
 });
 
 test('current Work-PC has no implicitly accepted cutover receipt; verifier is read-only',{
