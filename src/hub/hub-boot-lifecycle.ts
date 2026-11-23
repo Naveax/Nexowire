@@ -340,6 +340,15 @@ export function buildHubBootLauncher(input: {
     "$env:PATH='C:\\Windows\\System32;C:\\Windows;C:\\Windows\\System32\\WindowsPowerShell\\v1.0'",
     "$env:PSModulePath='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules'",
   ];
+  // The AtStartup task inherits MACHINE environment, not the elevated
+  // install shell's isolated environment. Remove all ambient Nexowire
+  // settings before persisting the reviewed, per-launcher allowlist.
+  // Otherwise machine-scoped bearer tokens / endpoints / feature toggles
+  // could silently grant SYSTEM an unintended service identity.
+  lines.push(
+    "Get-ChildItem Env: | Where-Object { $_.Name -like 'NEXOWIRE_*' } | " +
+    "ForEach-Object { Remove-Item -LiteralPath ('Env:' + $_.Name) -ErrorAction Stop }",
+  );
   for (const [name, value] of Object.entries(env).sort(
     ([a], [b]) => a.localeCompare(b),
   )) {
