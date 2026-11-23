@@ -9,6 +9,8 @@ import {promises as fs, type BigIntStats} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as z from 'zod';
+import {assertSystemCutoverDiskReserve,SYSTEM_CUTOVER_MINIMUM_FREE_BYTES}
+  from './system-cutover-disk-reserve.js';
 import {
   verifyWindowsPrivateAcl,
   verifyWindowsStackOuterAncestorAcl,
@@ -249,10 +251,14 @@ export async function assertNoSourceWriterReadOnly(sourceRoot:string):Promise<vo
     }
   }finally{db.close()}
 }
-async function assertProtectedTargetDiskBudget(bytes:number):Promise<void>{
-  const usage=await fs.statfs('C:\\ProgramData',{bigint:true});
+async function assertProtectedTargetDiskBudget(bytes:number,sourceRoot:string):Promise<void>{
+  // Source and protected destination may be on independent volume mounts.
+  // The persisted launcher, not the elevated account's home, is authoritative.
+  await assertSystemCutoverDiskReserve(undefined,os.homedir(),sourceRoot);
+  // Probe the mounted target itself, not an assumed C: parent filesystem.
+  const usage=await fs.statfs(SYSTEM_STATE_ROOT,{bigint:true});
   const free=usage.bavail*usage.bsize;
-  const required=4n*1024n*1024n*1024n+2n*BigInt(bytes);
+  const required=SYSTEM_CUTOVER_MINIMUM_FREE_BYTES+2n*BigInt(bytes);
   if(free<required)throw new Error('HUB_BOOT_SYSTEM_STATE_DISK_SPACE_INSUFFICIENT');
 }
 /**
@@ -276,7 +282,7 @@ export async function verifyProtectedSystemHubCutoverReadOnly(
     throw new Error('HUB_BOOT_MIGRATION_RECEIPT_UNTRUSTED');
   const raw=ReceiptSchema.parse(JSON.parse(await fs.readFile(SYSTEM_CUTOVER_RECEIPT,'utf8')));
   if(raw.sourceRoot!==source)throw new Error('HUB_BOOT_MIGRATION_RECEIPT_PATH_MISMATCH');
-  await assertProtectedTargetDiskBudget(raw.totalBytes);
+  await assertProtectedTargetDiskBudget(raw.totalBytes,source);
   // Reject a writer that remains present before any unseal or task mutation.
   await assertNoSourceWriterReadOnly(source);
   const firstSource=await captureHubStateDigestReadOnly(source);
@@ -286,7 +292,7 @@ export async function verifyProtectedSystemHubCutoverReadOnly(
   const nextDestination=await captureHubStateDigestReadOnly(SYSTEM_STATE_ROOT,true);
   assertHubStateReceiptBoundToLegacyLauncher(raw,source,nextSource,nextDestination);
   await assertNoSourceWriterReadOnly(source);
-  await assertProtectedTargetDiskBudget(raw.totalBytes);
+  await assertProtectedTargetDiskBudget(raw.totalBytes,source);
   verifyWindowsStackOuterAncestorAcl('C:\\');
   verifyWindowsStackOuterAncestorAcl('C:\\ProgramData');
   verifyWindowsPrivateAcl(PRIVATE_PARENT);
