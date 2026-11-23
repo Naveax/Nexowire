@@ -404,3 +404,36 @@ body:has(#setting-reduce-motion:checked) *,body:has(#setting-reduce-motion:check
   .bridge-live-status { min-width:0; white-space:normal; overflow-wrap:anywhere; }
   .pc-settings-label strong,.pc-settings-label small { white-space:normal; overflow-wrap:anywhere; }
 }
+
+/* AI-06: CORE is a separate, read-only authority indicator, never a pairing success badge. */
+.core-state-panel { display:grid; gap:13px; min-width:0; }
+.core-state-panel .connect-title-row { align-items:center; flex-wrap:wrap; }
+.core-state-panel .connect-title-row > div { min-width:0; flex:1 1 220px; }
+.core-state-panel h2 { overflow-wrap:anywhere; }
+#core-status-code { white-space:normal; overflow-wrap:anywhere; max-width:100%; text-align:center; }
+.core-state-description { display:grid; gap:7px; padding:12px 14px; border:1px solid #3a5070; border-radius:12px; background:#101c30; min-width:0; }
+.core-state-description p { margin:0; font-size:14px; line-height:1.55; overflow-wrap:anywhere; }
+#core-status-en { color:var(--muted); }
+@media (max-width:768px) {
+  .core-state-panel .connect-title-row { align-items:flex-start; }
+  .core-state-panel #core-status-code { flex:0 1 auto; }
+}
+@media (max-width:375px) {
+  .core-state-description { padding:10px; }
+  .core-state-panel h2 { font-size:18px; }
+  #core-status-code { font-size:11px; }
+}
+@media (max-width:320px) {
+  .core-state-panel .connect-title-row { display:grid; }
+  #core-status-code { justify-self:start; }
+  .core-state-description p { font-size:13px; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .core-state-panel { animation:none; }
+  .core-state-panel * { scroll-behavior:auto; }
+}
+@media (forced-colors:active) {
+  .core-state-description { background:Canvas; color:CanvasText; border-color:CanvasText; }
+  .core-state-panel #core-status-code { border:1px solid CanvasText; forced-color-adjust:auto; }
+  #core-status-en { color:CanvasText; }
+}
