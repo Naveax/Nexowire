@@ -28,7 +28,14 @@ test('AI-05 smoke covers an installed 1.0.8 during both successful and rejected 
   assert.match(smoke, /'upgrade-checksum-mismatch'/);
   assert.match(smoke, /scenario\.startsWith\('upgrade-'\)/);
   assert.match(smoke, /1\.0\.8-ai05-preserved/);
+  assert.match(smoke, /previous-v1\.0\.8-binary-sentinel/);
+  assert.match(smoke, /previous-v1\.0\.8-cli-sentinel/);
+  assert.match(smoke, /local-identity-sentinel\.json/);
+  assert.match(smoke, /preferences-sentinel\.json/);
+  assert.match(smoke, /owner-sentinel\.json/);
+  assert.match(smoke, /assertOldInstallIntact\(\)/);
   assert.match(smoke, /existingReleasePreserved: preserveLegacy/);
+  assert.match(smoke, /preservedFixtureCount: preserveLegacy \? preservedFixtures\.size : 0/);
   assert.match(smoke, /rejectedBeforeExtraction: true/);
   assert.match(smoke, /taskRegistrationAndBrowserSimulated: true/);
   assert.match(smoke, /oauthOrDevicePairingVerified: false/);
@@ -69,10 +76,12 @@ for (const scenario of ['upgrade-preserve', 'upgrade-checksum-mismatch']) {
     assert.equal(result.status, 0, result.stdout + result.stderr);
     const evidence = JSON.parse(result.stdout) as {
       existingReleasePreserved: boolean;
+      preservedFixtureCount: number;
       profileIsolated: boolean;
       oauthOrDevicePairingVerified: boolean;
     };
     assert.equal(evidence.existingReleasePreserved, true);
+    assert.equal(evidence.preservedFixtureCount, 5);
     assert.equal(evidence.profileIsolated, true);
     assert.equal(evidence.oauthOrDevicePairingVerified, false);
   });
