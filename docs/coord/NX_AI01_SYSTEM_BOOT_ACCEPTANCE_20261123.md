@@ -97,3 +97,11 @@ node --test --import tsx @tests
 ```
 
 These are source/PowerShell identity tests; they do **not** install or mutate a SYSTEM Scheduled Task. Verify runner SHA in the receipt. If the physical shared ancestor ACL check is unsupported in CI, record its specific SKIP/FAIL rather than quietly turning it green.
+
+## User launcher environment isolation (additional AI-01 source guard)
+
+- Interactive launchers may persist `NEXOWIRE_SKILLS_DIR` for their own user-mode context. It is **not an authorized SYSTEM input**: before composing the protected launcher, installation drops that inherited setting; direct launcher-builder calls with the setting fail closed.
+- The generated `launch.ps1` also clears any ambient `NEXOWIRE_SKILLS_DIR` override before spawning Node, preventing inherited machine/task environment from silently choosing a non-audited directory.
+- The generated `launch.ps1` sets fixed system PowerShell `PATH` and `PSModulePath` (plus `SystemRoot`, `windir`, `ComSpec`) at the start of the scheduled `AtStartup` action. The isolated environment used *while registering the task* does not automatically carry over to *executing the task after reboot*.
+- A protected SYSTEM Hub may discover skills only using the packaged runtime's normal default lookup; a custom external skills catalog needs a separately reviewed, immutable, ACL-verified deployment rather than an inherited user string.
+- This is a **source-only fix**. Negative tests are at `test/hub-boot-startup-trigger-integrity.test.ts`; real PowerShell 5.1 and Windows before-login execution require independent CI/AI-09 evidence.
