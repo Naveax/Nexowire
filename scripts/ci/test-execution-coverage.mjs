@@ -43,7 +43,9 @@ export function reconcileCoverage(entries,inventory,receipt) {
   catch {deny('INVALID_INVENTORY');}
   if(actualInventory.manifestSha256!==inventory.manifestSha256 ||
      actualInventory.trackedTsTestFiles!==inventory.trackedTsTestFiles ||
-     JSON.stringify(actualInventory.byDepth)!==JSON.stringify(inventory.byDepth))
+     !inventory.byDepth ||
+     ['root','oneDirectory','deeper'].some(k=>
+       actualInventory.byDepth[k]!==inventory.byDepth[k]))
     deny('INVENTORY_MANIFEST_MISMATCH');
   // This receipt format promises reviewed portable-root execution only.
   // A matching Git manifest is insufficient: an unapproved tracked test must
@@ -75,7 +77,7 @@ export function reconcileCoverage(entries,inventory,receipt) {
   const fileStates=entries.map(e=>({
     path:e.path, gitBlobSha:e.blob,
     result:executed.has(e.path)?'PASS':'NOT_RUN',
-  })).sort((a,b)=>a.path.localeCompare(b.path,'en'));
+  })).sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0);
   const statusCounts={PASS:executed.size,FAIL:0,SKIP:0,NOT_RUN:notRun.length};
   return {
     schemaVersion:1, sourceCommitSha:inventory.commitSha,
