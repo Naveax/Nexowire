@@ -12,7 +12,12 @@ import {readJournalOwnerProcess} from '../../src/agent/journal-owner-process.js'
 // Disposable process + SQLite fixtures only. Never open an installed Agent journal.
 async function fixture(t:import('node:test').TestContext){
   const dir=await mkdtemp(path.join(os.tmpdir(),'nw-ai04-os-owner-'));
-  t.after(()=>rm(dir,{recursive:true,force:true,maxRetries:10,retryDelay:100}));
+  const cleanups:Array<()=>void|Promise<void>>=[];
+  t.after(async()=>{
+    // Close SQLite handles and child processes before removing files on Windows.
+    for(const cleanup of cleanups.reverse())await cleanup();
+    await rm(dir,{recursive:true,force:true,maxRetries:10,retryDelay:100});
+  });
   const file=path.join(dir,'operations.sqlite');
   const id=randomUUID();
   const journal=new AgentOperationJournal(file);
@@ -22,17 +27,17 @@ async function fixture(t:import('node:test').TestContext){
   } finally {
     journal.close();
   }
-  return {file,id};
+  return {file,id,cleanup:(fn:()=>void|Promise<void>)=>cleanups.push(fn)};
 }
 
 test('external live OS incarnation denies takeover; confirmed death preserves UNKNOWN/no-replay',
   {timeout:120000},async t=>{
-    const {file,id}=await fixture(t);
+    const {file,id,cleanup}=await fixture(t);
     const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});
     assert.ok(child.pid&&Number.isSafeInteger(child.pid),'disposable owner worker must start');
     let exited=false;
     const closed=new Promise<void>(resolve=>child.once('close',()=>{exited=true;resolve();}));
-    t.after(async()=>{
+    cleanup(async()=>{
       if(!exited){child.kill('SIGKILL');await closed;}
     });
     const observed=await readJournalOwnerProcess(child.pid!);
@@ -50,7 +55,7 @@ test('external live OS incarnation denies takeover; confirmed death preserves UN
         .run(child.pid,randomUUID(),observed.identity);
     } finally {seeded.close();}
     const contender=new AgentOperationJournal(file);
-    t.after(()=>contender.close());
+    cleanup(()=>contender.close());
     await assert.rejects(contender.initialize(),{code:'AGENT_JOURNAL_IN_USE'});
     const readback=new DatabaseSync(file,{readOnly:true});
     try {
@@ -70,7 +75,7 @@ test('external live OS incarnation denies takeover; confirmed death preserves UN
 
 test('malformed nonce and forged incarnation cannot reclaim a live owner',
   {timeout:120000},async t=>{
-    const {file,id}=await fixture(t);
+    const {file,id,cleanup}=await fixture(t);
     const self=await readJournalOwnerProcess(process.pid);
     if(process.platform==='win32')
       assert.equal(self.state,'alive','Windows process incarnation readback is mandatory');
@@ -80,7 +85,7 @@ test('malformed nonce and forged incarnation cannot reclaim a live owner',
         .run(process.pid,'not-a-uuid',self.state==='alive'?self.identity:null);
     } finally {seeded.close();}
     const contender=new AgentOperationJournal(file);
-    t.after(()=>contender.close());
+    cleanup(()=>contender.close());
     await assert.rejects(contender.initialize(),{code:'AGENT_JOURNAL_IN_USE'});
     const edited=new DatabaseSync(file);
     try {
