@@ -6,6 +6,12 @@ import {CoreConsoleAdmission} from '../../src/agent/core-console-admission.js';
 import {prepareCoreWindowsMutation}
   from '../../src/agent/core-windows-mutation-dispatch.js';
 
+// Deliberately load AI-03's root-level suites: the repository's legacy
+// npm test glob (test/**/*.test.ts) otherwise omits direct test/*.test.ts.
+// This is scoped coverage, not a replacement for AI-08 full test discovery.
+import '../core-console-admission.test.js';
+import '../privileged-broker-effect-admission.test.js';
+
 const id='de935b67-516b-411e-948b-37ae22072f41';
 const denied=(code:string)=>(e:unknown)=>e instanceof Error &&
   'code' in e && e.code===code;
