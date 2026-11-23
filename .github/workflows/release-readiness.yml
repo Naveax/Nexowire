@@ -257,7 +257,7 @@ jobs:
   attest:
     name: Attest tagged release candidate
     if: github.ref_type == 'tag' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    needs: package
+    needs: [package, ai08-coverage-reconciliation]
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -303,7 +303,7 @@ jobs:
   publish:
     name: Publish GitHub Release
     if: github.ref_type == 'tag' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    needs: [package, attest]
+    needs: [package, ai08-coverage-reconciliation, attest]
     runs-on: ubuntu-latest
     permissions:
       actions: read
