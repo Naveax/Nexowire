@@ -568,7 +568,7 @@ test('Proxy-backed reserve/commit receipts refuse before verifier and effect',as
         ownKeys(){traps++;throw Error('PROXY_OWN_KEYS_EXECUTED');},
         getOwnPropertyDescriptor(){traps++;throw Error('PROXY_DESCRIPTOR_EXECUTED');},
         get(){traps++;throw Error('PROXY_GET_EXECUTED');},
-      });
+      };
       const begin=f.authority.begin.bind(f.authority);
       const commit=f.authority.commit.bind(f.authority);
       const verify=f.authority.verifyReceipt.bind(f.authority);
