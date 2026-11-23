@@ -41,7 +41,7 @@ test('Hub Boot install checks task identity before reading DPAPI and rechecks be
   const names=install.indexOf('assertCanonicalHubBootTaskNames(options)');
   const firstTask=install.indexOf('Get-ScheduledTask -TaskName $boot');
   const firstGuard=install.indexOf('hubBootRegisteredTaskIdentityGuard');
-  const preflight=install.indexOf('await runPowerShellJson<{ok:true}>');
+  const preflight=install.indexOf('const taskPreflight = await runPowerShellJson<{ok:true;legacyState:string}>');
   const secret=install.indexOf('readProtectedSecretFile(');
   const register=install.indexOf('Register-ScheduledTask -TaskName $boot');
   const secondGuard=install.indexOf('hubBootRegisteredTaskIdentityGuard',firstGuard+1);
