@@ -104,6 +104,7 @@ jobs:
         run: node --test test/ci/test-execution-coverage.test.mjs
 
   package:
+    needs: ai08-coverage-reconciliation
     strategy:
       fail-fast: false
       matrix:
@@ -257,7 +258,7 @@ jobs:
   attest:
     name: Attest tagged release candidate
     if: github.ref_type == 'tag' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    needs: [package, ai08-coverage-reconciliation]
+    needs: package
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -303,7 +304,7 @@ jobs:
   publish:
     name: Publish GitHub Release
     if: github.ref_type == 'tag' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    needs: [package, ai08-coverage-reconciliation, attest]
+    needs: [package, attest]
     runs-on: ubuntu-latest
     permissions:
       actions: read
