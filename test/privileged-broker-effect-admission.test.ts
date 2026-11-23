@@ -560,12 +560,15 @@ test('Proxy-backed reserve/commit receipts refuse before verifier and effect',as
     for(const shape of ['root','nested-binding','revoked'] as const){
       const f=fixture();
       let traps=0,verified=0;
-      const trapHandler:ProxyHandler<object>={
+      // One structural trap object is generic over receipt and binding.
+      // Zero-argument trap methods throw, so their inferred 'never' return
+      // satisfies both ProxyHandler<T> contracts without erasing target types.
+      const trapHandler={
         getPrototypeOf(){traps++;throw Error('PROXY_GET_PROTO_EXECUTED');},
         ownKeys(){traps++;throw Error('PROXY_OWN_KEYS_EXECUTED');},
         getOwnPropertyDescriptor(){traps++;throw Error('PROXY_DESCRIPTOR_EXECUTED');},
         get(){traps++;throw Error('PROXY_GET_EXECUTED');},
-      };
+      });
       const begin=f.authority.begin.bind(f.authority);
       const commit=f.authority.commit.bind(f.authority);
       const verify=f.authority.verifyReceipt.bind(f.authority);
