@@ -327,6 +327,8 @@ export const SYSTEM_HUB_RECOVERY_PS=[
   "    throw $launcherDrift",
   "  }",
   "  Unregister-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\\' -Confirm:$false",
+  // No stale legacy fallback even if a detached writer mutates after unregister.
+  "  & $validateState",
   "}",
 
 
@@ -334,6 +336,7 @@ export const SYSTEM_HUB_RECOVERY_PS=[
 
   SYSTEM_HUB_RECOVERY_FINAL_ABSENCE_PS,
   SYSTEM_HUB_RECOVERY_LAUNCHER_PROOF_PS,
+  "& $validateState",
   "$user=Get-ScheduledTask -TaskName 'Nexowire Hub' -TaskPath '\\' -ErrorAction Stop",
   "if([string]$user.Principal.UserId -cne [string]$journal.originalUserPrincipal){throw 'AI04_RECOVERY_LEGACY_TASK_REPLACED'}",
   "$portOwner=@(Get-NetTCPConnection -State Listen -ErrorAction Stop | Where-Object LocalPort -eq $port)",

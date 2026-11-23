@@ -28,6 +28,7 @@
 | Recovery journal unknown phase | Reject before task change and do not infer `COMPLETE` | New discovered source test + isolated Windows fixture; physical NOT_RUN |
 | Launcher SHA or source/port changes at quiesce/copy/receipt | Reject; retain journal and original launcher backup | Discovered source-contract test; physical NOT_RUN |
 | Launcher replaced after SYSTEM stop | Recheck before unregister; attempt resume of exact trusted SYSTEM task | Isolated Windows failure injection + discovered source contract; OS result NOT_RUN unless separately executed |
+| Detached SYSTEM writer commits after task unregister | Recheck both durable trees immediately after unregister and again before legacy startup; refuse stale fallback | Disposable PowerShell failure injection + source contract; hosted Windows execution NOT_RUN unless independently evidenced |
 | SYSTEM task action replaced before resume | Never execute untrusted action; report `RESUME_FAILED` | Isolated Windows test fixture + discovered contract; OS result NOT_RUN unless separately executed |
 | Target/source mount below 4.1 GiB | Deny even when `C:\` is healthy | Disk-reserve tests + new source gates; physical NOT_RUN |
 | 8 GiB advisory not met while floor is met | Report recommendation as unmet, no fake physical PASS | Existing `test/ai04/system-cutover-disk-reserve.test.ts`; physical NOT_RUN |

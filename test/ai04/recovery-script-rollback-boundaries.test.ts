@@ -57,3 +57,14 @@ test('post-stop task action proof runs before unregister even when file states m
   const unregister=script.indexOf('Unregister-ScheduledTask',current);
   assert.ok(current>=0&&recheck>current&&unregister>recheck);
 });
+
+test('durable state is revalidated after SYSTEM removal and before user fallback',()=>{
+  const script=SYSTEM_HUB_RECOVERY_PS;
+  const unregister=script.indexOf("Unregister-ScheduledTask -TaskName 'Nexowire Hub Boot'");
+  const firstRecheck=script.indexOf('& $validateState',unregister);
+  const absence=script.indexOf('AI04_RECOVERY_BOOT_STILL_REGISTERED_OR_HIDDEN',unregister);
+  const legacy=script.indexOf("$user=Get-ScheduledTask -TaskName 'Nexowire Hub'");
+  const secondRecheck=script.lastIndexOf('& $validateState',legacy);
+  assert.ok(unregister>=0&&firstRecheck>unregister&&absence>firstRecheck);
+  assert.ok(secondRecheck>absence&&legacy>secondRecheck);
+});

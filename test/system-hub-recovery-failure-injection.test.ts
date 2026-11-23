@@ -10,7 +10,7 @@ import {SYSTEM_HUB_RECOVERY_PS} from '../scripts/ai04-controlled-system-hub-cuto
 const psQuote=(value:string):string=>"'"+value.replaceAll("'","''")+"'";
 const powershell='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
 
-function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-write'|'tampered-launcher'|'late-launcher-swap'|'boot-action-swapped'|'boot-action-swapped-no-write',phase:'SYSTEM_STARTED'|'AWAITING_PHYSICAL_ACCEPTANCE'|'UNRECOGNIZED'='SYSTEM_STARTED'):void{
+function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-write'|'tampered-launcher'|'late-launcher-swap'|'boot-action-swapped'|'boot-action-swapped-no-write'|'late-write-after-unregister',phase:'SYSTEM_STARTED'|'AWAITING_PHYSICAL_ACCEPTANCE'|'UNRECOGNIZED'='SYSTEM_STARTED'):void{
   const temp=mkdtempSync(path.join(os.tmpdir(),'ai04-fi-'));
   try{
     const source=path.join(temp,'legacy');
@@ -64,7 +64,10 @@ function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-
                 ?" $script:fakeBoot.Actions[0].Execute='untrusted.exe';"
                 :'')+' }',
       'function Start-ScheduledTask { [CmdletBinding()] param([string]$TaskName,[string]$TaskPath); $script:resumeCount++ }',
-      'function Unregister-ScheduledTask { [CmdletBinding()] param([string]$TaskName,[string]$TaskPath,[switch]$Confirm); $script:removeCount++ }',
+      'function Unregister-ScheduledTask { [CmdletBinding()] param([string]$TaskName,[string]$TaskPath,[switch]$Confirm); $script:removeCount++;'+
+        (mode==='late-write-after-unregister'
+          ?' Set-Content -LiteralPath '+psQuote(targetFile)+" -Value 'late-system-write' -Encoding Ascii -NoNewline;"
+          :'')+' }',
       'function Get-NetTCPConnection { [CmdletBinding()] param([string]$State); return @() }',
       ...(phase==='AWAITING_PHYSICAL_ACCEPTANCE'?[
         'function Start-Sleep { [CmdletBinding()] param([int]$Milliseconds) }',
@@ -77,9 +80,9 @@ function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-
       '$failure=$null',
       'try{& ([scriptblock]::Create($body))}catch{$failure=$_.Exception.Message}',
       'if(-not $failure){throw "AI04_EXPECTED_RECOVERY_REJECTION"}',
-      'if($script:stopCount -ne '+(['late-shutdown-write','late-launcher-swap','boot-action-swapped','boot-action-swapped-no-write'].includes(mode)?'1':'0')+
+      'if($script:stopCount -ne '+(['late-shutdown-write','late-launcher-swap','boot-action-swapped','boot-action-swapped-no-write','late-write-after-unregister'].includes(mode)?'1':'0')+
         ' -or $script:resumeCount -ne '+(['late-shutdown-write','late-launcher-swap'].includes(mode)?'1':'0')+
-        ' -or $script:removeCount -ne 0){'+
+        ' -or $script:removeCount -ne '+(mode==='late-write-after-unregister'?'1':'0')+'){'+
         'throw ("AI04_UNEXPECTED_MUTATIONS: stop="+$script:stopCount+" resume="+$script:resumeCount+" remove="+$script:removeCount+" reason="+$failure)}',
       'if($failure -notmatch "'+(phase==='UNRECOGNIZED'
         ?'AI04_RECOVERY_UNKNOWN_PHASE'
@@ -105,7 +108,7 @@ function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-
     assert.match(result.stdout,/AI04_SIMULATED_REJECTION/);
     assert.equal(readFileSync(sourceFile,'utf8'),'legacy-state');
     assert.equal(readFileSync(targetFile,'utf8'),
-      ['late-shutdown-write','boot-action-swapped'].includes(mode)?'late-system-write':['late-launcher-swap','boot-action-swapped-no-write'].includes(mode)?'legacy-state':'new-system-data');
+      ['late-shutdown-write','boot-action-swapped','late-write-after-unregister'].includes(mode)?'late-system-write':['late-launcher-swap','boot-action-swapped-no-write'].includes(mode)?'legacy-state':'new-system-data');
     assert.equal(JSON.parse(readFileSync(journalFile,'utf8')).phase,phase);
   }finally{rmSync(temp,{recursive:true,force:true})}
 }
@@ -146,4 +149,9 @@ test('modified recovery task action after shutdown cannot be resumed',
 test('replaced SYSTEM task action after stop prevents task removal even when state matches',
   {skip:process.platform!=='win32'},()=>{
     executeIsolatedRecoveryFailureInjection('boot-action-swapped-no-write');
+  });
+
+test('late SYSTEM write after unregister refuses to start stale user Hub',
+  {skip:process.platform!=='win32'},()=>{
+    executeIsolatedRecoveryFailureInjection('late-write-after-unregister');
   });
