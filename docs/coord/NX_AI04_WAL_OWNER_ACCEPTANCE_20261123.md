@@ -5,7 +5,8 @@
 - Relevant open incidents: #974 (SQLite WAL RESTART/reuse), #1001 (PID liveness is not incarnation).
 - This agent may edit only `src/agent/operation-journal.ts`, `src/agent/operation-journal-wal.ts`, `src/agent/journal-owner-process.ts`, `src/agent/operation-journal-authority.ts`, matching journal/WAL/owner tests, and `docs/coord/NX_AI04_*.md`.
 - Shared `src/agent/native-agent-lifecycle.ts` and GitHub workflow/provenance files have not been changed.
-- CI run `45178025175` succeeded on the **parent integration HEAD**, not on this AI-04 commit. CI runs `45178026197` and `45178024621` were in progress during initial inspection. Do not rerun the same workflow/SHA/input.
+- Initial parent integration checks all completed successfully, including AI-04 run `45178025175` and general CI `45178026197` on HEAD `83c8b65`.
+- Initial AI-04 Draft PR #1245 `2404470` failed CI run `45181788589` in two coordinator provenance tests, because a previously inventoried root-level test blob had changed (`b97249d` to `c20586a`). This branch restores that file to the exact previously inventoried blob and moves the additional tests into a separately tracked one-level fixture; source/provenance CSVs remain untouched. No active run is manually re-dispatched.
 
 ## Source review: invariants currently present
 1. `verifyAgentJournalWal()` validates WAL header/page size/checksum and each **current-generation** frame checksum. A current-generation nonempty sequence must end on a committed frame. Retained older physical allocation after a SQLite RESTART is recognized only after a committed prefix and a stable WAL-index corroboration. The two WAL-index header copies, salts, mxFrame and checksum are checked.
@@ -15,7 +16,7 @@
 5. A volatile SHM WAL-index is not an authenticity/anti-rollback authority. Independently trusted reservation history and a guarded ownership/ACL boundary remain necessary.
 
 ## Additional regression added on this branch
-`test/agent-journal-owner-incarnation.test.ts`:
+`test/agent/ai04-external-journal-owner.test.ts` (new one-level test; the existing root-level `test/agent-journal-owner-incarnation.test.ts` is preserved exactly to honor locked provenance):
 - Spawn a real disposable Node process and observe its OS incarnation. Keep it alive while a different journal instance attempts takeover; assert `AGENT_JOURNAL_IN_USE` and unchanged `in_progress` status.
 - Terminate that disposable process, confirm the subsequent takeover, require that interrupted `in_progress` becomes `unknown`, and refuse to recreate the same request ID.
 - Reject malformed nonce and forged-but-unrecognized process incarnation while the PID is still alive; retain a committed tombstone.
@@ -27,13 +28,14 @@ These tests use only temporary SQLite files and a disposable child process; **no
 ```powershell
 node --version
 npm ci
+node --test --import tsx test/agent/ai04-external-journal-owner.test.ts
 node --test --import tsx test/agent-journal-owner-incarnation.test.ts
 node --test --import tsx test/qa-journal-wal-recycle-p11.test.ts
 node --test --import tsx test/agent-journal-restart-regression.test.ts
 npm run typecheck
 ```
 
-Record executable Node major version, OS build, exact commit SHA and exit code with each run. The root-level `test/*.test.ts` files must be executed explicitly until the AI-08 test-discovery gate is verified. Do not equate a generic `npm test` success with execution of all targeted files.
+Record executable Node major version, OS build, exact commit SHA and exit code with each run. The new one-level test is discovered by `test/**/*.test.ts` on the Linux CI shell, whereas root-level `test/*.test.ts` files still require explicit invocation. Confirm execution receipts rather than assuming. Do not equate a generic `npm test` success with execution of all targeted files.
 
 ## Fault-injection / acceptance matrix
 
