@@ -71,9 +71,9 @@ test('offline copy disk budget gates source and staged target mounted volumes',(
   const end=code.indexOf('export function protectedStateAclTargets(',start);
   assert.ok(start>=0&&end>start);
   const section=code.slice(start,end);
-  assert.match(section,/assertSystemCutoverDiskReserve\\(undefined,os\\.homedir\\(\\),source\\)/);
-  assert.match(section,/fs\\.statfs\\(path\\.win32\\.dirname\\(SYSTEM_HUB_STATE_PATH\\)/);
-  assert.doesNotMatch(section,/fs\\.statfs\\('C:/);
+  assert.match(section,/assertSystemCutoverDiskReserve\(undefined,os\.homedir\(\),source\)/);
+  assert.match(section,/fs\.statfs\(path\.win32\.dirname\(SYSTEM_HUB_STATE_PATH\)/);
+  assert.doesNotMatch(section,/fs\.statfs\('C:/);
 });
 
 test('physical protected audit refuses insufficient disk before reading destination snapshots',()=>{
