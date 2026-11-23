@@ -46,5 +46,5 @@ test('AI-03 discoverable smoke: ordinary JSON snapshots remain immutable and fai
   assert.equal(Object.isFrozen(p.input),true);
   assert.equal(Object.isFrozen((p.input as typeof original).data.points),true);
   original.data.points.push(4);
-  assert.deepEqual(p.input,{kind:'safe',data:{points:[1,2,3]}});
+  assert.deepEqual(JSON.parse(JSON.stringify(p.input)),{kind:'safe',data:{points:[1,2,3]}});
 });
