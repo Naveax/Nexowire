@@ -121,3 +121,11 @@ These are source/PowerShell identity tests; they do **not** install or mutate a 
 These are **16 source-level PowerShell fixture scenarios PASS**, not an execution of the full Node test files, Task Scheduler API integration, actual task XML, disposable VM, unattended boot, or physical Work-PC acceptance.
 
 **Evidence separation:** `test/hub-boot-startup-trigger-integrity.test.ts` is still **NOT_RUN** in the general hosted root-level TypeScript test suite unless a separate exact-commit Node + Windows shard proves otherwise. At this stage, source PowerShell fixture checks are `PASS`; source test-file execution, VM cutover/rollback and real physical acceptance stay `NOT_RUN`. AI-08 owns the hosted exact-SHA test shard (#1205), AI-09 owns physical Windows acceptance (#1161).
+
+### Follow-up synthetic ownership/state-race cases
+
+- Tested against exact source commit `ca0112cf91c3ad2553bb2da0b1deeb8c65d94572`, request ID `f73460dc-f97b-47be-a04b-f446fc4ae55b`, same Windows PowerShell 5.1 executor.
+- **Ownership marker guard 3/3 PASS:** own marker allowed, foreign marker denied `HUB_BOOT_ROLLBACK_TASK_NOT_OURS`, missing synthetic boot task handled without attempting a mutation. A *real* absent task still requires the separate COM visibility guard.
+- **User-task state race 5/5 PASS:** unchanged Running, NotInstalled and Disabled accepted; Ready replacing Running and disappearing user task denied `HUB_USER_TASK_STATE_RACE`.
+- Combined synthetic PowerShell fixture evidence: **24/24 expected outcomes, 0 unexpected**, spanning SYSTEM identity (7), user identity (8), ambient environment cleanup (1), ownership marker (3), and user state race (5).
+- The last two sets exercised the exact extracted ownership guard plus the source-matched state comparison in isolated PowerShell variables, not any actual Scheduled Task. This is not physical acceptance, integration test execution, or proof that cross-process timing is atomically safe.
