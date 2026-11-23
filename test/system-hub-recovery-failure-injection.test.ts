@@ -10,7 +10,7 @@ import {SYSTEM_HUB_RECOVERY_PS} from '../scripts/ai04-controlled-system-hub-cuto
 const psQuote=(value:string):string=>"'"+value.replaceAll("'","''")+"'";
 const powershell='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
 
-function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-write'|'tampered-launcher'|'late-launcher-swap',phase:'SYSTEM_STARTED'|'AWAITING_PHYSICAL_ACCEPTANCE'='SYSTEM_STARTED'):void{
+function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-write'|'tampered-launcher'|'late-launcher-swap',phase:'SYSTEM_STARTED'|'AWAITING_PHYSICAL_ACCEPTANCE'|'UNRECOGNIZED'='SYSTEM_STARTED'):void{
   const temp=mkdtempSync(path.join(os.tmpdir(),'ai04-fi-'));
   try{
     const source=path.join(temp,'legacy');
@@ -77,9 +77,11 @@ function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-
         ' -or $script:resumeCount -ne '+(['late-shutdown-write','late-launcher-swap'].includes(mode)?'1':'0')+
         ' -or $script:removeCount -ne 0){'+
         'throw ("AI04_UNEXPECTED_MUTATIONS: stop="+$script:stopCount+" resume="+$script:resumeCount+" remove="+$script:removeCount+" reason="+$failure)}',
-      'if($failure -notmatch "'+(['tampered-launcher','late-launcher-swap'].includes(mode)
-        ?'AI04_RECOVERY_LEGACY_LAUNCHER_CHANGED'
-        :'AI04_ROLLBACK_UNRECONCILED_SYSTEM_WRITES')+'"){throw ("AI04_WRONG_REJECTION: "+$failure)}',
+      'if($failure -notmatch "'+(phase==='UNRECOGNIZED'
+        ?'AI04_RECOVERY_UNKNOWN_PHASE'
+        :['tampered-launcher','late-launcher-swap'].includes(mode)
+          ?'AI04_RECOVERY_LEGACY_LAUNCHER_CHANGED'
+          :'AI04_ROLLBACK_UNRECONCILED_SYSTEM_WRITES')+'"){throw ("AI04_WRONG_REJECTION: "+$failure)}',
       'Write-Output ("AI04_SIMULATED_REJECTION "+$failure)',
     ];
     // EncodedCommand can exceed the Windows CreateProcess command-line limit
@@ -121,4 +123,9 @@ test('modified user launcher denies fallback before stopping either task',
 test('late launcher replacement after SYSTEM shutdown resumes verified SYSTEM task',
   {skip:process.platform!=='win32'},()=>{
     executeIsolatedRecoveryFailureInjection('late-launcher-swap');
+  });
+
+test('unknown recovery journal phase causes zero task mutations',
+  {skip:process.platform!=='win32'},()=>{
+    executeIsolatedRecoveryFailureInjection('pre-stop','UNRECOGNIZED');
   });
