@@ -487,8 +487,7 @@ test('broker effect input rejects getters, toJSON and non-JSON structures before
     {nested:{value:Symbol('bad')}}]){
     const f=fixture();
     await assert.rejects(f.run(op,raw),deny);
-    assert.deepEqual(f.events,[],'invalid input must not contact authority');
-    assert.equal(f.events.includes('invoke'),false);
+    assert.deepEqual(f.events,[],'invalid input must not contact authority or effect');
   }
   assert.equal(executed,0,'no attacker-defined code runs during snapshot');
 });
