@@ -20,6 +20,7 @@
 - Spawn a real disposable Node process and observe its OS incarnation. Keep it alive while a different journal instance attempts takeover; assert `AGENT_JOURNAL_IN_USE` and unchanged `in_progress` status.
 - Terminate that disposable process, confirm the subsequent takeover, require that interrupted `in_progress` becomes `unknown`, and refuse to recreate the same request ID.
 - Reject malformed nonce and forged-but-unrecognized process incarnation while the PID is still alive; retain a committed tombstone.
+- Spawn an actual independent Node process that opens this same disposable journal, persists its own OS-incarnation lease and a real `in_progress` mutation, then is forcefully terminated. While alive the parent must be blocked; following the crash the parent must recover the record to `UNKNOWN`, preserve its fingerprint, deny request-ID replay, and reject a changed fingerprint. This explicitly exercises cross-process SQLite WAL recovery rather than only manually seeding an owner row.
 
 These tests use only temporary SQLite files and a disposable child process; **no Work-PC production state is touched**.
 
@@ -29,6 +30,7 @@ These tests use only temporary SQLite files and a disposable child process; **no
 node --version
 npm ci
 node --test --import tsx test/agent/ai04-external-journal-owner.test.ts
+# This new suite also spawns a disposable independent Node writer using --import tsx
 node --test --import tsx test/agent-journal-owner-incarnation.test.ts
 node --test --import tsx test/qa-journal-wal-recycle-p11.test.ts
 node --test --import tsx test/agent-journal-restart-regression.test.ts
@@ -48,7 +50,8 @@ Record executable Node major version, OS build, exact commit SHA and exit code w
 | Multiple retained WAL generations | Source regression exists | Accept valid monotonic allocation generations |
 | Live external process owns journal | New test, run required | Deny takeover, no in-progress reconciliation |
 | Confirmed external process exit | New test, run required | Claim lease, in-progress -> UNKNOWN, no replay |
-| Malformed/forged owner metadata, live PID | New test, run required | Deny takeover, preserve records |
+| Malformed/forged owner metadata, live PID | New test, source CI run required | Deny takeover, preserve records |
+| Cross-process actual journal owner crashes mid-reservation | New test, source CI run required | Parent denied while alive; after crash UNKNOWN, fingerprint unchanged and no replay |
 | Access denied to OS process birth metadata | Physical/VM NOT_RUN | Unknown identity cannot grant mutation lease |
 | Cross-user SID / Windows elevation boundary | Physical/VM NOT_RUN | Only trusted owner identity; deny otherwise |
 | Reboot #1 and #2 on a packaged Windows 1.0.8 profile | AI-09 NOT_RUN | Exact packaged binaries, owner readback and Agent startup |
