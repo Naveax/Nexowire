@@ -28,8 +28,8 @@ const CORE_STATUS_MESSAGES = Object.freeze({
     'The device owner must approve the Windows administrator/UAC prompt locally. Remote approval does not count.',
   ],
   AWAITING_PHYSICAL_ACCEPTANCE: [
-    'CORE isteği iletildi; bu bilgisayardaki yerel kullanıcı onayı henüz doğrulanmadı. Tekrar istek gönderme.',
-    'The CORE request is pending local approval on this PC. Do not send another enrollment request.',
+    'CORE onay isteği kaydedildi, ancak cihaza ulaştığı veya yerel Windows onayı henüz doğrulanmadı. Aynı isteği yeniden gönderme.',
+    'A CORE consent request is recorded, but delivery to the PC and local Windows approval are unverified. Do not resend it.'
   ],
   REVOKED_LOCALLY: [
     'CORE erişimi bu cihazda yerel olarak iptal edildi. Yeni bir açık yerel onay gerekir.',
@@ -51,8 +51,10 @@ const CORE_STATUS_MESSAGES = Object.freeze({
 
 function coreStatusFromDashboard(dashboard) {
   const devices = Array.isArray(dashboard?.devices) ? dashboard.devices : [];
-  const device = devices.find((entry) => entry && entry.id === deviceId);
-  if (!device) return 'UNKNOWN';
+  // Duplicate or unmatched IDs cannot identify one trustworthy target.
+  const matched = devices.filter((entry) => entry && entry.id === deviceId);
+  if (matched.length !== 1) return 'UNKNOWN';
+  const device = matched[0];
   const physical = device.physicalConsole;
   // Only explicit source-of-truth negatives produce specific negative statuses.
   if (device.installationStatus === 'NOT_INSTALLED') return 'NOT_INSTALLED';
@@ -72,7 +74,8 @@ function coreStatusFromDashboard(dashboard) {
       physical?.active === true && Number.isFinite(age) && age >= 0 && age < 15000) {
     return 'READY_VERIFIED';
   }
-  if (device.platform === 'win32' &&
+  // A stored broker configuration on an offline device does not prove a running broker.
+  if (device.platform === 'win32' && device.online === true &&
       (device.privilegeMode === 'broker' || device.adminBridgeReady === true)) {
     return 'BROKER_RUNNING_BUT_UNVERIFIED';
   }
