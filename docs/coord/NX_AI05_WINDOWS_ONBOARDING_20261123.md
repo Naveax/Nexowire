@@ -50,6 +50,12 @@ node --import tsx scripts/smoke-windows-user-setup.ts --bundle-dir release-windo
 | Windows 10/11 | Uninstall/rollback | preserve encrypted owner data unless explicit local deletion |
 | Windows 10/11 | Reboot before login, CORE enrollment / revoke | only AI-09 may record physical SYSTEM and Broker/CORE effect acceptance |
 
+## Windows release-lane test coverage follow-up
+
+After the initial green CI `45188556719` and Release Readiness `45188556694`, inspection of the Windows release logs confirmed that ordinary `install` and `checksum-mismatch` smoke ran, while `upgrade-preserve` and `upgrade-checksum-mismatch` were not invoked. The AI-05-owned smoke driver now invokes **both additional disposable fixture scenarios from its default local-fixture `install` run when the packaged version is later than 1.0.8**, with an explicit child JSON receipt for scenario identity, preservation of five fixtures, and fail-closed checksum behavior. Tagged/stable v1.0.7 bootstrap and `--download-source github` are excluded from this automatic extension. No shared workflow edits or additional CI dispatch were made.
+
+This section describes added source behavior, not a completed OS acceptance. Verify the next exact-head Windows Release Readiness job output before changing `NOT_RUN` to `PASS`. The physical Work-PC and real SQLite/DPAPI migration remain outside this fixture's scope.
+
 ## Known gaps and coordination request
 
 - The actual generated CMD installer body lives in **`scripts/build-windows-user-bundle.ts`**, outside the AI-05 assigned write list. It currently uses side-by-side version directories, but does not implement a complete UX for protected SYSTEM install/uninstall/UAC or a verified data-aware version rollback. Request coordinator ownership for the precise `renderSetupScript` symbol before modifying it.
