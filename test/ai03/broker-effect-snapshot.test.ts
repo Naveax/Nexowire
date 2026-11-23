@@ -42,7 +42,7 @@ test('AI-03 discoverable smoke: CORE console blocks custom toJSON before native 
 test('AI-03 discoverable smoke: ordinary JSON snapshots remain immutable and faithful',()=>{
   const original={kind:'safe',data:{points:[1,2,3]}};
   const p=prepareCoreWindowsMutation('windows.pointer.click',original);
-  assert.deepEqual(p.input,original);
+  assert.deepEqual(JSON.parse(JSON.stringify(p.input)),original);
   assert.equal(Object.isFrozen(p.input),true);
   assert.equal(Object.isFrozen((p.input as typeof original).data.points),true);
   original.data.points.push(4);

@@ -164,7 +164,20 @@ function frozenEffectInput(capability:string,input:unknown):
     json=JSON.stringify({capability,input:snapshot});
   }catch{deny()}
   if(!json || Buffer.byteLength(json,'utf8')>4*1024*1024)deny();
-  return {input:snapshot,
+  // Preserve the original native callback contract: plain JSON.parse object
+  // prototypes, never the caller's accessors or custom serialization code.
+  // Hashes are already fixed from the strict null-prototype serialization.
+  let parsed:{capability:string;input:unknown};
+  try{parsed=JSON.parse(json) as typeof parsed;}catch{deny()}
+  const deepFreeze=(value:unknown,depth=0):void=>{
+    if(depth>64)deny();
+    if(value!==null&&typeof value==='object'){
+      for(const child of Object.values(value))deepFreeze(child,depth+1);
+      Object.freeze(value);
+    }
+  };
+  deepFreeze(parsed.input);
+  return {input:parsed.input,
     inputSha256:createHash('sha256').update(json).digest('hex')};
 }
 function receiptMatches(receipt:BrokerEffectReceipt|null,
