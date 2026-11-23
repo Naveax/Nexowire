@@ -109,15 +109,15 @@ test('T-378 #485: dashboard 500 cevabının gövdesi kullanılmıyor', async () 
   assert.equal(getElement('approve').disabled, true);
 });
 
-test('T-378 #485: 5xx pairing hatasındaki sunucu mesajı/sahte URL gösterilmiyor', async () => {
+test('AI-06 T-378 #485: uncertain 5xx pairing never echoes response secrets or permits blind retry', async () => {
   const sentinel = 'SECRET_SENTINEL_T378';
   const { getElement } = await simulate({
     pairingStatus: 503, pairingBody: { message: `https://invalid.example/?access_token=${sentinel}` },
   });
   assert.equal(getElement('error-message').textContent,
-    'Bağlantı hizmeti geçici olarak kullanılamıyor. Biraz sonra tekrar dene.');
-  assert.equal(getElement('approve').disabled, false,
-    'HTTP 503 stays retryable but upstream response bodies are never displayed');
+    'Bağlantı sonucu belirsiz (HTTP 503). Önce Nexowire uygulamasındaki eşleştirmeyi kontrol et; aynı isteği körlemesine yineleme.');
+  assert.equal(getElement('approve').disabled, true,
+    'HTTP 503 is an uncertain postcondition; blindly replaying POST is forbidden');
   const badGateway = await simulate({
     pairingStatus: 502, pairingBody: { message: 'SECRET_SENTINEL_502' },
   });
@@ -132,14 +132,15 @@ test('T-378 #485: beklenmeyen hesap-fetch hatasının ham metni kullanıcıya g�
   assert.equal(getElement('error-message').textContent, 'Hesap doğrulanamadı. Bağlantıyı kontrol edip yeniden dene.');
 });
 
-test('T-378 #485: pairing POST istisnasındaki sahte URL kullanıcıya yansımıyor', async () => {
+test('AI-06 T-378 #485: lost POST ACK is bounded UNKNOWN and never enables automatic replay', async () => {
   const sentinel = 'SECRET_SENTINEL_T378';
   const { getElement } = await simulate({
     pairingError: new TypeError(`Failed to fetch https://invalid.example/?access_token=${sentinel}`),
   });
   assert.equal(getElement('error-message').textContent.includes(sentinel), false);
-  assert.equal(getElement('error-message').textContent, 'Beklenmeyen bağlantı hatası.');
-  assert.equal(getElement('approve').disabled, false);
+  assert.equal(getElement('error-message').textContent,
+    'Bağlantı sonucu belirsiz. Önce yerel uygulamadaki sonucu kontrol et; tekrar istek gönderme.');
+  assert.equal(getElement('approve').disabled, true);
 });
 
 test('K01 #485: connect Windows indirmesi README ile aynı resmî v1.0.8 yayınına bağlı', () => {
