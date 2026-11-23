@@ -77,6 +77,6 @@ test('ambiguous commit outcome preserves the armed recovery and refuses automati
     error.rollbackAttempted===false&&
     error.rollbackFailed===false&&
     error.message==='SYSTEM_HUB_CUTOVER_FAILED_COMMIT_RECOVERY_UNVERIFIED');
+  // Exact step sequence already proves no rollback callback was invoked.
   assert.deepEqual(events,[...phases]);
-  assert.ok(!events.includes('rollback'));
 });
