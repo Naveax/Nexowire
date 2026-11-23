@@ -95,3 +95,30 @@ test('PowerShell rejects logon-only, duplicate, disabled startup and hijacked wo
     else assert.match(run.stderr+run.stdout,/HUB_BOOT_TASK_IDENTITY_MISMATCH/);
   }
 });
+
+test('AtStartup launcher isolates PowerShell lookup and rejects inherited writable skills catalogs',()=>{
+  const override=String.raw`C:\Users\Owner\.nexowire\skills`;
+  assert.throws(()=>assertProtectedHubBootLauncherContext({
+    ...safeEnv,
+    NEXOWIRE_SKILLS_DIR:override,
+  },pid),/HUB_BOOT_UNPROTECTED_LAUNCHER_CONTEXT/);
+
+  const launcher=buildHubBootLauncher({
+    env:safeEnv,executable:'node.exe',args:['cli.js','http'],pidFile:pid,
+  });
+  const modules=launcher.indexOf("$env:PSModulePath='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules'");
+  const pathVar=launcher.indexOf("$env:PATH='C:\\Windows\\System32;C:\\Windows;C:\\Windows\\System32\\WindowsPowerShell\\v1.0'");
+  const scrub=launcher.indexOf('Remove-Item -Path Env:NEXOWIRE_SKILLS_DIR -ErrorAction SilentlyContinue');
+  const spawn=launcher.indexOf('Start-Process -FilePath');
+  assert.ok(modules>=0 && pathVar>=0 && scrub>=0 &&
+    modules<scrub && pathVar<scrub && scrub<spawn,
+    'Clean bootstrap must precede all privileged child startup');
+  assert.equal(launcher.includes('$env:NEXOWIRE_SKILLS_DIR='),false);
+
+  const source=readFileSync(new URL('../src/hub/hub-boot-lifecycle.ts',import.meta.url),'utf8');
+  const install=source.slice(source.indexOf('export async function installHubBootLifecycle('));
+  const sanitize=install.indexOf('delete env.NEXOWIRE_SKILLS_DIR;');
+  const build=install.indexOf('buildHubBootLauncher({');
+  assert.ok(sanitize>=0 && build>sanitize,
+    'Interactive skills overrides must be removed before creating the SYSTEM launcher');
+});
