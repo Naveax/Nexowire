@@ -33,7 +33,7 @@ test('AI-06 diagnostic: full delegated lane emits redacted failing TAP evidence'
   // Node marks nested test workers through NODE_TEST_CONTEXT; removing only
   // that marker permits an independent process to execute the selected files.
   // The child receives no external credentials or production device inputs.
-  const env={...process.env,CI:'true'};
+  const env:NodeJS.ProcessEnv={...process.env,CI:'true'};
   delete env.NODE_TEST_CONTEXT;
   const child=spawnSync(process.execPath,
     ['--test','--test-reporter=tap','--import','tsx','--test-concurrency=1',...paths],{
