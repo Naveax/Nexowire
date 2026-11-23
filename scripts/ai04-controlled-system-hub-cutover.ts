@@ -215,6 +215,13 @@ export const SYSTEM_HUB_RECOVERY_LAUNCHER_PROOF_PS=[
   "$savedHash=(Get-FileHash -LiteralPath $savedLauncher -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()",
   "if($onDiskHash -cne $launcherSha -or $savedHash -cne $launcherSha){throw 'AI04_RECOVERY_LEGACY_LAUNCHER_CHANGED'}",
 ].join('\r\n');
+/** Re-read trusted task identity before ANY automatic SYSTEM resume. */
+export const SYSTEM_HUB_RECOVERY_RESUME_TASK_PS=[
+  "$resumeTask=Get-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\\' -ErrorAction Stop",
+  "if([string]$resumeTask.TaskName -cne 'Nexowire Hub Boot' -or [string]$resumeTask.TaskPath -cne '\\' -or [string]$resumeTask.Principal.UserId -notin @('SYSTEM','S-1-5-18') -or [string]$resumeTask.Description -cne [string]$journal.marker){throw 'AI04_RECOVERY_RESUME_TASK_CHANGED'}",
+  "$resumeActions=@($resumeTask.Actions)",
+  "if($resumeActions.Count -ne 1 -or [string]$resumeActions[0].Execute -cne 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe' -or [string]$resumeActions[0].Arguments -cne $expected){throw 'AI04_RECOVERY_RESUME_ACTION_CHANGED'}",
+].join('\r\n');
 export const SYSTEM_HUB_RECOVERY_PS=[
   "$ErrorActionPreference='Stop'",
   "$root='C:\\ProgramData\\Nexowire\\hub-cutover-recovery'",
@@ -299,7 +306,10 @@ export const SYSTEM_HUB_RECOVERY_PS=[
   // Restore availability using only the already owner-verified task.
   "  try{& $validateState}catch{",
   "    $divergence=$_",
-  "    try{Start-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\\' -ErrorAction Stop}catch{throw 'AI04_RECOVERY_SYSTEM_RESUME_FAILED'}",
+  "    try{",
+  SYSTEM_HUB_RECOVERY_RESUME_TASK_PS,,
+  "      Start-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\\' -ErrorAction Stop",,
+  "    }catch{throw 'AI04_RECOVERY_SYSTEM_RESUME_FAILED'}"
   "    throw $divergence",
   "  }",
   "  $current=Get-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\\' -ErrorAction Stop",
@@ -308,7 +318,10 @@ export const SYSTEM_HUB_RECOVERY_PS=[
   SYSTEM_HUB_RECOVERY_LAUNCHER_PROOF_PS,
   "  }catch{",
   "    $launcherDrift=$_",
-  "    try{Start-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\\' -ErrorAction Stop}catch{throw 'AI04_RECOVERY_SYSTEM_RESUME_FAILED'}",
+  "    try{",
+  SYSTEM_HUB_RECOVERY_RESUME_TASK_PS,,
+  "      Start-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\\' -ErrorAction Stop",,
+  "    }catch{throw 'AI04_RECOVERY_SYSTEM_RESUME_FAILED'}"
   "    throw $launcherDrift",
   "  }",
   "  Unregister-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\\' -Confirm:$false",
