@@ -13,6 +13,9 @@ param(
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
+if([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT){throw 'AI01_STAGE_WINDOWS_REQUIRED'}
+if(-not [Environment]::Is64BitOperatingSystem){throw 'AI01_STAGE_64BIT_WINDOWS_REQUIRED'}
+if(-not [Environment]::Is64BitProcess){throw 'AI01_STAGE_64BIT_PROCESS_REQUIRED'}
 $repo=[IO.Path]::GetFullPath($RepositoryRoot).TrimEnd('\')
 $output=[IO.Path]::GetFullPath($OutputDirectory).TrimEnd('\')
 $sha=$ExpectedCommitSha.ToLowerInvariant()
