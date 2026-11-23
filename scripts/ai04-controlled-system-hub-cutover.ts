@@ -303,6 +303,13 @@ export const SYSTEM_HUB_RECOVERY_PS=[
   "  }",
   "  $current=Get-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\\' -ErrorAction Stop",
   "  if([string]$current.Description -cne [string]$journal.marker -or [string]$current.Principal.UserId -notin @('SYSTEM','S-1-5-18')){throw 'AI04_RECOVERY_BOOT_REPLACED'}",
+  "  try{",
+  SYSTEM_HUB_RECOVERY_LAUNCHER_PROOF_PS,
+  "  }catch{",
+  "    $launcherDrift=$_",
+  "    try{Start-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\\' -ErrorAction Stop}catch{throw 'AI04_RECOVERY_SYSTEM_RESUME_FAILED'}",
+  "    throw $launcherDrift",
+  "  }"
   "  Unregister-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\\' -Confirm:$false",
   "}",
 
