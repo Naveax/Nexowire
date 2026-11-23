@@ -233,7 +233,7 @@ function showError(message, retryable = false) {
   approve.dataset.busy = 'false';
   $('retry-hint').textContent = retryable
     ? 'Tekrar denemek için TEKRAR DENE düğmesine bas.'
-    : 'Bağlantıyı kontrol ettikten sonra bu sayfayı yenile veya kontrol paneline dön.';
+    : 'Önce Nexowire uygulamasından eşleştirme sonucunu kontrol et. Yeniden bağlamak gerekiyorsa yeni oturumu yerel uygulamadan başlat; bu isteği otomatik tekrarlama.';
   if (retryable) {
     approve.setAttribute('aria-describedby', 'error-message retry-hint');
     approve.focus();
