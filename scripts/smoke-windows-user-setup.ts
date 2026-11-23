@@ -476,6 +476,56 @@ async function main(): Promise<void> {
       await fs.writeFile(cli, originalCli);
     }
 
+    // The release workflow already executes this default fixture smoke on
+    // Windows. Run both isolated upgrade cases here as well, without
+    // changing shared CI workflows or pretending the fake 1.0.8 profile is
+    // a real production data-migration exercise.
+    const numericVersion = /^(\\d+)\\.(\\d+)\\.(\\d+)(?:-|$)/.exec(version);
+    const runsAfter108 = numericVersion !== null &&
+      (Number(numericVersion[1]) > 1 ||
+       (Number(numericVersion[1]) === 1 && Number(numericVersion[2]) > 0) ||
+       (Number(numericVersion[1]) === 1 && Number(numericVersion[2]) === 0 &&
+        Number(numericVersion[3]) > 8));
+    const upgradeMatrix: string[] = [];
+    if (scenario === 'install' && downloadSource === 'fixture' && runsAfter108) {
+      const smokeEntry = process.argv[1];
+      if (!smokeEntry) fail('AI05_UPGRADE_SMOKE_ENTRY_MISSING');
+      for (const upgradeScenario of ['upgrade-preserve', 'upgrade-checksum-mismatch']) {
+        const run = await waitForChild(process.execPath, [
+          '--import', 'tsx', path.resolve(smokeEntry),
+          '--bundle-dir', bundleDir,
+          '--download-source', 'fixture',
+          '--profile', 'unicode',
+          '--scenario', upgradeScenario,
+        ], { cwd: process.cwd(), env: process.env });
+        assert.equal(run.exitCode, 0,
+          'AI-05 upgrade scenario failed: ' + upgradeScenario + '\\n' +
+          run.stdout + '\\n' + run.stderr);
+        const result = JSON.parse(run.stdout) as {
+          ok?: boolean;
+          testPassed?: boolean;
+          scenario?: string;
+          preservedFixtureCount?: number;
+          existingReleasePreserved?: boolean;
+          rejectedBeforeExtraction?: boolean;
+          taskRegistrationAndBrowserSimulated?: boolean;
+          oauthOrDevicePairingVerified?: boolean;
+        };
+        assert.equal(result.scenario, upgradeScenario);
+        assert.equal(result.existingReleasePreserved, true);
+        assert.equal(result.preservedFixtureCount, 5);
+        assert.equal(result.taskRegistrationAndBrowserSimulated, true);
+        assert.equal(result.oauthOrDevicePairingVerified, false);
+        if (upgradeScenario === 'upgrade-checksum-mismatch') {
+          assert.equal(result.testPassed, true);
+          assert.equal(result.rejectedBeforeExtraction, true);
+        } else {
+          assert.equal(result.ok, true);
+        }
+        upgradeMatrix.push(upgradeScenario);
+      }
+    }
+
     process.stdout.write(
       JSON.stringify(
         {
@@ -489,7 +539,8 @@ async function main(): Promise<void> {
           profileKind,
           downloadSource,
           existingReleasePreserved: preserveLegacy,
-        preservedFixtureCount: preserveLegacy ? preservedFixtures.size : 0,
+          preservedFixtureCount: preserveLegacy ? preservedFixtures.size : 0,
+          upgradeMatrix,
           payloadDownloadedOverPublicHttps: downloadSource === 'github',
           bootstrapDownloadedOverPublicHttps: downloadSource === 'github',
           taskRegistrationAndBrowserSimulated: true,
