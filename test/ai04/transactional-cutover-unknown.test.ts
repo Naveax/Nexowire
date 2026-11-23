@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {
   runRecoverableSystemHubCutover,
   SystemCutoverFailed,
@@ -62,4 +63,23 @@ test('interrupted recovery never gets labelled as completed rollback',async()=>{
     failure.rollbackFailed===true&&
     failure.cause instanceof AggregateError);
   assert.equal(events.filter(event=>event==='rollback').length,1);
+});
+
+test('launcher state root and port are re-read at quiesce/copy/receipt boundaries',()=>{
+  const source=readFileSync(
+    new URL('../../scripts/ai04-controlled-system-hub-cutover.ts',import.meta.url),'utf8');
+  const helper=source.slice(source.indexOf('async function assertLegacyLauncherBoundToJournal('),
+    source.indexOf('function psLiteral('));
+  assert.match(helper,/parsePersistedHubLauncherEnvironment\\(raw\\)/);
+  assert.match(helper,/assertCanonicalHubStateSourcePath\\(env\\.NEXOWIRE_STATE_DIR\\)/);
+  assert.match(helper,/source!==journal\\.sourceRoot\\|\\|port!==journal\\.port/);
+  const pre=source.slice(source.indexOf('async confirmRecoveryBeforeQuiesce(){'),
+    source.indexOf('async quiesceLegacy(){'));
+  const copy=source.slice(source.indexOf('async copyProtectedState(){'),
+    source.indexOf('async issueReceipt(){'));
+  const receipt=source.slice(source.indexOf('async issueReceipt(){'),
+    source.indexOf('async installSystemHub(){'));
+  assert.equal(pre.split('assertLegacyLauncherBoundToJournal(journal)').length-1,1);
+  assert.equal(copy.split('assertLegacyLauncherBoundToJournal(journal)').length-1,2);
+  assert.equal(receipt.split('assertLegacyLauncherBoundToJournal(journal)').length-1,2);
 });
