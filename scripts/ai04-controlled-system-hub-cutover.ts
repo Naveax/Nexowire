@@ -309,7 +309,7 @@ export const SYSTEM_HUB_RECOVERY_PS=[
   "    $launcherDrift=$_",
   "    try{Start-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\\' -ErrorAction Stop}catch{throw 'AI04_RECOVERY_SYSTEM_RESUME_FAILED'}",
   "    throw $launcherDrift",
-  "  }"
+  "  }",
   "  Unregister-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\\' -Confirm:$false",
   "}",
 
