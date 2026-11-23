@@ -56,6 +56,14 @@ After the initial green CI `45188556719` and Release Readiness `45188556694`, in
 
 This section describes added source behavior, not a completed OS acceptance. Verify the next exact-head Windows Release Readiness job output before changing `NOT_RUN` to `PASS`. The physical Work-PC and real SQLite/DPAPI migration remain outside this fixture's scope.
 
+## 23 November, native Windows evidence and additional Plan coverage
+
+Exact earlier SHA: `492b3ee02c9bebffdfdd8d99a02e6296a42e2773`. CI `45202515614`: SUCCESS. Release Readiness `45202515649`: FAILURE with Windows package job `137790044498` SUCCESS, Ubuntu package SUCCESS, macOS package CANCELLED. The precise reason for the macOS cancellation is not established; do not attribute the workflow failure to AI-05 or a known code defect without additional evidence. The Windows job JSON receipt includes `"upgradeMatrix": ["upgrade-preserve", "upgrade-checksum-mismatch"]`, confirming both isolated scenarios executed successfully for that SHA. This is **Windows fixture acceptance**, not a real state cutover or physical CORE enrollment.
+
+New AI-05 test `test/ai05/system-stage-plan-windows.test.ts` invokes the actual PS5.1 `-Action Plan` with an exact Git HEAD, derives the user's MyDocuments location from the Windows known-folder API (preserving Unicode via base64), and verifies that neither stage nor provenance files are created. It skips with an explicit reason if the transient runner lacks a provisioned known Documents folder. A second OS-only test parses the stage script under PowerShell 7 when that interpreter is installed, otherwise explicitly SKIP.
+
+The stage script additionally rejects non-Windows platforms, 32-bit Windows and 32-bit PowerShell processes with distinct messages before any build work. These changes affect only source-owned staging and tests, never existing installed runtimes. Recheck exact HEAD CI and Windows job logs before recording PASS for the new Plan and PowerShell 7 checks.
+
 ## Known gaps and coordination request
 
 - The actual generated CMD installer body lives in **`scripts/build-windows-user-bundle.ts`**, outside the AI-05 assigned write list. It currently uses side-by-side version directories, but does not implement a complete UX for protected SYSTEM install/uninstall/UAC or a verified data-aware version rollback. Request coordinator ownership for the precise `renderSetupScript` symbol before modifying it.
