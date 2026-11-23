@@ -13,6 +13,17 @@ const required = [
   'test/ci/v109-core-readonly-preflight.test.mjs',
   'test/ci/v109-experimental-source-audit.test.mjs',
   'test/ci/release-path-coverage.test.mjs',
+  'scripts/ci/test-inventory.mjs',
+  'scripts/ci/test-execution-plan.mjs',
+  'scripts/ci/test-execution-coverage.mjs',
+  'scripts/ci/portable-root-execution-receipt.mjs',
+  'scripts/ci/pure-import-provenance.mjs',
+  'test/ci/test-inventory.test.mjs',
+  'test/ci/test-execution-plan.test.mjs',
+  'test/ci/test-execution-coverage.test.mjs',
+  'test/ci/portable-root-execution-receipt.test.mjs',
+  'test/ci/pure-import-provenance.test.mjs',
+  '.github/workflows/ci.yml',
   'src/agent/process-launch-mode.ts',
   'src/agent/process-manager.ts',
   'src/agent/windows-job-owner.ts',
@@ -52,4 +63,15 @@ test('stable and experimental releases both run the release path coverage gate',
   assert.doesNotMatch(command,/test\/ci\/release-path-coverage\.test\.mjs/);
   assert.match(command,/test\/ci\/v109-core-readonly-preflight\.test\.mjs/);
   assert.match(workflow,/\n  push:\s*\n    tags:\s*\n      - "v\*"\s*\n/);
+});
+
+test('tag release attestation and publication require exact-head AI-08 receipt checks',()=>{
+  assert.match(workflow,/\n  ai08-coverage-reconciliation:\s*\n/);
+  assert.match(workflow,/ref: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
+  assert.match(workflow,/NEXOWIRE_EXPECTED_COMMIT_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
+  assert.match(workflow,/matrix:\s*\n\s*node-version: \[22, 24\]/);
+  assert.match(workflow,/run: node --test test\/ci\/test-execution-coverage\.test\.mjs/);
+  assert.match(workflow,/  package:\s*\n    needs: ai08-coverage-reconciliation/);
+  assert.match(workflow,/  attest:[\s\S]*?needs: package/);
+  assert.match(workflow,/  publish:[\s\S]*?needs: \[package, attest\]/);
 });

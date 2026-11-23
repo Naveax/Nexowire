@@ -41,6 +41,18 @@ on:
       - "test/ci/v109-core-readonly-preflight.test.mjs"
       - "test/ci/v109-experimental-source-audit.test.mjs"
       - "test/ci/release-path-coverage.test.mjs"
+      # Test execution coverage changes must never bypass release readiness.
+      - "scripts/ci/test-inventory.mjs"
+      - "scripts/ci/test-execution-plan.mjs"
+      - "scripts/ci/test-execution-coverage.mjs"
+      - "scripts/ci/portable-root-execution-receipt.mjs"
+      - "scripts/ci/pure-import-provenance.mjs"
+      - "test/ci/test-inventory.test.mjs"
+      - "test/ci/test-execution-plan.test.mjs"
+      - "test/ci/test-execution-coverage.test.mjs"
+      - "test/ci/portable-root-execution-receipt.test.mjs"
+      - "test/ci/pure-import-provenance.test.mjs"
+      - ".github/workflows/ci.yml"
       # Windows process ownership is part of packaging acceptance.
       - "src/agent/process-launch-mode.ts"
       - "src/agent/process-manager.ts"
@@ -67,7 +79,32 @@ permissions:
   contents: read
 
 jobs:
+  ai08-coverage-reconciliation:
+    name: AI-08 exact-head receipt scope (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Assert exact immutable source HEAD
+        env:
+          NEXOWIRE_EXPECTED_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "$NEXOWIRE_EXPECTED_COMMIT_SHA"
+      - name: Reject forged approved test execution receipts
+        run: node --test test/ci/test-execution-coverage.test.mjs
+
   package:
+    needs: ai08-coverage-reconciliation
     strategy:
       fail-fast: false
       matrix:
