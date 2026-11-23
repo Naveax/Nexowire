@@ -105,3 +105,19 @@ These are source/PowerShell identity tests; they do **not** install or mutate a 
 - The generated `launch.ps1` sets fixed system PowerShell `PATH` and `PSModulePath` (plus `SystemRoot`, `windir`, `ComSpec`) at the start of the scheduled `AtStartup` action. The isolated environment used *while registering the task* does not automatically carry over to *executing the task after reboot*.
 - A protected SYSTEM Hub may discover skills only using the packaged runtime's normal default lookup; a custom external skills catalog needs a separately reviewed, immutable, ACL-verified deployment rather than an inherited user string.
 - This is a **source-only fix**. Negative tests are at `test/hub-boot-startup-trigger-integrity.test.ts`; real PowerShell 5.1 and Windows before-login execution require independent CI/AI-09 evidence.
+
+## Windows PowerShell 5.1 synthetic fixture results (2026-11-23)
+
+**Source tested:** `b10598e4504a228d5737f48d48a2093fe8068d69`. The guard text was extracted from the exact GitHub source blob at that commit, not rewritten to mimic expected behavior. The environment scrub command was also located in that exact source before execution.
+
+**Execution environment:** online Windows 10 computer `DESKTOP-ONDD84S`, Windows PowerShell `5.1.19041.6456`, Nexowire first-party `shell.exec` headless PowerShell invocation. **No task API, scheduler read/write, reboot, Windows service change, file write, DPAPI, SQLite, or CORE operation** in these simulations. All task identities, paths, secrets, and environment variables used by the scripts were *synthetic*.
+
+| Source simulation | Cases | Result | Request ID |
+|---|---:|---|---|
+| SYSTEM Boot identity: canonical, no trigger, AtLogOn, disabled, duplicate, foreign working directory, foreign principal | 7 | **7 PASS / 0 FAIL** | `183e38c5-e207-4628-8ebc-0bcda930f490` |
+| User Hub identity: canonical, approved legacy `powershell.exe`, wrong SID, Highest, wrong args, foreign name, foreign executable, spoofed legacy description | 8 | **8 PASS / 0 FAIL** | `b20ece2e-9e7a-45cc-8c50-cafe136d7939` |
+| Inherited machine `NEXOWIRE_*` cleanup before restoring reviewed SYSTEM allowlist | 1 | **1 PASS / 0 FAIL** | `ffe537f5-cac2-4ff3-aeeb-bbb9bab0fce2` |
+
+These are **16 source-level PowerShell fixture scenarios PASS**, not an execution of the full Node test files, Task Scheduler API integration, actual task XML, disposable VM, unattended boot, or physical Work-PC acceptance.
+
+**Evidence separation:** `test/hub-boot-startup-trigger-integrity.test.ts` is still **NOT_RUN** in the general hosted root-level TypeScript test suite unless a separate exact-commit Node + Windows shard proves otherwise. At this stage, source PowerShell fixture checks are `PASS`; source test-file execution, VM cutover/rollback and real physical acceptance stay `NOT_RUN`. AI-08 owns the hosted exact-SHA test shard (#1205), AI-09 owns physical Windows acceptance (#1161).
