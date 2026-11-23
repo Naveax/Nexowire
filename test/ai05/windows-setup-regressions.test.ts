@@ -36,6 +36,11 @@ test('AI-05 smoke covers an installed 1.0.8 during both successful and rejected 
   assert.match(smoke, /assertOldInstallIntact\(\)/);
   assert.match(smoke, /existingReleasePreserved: preserveLegacy/);
   assert.match(smoke, /preservedFixtureCount: preserveLegacy \? preservedFixtures\.size : 0/);
+  assert.match(smoke, /scenario === 'install' && downloadSource === 'fixture' && runsAfter108/);
+  assert.match(smoke, /for \(const upgradeScenario of \['upgrade-preserve', 'upgrade-checksum-mismatch'\]\)/);
+  assert.match(smoke, /assert\.equal\(result\.scenario, upgradeScenario\)/);
+  assert.match(smoke, /assert\.equal\(result\.preservedFixtureCount, 5\)/);
+  assert.match(smoke, /upgradeMatrix\.push\(upgradeScenario\)/);
   assert.match(smoke, /rejectedBeforeExtraction: true/);
   assert.match(smoke, /taskRegistrationAndBrowserSimulated: true/);
   assert.match(smoke, /oauthOrDevicePairingVerified: false/);
