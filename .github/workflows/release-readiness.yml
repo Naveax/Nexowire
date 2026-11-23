@@ -79,6 +79,30 @@ permissions:
   contents: read
 
 jobs:
+  ai08-coverage-reconciliation:
+    name: AI-08 exact-head receipt scope (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Assert exact immutable source HEAD
+        env:
+          NEXOWIRE_EXPECTED_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "$NEXOWIRE_EXPECTED_COMMIT_SHA"
+      - name: Reject forged approved test execution receipts
+        run: node --test test/ci/test-execution-coverage.test.mjs
+
   package:
     strategy:
       fail-fast: false
