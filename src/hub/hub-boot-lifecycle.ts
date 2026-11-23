@@ -938,9 +938,14 @@ export async function installHubBootLifecycle(
         // object. A replaced action, logon trigger or principal must be
         // rejected before stopping the old Hub or launching privileged code.
         '$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction Stop',
+        '$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
         hubBootRegisteredTaskIdentityGuard,
         hubBootRollbackTaskOwnershipGuard,
-        '$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
+        // The user's task can be replaced or change state between the
+        // pre-registration preflight and this post-registration readback.
+        // Never stop a different or newly Running task on stale evidence.
+        "$actualLegacyState=if($userTask){[string]$userTask.State}else{'NotInstalled'}",
+        "if($actualLegacyState -cne $expectedLegacyState){throw 'HUB_USER_TASK_STATE_RACE'}",
         'if($userTask){',
         '  Stop-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
         '  Disable-ScheduledTask -TaskName $user -TaskPath \\ | Out-Null',
