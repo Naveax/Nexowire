@@ -292,6 +292,31 @@ function psArgument(value: string): string {
   return '"' + value + '"';
 }
 
+/**
+ * Keep the standalone launcher builder inside the same protected state,
+ * machine DPAPI and PID boundaries as the elevated install path. Otherwise a
+ * caller can accidentally persist the legacy user's writable state to SYSTEM.
+ */
+export function assertProtectedHubBootLauncherContext(
+  env: NodeJS.ProcessEnv,
+  pidFile: string,
+): void {
+  assertProtectedSystemHubStateRoot(env.NEXOWIRE_STATE_DIR);
+  const expectedSecret = path.win32.join(
+    PROTECTED_HUB_BOOT_ROOT,
+    'control-plane-service-token.machine.dpapi.json',
+  );
+  const expectedPid = path.win32.join(PROTECTED_HUB_BOOT_ROOT,'hub.pid');
+  if (
+    env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_DPAPI_FILE !== expectedSecret ||
+    env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_FILE !== undefined ||
+    env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_PLATFORM_NAME !== undefined ||
+    pidFile !== expectedPid
+  ) {
+    throw new Error('HUB_BOOT_UNPROTECTED_LAUNCHER_CONTEXT');
+  }
+}
+
 export function buildHubBootLauncher(input: {
   env: NodeJS.ProcessEnv;
   executable: string;
@@ -299,6 +324,7 @@ export function buildHubBootLauncher(input: {
   pidFile: string;
 }): string {
   const env = persistedHubEnvironment(input.env);
+  assertProtectedHubBootLauncherContext(env,input.pidFile);
   const lines = [
     "$ErrorActionPreference='Stop'",
     "$ProgressPreference='SilentlyContinue'",
@@ -355,11 +381,20 @@ if($null -ne $bootTask){
   }
   $expectedBootArgs='-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $env:NEXOWIRE_HUB_BOOT_LAUNCHER.Replace('"','""') + '"'
   $bootActions=@($bootTask.Actions)
+  # A matching principal and action are insufficient: a logon-only or
+  # disabled startup trigger cannot provide unattended pre-login recovery.
+  $bootTriggers=@($bootTask.Triggers)
+  $validStartupTrigger=($bootTriggers.Count -eq 1) -and
+    ($null -ne $bootTriggers[0]) -and
+    ([string]$bootTriggers[0].CimClass.CimClassName -ceq 'MSFT_TaskBootTrigger') -and
+    ([bool]$bootTriggers[0].Enabled)
   $bootSid=[string]$bootTask.Principal.UserId
   try {
     $bootSid=(New-Object System.Security.Principal.NTAccount($bootSid)).Translate([System.Security.Principal.SecurityIdentifier]).Value
   } catch { }
   if($bootActions.Count -ne 1 -or
+     -not $validStartupTrigger -or
+     [string]$bootActions[0].WorkingDirectory -ne '' -or
      ([string]$bootActions[0].Execute).Trim('"') -ine $expectedExe -or
      [string]$bootActions[0].Arguments -cne $expectedBootArgs -or
      $bootSid -ne 'S-1-5-18' -or
