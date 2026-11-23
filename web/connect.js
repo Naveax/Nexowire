@@ -400,7 +400,7 @@ async function loadAccount() {
         'Bağlantı hazırlanamadı.', 'Bağlantı cevabı geçersiz.',
         'Bu hesap için cihaz limiti dolu.', 'Bu cihaz bu hesaba bağlanamadı.',
       ]);
-      showError(visibleError || (known.has(rawMessage) ? rawMessage : 'Bağlantı sonucu belirsiz. Önce yerel uygulamadaki sonucu kontrol et; tekrar istek gönderme.'), retryable);
+      showError(visibleError || (known.has(rawMessage) ? rawMessage : 'Beklenmeyen bağlantı hatası. Bağlantı sonucu belirsiz. Önce yerel uygulamadaki sonucu kontrol et; tekrar istek gönderme.'), retryable);
       $('status-title').textContent = retryable ? 'Tekrar deneyebilirsin' : 'Bağlantı durduruldu';
       $('status-text').textContent =
         retryable ? 'Ayarları değiştirmen gerekmez.' : 'Hata açıklamasını kontrol et.';
