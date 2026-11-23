@@ -206,15 +206,44 @@ async function main(): Promise<void> {
   // The installer must neither delete nor overwrite this prior release,
   // regardless of success or a failed checksum preflight for the new ZIP.
   const preserveLegacy = scenario.startsWith('upgrade-');
-  const legacyMarker = path.join(
-    fakeLocalAppData, 'Nexowire', 'versions', '1.0.8-ai05-preserved',
-    'app', 'user-data-preservation-sentinel.json',
-  );
-  const legacyContents = '{"ai05":"existing-v1.0.8-state-must-remain"}\\n';
+  const preservedFixtures = new Map<string, string>([
+    [
+      path.join(fakeLocalAppData, 'Nexowire', 'versions',
+        '1.0.8-ai05-preserved', 'runtime', 'node.exe'),
+      'previous-v1.0.8-binary-sentinel',
+    ],
+    [
+      path.join(fakeLocalAppData, 'Nexowire', 'versions',
+        '1.0.8-ai05-preserved', 'app', 'dist', 'src', 'cli.js'),
+      'previous-v1.0.8-cli-sentinel',
+    ],
+    [
+      path.join(fakeLocalAppData, 'Nexowire', 'state',
+        'local-identity-sentinel.json'),
+      '{"fixture":"persisted-local-state"}',
+    ],
+    [
+      path.join(appData, 'Nexowire', 'preferences-sentinel.json'),
+      '{"fixture":"persisted-roaming-preferences"}',
+    ],
+    [
+      path.join(profile, '.nexowire', 'state', 'owner-sentinel.json'),
+      '{"fixture":"per-user-owner-state"}',
+    ],
+  ]);
   if (preserveLegacy) {
-    await fs.mkdir(path.dirname(legacyMarker), { recursive: true });
-    await fs.writeFile(legacyMarker, legacyContents, 'utf8');
+    for (const [filename, contents] of preservedFixtures) {
+      await fs.mkdir(path.dirname(filename), { recursive: true });
+      await fs.writeFile(filename, contents, 'utf8');
+    }
   }
+  const assertOldInstallIntact = async (): Promise<void> => {
+    if (!preserveLegacy) return;
+    for (const [filename, contents] of preservedFixtures) {
+      assert.equal(await fs.readFile(filename, 'utf8'), contents,
+        'Installer modified a preexisting 1.0.8 or user-state fixture: ' + filename);
+    }
+  };
   for (const tool of ['node', 'npm', 'git', 'pwsh']) {
     const probe = await waitForChild(path.join(system32, 'where.exe'), [tool], {
       cwd: tempRoot, env: cleanEnv,
@@ -355,16 +384,14 @@ async function main(): Promise<void> {
       assert.match(installed.stdout + installed.stderr, /Nexowire payload checksum mismatch/);
       assert.doesNotMatch(installed.stdout, /^(?:launcher-ready|hourly-updater-simulated|Nexowire experimental preview: automatic updates disabled)$/m);
       await assert.rejects(fs.access(installRoot), { code: 'ENOENT' });
-      if (preserveLegacy) {
-        assert.equal(await fs.readFile(legacyMarker, 'utf8'), legacyContents,
-          'Existing 1.0.8 installation must survive a failed upgrade.');
-      }
+      await assertOldInstallIntact();
       process.stdout.write(JSON.stringify({
         testPassed: true, scenario, installed: false,
         setupExitCode: installed.exitCode, rejectedBeforeExtraction: true,
         ambientNodeNpmGitPwshAbsent: true, profileIsolated: true, profileKind,
         taskRegistrationAndBrowserSimulated: true, oauthOrDevicePairingVerified: false,
         existingReleasePreserved: preserveLegacy,
+        preservedFixtureCount: preserveLegacy ? preservedFixtures.size : 0,
       }, null, 2) + '\n');
       return;
     }
@@ -421,10 +448,7 @@ async function main(): Promise<void> {
     );
     assert.equal(runtime.exitCode, 0, runtime.stderr);
     assert.equal(runtime.stdout.trim(), version);
-    if (preserveLegacy) {
-      assert.equal(await fs.readFile(legacyMarker, 'utf8'), legacyContents,
-        'Side-by-side upgrade must not destroy the previous 1.0.8 installation.');
-    }
+    await assertOldInstallIntact();
 
     // Test the actual hidden launcher with a disposable sentinel CLI, after
     // verifying the real packaged CLI version. Never start an Agent or OAuth
@@ -465,6 +489,7 @@ async function main(): Promise<void> {
           profileKind,
           downloadSource,
           existingReleasePreserved: preserveLegacy,
+        preservedFixtureCount: preserveLegacy ? preservedFixtures.size : 0,
           payloadDownloadedOverPublicHttps: downloadSource === 'github',
           bootstrapDownloadedOverPublicHttps: downloadSource === 'github',
           taskRegistrationAndBrowserSimulated: true,
