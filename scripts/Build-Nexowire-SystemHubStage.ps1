@@ -17,7 +17,11 @@ $repo=[IO.Path]::GetFullPath($RepositoryRoot).TrimEnd('\')
 $output=[IO.Path]::GetFullPath($OutputDirectory).TrimEnd('\')
 $sha=$ExpectedCommitSha.ToLowerInvariant()
 $profileRoot=[IO.Path]::GetFullPath($env:USERPROFILE).TrimEnd('\')
-$documents=Join-Path $profileRoot 'Documents'
+$documents=[Environment]::GetFolderPath([Environment+SpecialFolder]::MyDocuments)
+if([string]::IsNullOrWhiteSpace($documents) -or -not [IO.Path]::IsPathRooted($documents)){
+  throw 'AI01_STAGE_DOCUMENTS_KNOWN_FOLDER_MISSING'
+}
+$documents=[IO.Path]::GetFullPath($documents).TrimEnd('\')
 $parent=Split-Path -Parent $output
 $name=[IO.Path]::GetFileName($output)
 if($parent -ine $documents -or
@@ -28,11 +32,12 @@ if($parent -ine $documents -or
 }
 if(-not (Test-Path -LiteralPath $parent -PathType Container)){throw 'AI01_STAGE_OUTPUT_PARENT_MISSING'}
 $cursor=$parent
-while($cursor.Length -ge $profileRoot.Length) {
+while($true) {
   $item=Get-Item -LiteralPath $cursor -Force -ErrorAction Stop
   if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw 'AI01_STAGE_OUTPUT_ANCESTOR_REPARSE'}
-  if($cursor -ieq $profileRoot){break}
-  $cursor=Split-Path -Parent $cursor
+  $next=Split-Path -Parent $cursor
+  if([string]::IsNullOrEmpty($next) -or $next -ieq $cursor){break}
+  $cursor=$next
 }
 if(Test-Path -LiteralPath $output){throw 'AI01_STAGE_OUTPUT_EXISTS'}
 if(Test-Path -LiteralPath ($output+'.provenance.json')){throw 'AI01_STAGE_PROVENANCE_EXISTS'}
@@ -57,6 +62,13 @@ $sourceDir=Join-Path $work 'source'
 $extract=Join-Path $work 'extract'
 $stage=Join-Path $extract 'package'
 $installer=Join-Path $sourceDir 'scripts\Install-Nexowire-SystemHubRuntime.ps1'
+$windowsDirectory=[Environment]::GetFolderPath([Environment+SpecialFolder]::Windows)
+if([string]::IsNullOrWhiteSpace($windowsDirectory)){throw 'AI01_STAGE_WINDOWS_DIRECTORY_MISSING'}
+$tarExecutable=Join-Path $windowsDirectory 'System32\tar.exe'
+$powershell51=Join-Path $windowsDirectory 'System32\WindowsPowerShell\v1.0\powershell.exe'
+foreach($exe in @($tarExecutable,$powershell51)){
+  if(-not (Test-Path -LiteralPath $exe -PathType Leaf)){throw 'AI01_STAGE_WINDOWS_TOOL_MISSING'}
+}
 function Invoke-Checked([string]$exe,[string[]]$arguments,[string]$errorCode) {
   & $exe @arguments | Out-Host
   if($LASTEXITCODE -ne 0){throw $errorCode}
@@ -96,7 +108,7 @@ try {
   $tarball=Join-Path $work $filename
   if(-not(Test-Path -LiteralPath $tarball -PathType Leaf)){throw 'AI01_STAGE_PACK_FILE_MISSING'}
   New-Item -ItemType Directory -Path $extract -ErrorAction Stop|Out-Null
-  Invoke-Checked 'C:\Windows\System32\tar.exe' @('-xzf',$tarball,'-C',$extract) 'AI01_STAGE_EXTRACT_FAILED'
+  Invoke-Checked $tarExecutable @('-xzf',$tarball,'-C',$extract) 'AI01_STAGE_EXTRACT_FAILED'
   Assert-NoReparse $stage
   $pkgSha=(Get-FileHash -LiteralPath (Join-Path $sourceDir 'package.json') -Algorithm SHA256).Hash
   $packedPkgSha=(Get-FileHash -LiteralPath (Join-Path $stage 'package.json') -Algorithm SHA256).Hash
@@ -112,12 +124,12 @@ try {
   if((Get-FileHash -LiteralPath (Join-Path $stage 'package-lock.json') -Algorithm SHA256).Hash.ToLowerInvariant() -cne $lockSha){
     throw 'AI01_STAGE_LOCKFILE_CHANGED'
   }
-  $planText=(& 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' -NoLogo -NoProfile -NonInteractive -File $installer -Action Plan -SourceDirectory $stage -ExpectedTreeSha256 ('0'*64) | Out-String)
+  $planText=(& $powershell51 -NoLogo -NoProfile -NonInteractive -File $installer -Action Plan -SourceDirectory $stage -ExpectedTreeSha256 ('0'*64) | Out-String)
   if($LASTEXITCODE -ne 0){throw 'AI01_STAGE_INSTALLER_PLAN_FAILED'}
   $firstPlan=$planText|ConvertFrom-Json
   $treeSha=[string]$firstPlan.treeSha256
   if($treeSha -notmatch '^[0-9a-f]{64}$'){throw 'AI01_STAGE_TREE_DIGEST_UNVERIFIED'}
-  $planText=(& 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' -NoLogo -NoProfile -NonInteractive -File $installer -Action Plan -SourceDirectory $stage -ExpectedTreeSha256 $treeSha | Out-String)
+  $planText=(& $powershell51 -NoLogo -NoProfile -NonInteractive -File $installer -Action Plan -SourceDirectory $stage -ExpectedTreeSha256 $treeSha | Out-String)
   if($LASTEXITCODE -ne 0){throw 'AI01_STAGE_RECHECK_PLAN_FAILED'}
   $finalPlan=$planText|ConvertFrom-Json
   if([string]$finalPlan.treeSha256 -cne $treeSha){throw 'AI01_STAGE_TREE_DIGEST_CHANGED'}
@@ -127,7 +139,7 @@ try {
   Move-Item -LiteralPath $stage -Destination $output -ErrorAction Stop
   # Verify again at the *published* path, not only the temporary path. If
   # any byte changes during promotion, do not issue a provenance receipt.
-  $publishedText=(& 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' -NoLogo -NoProfile -NonInteractive -File $installer -Action Plan -SourceDirectory $output -ExpectedTreeSha256 $treeSha | Out-String)
+  $publishedText=(& $powershell51 -NoLogo -NoProfile -NonInteractive -File $installer -Action Plan -SourceDirectory $output -ExpectedTreeSha256 $treeSha | Out-String)
   if($LASTEXITCODE -ne 0){throw 'AI01_STAGE_PUBLISHED_PLAN_FAILED'}
   $publishedPlan=$publishedText|ConvertFrom-Json
   if([string]$publishedPlan.treeSha256 -cne $treeSha -or
