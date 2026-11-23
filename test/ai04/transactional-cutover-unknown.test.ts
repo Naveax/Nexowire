@@ -70,9 +70,9 @@ test('launcher state root and port are re-read at quiesce/copy/receipt boundarie
     new URL('../../scripts/ai04-controlled-system-hub-cutover.ts',import.meta.url),'utf8');
   const helper=source.slice(source.indexOf('async function assertLegacyLauncherBoundToJournal('),
     source.indexOf('function psLiteral('));
-  assert.match(helper,/parsePersistedHubLauncherEnvironment\\(raw\\)/);
-  assert.match(helper,/assertCanonicalHubStateSourcePath\\(env\\.NEXOWIRE_STATE_DIR\\)/);
-  assert.match(helper,/source!==journal\\.sourceRoot\\|\\|port!==journal\\.port/);
+  assert.match(helper,/parsePersistedHubLauncherEnvironment\(raw\)/);
+  assert.match(helper,/assertCanonicalHubStateSourcePath\(env\.NEXOWIRE_STATE_DIR\)/);
+  assert.match(helper,/source!==journal\.sourceRoot\|\|port!==journal\.port/);
   const pre=source.slice(source.indexOf('async confirmRecoveryBeforeQuiesce(){'),
     source.indexOf('async quiesceLegacy(){'));
   const copy=source.slice(source.indexOf('async copyProtectedState(){'),
