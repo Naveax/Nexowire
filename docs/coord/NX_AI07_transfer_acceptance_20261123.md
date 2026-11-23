@@ -68,3 +68,28 @@ For the new test and documentation, rollback is a Git revert of the AI-07 commit
 - NAVEAX connectivity: OFFLINE.
 - Two-PC file delivery/reboot/revoke: **NOT_RUN**.
 - Initial #1160 General CI `45178026197` and Release Readiness `45178024621`: IN_PROGRESS when inspected; do not re-dispatch the same SHA/workflow/input.
+
+
+## AI-07 follow-up: ACK-loss and corrupted stage (23 Nov, 18:08+03:00)
+
+Two additional source-only regressions now exist in the owned nested K18 test file:
+- **Persisted chunk / lost ACK:** the test fixture writes a 64 KiB chunk, discards the positive response, and confirms the published artifact is still absent. A new disposable Store instance resumes from offset 65,536, and the final manifest SHA-256 is checked. A later ALREADY_PRESENT retry must perform zero payload reads.
+- **Corrupted durable prefix:** a partially staged 221 KiB fixture's 64 KiB prefix is modified *in the temporary fixture directory*. A new Store instance must return `CORRUPT_SESSION` rather than auto-repair, replay or publish.
+
+This does not establish authenticated external CAS, real Agent/Hub reconnection or a physical receiver final receipt. The source test now contains **five** independent `node:test` cases, and its exact direct-run outcome remains **NOT_RUN** until an executed-file receipt is available.
+
+### Moving integration and CI provenance
+- The integration branch #1160 advanced to `b04bf428dd9cedc1a765d9194c17eb0c80df97c0` (17 commits beyond the historical AI-07 base). Its CI `45190374159`, Release Readiness `45190374558`, Portable Root `45190374173`, Test Discovery `45190374144`, AI-03 `45190374273`, AI-04 `45190374372` were observed **SUCCESS** on that base SHA only. Those results are **not inherited** by #1241.
+- The AI-07 previous exact child `0f1ce457` CI `45188524286` failed on Windows `test/agent-native-remote-cas-live.test.ts` with `MUTATION_STATE_UNKNOWN` / `ack_timeout`. The test represents a legitimate negative outcome until reconciled; do not report a successful effect or blindly resend. A targeted rerun was requested after verifying no same-SHA CI was active, but later the run reported `cancelled` while a new source commit was made. No successful rerun proof is claimed.
+- Current AI-07 head after the extra isolated tests: `488834387f8861cd63fb23dba4545ce6a9ac0559`. This head has its **own** queued CI workflows; only results on exactly this SHA are admissible.
+- AI-08's Draft PR #1240 was closed when its changes reached integration #1160, but its review of additional direct K18 execution remains necessary. AI-07 does not edit shared `.github/workflows/ci.yml` or provenance matrices.
+- **Branch topology:** #1241 is ahead by four own commits and behind integration by 17 at the last compare. A coordinator-reviewed rebased/cherry-picked integration is needed. Do not force-update a shared branch during an active CI attempt.
+
+### Exact AI-07 test commands requested from CI owner
+
+```bash
+node --test --test-reporter=tap --import tsx --test-concurrency=1 test/delegated/k18/ai07-cross-device-transfer-evidence.test.ts
+node --test --test-reporter=tap --import tsx --test-concurrency=1 test/delegated/k18/p007-transfer-replay-integrity.test.ts
+```
+
+Attach `sourceCommitSha`, test-file Git blob SHA, Node major, executed test paths, and TAP counts for both Node 22 and Node 24. Report failures or fixture differences as FAIL, omitted paths as NOT_RUN. The command is **not** an authorization to run it against Work-PC production state.
