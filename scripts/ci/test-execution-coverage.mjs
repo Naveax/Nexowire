@@ -46,13 +46,13 @@ export function reconcileCoverage(entries,inventory,receipt) {
   const executed=new Set();
   let passed=0;
   for(const f of receipt.files) {
-    if(!f || typeof f.path!=='string' || !approved.has(f.path) ||
-       !Object.hasOwn(REVIEWED_ROOT_GIT_BLOBS,f.path) ||
-       f.gitBlobSha!==REVIEWED_ROOT_GIT_BLOBS[f.path])
-      deny('UNAPPROVED_ROOT_FILE');
     if(!f || typeof f.path!=='string' || !tracked.has(f.path) ||
        executed.has(f.path) || f.gitBlobSha!==tracked.get(f.path))
       deny('FILE_NOT_BOUND_TO_SOURCE');
+    if(!approved.has(f.path) ||
+       !Object.hasOwn(REVIEWED_ROOT_GIT_BLOBS,f.path) ||
+       f.gitBlobSha!==REVIEWED_ROOT_GIT_BLOBS[f.path])
+      deny('UNAPPROVED_ROOT_FILE');
     if(f.result!=='PASS' || !safeInt(f.tests) || f.tests===0 ||
        !safeInt(f.pass) || f.pass!==f.tests ||
        f.fail!==0 || f.skipped!==0 || f.todo!==0 || f.cancelled!==0)
