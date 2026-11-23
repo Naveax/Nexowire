@@ -30,11 +30,16 @@ test('AI-06 diagnostic: full delegated lane emits redacted failing TAP evidence'
   assert.ok(paths.length>=45&&paths.length<=80,
     'delegated lane inventory unexpectedly changed: '+paths.length);
 
+  // Node marks nested test workers through NODE_TEST_CONTEXT; removing only
+  // that marker permits an independent process to execute the selected files.
+  // The child receives no external credentials or production device inputs.
+  const env={...process.env,CI:'true'};
+  delete env.NODE_TEST_CONTEXT;
   const child=spawnSync(process.execPath,
     ['--test','--test-reporter=tap','--import','tsx','--test-concurrency=1',...paths],{
       cwd:process.cwd(),encoding:'utf8',timeout:180_000,
       maxBuffer:8*1024*1024,
-      env:{...process.env,CI:'true'},
+      env,
     });
   const output=child.stdout??'';
   const failures=[...output.matchAll(/^not ok\s+\d+.*$/gm)].map(match=>{
