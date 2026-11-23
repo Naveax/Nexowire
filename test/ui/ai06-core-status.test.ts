@@ -38,6 +38,7 @@ class FakeElement {
 async function render(dashboard:unknown,options:{
   pairingStatus?:number; throwPairing?:boolean;
   pairingResponse?:()=>Promise<Response>;
+  dashboardResponse?:()=>Promise<Response>;
 }={}) {
   const ids=new Map<string,FakeElement>();
   const get=(id:string)=>{if(!ids.has(id))ids.set(id,new FakeElement());return ids.get(id)!};
@@ -55,7 +56,7 @@ async function render(dashboard:unknown,options:{
     window:{location:{search,pathname:'/connect.html',origin:'https://owner.fixture.invalid',
       replace:()=>{throw Error('fixture navigation blocked')}}},
     fetch:async(path:string)=>{
-      if(path==='/api/v1/me/dashboard')return Response.json(dashboard);
+      if(path==='/api/v1/me/dashboard')return options.dashboardResponse?.()??Response.json(dashboard);
       if(path==='/api/v1/pairing'){
         postCount++;
         if(options.pairingResponse)return options.pairingResponse();
@@ -126,8 +127,9 @@ test('AI-06: pending pairing is single-flight even with repeated click events',a
   assert.equal(f.postCount(),1);
 });
 
-test('AI-06: HTTP 503 and ACK-loss cannot trigger a second pairing POST',async()=>{
-  for(const options of [{pairingStatus:503},{throwPairing:true}]){
+test('AI-06: HTTP 503, ACK-loss and request timeout cannot replay pairing POST',async()=>{
+  const timeout=async():Promise<Response>=>{const error=new Error('fixture timeout');error.name='TimeoutError';throw error};
+  for(const options of [{pairingStatus:503},{throwPairing:true},{pairingResponse:timeout}]){
     const f=await render(dashboard({active:false}),options);
     await f.get('approve').handlers.click!();
     assert.equal(f.postCount(),1);
@@ -139,6 +141,17 @@ test('AI-06: HTTP 503 and ACK-loss cannot trigger a second pairing POST',async()
   }
 });
 
+
+test('AI-06: dashboard timeout keeps pairing disabled and reports a safe, actionable error',async()=>{
+  const timeout=async():Promise<Response>=>{const error=new Error('private upstream timeout token=fixture');error.name='TimeoutError';throw error};
+  const f=await render({}, {dashboardResponse:timeout});
+  assert.equal(f.get('approve').disabled,true);
+  assert.equal(f.get('core-status-code').textContent,'UNKNOWN');
+  assert.match(f.get('error-message').textContent,/Hesap doğrulanamadı/);
+  assert.doesNotMatch(f.get('error-message').textContent,/private|token=fixture/);
+  assert.equal(f.postCount(),0);
+});
+
 test('AI-06: bilingual CORE panel and zoom/keyboard/forced-color contracts',()=>{
   assert.match(connectHtml,/id="core-state-panel"/);
   assert.match(connectHtml,/id="core-status-code"[^>]*aria-live="polite"/);
@@ -147,6 +160,8 @@ test('AI-06: bilingual CORE panel and zoom/keyboard/forced-color contracts',()=>
   assert.match(connectHtml,/Windows\/UAC onayı/);
   assert.match(connectJs,/CORE_INDEPENDENT_VERIFIER_INSTALLED = false/);
   assert.match(connectJs,/pairingOutcomeUncertain/);
+  assert.match(connectJs,/signal: AbortSignal.timeout\(8000\)/);
+  assert.match(connectJs,/signal: AbortSignal.timeout\(15000\)/);
   assert.match(connectJs,/ArrowRight.*ArrowLeft/);
   for(const breakpoint of [768,375,320])
     assert.ok(css.includes('max-width:'+breakpoint+'px'),'missing '+breakpoint+'px layout');
