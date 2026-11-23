@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {SYSTEM_HUB_RECOVERY_PS} from '../../scripts/ai04-controlled-system-hub-cutover.js';
 import {
   runRecoverableSystemHubCutover,
   SystemCutoverFailed,
@@ -85,4 +86,14 @@ test('launcher state root and port are re-read at quiesce/copy/receipt boundarie
   assert.equal(pre.split('assertLegacyLauncherBoundToJournal(journal)').length-1,1);
   assert.equal(copy.split('assertLegacyLauncherBoundToJournal(journal)').length-1,2);
   assert.equal(receipt.split('assertLegacyLauncherBoundToJournal(journal)').length-1,2);
+});
+
+test('recovery rejects unknown journal phases without implicitly starting legacy writer',()=>{
+  assert.match(SYSTEM_HUB_RECOVERY_PS,/AI04_RECOVERY_UNKNOWN_PHASE/);
+  assert.match(SYSTEM_HUB_RECOVERY_PS,/\bAWAITING_PHYSICAL_ACCEPTANCE\b/);
+  const allowed=SYSTEM_HUB_RECOVERY_PS.indexOf('AI04_RECOVERY_UNKNOWN_PHASE');
+  const firstLauncher=SYSTEM_HUB_RECOVERY_PS.indexOf('AI04_RECOVERY_LEGACY_LAUNCHER_CHANGED');
+  const systemStop=SYSTEM_HUB_RECOVERY_PS.indexOf('Stop-ScheduledTask');
+  assert.ok(allowed>=0&&allowed<firstLauncher&&firstLauncher<systemStop);
+  assert.doesNotMatch(SYSTEM_HUB_RECOVERY_PS,/if\(\$journal\.phase -eq 'UNKNOWN'\)\{exit 0\}/);
 });
