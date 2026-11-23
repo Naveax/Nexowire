@@ -72,7 +72,10 @@ test('launcher state root and port are re-read at quiesce/copy/receipt boundarie
     source.indexOf('function psLiteral('));
   assert.match(helper,/parsePersistedHubLauncherEnvironment\(raw\)/);
   assert.match(helper,/assertCanonicalHubStateSourcePath\(env\.NEXOWIRE_STATE_DIR\)/);
-  assert.match(helper,/source!==journal\.sourceRoot\|\|port!==journal\.port/);
+  assert.match(helper,/journal\.launcherPath!==LAUNCHER/);
+  assert.match(helper,/source!==journal\.sourceRoot/);
+  assert.match(helper,/port!==journal\.port/);
+  assert.match(helper,/digest!==journal\.launcherSha256/);
   const pre=source.slice(source.indexOf('async confirmRecoveryBeforeQuiesce(){'),
     source.indexOf('async quiesceLegacy(){'));
   const copy=source.slice(source.indexOf('async copyProtectedState(){'),
