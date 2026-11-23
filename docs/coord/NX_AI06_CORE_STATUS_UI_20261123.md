@@ -2,7 +2,7 @@
 
 ## Ownership / baseline
 - Integration PR: #1160; baseline commit: `83c8b651106ecd1244fb9d982cf94fd390c15b6b`.
-- Branch: `agent/nx-06-core-status-ui-20261123`; only `web/connect.js`, `web/connect.html`, `web/styles.css`, `test/ui/ai06-core-status.test.ts` and this AI-06 handoff are modified.
+- Branch: `agent/nx-06-core-status-ui-20261123`; scoped files: `web/connect.js`, `web/connect.html`, `web/styles.css`, `test/ui/ai06-core-status.test.ts`, `test/connect-web.test.ts`, `test/delegated/k06/connect-error-display.test.mjs` and this AI-06 handoff.
 - No shared workflow, provenance, Broker, authority, Windows task, credential or SQLite changes.
 
 ## Contract
@@ -16,6 +16,7 @@
 
 ## Validation
 - Focused source/VM test: `node --test --import tsx test/ui/ai06-core-status.test.ts`.
+- DOM/retry regression: `node --test test/delegated/k06/connect-error-display.test.mjs`; legacy web copy contract: `node --test --import tsx test/connect-web.test.ts`.
 - Existing source/VM test: `node --test --import tsx test/connect-onboarding.test.ts`.
 - Existing DOM contract: `node --test --import tsx test/console-ui-polish.test.ts`.
 - Browser checks still required on real browsers: 320/375/768 CSS pixels, zoom 200%/400%, keyboard-only tab navigation, reduced motion, forced colors, English and Turkish, various network outcomes. CSS or VM-only assertions are **not** browser acceptance.
@@ -24,6 +25,13 @@
 
 ## Rollback
 - Revert only these AI-06 commits or close this Draft PR. No production/device rollback is necessary because no live services or stored states were modified.
+
+## 2026-11-23 CI triage and current source-only evidence
+- Prior SHA `c9b162a7d1f7da988b11da7e1980ef69e0f3b529` CI #45182074096 was FAILURE only after `npm run check` PASS: Node24 delegated source+transfer batch red, Node22 cancelled. Do not inherit earlier SHA PASS.
+- K06 delegated `connect-error-display` previously expected 503 retry despite uncertain POST completion. It now enforces no-repeat and secret redaction; legacy error wording remains visible as an accurate generic prefix.
+- A source-only in-memory V8 simulator ran pairing 403, 503, 502, invalid 200 and network loss, with one POST even after duplicate clicks. These checks are **not** full Node/hosted browser acceptance.
+- Further newly committed status/timeout regressions await exact-SHA CI. No claims of CI PASS until green on the final SHA.
+- AI-05/coordinator should revise `docs/INSTALL_WINDOWS.md` and `docs/CHATGPT_INSTALL_PROMPT.md` recovery wording and their mixed docs-only tests for UNKNOWN outcome vs new locally-initiated session, without replacing existing credential redaction.
 
 ## Coordination blockers
 1. Reviewed independent native owner/elevated verifier is not deployed; `READY_VERIFIED` must remain disabled.
