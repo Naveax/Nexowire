@@ -4,10 +4,12 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {readTestInventory} from '../../scripts/ci/test-inventory.mjs';
 import {reconcileCoverage} from '../../scripts/ci/test-execution-coverage.mjs';
+import {APPROVED_ROOT_TEST_FILES} from '../../scripts/ci/portable-root-execution-receipt.mjs';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const {entries,report}=readTestInventory(root);
-const subset=entries.slice(0,3);
+const subset=APPROVED_ROOT_TEST_FILES.slice(0,3).map(file=>entries.find(e=>e.path===file));
+assert.ok(subset.every(Boolean),'reviewed test files must exist in immutable inventory');
 const receipt=()=>({
   schemaVersion:1, sourceCommitSha:report.commitSha,
   sourceManifestSha256:report.manifestSha256,
@@ -58,4 +60,39 @@ test('rejects source inventory inconsistencies',()=>{
   assert.throws(()=>reconcileCoverage([...entries,entries[0]],
     {...report,trackedTsTestFiles:entries.length+1},r),
     /TEST_COVERAGE_INVALID_INVENTORY/);
+});
+
+test('rejects any unreviewed tracked file masquerading as an approved portable root test',()=>{
+  const unapproved=entries.find(e=>!APPROVED_ROOT_TEST_FILES.includes(e.path));
+  assert.ok(unapproved,'fixture requires an unreviewed tracked test');
+  const r=receipt();
+  r.files[0]={...r.files[0],path:unapproved.path,gitBlobSha:unapproved.blob};
+  assert.throws(()=>reconcileCoverage(entries,report,r),
+    /TEST_COVERAGE_UNAPPROVED_ROOT_FILE/);
+});
+test('rejects a forged full-inventory PASS claim under the portable-root receipt scope',()=>{
+  const forged=receipt();
+  forged.files=entries.map(e=>({
+    path:e.path,gitBlobSha:e.blob,tests:1,pass:1,
+    fail:0,skipped:0,todo:0,cancelled:0,result:'PASS',
+  }));
+  forged.executedFileCount=entries.length;
+  forged.testsPassed=entries.length;
+  assert.throws(()=>reconcileCoverage(entries,report,forged),
+    /TEST_COVERAGE_UNAPPROVED_ROOT_FILE/);
+});
+test('reviewed-only receipt cannot claim full test inventory execution',()=>{
+  const approved=APPROVED_ROOT_TEST_FILES.map(file=>entries.find(e=>e.path===file));
+  assert.ok(approved.every(Boolean));
+  const r=receipt();
+  r.files=approved.map(e=>({
+    path:e.path,gitBlobSha:e.blob,tests:1,pass:1,
+    fail:0,skipped:0,todo:0,cancelled:0,result:'PASS',
+  }));
+  r.executedFileCount=approved.length;
+  r.testsPassed=approved.length;
+  const coverage=reconcileCoverage(entries,report,r);
+  assert.equal(coverage.executedFileCount,APPROVED_ROOT_TEST_FILES.length);
+  assert.equal(coverage.notRunFileCount,entries.length-APPROVED_ROOT_TEST_FILES.length);
+  assert.equal(coverage.comprehensiveCoverage,false);
 });
