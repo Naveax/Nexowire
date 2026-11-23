@@ -314,6 +314,8 @@ export const SYSTEM_HUB_RECOVERY_PS=[
   "  }",
   "  $current=Get-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\\' -ErrorAction Stop",
   "  if([string]$current.Description -cne [string]$journal.marker -or [string]$current.Principal.UserId -notin @('SYSTEM','S-1-5-18')){throw 'AI04_RECOVERY_BOOT_REPLACED'}",
+  // A replaced task action must never be unregistered as though it were the original.
+  SYSTEM_HUB_RECOVERY_RESUME_TASK_PS,
   "  try{",
   SYSTEM_HUB_RECOVERY_LAUNCHER_PROOF_PS,
   "  }catch{",

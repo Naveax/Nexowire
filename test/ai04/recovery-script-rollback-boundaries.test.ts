@@ -46,6 +46,14 @@ test('SYSTEM task restart rechecks principal, identity, exact executable and act
   assert.match(source,/\$resumeTask\.Principal\.UserId/);
   assert.match(source,/\$resumeActions\[0\]\.Execute/);
   assert.match(source,/\$resumeActions\[0\]\.Arguments/);
-  assert.equal(SYSTEM_HUB_RECOVERY_PS.split('AI04_RECOVERY_RESUME_ACTION_CHANGED').length-1,2);
+  assert.equal(SYSTEM_HUB_RECOVERY_PS.split('AI04_RECOVERY_RESUME_ACTION_CHANGED').length-1,3);
   assert.equal(SYSTEM_HUB_RECOVERY_PS.split('AI04_RECOVERY_SYSTEM_RESUME_FAILED').length-1,2);
+});
+
+test('post-stop task action proof runs before unregister even when file states match',()=>{
+  const script=SYSTEM_HUB_RECOVERY_PS;
+  const current=script.indexOf("$current=Get-ScheduledTask -TaskName 'Nexowire Hub Boot'");
+  const recheck=script.indexOf('AI04_RECOVERY_RESUME_ACTION_CHANGED',current);
+  const unregister=script.indexOf('Unregister-ScheduledTask',current);
+  assert.ok(current>=0&&recheck>current&&unregister>recheck);
 });

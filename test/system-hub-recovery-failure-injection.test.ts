@@ -10,7 +10,7 @@ import {SYSTEM_HUB_RECOVERY_PS} from '../scripts/ai04-controlled-system-hub-cuto
 const psQuote=(value:string):string=>"'"+value.replaceAll("'","''")+"'";
 const powershell='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
 
-function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-write'|'tampered-launcher'|'late-launcher-swap'|'boot-action-swapped',phase:'SYSTEM_STARTED'|'AWAITING_PHYSICAL_ACCEPTANCE'|'UNRECOGNIZED'='SYSTEM_STARTED'):void{
+function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-write'|'tampered-launcher'|'late-launcher-swap'|'boot-action-swapped'|'boot-action-swapped-no-write',phase:'SYSTEM_STARTED'|'AWAITING_PHYSICAL_ACCEPTANCE'|'UNRECOGNIZED'='SYSTEM_STARTED'):void{
   const temp=mkdtempSync(path.join(os.tmpdir(),'ai04-fi-'));
   try{
     const source=path.join(temp,'legacy');
@@ -20,7 +20,7 @@ function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-
     const sourceFile=path.join(source,'record.txt');
     const targetFile=path.join(target,'record.txt');
     writeFileSync(sourceFile,'legacy-state','utf8');
-    writeFileSync(targetFile,['late-shutdown-write','late-launcher-swap','boot-action-swapped'].includes(mode)?'legacy-state':'new-system-data','utf8');
+    writeFileSync(targetFile,['late-shutdown-write','late-launcher-swap','boot-action-swapped','boot-action-swapped-no-write'].includes(mode)?'legacy-state':'new-system-data','utf8');
     const launcherFile=path.join(temp,'legacy-launch.ps1');
     const originalLauncher='# synthetic user-Hub launcher\\n';
     writeFileSync(launcherFile,originalLauncher,'utf8');
@@ -60,7 +60,9 @@ function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-
             ?' Set-Content -LiteralPath '+psQuote(launcherFile)+" -Value '# after-stop replacement' -Encoding Ascii -NoNewline;"
             :mode==='boot-action-swapped'
               ?' Set-Content -LiteralPath '+psQuote(targetFile)+" -Value 'late-system-write' -Encoding Ascii -NoNewline; $script:fakeBoot.Actions[0].Execute='untrusted.exe';"
-              :'')+' }',
+              :mode==='boot-action-swapped-no-write'
+                ?" $script:fakeBoot.Actions[0].Execute='untrusted.exe';"
+                :'')+' }',
       'function Start-ScheduledTask { [CmdletBinding()] param([string]$TaskName,[string]$TaskPath); $script:resumeCount++ }',
       'function Unregister-ScheduledTask { [CmdletBinding()] param([string]$TaskName,[string]$TaskPath,[switch]$Confirm); $script:removeCount++ }',
       'function Get-NetTCPConnection { [CmdletBinding()] param([string]$State); return @() }',
@@ -75,7 +77,7 @@ function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-
       '$failure=$null',
       'try{& ([scriptblock]::Create($body))}catch{$failure=$_.Exception.Message}',
       'if(-not $failure){throw "AI04_EXPECTED_RECOVERY_REJECTION"}',
-      'if($script:stopCount -ne '+(['late-shutdown-write','late-launcher-swap','boot-action-swapped'].includes(mode)?'1':'0')+
+      'if($script:stopCount -ne '+(['late-shutdown-write','late-launcher-swap','boot-action-swapped','boot-action-swapped-no-write'].includes(mode)?'1':'0')+
         ' -or $script:resumeCount -ne '+(['late-shutdown-write','late-launcher-swap'].includes(mode)?'1':'0')+
         ' -or $script:removeCount -ne 0){'+
         'throw ("AI04_UNEXPECTED_MUTATIONS: stop="+$script:stopCount+" resume="+$script:resumeCount+" remove="+$script:removeCount+" reason="+$failure)}',
@@ -83,6 +85,8 @@ function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-
         ?'AI04_RECOVERY_UNKNOWN_PHASE'
         :mode==='boot-action-swapped'
           ?'AI04_RECOVERY_SYSTEM_RESUME_FAILED'
+        :mode==='boot-action-swapped-no-write'
+          ?'AI04_RECOVERY_RESUME_ACTION_CHANGED'
         :['tampered-launcher','late-launcher-swap'].includes(mode)
           ?'AI04_RECOVERY_LEGACY_LAUNCHER_CHANGED'
           :'AI04_ROLLBACK_UNRECONCILED_SYSTEM_WRITES')+'"){throw ("AI04_WRONG_REJECTION: "+$failure)}',
@@ -101,7 +105,7 @@ function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-
     assert.match(result.stdout,/AI04_SIMULATED_REJECTION/);
     assert.equal(readFileSync(sourceFile,'utf8'),'legacy-state');
     assert.equal(readFileSync(targetFile,'utf8'),
-      ['late-shutdown-write','boot-action-swapped'].includes(mode)?'late-system-write':mode==='late-launcher-swap'?'legacy-state':'new-system-data');
+      ['late-shutdown-write','boot-action-swapped'].includes(mode)?'late-system-write':['late-launcher-swap','boot-action-swapped-no-write'].includes(mode)?'legacy-state':'new-system-data');
     assert.equal(JSON.parse(readFileSync(journalFile,'utf8')).phase,phase);
   }finally{rmSync(temp,{recursive:true,force:true})}
 }
@@ -137,4 +141,9 @@ test('unknown recovery journal phase causes zero task mutations',
 test('modified recovery task action after shutdown cannot be resumed',
   {skip:process.platform!=='win32'},()=>{
     executeIsolatedRecoveryFailureInjection('boot-action-swapped');
+  });
+
+test('replaced SYSTEM task action after stop prevents task removal even when state matches',
+  {skip:process.platform!=='win32'},()=>{
+    executeIsolatedRecoveryFailureInjection('boot-action-swapped-no-write');
   });
