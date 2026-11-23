@@ -37,6 +37,7 @@ class FakeElement {
 
 async function render(dashboard:unknown,options:{
   pairingStatus?:number; throwPairing?:boolean;
+  pairingResponse?:()=>Promise<Response>;
 }={}) {
   const ids=new Map<string,FakeElement>();
   const get=(id:string)=>{if(!ids.has(id))ids.set(id,new FakeElement());return ids.get(id)!};
@@ -57,6 +58,7 @@ async function render(dashboard:unknown,options:{
       if(path==='/api/v1/me/dashboard')return Response.json(dashboard);
       if(path==='/api/v1/pairing'){
         postCount++;
+        if(options.pairingResponse)return options.pairingResponse();
         if(options.throwPairing)throw Error('ACK lost after POST');
         return Response.json({error:'UPSTREAM_UNKNOWN'},{status:options.pairingStatus??503});
       }
@@ -108,6 +110,20 @@ test('AI-06: forged / stale active dashboard cannot promote READY_VERIFIED',asyn
   const f=await render(dashboard(physical));
   assert.equal(f.get('core-status-code').textContent,'BROKER_RUNNING_BUT_UNVERIFIED');
   assert.notEqual(f.get('core-status-code').className,'pill good');
+});
+
+
+test('AI-06: pending pairing is single-flight even with repeated click events',async()=>{
+  let release!:(response:Response)=>void;
+  const pending=new Promise<Response>(resolve=>{release=resolve});
+  const f=await render(dashboard({active:false}),{pairingResponse:()=>pending});
+  const first=f.get('approve').handlers.click();
+  await f.get('approve').handlers.click();
+  assert.equal(f.postCount(),1,'one request while the first POST is unresolved');
+  assert.equal(f.get('approve').disabled,true);
+  release(Response.json({error:'fixture upstream unavailable'},{status:503}));
+  await first;
+  assert.equal(f.postCount(),1);
 });
 
 test('AI-06: HTTP 503 and ACK-loss cannot trigger a second pairing POST',async()=>{
