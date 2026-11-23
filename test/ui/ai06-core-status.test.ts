@@ -117,8 +117,8 @@ test('AI-06: pending pairing is single-flight even with repeated click events',a
   let release!:(response:Response)=>void;
   const pending=new Promise<Response>(resolve=>{release=resolve});
   const f=await render(dashboard({active:false}),{pairingResponse:()=>pending});
-  const first=f.get('approve').handlers.click();
-  await f.get('approve').handlers.click();
+  const first=f.get('approve').handlers.click!();
+  await f.get('approve').handlers.click!();
   assert.equal(f.postCount(),1,'one request while the first POST is unresolved');
   assert.equal(f.get('approve').disabled,true);
   release(Response.json({error:'fixture upstream unavailable'},{status:503}));
@@ -129,11 +129,11 @@ test('AI-06: pending pairing is single-flight even with repeated click events',a
 test('AI-06: HTTP 503 and ACK-loss cannot trigger a second pairing POST',async()=>{
   for(const options of [{pairingStatus:503},{throwPairing:true}]){
     const f=await render(dashboard({active:false}),options);
-    await f.get('approve').handlers.click();
+    await f.get('approve').handlers.click!();
     assert.equal(f.postCount(),1);
     assert.equal(f.get('approve').disabled,true);
     assert.match(f.get('error-message').textContent,/kontrol et/);
-    await f.get('approve').handlers.click();
+    await f.get('approve').handlers.click!();
     assert.equal(f.postCount(),1,'uncertain operation was not replayed');
     assert.equal(f.get('connect-pill').textContent,'Hata');
   }
