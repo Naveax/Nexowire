@@ -21,7 +21,7 @@
 - Existing DOM contract: `node --test --import tsx test/console-ui-polish.test.ts`.
 - Browser checks still required on real browsers: 320/375/768 CSS pixels, zoom 200%/400%, keyboard-only tab navigation, reduced motion, forced colors, English and Turkish, various network outcomes. CSS or VM-only assertions are **not** browser acceptance.
 - Exact-SHA CI runs must be observed after Draft PR, **not** borrowed from #1160.
-- Source/DOM results: NOT_RUN until executed. Live browser: NOT_RUN. Physical SYSTEM/CORE/DPAPI/Windows: NOT_RUN by AI-06.
+- Source/DOM: prior exact-head `48a0fda89dd020f257cd5e8d944d9c9b4fab4d2b` CI #45206150272 **SUCCESS** (Node 22/24, delegated 409, build). New commits require their own exact-SHA revalidation. Live `connect.html` browser accessibility: NOT_RUN; generic `browser-live` CI uses a separate fixture. Physical SYSTEM/CORE/DPAPI/Windows: NOT_RUN by AI-06.
 
 ## Rollback
 - Revert only these AI-06 commits or close this Draft PR. No production/device rollback is necessary because no live services or stored states were modified.
@@ -46,3 +46,12 @@
 - The temporary full 409-test duplicate diagnostic was **replaced** by a bounded four-file test `test/ui/ai06-delegated-compat.test.ts`, which additionally exercises the 19 K01 DOM cases under the ordinary Node check (35 nested tests total). This avoids retaining a second complete 409-case lane.
 - This is a pure DOM/contract regression update, not authority or security policy mutation. Other agents retain ownership of their production source and CI/provenance.
 - The current branch requires a new exact-head CI result after the diagnostic cleanup; do not inherit historical PASS onto the final SHA.
+
+## 2026-11-23 Follow-up: offline and malformed dashboard states
+
+- `BROKER_RUNNING_BUT_UNVERIFIED` is now shown only with a single matched Windows device that is explicitly online and has broker/bridge metadata. An offline saved `privilegeMode:broker` configuration is `UNKNOWN`, **not** proof that the Broker is running.
+- Conflicting duplicate dashboard entries with the same device ID are `UNKNOWN` rather than depending on whichever list element came first.
+- `enrollmentRequested` does **not** establish local delivery. Pending copy explicitly says the request was recorded without proof the PC received it or its owner approved UAC.
+- The CORE description remains the sole live status region; the visible status code is described by the TR/EN text instead of generating an extra competing live announcement.
+- These are UI-only changes. The read-only backend shape still cannot assert `REVOKED_LOCALLY` without a future explicit owner-attested negative field; `READY_VERIFIED` remains disabled.
+- Additional VM tests exercise offline/missing-online device metadata, duplicate IDs, recorded-but-undelivered requests, and accessible status regions. Actual screen-reader and 200%/400% zoom results remain NOT_RUN.
