@@ -139,7 +139,7 @@ test('AI-06 T-378 #485: lost POST ACK is bounded UNKNOWN and never enables autom
   });
   assert.equal(getElement('error-message').textContent.includes(sentinel), false);
   assert.equal(getElement('error-message').textContent,
-    'Bağlantı sonucu belirsiz. Önce yerel uygulamadaki sonucu kontrol et; tekrar istek gönderme.');
+    'Beklenmeyen bağlantı hatası. Bağlantı sonucu belirsiz. Önce yerel uygulamadaki sonucu kontrol et; tekrar istek gönderme.');
   assert.equal(getElement('approve').disabled, true);
 });
 
