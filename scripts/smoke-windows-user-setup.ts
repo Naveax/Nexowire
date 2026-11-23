@@ -480,7 +480,7 @@ async function main(): Promise<void> {
     // Windows. Run both isolated upgrade cases here as well, without
     // changing shared CI workflows or pretending the fake 1.0.8 profile is
     // a real production data-migration exercise.
-    const numericVersion = /^(\\d+)\\.(\\d+)\\.(\\d+)(?:-|$)/.exec(version);
+    const numericVersion = /^(\d+)\.(\d+)\.(\d+)(?:-|$)/.exec(version);
     const runsAfter108 = numericVersion !== null &&
       (Number(numericVersion[1]) > 1 ||
        (Number(numericVersion[1]) === 1 && Number(numericVersion[2]) > 0) ||
@@ -530,6 +530,7 @@ async function main(): Promise<void> {
       JSON.stringify(
         {
           ok: true,
+          scenario,
           version,
           buildId,
           setupExitCode: installed.exitCode,
