@@ -64,3 +64,13 @@ test('stable and experimental releases both run the release path coverage gate',
   assert.match(command,/test\/ci\/v109-core-readonly-preflight\.test\.mjs/);
   assert.match(workflow,/\n  push:\s*\n    tags:\s*\n      - "v\*"\s*\n/);
 });
+
+test('tag release attestation and publication require exact-head AI-08 receipt checks',()=>{
+  assert.match(workflow,/\n  ai08-coverage-reconciliation:\s*\n/);
+  assert.match(workflow,/ref: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
+  assert.match(workflow,/NEXOWIRE_EXPECTED_COMMIT_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
+  assert.match(workflow,/matrix:\s*\n\s*node-version: \[22, 24\]/);
+  assert.match(workflow,/run: node --test test\/ci\/test-execution-coverage\.test\.mjs/);
+  assert.match(workflow,/  attest:[\s\S]*?needs: \[package, ai08-coverage-reconciliation\]/);
+  assert.match(workflow,/  publish:[\s\S]*?needs: \[package, ai08-coverage-reconciliation, attest\]/);
+});
