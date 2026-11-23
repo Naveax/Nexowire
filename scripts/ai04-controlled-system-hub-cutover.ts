@@ -222,6 +222,7 @@ export const SYSTEM_HUB_RECOVERY_PS=[
   "$journal=Get-Content -LiteralPath $journalPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop",
   "if($journal.version -ne 1 -or [string]$journal.host -cne $env:COMPUTERNAME){throw 'AI04_RECOVERY_JOURNAL_FOREIGN'}",
   "if($journal.phase -in @('COMPLETE','ROLLED_BACK')){exit 0}",
+  "if([string]$journal.phase -cnotin @('ARMED','QUIESCING','QUIESCED','COPIED','RECEIPT_ISSUED','SYSTEM_INSTALLING','SYSTEM_STARTED','HEALTHY','AWAITING_PHYSICAL_ACCEPTANCE')){throw 'AI04_RECOVERY_UNKNOWN_PHASE'}",
   SYSTEM_HUB_RECOVERY_LAUNCHER_PROOF_PS,
   "$port=[int]$journal.port",
   "if($port -lt 1 -or $port -gt 65535){throw 'AI04_RECOVERY_PORT_UNTRUSTED'}",
