@@ -934,6 +934,12 @@ export async function installHubBootLifecycle(
         "if($actualLegacyState -cne $expectedLegacyState){throw 'HUB_USER_TASK_STATE_RACE'}",
         // No -Force: a concurrent registration must fail rather than replace.
         'Register-ScheduledTask -TaskName $boot -TaskPath \\ -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description $marker|Out-Null',
+        // Read back the *registered* task, not the plan or our preflight
+        // object. A replaced action, logon trigger or principal must be
+        // rejected before stopping the old Hub or launching privileged code.
+        '$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction Stop',
+        hubBootRegisteredTaskIdentityGuard,
+        hubBootRollbackTaskOwnershipGuard,
         '$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
         'if($userTask){',
         '  Stop-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
