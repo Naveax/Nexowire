@@ -56,6 +56,11 @@ test('AI-07 221 KiB reconnect/restart keeps scope and receiver digest separate',
   assert.equal(first.transferredBytes,65536);
   assert.equal(await new ArtifactBridgeStore(root).get(aScope,artifactPath),null);
   assert.equal(await new ArtifactBridgeStore(root).get(bScope,artifactPath),null);
+  await assert.rejects(
+    new ArtifactBridgeStore(root).readChunk(bScope,artifactPath,0,65536),
+    (error:unknown)=>error instanceof ArtifactBridgeError &&
+      error.code==='ARTIFACT_NOT_FOUND',
+  );
 
   // New Store instances emulate process/reconnect recovery against durable
   // test-only metadata, not an actual two-PC network or reboot acceptance.
@@ -96,6 +101,18 @@ test('AI-07 221 KiB reconnect/restart keeps scope and receiver digest separate',
   assert.equal(replay.state,'ALREADY_PRESENT');
   assert.equal(replay.transferredBytes,0);
   assert.equal(replayReads,0);
+
+  // A modified source cannot silently overwrite the previously published
+  // manifest without an explicit expectedPreviousSha256 CAS value.
+  const changed=Buffer.from(a);
+  changed[0]=changed[0]! ^ 1;
+  await assert.rejects(
+    ingestDeviceArtifact(store,sender(changed),{...aInput,maxChunks:16}),
+    (error:unknown)=>error instanceof ArtifactBridgeError &&
+      error.code==='COMPARE_AND_SWAP_FAILED',
+  );
+  assert.equal((await store.get(aScope,artifactPath))?.sha256,digest(a));
+  assert.equal((await store.get(bScope,artifactPath))?.sha256,digest(b));
 }));
 
 test('AI-07 256 MiB + 1 and 1 GiB + 1 are explicitly unsupported by current ingest',()=>isolated(async root=>{
