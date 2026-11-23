@@ -249,10 +249,10 @@ test('protected disk gate checks source mount and target state volume at both wi
   const verifierStart=code.indexOf('export async function verifyProtectedSystemHubCutoverReadOnly(');
   assert.ok(gateStart>=0&&verifierStart>gateStart);
   const gate=code.slice(gateStart,verifierStart);
-  assert.match(gate,/assertSystemCutoverDiskReserve\\(undefined,os\\.homedir\\(\\),sourceRoot\\)/);
-  assert.match(gate,/fs\\.statfs\\(SYSTEM_STATE_ROOT,/);
-  assert.match(gate,/SYSTEM_CUTOVER_MINIMUM_FREE_BYTES\\+2n\\*BigInt\\(bytes\\)/);
-  assert.doesNotMatch(gate,/fs\\.statfs\\('C:/);
+  assert.match(gate,/assertSystemCutoverDiskReserve\(undefined,os\.homedir\(\),sourceRoot\)/);
+  assert.match(gate,/fs\.statfs\(SYSTEM_STATE_ROOT,/);
+  assert.match(gate,/SYSTEM_CUTOVER_MINIMUM_FREE_BYTES\+2n\*BigInt\(bytes\)/);
+  assert.doesNotMatch(gate,/fs\.statfs\('C:/);
   const verifier=code.slice(verifierStart);
   assert.equal(verifier.split('await assertProtectedTargetDiskBudget(raw.totalBytes,source)').length-1,2);
 });
