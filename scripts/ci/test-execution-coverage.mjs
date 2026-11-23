@@ -2,6 +2,7 @@ import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {readTestInventory} from './test-inventory.mjs';
+import {APPROVED_ROOT_TEST_FILES,REVIEWED_ROOT_GIT_BLOBS} from './portable-root-execution-receipt.mjs';
 
 function deny(reason) {throw new Error('TEST_COVERAGE_' + reason)}
 const sha=/^[0-9a-f]{40}$/;
@@ -34,9 +35,21 @@ export function reconcileCoverage(entries,inventory,receipt) {
         tracked.has(entry.path)) deny('INVALID_INVENTORY');
     tracked.set(entry.path,entry.blob);
   }
+  // This receipt format promises reviewed portable-root execution only.
+  // A matching Git manifest is insufficient: an unapproved tracked test must
+  // never acquire PASS evidence merely by being included in a forged receipt.
+  const approved=new Set(APPROVED_ROOT_TEST_FILES);
+  if(approved.size!==APPROVED_ROOT_TEST_FILES.length ||
+     Object.keys(REVIEWED_ROOT_GIT_BLOBS).length!==approved.size ||
+     [...approved].some(file=>!Object.hasOwn(REVIEWED_ROOT_GIT_BLOBS,file)))
+    deny('REVIEWED_ALLOWLIST_INVALID');
   const executed=new Set();
   let passed=0;
   for(const f of receipt.files) {
+    if(!f || typeof f.path!=='string' || !approved.has(f.path) ||
+       !Object.hasOwn(REVIEWED_ROOT_GIT_BLOBS,f.path) ||
+       f.gitBlobSha!==REVIEWED_ROOT_GIT_BLOBS[f.path])
+      deny('UNAPPROVED_ROOT_FILE');
     if(!f || typeof f.path!=='string' || !tracked.has(f.path) ||
        executed.has(f.path) || f.gitBlobSha!==tracked.get(f.path))
       deny('FILE_NOT_BOUND_TO_SOURCE');
