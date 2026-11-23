@@ -16,7 +16,6 @@ $ErrorActionPreference='Stop'
 $repo=[IO.Path]::GetFullPath($RepositoryRoot).TrimEnd('\')
 $output=[IO.Path]::GetFullPath($OutputDirectory).TrimEnd('\')
 $sha=$ExpectedCommitSha.ToLowerInvariant()
-$profileRoot=[IO.Path]::GetFullPath($env:USERPROFILE).TrimEnd('\')
 $documents=[Environment]::GetFolderPath([Environment+SpecialFolder]::MyDocuments)
 if([string]::IsNullOrWhiteSpace($documents) -or -not [IO.Path]::IsPathRooted($documents)){
   throw 'AI01_STAGE_DOCUMENTS_KNOWN_FOLDER_MISSING'
