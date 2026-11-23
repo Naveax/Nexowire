@@ -1,4 +1,5 @@
 import {createHash,randomBytes} from 'node:crypto';
+import {types as utilTypes} from 'node:util';
 
 /**
  * Broker #02 source contract ONLY. No physical or production provider is
@@ -120,7 +121,10 @@ function snapshotPlainJson(value:unknown,depth=0,
     if(!Number.isFinite(value))deny();
     return value;
   }
-  if(typeof value!=='object'||ancestors.has(value))deny();
+  if(typeof value!=='object')deny();
+  // V8's native proxy discriminator does not invoke getPrototypeOf/ownKeys
+  // traps. Check BEFORE touching any original object metadata, recursively.
+  if(utilTypes.isProxy(value)||ancestors.has(value))deny();
   const array=Array.isArray(value);
   const proto=Object.getPrototypeOf(value);
   if(array ? proto!==Array.prototype :

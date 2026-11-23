@@ -55,3 +55,52 @@ A second owned boundary, `src/agent/core-console-admission.ts`, previously calle
 New root-level negative tests in `test/core-console-admission.test.ts` assert zero getter execution, zero provider inspection, and zero effects for getter/toJSON/sparse input. A second small suite `test/ai03/broker-effect-snapshot.test.ts` is deliberately one directory below `test/` so the legacy `npm test` glob discovers smoke coverage even while #1205's full test-discovery repair is separate AI-08 work. This is not a substitute for running the full root-level tests explicitly.
 
 The AI-03-specific workflow can be SKIPPED for a nonmatching branch name. If so, record SKIP and request a targeted run through coordinator/AI-08; do not claim a skipped job PASS, and do not edit protected workflows outside this agent's ownership.
+
+## Coordinator review closure: Proxy trap boundary
+
+The 23 November coordinator review correctly identified that `Object.getPrototypeOf`,
+`Reflect.ownKeys`, and `Object.getOwnPropertyDescriptor` can invoke hostile
+JavaScript **Proxy traps** despite previously rejecting getters and toJSON.
+The new defense uses `node:util` `types.isProxy(value)` **before** any
+object introspection, recursively in both:
+- `src/agent/privileged-broker-effect-admission.ts` (`snapshotPlainJson`)
+- `src/agent/core-windows-mutation-dispatch.ts` (`canonical`)
+
+`core-console-admission.ts` already delegates to the second function, so
+CORE console also denies root/nested/revoked Proxies before native inspection.
+Dedicated negative tests assert **zero getPrototypeOf/ownKeys/descriptor/get
+trap executions**, zero Broker authority CAS for invalid effect inputs,
+zero receipt verification for invalid reserve, no effect callback and zero
+CORE provider inspection.
+
+`types.isProxy` is Node 22+/V8 native detection, not a recursive scan
+by itself. Depth-first guards in the existing snapshot/canonical walkers
+cover nested values; this does not imply an untrusted in-process Object can
+be safely serialized by arbitrary other modules.
+
+### Capability-by-capability source acceptance (physical evidence: NOT_RUN)
+
+| Capability class | Example | Source status | Positive physical acceptance |
+|---|---|---|---|
+| General CORE executor mutations | `executeCoreWindowsMutation` | `CORE_EXECUTOR_DISPATCH_ENABLED=false`; deny by default | NOT_RUN |
+| OS task subprocess sandbox | `shell.exec`, `wsl.exec`, `process.start`, `task.graph.run` | `OS_TASK_SANDBOX_UNAVAILABLE` for CORE/Broker-routed use | NOT_RUN |
+| Direct mutable files / update / registry user scope | `files.write`, `nexowire.update.apply`, `windows.registry.set` | `CORE_NATIVE_EFFECT_ADMISSION_REQUIRED` unless a separate elevated-route guard is applicable | NOT_RUN |
+| Privileged Broker effect claim | `windows.firewall.control`, machine registry/environment | Source-only `invokeBrokerEffectOnce` requires external one-shot binding, reserve+commit, verified signed receipts and fresh HIGH token | NOT_RUN |
+| Physical console / GUI | `windows.pointer.click`, `windows.keyboard.type` | Synthetic enrollment/epoch/native provider tests exist; real owner consent/native provider not established here | NOT_RUN |
+| Read-only status | `windows.console_control.status` | Status does not prove an authorized effect | NOT_RUN |
+
+No runtime guard is disabled. The positive matrix requires **independently
+authenticated native Windows evidence**, per-capability reversible effect,
+owner approval, stable UUID/no replay, revoke/drain, reboot and rollback.
+AI-09 remains physical executor; AI-03 does **not** claim CORE fully enabled.
+
+### Protected provenance update request (coordinator/AI-08)
+
+These are source-only modifications. The existing 290- and 243-row
+provenance CSVs include `core-console-admission.ts`,
+`core-windows-mutation-dispatch.ts`, and
+`privileged-broker-effect-admission.ts`. For all evolved source blobs,
+preserve the original Git source SHA, row count and original classification
+audit trail; `EXACT_SOURCE_BLOB` cannot remain exact if the candidate blob
+changes. Independently review new candidate SHAs before updating protected
+matrices. This AI-03 branch does **not** write the protected matrices.

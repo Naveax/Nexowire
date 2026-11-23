@@ -536,3 +536,64 @@ test('receipt toJSON method is never invoked to forge signed bytes',async()=>{
   assert.equal(verified,0);
   assert.equal(f.events.includes('invoke'),false);
 });
+
+test('Proxy-backed Broker input is denied before any trap or external authority CAS',async()=>{
+  let traps=0;
+  const attack=new Proxy({command:'blocked'},{
+    getPrototypeOf(){traps++;throw Error('PROXY_GET_PROTO_EXECUTED');},
+    ownKeys(){traps++;throw Error('PROXY_OWN_KEYS_EXECUTED');},
+    getOwnPropertyDescriptor(){traps++;throw Error('PROXY_DESCRIPTOR_EXECUTED');},
+    get(){traps++;throw Error('PROXY_GET_EXECUTED');},
+  });
+  const revoked=Proxy.revocable({command:'revoked'},{});
+  revoked.revoke();
+  for(const raw of [attack,{nested:[{p:attack}]},[attack],revoked.proxy]){
+    const f=fixture();
+    await assert.rejects(f.run(op,raw),deny);
+    assert.deepEqual(f.events,[],'Proxy must fail before authority read');
+    assert.equal(traps,0,'no caller trap may run');
+  }
+});
+
+test('Proxy-backed reserve/commit receipts refuse before verifier and effect',async()=>{
+  for(const stage of ['begin','commit'] as const){
+    for(const shape of ['root','nested-binding','revoked'] as const){
+      const f=fixture();
+      let traps=0,verified=0;
+      const trapHandler:ProxyHandler<object>={
+        getPrototypeOf(){traps++;throw Error('PROXY_GET_PROTO_EXECUTED');},
+        ownKeys(){traps++;throw Error('PROXY_OWN_KEYS_EXECUTED');},
+        getOwnPropertyDescriptor(){traps++;throw Error('PROXY_DESCRIPTOR_EXECUTED');},
+        get(){traps++;throw Error('PROXY_GET_EXECUTED');},
+      };
+      const begin=f.authority.begin.bind(f.authority);
+      const commit=f.authority.commit.bind(f.authority);
+      const verify=f.authority.verifyReceipt.bind(f.authority);
+      f.authority.verifyReceipt=async(...args)=>{
+        verified++;return verify(...args);
+      };
+      const malicious=(receipt:BrokerEffectReceipt|null):BrokerEffectReceipt|null=>{
+        if(!receipt)return null;
+        if(shape==='nested-binding'){
+          return {...receipt,
+            binding:new Proxy(receipt.binding,trapHandler)}
+        }
+        if(shape==='revoked'){
+          const rev=Proxy.revocable(receipt,trapHandler);
+          rev.revoke();
+          return rev.proxy;
+        }
+        return new Proxy(receipt,trapHandler);
+      };
+      if(stage==='begin'){
+        f.authority.begin=async(...args)=>malicious(await begin(...args));
+      }else{
+        f.authority.commit=async(...args)=>malicious(await commit(...args));
+      }
+      await assert.rejects(f.run(),deny,stage+'/'+shape);
+      assert.equal(traps,0,stage+'/'+shape);
+      assert.equal(verified,stage==='begin'?0:1,stage+'/'+shape);
+      assert.equal(f.events.includes('invoke'),false,stage+'/'+shape);
+    }
+  }
+});

@@ -277,3 +277,28 @@ test('CORE console rejects executable input properties before native inspection'
     assert.equal(f.calls(),0,shape);
   }
 });
+
+test('CORE console rejects nested and revoked Proxy before native provider inspection',async()=>{
+  let traps=0;
+  const handler:ProxyHandler<object>={
+    getPrototypeOf(){traps++;throw Error('PROXY_GET_PROTO');},
+    ownKeys(){traps++;throw Error('PROXY_KEYS');},
+    getOwnPropertyDescriptor(){traps++;throw Error('PROXY_DESC');},
+    get(){traps++;throw Error('PROXY_GET');},
+  };
+  const proxy=new Proxy({action:'click'},handler);
+  const revoked=Proxy.revocable({action:'click'},handler);
+  revoked.revoke();
+  for(const raw of [proxy,{target:[{attrs:proxy}]},revoked.proxy]){
+    let inspections=0,executions=0;
+    const f=fixture({inspect:async()=>{inspections++;return evidence();},
+      execute:async req=>{executions++;
+        return {requestId:req.requestId,fingerprint:req.fingerprint,outcome:'succeeded'};}});
+    await assert.rejects(
+      f.controller.execute('windows.pointer.click',raw,randomUUID(),'full'),
+      code('CORE_CONSOLE_INPUT_NOT_CANONICAL'));
+    assert.equal(traps,0);
+    assert.equal(inspections,0);
+    assert.equal(executions,0);
+  }
+});
