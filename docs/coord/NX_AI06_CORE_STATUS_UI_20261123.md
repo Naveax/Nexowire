@@ -2,7 +2,7 @@
 
 ## Ownership / baseline
 - Integration PR: #1160; baseline commit: `83c8b651106ecd1244fb9d982cf94fd390c15b6b`.
-- Branch: `agent/nx-06-core-status-ui-20261123`; scoped files: `web/connect.js`, `web/connect.html`, `web/styles.css`, `test/ui/ai06-core-status.test.ts`, `test/connect-web.test.ts`, `test/delegated/k06/connect-error-display.test.mjs` and this AI-06 handoff.
+- Branch: `agent/nx-06-core-status-ui-20261123`; scoped files: `web/connect.js`, `web/connect.html`, `web/styles.css`, `test/ui/ai06-core-status.test.ts`, `test/ui/ai06-delegated-compat.test.ts`, `test/connect-web.test.ts`, `test/delegated/k01/connect-state.test.ts`, `test/delegated/k06/connect-error-display.test.mjs` and this AI-06 handoff.
 - No shared workflow, provenance, Broker, authority, Windows task, credential or SQLite changes.
 
 ## Contract
@@ -37,3 +37,12 @@
 1. Reviewed independent native owner/elevated verifier is not deployed; `READY_VERIFIED` must remain disabled.
 2. Two-PC physical owner acceptance and real effect/revoke require AI-09 with explicit local administrator consent.
 3. No browser-live result is claimed without an executable browser run on the exact source SHA.
+
+## 2026-11-23 K01 delegated regression correction
+
+- Actual blocker was the nested `test/delegated/k01/connect-state.test.ts` DOM fixture asserting the legacy `Hazır` UI and retrying an uncertain 503 pairing POST. Those assertions are no longer correct for an idempotency-safe interface.
+- K01 DOM fixtures now require `Eşleştirmeye hazır` (account pairing only), one POST with terminal uncertain local readback guidance after 503, no subsequent automatic re-send, and a separately initiated fresh session positive flow.
+- Exact-source CI `a334bd4c3b0404e28f6006836b1e458c2ddf5c56`: Node22 and Node24 both completed `npm run check` and the explicit **409-case delegated lane** successfully during observed jobs; physical acceptance remains NOT_RUN.
+- The temporary full 409-test duplicate diagnostic was **replaced** by a bounded four-file test `test/ui/ai06-delegated-compat.test.ts`, which additionally exercises the 19 K01 DOM cases under the ordinary Node check (35 nested tests total). This avoids retaining a second complete 409-case lane.
+- This is a pure DOM/contract regression update, not authority or security policy mutation. Other agents retain ownership of their production source and CI/provenance.
+- The current branch requires a new exact-head CI result after the diagnostic cleanup; do not inherit historical PASS onto the final SHA.
