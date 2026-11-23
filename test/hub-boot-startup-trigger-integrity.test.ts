@@ -85,7 +85,7 @@ test('PowerShell rejects logon-only, duplicate, disabled startup and hijacked wo
       scenario.change,
       hubBootRegisteredTaskIdentityGuard,
       "'GUARD_ACCEPTED'",
-    ].join('\\n');
+    ].join('\n');
     const run=spawnSync(powershell,[
       '-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',
       Buffer.from(script,'utf16le').toString('base64'),
