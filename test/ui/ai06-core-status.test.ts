@@ -105,6 +105,33 @@ test('AI-06: explicit authority states are rendered without claiming verified ex
   }
 });
 
+
+test('AI-06: offline Broker configuration and duplicate device IDs stay UNKNOWN',async()=>{
+  for(const override of [{online:false},{online:null},{online:undefined}]){
+    const f=await render(dashboard({active:false},override));
+    assert.equal(f.get('core-status-code').textContent,'UNKNOWN');
+    assert.match(f.get('core-status-tr').textContent,/doğrulanamadı/);
+    assert.equal(f.get('approve').disabled,false,'CORE status must not block account pairing');
+  }
+  const snapshot=dashboard({state:'REVOKED_LOCALLY'});
+  const duplicate={...snapshot,devices:[
+    ...snapshot.devices,
+    {...snapshot.devices[0],physicalConsole:{state:'PERMISSION_REQUIRED'}},
+  ]};
+  const f=await render(duplicate);
+  assert.equal(f.get('core-status-code').textContent,'UNKNOWN');
+  const revoked=await render(dashboard({state:'REVOKED_LOCALLY'},{online:false}));
+  assert.equal(revoked.get('core-status-code').textContent,'REVOKED_LOCALLY',
+    'an explicitly recorded local revocation survives an offline device');
+});
+
+test('AI-06: enrollment recorded is not proof that the PC received a prompt',async()=>{
+  const f=await render(dashboard({enrollmentRequested:true,localEnrolled:false},{online:false}));
+  assert.equal(f.get('core-status-code').textContent,'AWAITING_PHYSICAL_ACCEPTANCE');
+  assert.match(f.get('core-status-tr').textContent,/cihaza ulaştığı/);
+  assert.match(f.get('core-status-en').textContent,/delivery to the PC/);
+});
+
 test('AI-06: forged / stale active dashboard cannot promote READY_VERIFIED',async()=>{
   const physical={localEnrolled:true,active:true,deviceReady:true,
     observedAtMs:Date.now()};
@@ -154,7 +181,9 @@ test('AI-06: dashboard timeout keeps pairing disabled and reports a safe, action
 
 test('AI-06: bilingual CORE panel and zoom/keyboard/forced-color contracts',()=>{
   assert.match(connectHtml,/id="core-state-panel"/);
-  assert.match(connectHtml,/id="core-status-code"[^>]*aria-live="polite"/);
+  assert.match(connectHtml,/id="core-status-code"[^>]*aria-describedby="core-status-tr core-status-en"/);
+  assert.doesNotMatch(connectHtml,/id="core-status-code"[^>]*aria-live=/);
+  assert.match(connectHtml,/class="core-state-description" role="status" aria-live="polite"/);
   assert.match(connectHtml,/id="core-status-tr" lang="tr"/);
   assert.match(connectHtml,/id="core-status-en" lang="en"/);
   assert.match(connectHtml,/Windows\/UAC onayı/);
