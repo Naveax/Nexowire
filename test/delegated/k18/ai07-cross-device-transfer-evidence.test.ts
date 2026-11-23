@@ -115,6 +115,68 @@ test('AI-07 221 KiB reconnect/restart keeps scope and receiver digest separate',
   assert.equal((await store.get(bScope,artifactPath))?.sha256,digest(b));
 }));
 
+test('AI-07 lost chunk ACK preserves durable prefix without publishing or double-writing',()=>isolated(async root=>{
+  const bytes=Buffer.alloc(221*1024);
+  for(let i=0;i<bytes.length;i++)bytes[i]=(i*17+3)%251;
+  const store=new ArtifactBridgeStore(root);
+  const args={...transfer('ack-device','ai07/ack-loss-221-kib.bin'),maxChunks:16};
+  let dropped=false;
+  const lostAck=new Proxy(store,{
+    get(target,property){
+      if(property==='putChunk')return async(
+        ...params:Parameters<ArtifactBridgeStore['putChunk']>
+      )=>{
+        const saved=await target.putChunk(...params);
+        if(!dropped&&params[2]===0){
+          dropped=true;
+          throw Error('AI07_DISPOSABLE_ACK_LOST_AFTER_DURABLE_WRITE');
+        }
+        return saved;
+      };
+      const value=Reflect.get(target,property,target);
+      return typeof value==='function'?value.bind(target):value;
+    },
+  });
+  await assert.rejects(ingestDeviceArtifact(lostAck,sender(bytes),args),
+    /AI07_DISPOSABLE_ACK_LOST_AFTER_DURABLE_WRITE/);
+  assert.equal(dropped,true);
+  assert.equal(await store.get(args.scope,args.artifactPath),null);
+  const resumed=await ingestDeviceArtifact(
+    new ArtifactBridgeStore(root),sender(bytes),args,
+  );
+  assert.equal(resumed.state,'COMPLETE');
+  assert.equal(resumed.transferredBytes,bytes.length-65536);
+  assert.equal(resumed.offset,bytes.length);
+  assert.equal((await store.get(args.scope,args.artifactPath))?.sha256,digest(bytes));
+  let retransmitReads=0;
+  const retry=await ingestDeviceArtifact(
+    new ArtifactBridgeStore(root),sender(bytes,()=>{retransmitReads++}),args,
+  );
+  assert.equal(retry.state,'ALREADY_PRESENT');
+  assert.equal(retransmitReads,0);
+  assert.equal(retry.transferredBytes,0);
+}));
+
+test('AI-07 corrupted staged prefix fails closed on reconnect; no automatic stage repair',()=>isolated(async root=>{
+  const bytes=Buffer.alloc(221*1024);
+  for(let i=0;i<bytes.length;i++)bytes[i]=(i*37+13)%251;
+  const args=transfer('corrupt-device','ai07/corrupt-staged-221-kib.bin');
+  const first=await ingestDeviceArtifact(new ArtifactBridgeStore(root),sender(bytes),args);
+  assert.equal(first.state,'PARTIAL');
+  assert.equal(first.offset,65536);
+  const names=await fs.readdir(root,{recursive:true});
+  const stage=names.filter(name=>name.endsWith('.part'));
+  assert.equal(stage.length,1);
+  // Same length but different content, on a disposable fixture only.
+  await fs.writeFile(path.join(root,stage[0]!),Buffer.alloc(65536,0xaa));
+  await assert.rejects(
+    ingestDeviceArtifact(new ArtifactBridgeStore(root),sender(bytes),args),
+    (error:unknown)=>error instanceof ArtifactBridgeError &&
+      error.code==='CORRUPT_SESSION',
+  );
+  assert.equal(await new ArtifactBridgeStore(root).get(args.scope,args.artifactPath),null);
+}));
+
 test('AI-07 256 MiB + 1 and 1 GiB + 1 are explicitly unsupported by current ingest',()=>isolated(async root=>{
   for(const [label,size] of [
     ['256-mib-plus-one',268_435_457],
