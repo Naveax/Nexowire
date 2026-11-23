@@ -64,6 +64,14 @@ export async function runRecoverableSystemHubCutover(
     step='verify-system-hub'; await ops.verifySystemHub();
     step='commit'; await ops.commit();
   }catch(error){
+    // Commit can durably advance the recovery journal before throwing (for
+    // example, an interrupted fsync/rename/readback). Its outcome is UNKNOWN.
+    // An automatic rollback would risk replaying the legacy writer after
+    // SYSTEM has accepted new operations. Preserve the recovery task and
+    // require operator reconciliation instead.
+    if(step==='commit'){
+      throw new SystemCutoverFailed(step,false,error,false);
+    }
     try{await ops.rollback()}catch(rollbackError){
       throw new SystemCutoverFailed(step,true,new AggregateError(
         [error,rollbackError],'SYSTEM_HUB_CUTOVER_AND_ROLLBACK_FAILED'));
