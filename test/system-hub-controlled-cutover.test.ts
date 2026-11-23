@@ -33,6 +33,7 @@ test('an incomplete recovery arm never attempts rollback or touches the legacy w
     error.failedStep==='arm-recovery'&&
     error.rollbackAttempted===false&&
     error.rollbackFailed===false&&
+    error.outcomeUnknown===false&&
     error.message==='SYSTEM_HUB_CUTOVER_FAILED_ARM_RECOVERY_RECOVERY_UNVERIFIED');
   assert.deepEqual(events,['preflight','armRecovery']);
 });
@@ -43,6 +44,7 @@ test('failed recovery recheck cannot invoke rollback before legacy quiescence',a
     error instanceof SystemCutoverFailed&&
     error.failedStep==='arm-recovery'&&
     error.rollbackAttempted===false&&
+    error.outcomeUnknown===false&&
     error.message==='SYSTEM_HUB_CUTOVER_FAILED_ARM_RECOVERY_RECOVERY_UNVERIFIED');
   assert.deepEqual(events,['preflight','armRecovery','confirmRecoveryBeforeQuiesce']);
 });
@@ -76,7 +78,8 @@ test('ambiguous commit outcome preserves the armed recovery and refuses automati
     error.failedStep==='commit'&&
     error.rollbackAttempted===false&&
     error.rollbackFailed===false&&
-    error.message==='SYSTEM_HUB_CUTOVER_FAILED_COMMIT_RECOVERY_UNVERIFIED');
+    error.outcomeUnknown===true&&
+    error.message==='SYSTEM_HUB_CUTOVER_FAILED_COMMIT_COMMIT_OUTCOME_UNKNOWN');
   // Exact step sequence already proves no rollback callback was invoked.
   assert.deepEqual(events,[...phases]);
 });
