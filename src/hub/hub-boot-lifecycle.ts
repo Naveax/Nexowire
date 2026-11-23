@@ -311,6 +311,9 @@ export function assertProtectedHubBootLauncherContext(
     env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_DPAPI_FILE !== expectedSecret ||
     env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_FILE !== undefined ||
     env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_PLATFORM_NAME !== undefined ||
+    // User-Hub skills are outside the audited SYSTEM executable tree.
+    // The protected Hub resolves packaged skills from its trusted runtime.
+    env.NEXOWIRE_SKILLS_DIR !== undefined ||
     pidFile !== expectedPid
   ) {
     throw new Error('HUB_BOOT_UNPROTECTED_LAUNCHER_CONTEXT');
@@ -328,6 +331,14 @@ export function buildHubBootLauncher(input: {
   const lines = [
     "$ErrorActionPreference='Stop'",
     "$ProgressPreference='SilentlyContinue'",
+    // A Scheduled Task starts in a fresh process. The caller's isolated
+    // task-registration shell is not inherited at AtStartup, so bootstrap
+    // PowerShell's module and command lookup with fixed OS paths again.
+    "$env:SystemRoot='C:\\Windows'",
+    "$env:windir='C:\\Windows'",
+    "$env:ComSpec='C:\\Windows\\System32\\cmd.exe'",
+    "$env:PATH='C:\\Windows\\System32;C:\\Windows;C:\\Windows\\System32\\WindowsPowerShell\\v1.0'",
+    "$env:PSModulePath='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules'",
   ];
   for (const [name, value] of Object.entries(env).sort(
     ([a], [b]) => a.localeCompare(b),
@@ -341,6 +352,9 @@ export function buildHubBootLauncher(input: {
   lines.push('Remove-Item -Path ' +
     PRIVILEGED_NODE_INJECTION_ENV.map(name=>`Env:${name}`).join(',') +
     ' -ErrorAction SilentlyContinue');
+  // Do not inherit a machine or task environment skills override under
+  // SYSTEM even if the interactive launcher had no explicit override.
+  lines.push('Remove-Item -Path Env:NEXOWIRE_SKILLS_DIR -ErrorAction SilentlyContinue');
 
   const argumentList =
     '@(' +
@@ -873,6 +887,8 @@ export async function installHubBootLifecycle(
     };
     delete env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_FILE;
     delete env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_PLATFORM_NAME;
+    // A former user's writable skills catalog cannot become a SYSTEM input.
+    delete env.NEXOWIRE_SKILLS_DIR;
 
     await fs.writeFile(
       p.launcher,
