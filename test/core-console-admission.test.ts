@@ -253,3 +253,27 @@ test('policy rejects truthy non-booleans and noncanonical signature encodings fr
     signatureBase64:original.certificate!.signatureBase64+'\n'}});
   assert.equal((await f.controller.status('full')).active,false);
 });
+
+test('CORE console rejects executable input properties before native inspection',async()=>{
+  for(const shape of ['getter','toJSON','sparse'] as const){
+    let executed=0,inspected=0;
+    const f=fixture({inspect:async()=>{inspected++;return evidence();}});
+    let input:unknown;
+    if(shape==='getter'){
+      input=Object.defineProperty({action:'click'},'target',{
+        enumerable:true,get(){executed++;return {hwnd:'1'};},
+      });
+    }else if(shape==='toJSON'){
+      input={action:'click',toJSON(){executed++;return {action:'click'};}};
+    }else{
+      input=new Array(2);
+      (input as unknown[])[1]='noncanonical';
+    }
+    await assert.rejects(
+      f.controller.execute('windows.pointer.click',input,randomUUID(),'full'),
+      code('CORE_CONSOLE_INPUT_NOT_CANONICAL'),shape);
+    assert.equal(executed,0,shape);
+    assert.equal(inspected,0,shape);
+    assert.equal(f.calls(),0,shape);
+  }
+});

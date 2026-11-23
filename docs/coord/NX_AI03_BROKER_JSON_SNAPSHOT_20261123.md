@@ -47,3 +47,11 @@ Revert this Draft PR's commit on its own branch. No production state rollback is
 ## Validation
 
 Pending exact-head Node22/Node24 and Windows CI for this Draft; never reuse CI from base SHA as proof for the new source SHA.
+
+## Additional CORE console boundary fix and discoverable tests
+
+A second owned boundary, `src/agent/core-console-admission.ts`, previously called `JSON.parse(JSON.stringify(input ?? null))` **before** native provider inspection. It now reuses `prepareCoreWindowsMutation`'s descriptor-based immutable snapshot, converts malformed values to `CORE_CONSOLE_INPUT_NOT_CANONICAL`, and leaves replay ID reservation and all owner/desktop/epoch/native checks unchanged.
+
+New root-level negative tests in `test/core-console-admission.test.ts` assert zero getter execution, zero provider inspection, and zero effects for getter/toJSON/sparse input. A second small suite `test/ai03/broker-effect-snapshot.test.ts` is deliberately one directory below `test/` so the legacy `npm test` glob discovers smoke coverage even while #1205's full test-discovery repair is separate AI-08 work. This is not a substitute for running the full root-level tests explicitly.
+
+The AI-03-specific workflow can be SKIPPED for a nonmatching branch name. If so, record SKIP and request a targeted run through coordinator/AI-08; do not claim a skipped job PASS, and do not edit protected workflows outside this agent's ownership.

@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {prepareCoreWindowsMutation} from './core-windows-mutation-dispatch.js';
 import {requiresPhysicalConsoleGrant} from './windows-console-grant.js';
 import {
   evaluateCoreConsoleEnrollment,
@@ -233,7 +234,11 @@ export class CoreConsoleAdmission {
     this.requests.add(requestId);
     this.inFlight.add(requestId);
     try{
-    const snapshot = JSON.parse(JSON.stringify(input ?? null)) as unknown;
+    // Descriptor-only, deeply frozen JSON snapshot BEFORE provider inspection.
+    // Never invoke caller getters/toJSON while preparing native admission.
+    let snapshot:unknown;
+    try{snapshot=prepareCoreWindowsMutation(capability,input ?? null).input;}
+    catch{throw failure('CORE_CONSOLE_INPUT_NOT_CANONICAL');}
     const {status,evidence} = await this.inspect(accessMode,requestSignal);
     if (!status.active || !evidence?.certificate || !this.binding || !this.provider)
       throw failure(status.state);
