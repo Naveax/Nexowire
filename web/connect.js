@@ -287,6 +287,7 @@ async function loadAccount() {
   const response = await fetch('/api/v1/me/dashboard', {
     credentials: 'include',
     headers: { accept: 'application/json' },
+    signal: AbortSignal.timeout(8000),
   });
 
   if (response.status === 401) {
@@ -340,6 +341,7 @@ async function loadAccount() {
       pairingOutcomeUncertain = true;
       const pairing = await fetch('/api/v1/pairing', {
         method: 'POST',
+        signal: AbortSignal.timeout(15000),
         credentials: 'include',
         headers: {
           accept: 'application/json',
