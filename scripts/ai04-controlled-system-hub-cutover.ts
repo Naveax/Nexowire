@@ -50,6 +50,16 @@ interface Journal {
   sourceRoot:string;
   createdAt:string;
 }
+/** Re-read persisted launcher identity at each crossing of the old writer boundary. */
+async function assertLegacyLauncherBoundToJournal(journal:Journal):Promise<void>{
+  const raw=await fs.readFile(LAUNCHER,'utf8');
+  const env=parsePersistedHubLauncherEnvironment(raw);
+  const source=assertCanonicalHubStateSourcePath(env.NEXOWIRE_STATE_DIR);
+  const port=Number(env.NEXOWIRE_HTTP_PORT??'43110');
+  if(source!==journal.sourceRoot||port!==journal.port){
+    throw new Error('AI04_LEGACY_LAUNCHER_CHANGED_DURING_CUTOVER');
+  }
+}
 function psLiteral(value:string):string{return "'"+value.replaceAll("'","''")+"'";}
 /**
  * Re-read the registered recovery task before stopping the legacy Hub.
@@ -399,6 +409,7 @@ export async function controlledSystemHubCutover(
         throw new Error('AI04_RECOVERY_TASK_CHANGED_BEFORE_QUIESCE');
       verifyWindowsPrivateAcl(RECOVERY);
       verifyWindowsPrivateAcl(JOURNAL);
+      await assertLegacyLauncherBoundToJournal(journal);
       // Other processes can consume space while the recovery task is armed.
       // Recheck the authoritative source path as well as the protected target
       // immediately before disabling the existing user Hub.
@@ -429,12 +440,16 @@ export async function controlledSystemHubCutover(
     },
     async copyProtectedState(){
       trustedAncestors();
+      await assertLegacyLauncherBoundToJournal(journal);
       await prepareProtectedOfflineSystemHubStateCopy(LAUNCHER,true);
+      await assertLegacyLauncherBoundToJournal(journal);
       await advance(journal,'COPIED');
     },
     async issueReceipt(){
       assertInteractiveHubTaskDisabledReadOnly();
+      await assertLegacyLauncherBoundToJournal(journal);
       await issueOfflineSystemStateCutoverReceipt(LAUNCHER,true);
+      await assertLegacyLauncherBoundToJournal(journal);
       await advance(journal,'RECEIPT_ISSUED');
     },
     async installSystemHub(){
