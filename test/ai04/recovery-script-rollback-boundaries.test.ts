@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   SYSTEM_HUB_RECOVERY_PS,
   SYSTEM_HUB_RECOVERY_LAUNCHER_PROOF_PS,
+  SYSTEM_HUB_RECOVERY_RESUME_TASK_PS,
 } from '../../scripts/ai04-controlled-system-hub-cutover.js';
 
 test('rollback only recognizes explicit durable journal phases',()=>{
@@ -36,4 +37,15 @@ test('post-stop launcher replacement must be checked before SYSTEM unregister an
   assert.ok(unregister>resume&&finalProof>unregister&&userTask>finalProof);
   assert.match(script,/\$launcherDrift=\$_/);
   assert.match(script,/AI04_RECOVERY_SYSTEM_RESUME_FAILED/);
+});
+
+test('SYSTEM task restart rechecks principal, identity, exact executable and action',()=>{
+  const source=SYSTEM_HUB_RECOVERY_RESUME_TASK_PS;
+  assert.match(source,/AI04_RECOVERY_RESUME_TASK_CHANGED/);
+  assert.match(source,/AI04_RECOVERY_RESUME_ACTION_CHANGED/);
+  assert.match(source,/\$resumeTask\.Principal\.UserId/);
+  assert.match(source,/\$resumeActions\[0\]\.Execute/);
+  assert.match(source,/\$resumeActions\[0\]\.Arguments/);
+  assert.equal(SYSTEM_HUB_RECOVERY_PS.split('AI04_RECOVERY_RESUME_ACTION_CHANGED').length-1,2);
+  assert.equal(SYSTEM_HUB_RECOVERY_PS.split('AI04_RECOVERY_SYSTEM_RESUME_FAILED').length-1,2);
 });
