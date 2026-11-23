@@ -37,7 +37,9 @@ test('UNKNOWN commit cannot automatically replay the legacy Hub writer',async()=
     failure instanceof SystemCutoverFailed&&
     failure.failedStep==='commit'&&
     failure.rollbackAttempted===false&&
-    failure.rollbackFailed===false);
+    failure.rollbackFailed===false&&
+    failure.outcomeUnknown===true&&
+    failure.message==='SYSTEM_HUB_CUTOVER_FAILED_COMMIT_COMMIT_OUTCOME_UNKNOWN');
   assert.deepEqual(events,[...steps]);
 });
 
