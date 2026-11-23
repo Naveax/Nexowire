@@ -559,15 +559,20 @@ test('Proxy-backed reserve/commit receipts refuse before verifier and effect',as
   for(const stage of ['begin','commit'] as const){
     for(const shape of ['root','nested-binding','revoked'] as const){
       const f=fixture();
-      let traps=0,verified=0;
-      // One structural trap object is generic over receipt and binding.
-      // Zero-argument trap methods throw, so their inferred 'never' return
-      // satisfies both ProxyHandler<T> contracts without erasing target types.
+      let metadataTraps=0,thenReads=0,otherReads=0,verified=0;
+      // A Promise resolves an object by querying its 'then' property.
+      // A top-level Proxy returned by an async authority therefore receives
+      // this one class of trap BEFORE snapshotReceipt can inspect it.
+      // The snapshot boundary still must execute ZERO metadata traps and
+      // must never verify, commit or execute a hostile receipt.
       const trapHandler={
-        getPrototypeOf(){traps++;throw Error('PROXY_GET_PROTO_EXECUTED');},
-        ownKeys(){traps++;throw Error('PROXY_OWN_KEYS_EXECUTED');},
-        getOwnPropertyDescriptor(){traps++;throw Error('PROXY_DESCRIPTOR_EXECUTED');},
-        get(){traps++;throw Error('PROXY_GET_EXECUTED');},
+        getPrototypeOf(){metadataTraps++;throw Error('PROXY_GET_PROTO_EXECUTED');},
+        ownKeys(){metadataTraps++;throw Error('PROXY_OWN_KEYS_EXECUTED');},
+        getOwnPropertyDescriptor(){metadataTraps++;throw Error('PROXY_DESCRIPTOR_EXECUTED');},
+        get(_target:object,key:string|symbol){
+          if(key==='then'){thenReads++;return undefined;}
+          otherReads++;throw Error('PROXY_GET_EXECUTED');
+        },
       };
       const begin=f.authority.begin.bind(f.authority);
       const commit=f.authority.commit.bind(f.authority);
@@ -594,7 +599,12 @@ test('Proxy-backed reserve/commit receipts refuse before verifier and effect',as
         f.authority.commit=async(...args)=>malicious(await commit(...args));
       }
       await assert.rejects(f.run(),deny,stage+'/'+shape);
-      assert.equal(traps,0,stage+'/'+shape);
+      assert.equal(metadataTraps,0,stage+'/'+shape);
+      assert.equal(otherReads,0,stage+'/'+shape);
+      if(shape==='root')
+        assert.ok(thenReads>0,'async Promise assimilation must be distinguished');
+      else
+        assert.equal(thenReads,0,stage+'/'+shape);
       assert.equal(verified,stage==='begin'?0:1,stage+'/'+shape);
       assert.equal(f.events.includes('invoke'),false,stage+'/'+shape);
     }

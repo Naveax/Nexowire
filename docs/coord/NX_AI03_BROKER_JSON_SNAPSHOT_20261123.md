@@ -68,10 +68,18 @@ object introspection, recursively in both:
 
 `core-console-admission.ts` already delegates to the second function, so
 CORE console also denies root/nested/revoked Proxies before native inspection.
-Dedicated negative tests assert **zero getPrototypeOf/ownKeys/descriptor/get
-trap executions**, zero Broker authority CAS for invalid effect inputs,
+Dedicated negative tests assert **zero getPrototypeOf/ownKeys/descriptor
+traps** and zero non-`then` property reads for asynchronous Proxy receipts,
+zero Broker authority CAS for invalid effect inputs,
 zero receipt verification for invalid reserve, no effect callback and zero
-CORE provider inspection.
+CORE provider inspection. A top-level Proxy returned by an **async provider**
+can receive a `get('then')` trap during built-in Promise resolution BEFORE
+`snapshotReceipt` is entered. The guard cannot prevent this JavaScript
+language behavior. Tests explicitly distinguish this unavoidable thenable
+assimilation from accesses made by the snapshot and assert DENY/no native
+effect. Production providers must return decoded/authenticated JSON data
+without in-process Proxy objects. Never claim that the snapshot function
+prevents arbitrary side effects inside a compromised async provider.
 
 `types.isProxy` is Node 22+/V8 native detection, not a recursive scan
 by itself. Depth-first guards in the existing snapshot/canonical walkers
