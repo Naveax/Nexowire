@@ -19,7 +19,7 @@ test('AI-05 SYSTEM stage honors relocated Documents and Windows directories', ()
   assert.match(stage, /AI01_STAGE_WINDOWS_TOOL_MISSING/);
   assert.match(stage, /Invoke-Checked \$tarExecutable/);
   assert.match(stage, /& \$powershell51 /);
-  assert.doesNotMatch(stage, /'C:\\\\Windows\\\\System32\\\\(?:tar|WindowsPowerShell)/);
+  assert.doesNotMatch(stage, /'C:\\Windows\\System32\\(?:tar|WindowsPowerShell)/);
   assert.doesNotMatch(stage, /Register-ScheduledTask|Unregister-ScheduledTask|Stop-ScheduledTask/);
 });
 
