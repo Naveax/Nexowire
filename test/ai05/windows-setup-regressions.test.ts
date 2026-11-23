@@ -17,6 +17,9 @@ test('AI-05 SYSTEM stage honors relocated Documents and Windows directories', ()
   assert.match(stage, /AI01_STAGE_OUTPUT_BOUNDARY_UNTRUSTED/);
   assert.match(stage, /AI01_STAGE_OUTPUT_ANCESTOR_REPARSE/);
   assert.match(stage, /AI01_STAGE_WINDOWS_TOOL_MISSING/);
+  assert.match(stage, /AI01_STAGE_WINDOWS_REQUIRED/);
+  assert.match(stage, /AI01_STAGE_64BIT_WINDOWS_REQUIRED/);
+  assert.match(stage, /AI01_STAGE_64BIT_PROCESS_REQUIRED/);
   assert.match(stage, /Invoke-Checked \$tarExecutable/);
   assert.match(stage, /& \$powershell51 /);
   assert.doesNotMatch(stage, /'C:\\Windows\\System32\\(?:tar|WindowsPowerShell)/);
