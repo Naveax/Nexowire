@@ -303,11 +303,16 @@ async function loadAccount() {
   }
 
   // A pairing dashboard is not evidence of local CORE approval.
-  const dashboard = await response.json().catch(() => null);
+  let dashboard = null;
+  try {
+    if (typeof response.json === 'function') dashboard = await response.json();
+  } catch {
+    // An unreadable or absent optional dashboard body must never invent CORE authority.
+  }
   renderCoreStatus(coreStatusFromDashboard(dashboard));
   $('status-title').textContent = 'Eşleştirmeye hazır';
   $('status-text').textContent =
-    'BAĞLA yalnızca cihazını hesabına ekler. CORE yetkisi için cihaz sahibinin yerel Windows onayı ayrıca gerekir.';
+    'Hesap eşleştirmesi için ekstra erişim ayarı gerekmez. BAĞLA yalnızca cihazını hesabına ekler. CORE yetkisi için cihaz sahibinin yerel Windows onayı ayrıca gerekir.';
   $('approve').disabled = false;
   $('pair-panel').setAttribute('aria-busy', 'false');
   setPill('Eşleştirmeye hazır', 'muted');
