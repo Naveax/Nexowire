@@ -164,7 +164,9 @@ test('T-001: pairing state progresses from account check to ready without premat
   dashboard.resolve(Response.json({ user: 'fixture' }));
   await tick();
   assert.equal(f.el('approve').disabled, false);
-  assert.equal(f.el('connect-pill').textContent, 'Hazır');
+  assert.equal(f.el('connect-pill').textContent, 'Eşleştirmeye hazır');
+  assert.equal(f.el('status-title').textContent, 'Eşleştirmeye hazır');
+  assert.match(f.el('status-text').textContent, /CORE yetkisi/);
   assert.equal(f.el('pair-panel').attributes.get('aria-busy'), 'false');
   assert.equal(f.el('error-panel').classes.has('hidden'), true);
 });
@@ -190,17 +192,18 @@ test('T-002: failed account verification shows an actionable, focused terminal e
   assert.equal(f.el('error-panel').focused, true);
   assert.equal(f.el('approve').disabled, true);
   assert.equal(f.el('pair-panel').attributes.get('aria-busy'), 'false');
-  assert.match(f.el('retry-hint').textContent, /sayfayı yenile/);
+  assert.match(f.el('retry-hint').textContent, /eşleştirme sonucunu kontrol et/);
 });
 
-test('T-002/T-003: failed pairing is retryable, but pending double clicks send only one request', async () => {
+test('T-002/T-003: uncertain pairing never replays after an in-flight duplicate click', async () => {
   const first = deferred<Response>();
   let calls = 0;
   const f = await boot({
     search: pairingSearch(),
-    pairing: () => ++calls === 1
-      ? first.promise
-      : Promise.resolve(Response.json({ pairingId: 'fixture-pair', token: 'fixture-token' })),
+    pairing: () => {
+      calls++;
+      return first.promise;
+    },
   });
   const pending = f.el('approve').dispatch('click');
   await f.el('approve').dispatch('click');
@@ -212,20 +215,26 @@ test('T-002/T-003: failed pairing is retryable, but pending double clicks send o
   first.resolve(Response.json({}, { status: 503 }));
   await pending;
   assert.equal(f.el('error-panel').classes.has('hidden'), false);
-  assert.equal(f.el('approve').disabled, false);
-  assert.equal(f.el('approve').textContent, 'TEKRAR DENE');
-  assert.equal(f.el('approve').focused, true);
-  assert.equal(f.el('approve').attributes.get('aria-describedby'), 'error-message retry-hint');
-
-  await f.el('approve').dispatch('click');
-  assert.equal(calls, 2);
-  assert.equal(f.el('error-panel').classes.has('hidden'), true);
+  assert.equal(f.el('approve').disabled, true);
+  assert.equal(f.el('approve').textContent, 'BAĞLA');
+  assert.equal(f.el('error-panel').focused, true);
   assert.equal(f.el('approve').attributes.has('aria-describedby'), false);
-  assert.equal(f.navigations.length, 1);
-  const callback = new URL(f.navigations[0]!);
-  assert.equal(callback.hostname, '127.0.0.1');
-  assert.equal(callback.searchParams.get('state'), 'fixture-state');
-  assert.equal(callback.searchParams.get('pairing_id'), 'fixture-pair');
+  assert.match(f.el('error-message').textContent, /Bağlantı sonucu belirsiz/);
+  assert.match(f.el('retry-hint').textContent, /otomatik tekrarlama/);
+  await f.el('approve').dispatch('click');
+  assert.equal(calls, 1);
+  assert.equal(f.navigations.length, 0);
+  assert.equal(f.el('pair-panel').attributes.get('aria-busy'), 'false');
+
+  // A separately initiated fresh pairing is still supported, unlike replay
+  // of a request whose earlier server result is UNKNOWN.
+  const fresh=await boot({search:pairingSearch(),
+    pairing:async()=>Response.json({pairingId:'fixture-pair',token:'fixture-token'})});
+  await fresh.el('approve').dispatch('click');
+  assert.equal(fresh.navigations.length,1);
+  const callback=new URL(fresh.navigations[0]!);
+  assert.equal(callback.hostname,'127.0.0.1');
+  assert.equal(callback.searchParams.get('pairing_id'),'fixture-pair');
 });
 
 test('T-002: device quota 403 does not present an ineffective retry action', async () => {
@@ -299,37 +308,32 @@ test('T-138: network error and malformed successful pairing both remain failures
     await f.el('approve').dispatch('click');
     assert.equal(f.el('connect-pill').textContent, 'Hata');
     assert.equal(f.el('error-panel').classes.has('hidden'), false);
-    assert.equal(f.el('approve').textContent, 'TEKRAR DENE');
+    assert.equal(f.el('approve').textContent, 'BAĞLA');
+    assert.equal(f.el('approve').disabled, true);
     assert.equal(f.navigations.length, 0);
     assert.equal(f.el('pair-panel').attributes.get('aria-busy'), 'false');
   }
 });
 
-test('T-141: duplicate clicks do not repeat focus or alert events while request is pending', async () => {
-  const pairingQueue = [deferred<Response>(), deferred<Response>()];
-  let attempts = 0;
-  const f = await boot({
-    search: pairingSearch(),
-    pairing: () => pairingQueue[attempts++]!.promise,
-  });
-  const first = f.el('approve').dispatch('click');
+test('T-141: duplicate clicks never trigger repeat focus or mutation after 503 UNKNOWN', async () => {
+  const pending=deferred<Response>();
+  let attempts=0;
+  const f=await boot({search:pairingSearch(),
+    pairing:()=>{attempts++;return pending.promise;}});
+  const first=f.el('approve').dispatch('click');
   await f.el('approve').dispatch('click');
-  pairingQueue[0]!.resolve(Response.json({}, { status: 503 }));
+  assert.equal(attempts,1);
+  pending.resolve(Response.json({}, {status:503}));
   await first;
-  assert.equal(attempts, 1);
-  assert.equal(f.el('approve').focusCount, 1);
-  assert.equal(f.el('retry-hint').textContent, 'Tekrar denemek için TEKRAR DENE düğmesine bas.');
-
-  const second = f.el('approve').dispatch('click');
+  assert.equal(attempts,1);
+  assert.equal(f.el('approve').focusCount,0);
+  assert.equal(f.el('error-panel').focusCount,1);
+  assert.match(f.el('retry-hint').textContent,/eşleştirme sonucunu kontrol et/);
   await f.el('approve').dispatch('click');
-  assert.equal(attempts, 2);
-  assert.equal(f.el('approve').focusCount, 1);
-  assert.equal(f.el('error-panel').classes.has('hidden'), true);
-  pairingQueue[1]!.resolve(Response.json({}, { status: 500 }));
-  await second;
-  assert.equal(f.el('approve').focusCount, 2);
-  assert.equal(f.el('error-panel').classes.has('hidden'), false);
-  assert.equal(f.el('approve').attributes.get('aria-describedby'), 'error-message retry-hint');
+  assert.equal(attempts,1);
+  assert.equal(f.el('error-panel').focusCount,1);
+  assert.equal(f.el('error-panel').classes.has('hidden'),false);
+  assert.equal(f.navigations.length,0);
 });
 
 test('T-142/T-143: cancelled setup query and long untrusted display name cannot announce connected state', async () => {
@@ -342,7 +346,7 @@ test('T-142/T-143: cancelled setup query and long untrusted display name cannot 
   const deviceName = '<img src=x onerror=alert(1)>' + 'İşletme-ÇokUzunAdı'.repeat(40);
   const f = await boot({ search: pairingSearch({ deviceName }) });
   assert.equal(f.el('device-name').textContent, deviceName);
-  assert.equal(f.el('status-title').textContent, 'Hazır');
+  assert.equal(f.el('status-title').textContent, 'Eşleştirmeye hazır');
   assert.notEqual(f.el('connect-pill').textContent, 'Bağlandı');
   assert.doesNotMatch(script, /\binnerHTML\s*=/);
   // Real 375px overflow depends on K02's stylesheet and requires a browser.
@@ -426,7 +430,7 @@ test('P008: expired HTTP 401 is terminal and distinct from unavailable HTTP 503'
   assert.equal(expired.el('approve').disabled,true);
   assert.match(expired.el('error-message').textContent,/Oturumun sona erdi/);
   assert.notEqual(expired.el('error-message').textContent,outage.el('error-message').textContent);
-  assert.equal(outage.el('approve').disabled,false);
+  assert.equal(outage.el('approve').disabled,true);
 });
 
 test('P008: unexpected HTTP pairing failure cannot display raw credential diagnostics',async()=>{
@@ -437,7 +441,8 @@ test('P008: unexpected HTTP pairing failure cannot display raw credential diagno
   assert.equal(f.navigations.length,0);
   assert.equal(f.el('connect-pill').textContent,'Hata');
   assert.equal(f.el('error-message').textContent.includes(secret),false);
-  assert.equal(f.el('error-message').textContent,'Beklenmeyen bağlantı hatası.');
+  assert.match(f.el('error-message').textContent,/Beklenmeyen bağlantı hatası\. Bağlantı sonucu belirsiz/);
+  assert.equal(f.el('approve').disabled,true);
 });
 
 test('P008: initial account-fetch failure cannot disclose raw upstream diagnostics',async()=>{
