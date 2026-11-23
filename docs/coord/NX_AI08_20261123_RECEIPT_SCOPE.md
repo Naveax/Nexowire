@@ -16,6 +16,8 @@
 1. `scripts/ci/test-execution-coverage.mjs`: a receipt claiming `ONLY_EXPLICIT_APPROVED_ROOT_TEST_FILES` now fails if any receipt path is missing from the 35-file immutable allowlist or its Git blob differs from the independently reviewed blob. A valid Git-tracked path and matching commit manifest *alone* cannot prove review or execution.
 2. `test/ci/test-execution-coverage.test.mjs`: use three reviewed-file fixtures; add negatives for a tracked but unreviewed file masquerading as approved, and a forged full-inventory PASS claim; test that the complete reviewed allowlist still leaves unreviewed files NOT_RUN.
 3. `.github/workflows/ci.yml`: isolated Node 22 and Node 24 Linux jobs check out the pull request's **exact head SHA**, assert `git rev-parse HEAD` equals that SHA, and run the receipt denial contract tests. No redispatch of the parent integration run and no modification of existing broad test jobs.
+4. `.github/workflows/release-readiness.yml`: test inventory, plan, coverage, receipt and pure-import provenance changes, their target MJS tests, and the CI workflow are now explicit PR trigger inputs for the release gate.
+5. `test/ci/release-path-coverage.test.mjs`: enforce presence of those trigger paths in the release workflow to prevent regression.
 
 **Limits:** The coverage reconciler does not independently authenticate a test executor. It validates the claimed reviewed-only scope and separates PASS receipt reconciliation from unmeasured execution. The 654-file full-suite assertion is **NOT_RUN**, not PASS. Browser, native Windows effects, SYSTEM/CORE, reboot, user profile state and release signing are outside this source-only PR.
 
