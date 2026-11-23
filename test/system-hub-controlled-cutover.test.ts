@@ -47,7 +47,9 @@ test('failed recovery recheck cannot invoke rollback before legacy quiescence',a
   assert.deepEqual(events,['preflight','armRecovery','confirmRecoveryBeforeQuiesce']);
 });
 
-for(const phase of phases.slice(3)){
+// Commit is never a safe automatic-rollback boundary: its durable result
+// may already be published even if the caller received an exception.
+for(const phase of phases.slice(3,-1)){
   test('failure at '+phase+' invokes exactly one rollback',async()=>{
     const {ops,events}=setup(phase);
     await assert.rejects(runRecoverableSystemHubCutover(ops),(error:unknown)=>
@@ -65,4 +67,16 @@ test('rollback failure remains explicit, never presented as recovered',async()=>
     error instanceof SystemCutoverFailed&&error.rollbackFailed&&
     error.cause instanceof AggregateError);
   assert.equal(events.at(-1),'rollback');
+});
+
+test('ambiguous commit outcome preserves the armed recovery and refuses automatic replay',async()=>{
+  const {ops,events}=setup('commit');
+  await assert.rejects(runRecoverableSystemHubCutover(ops),(error:unknown)=>
+    error instanceof SystemCutoverFailed&&
+    error.failedStep==='commit'&&
+    error.rollbackAttempted===false&&
+    error.rollbackFailed===false&&
+    error.message==='SYSTEM_HUB_CUTOVER_FAILED_COMMIT_RECOVERY_UNVERIFIED');
+  assert.deepEqual(events,[...phases]);
+  assert.ok(!events.includes('rollback'));
 });
