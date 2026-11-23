@@ -472,3 +472,68 @@ test('malformed or cyclic transport receipt never reaches verifier or effect',as
   assert.equal(verified,0);
   assert.equal(f.events.includes('invoke'),false);
 });
+
+test('broker effect input rejects getters, toJSON and non-JSON structures before CAS',async()=>{
+  let executed=0;
+  const accessor=Object.defineProperty({action:'enable'},'name',{
+    enumerable:true,get(){executed++;return 'untrusted';},
+  });
+  const withToJson={action:'enable',toJSON(){executed++;return {action:'enable'};}};
+  const sparse=new Array(2);
+  sparse[1]='x';
+  const inherited=Object.assign(Object.create({unauthorized:'prototype'}),{action:'enable'});
+  for(const raw of [accessor,withToJson,sparse,inherited,
+    {nested:{action:undefined}},{nested:{value:Infinity}},
+    {nested:{value:Symbol('bad')}}]){
+    const f=fixture();
+    await assert.rejects(f.run(op,raw),deny);
+    assert.deepEqual(f.events,[],'invalid input must not contact authority');
+    assert.equal(f.events.includes('invoke'),false);
+  }
+  assert.equal(executed,0,'no attacker-defined code runs during snapshot');
+});
+
+test('untrusted reservation and commit receipt accessors deny without invocation',async()=>{
+  for(const stage of ['begin','commit'] as const){
+    const f=fixture();
+    let executed=0,verified=0;
+    const originalBegin=f.authority.begin.bind(f.authority);
+    const originalCommit=f.authority.commit.bind(f.authority);
+    f.authority.verifyReceipt=async()=>{verified++;return true;};
+    const tamper=(receipt:BrokerEffectReceipt|null)=>{
+      if(receipt){
+        Object.defineProperty(receipt,'ticket',{
+          configurable:true,enumerable:true,
+          get(){executed++;return 'malicious_getter';},
+        });
+      }
+      return receipt;
+    };
+    if(stage==='begin')
+      f.authority.begin=async(...args)=>tamper(await originalBegin(...args));
+    else
+      f.authority.commit=async(...args)=>tamper(await originalCommit(...args));
+    await assert.rejects(f.run(),deny,stage);
+    assert.equal(executed,0,stage);
+    assert.equal(verified,stage==='begin'?0:1,stage);
+    assert.equal(f.events.includes('invoke'),false,stage);
+  }
+});
+
+test('receipt toJSON method is never invoked to forge signed bytes',async()=>{
+  const f=fixture();
+  let executed=0,verified=0;
+  const original=f.authority.begin.bind(f.authority);
+  f.authority.begin=async(...args)=>{
+    const receipt=await original(...args);
+    if(receipt)Object.assign(receipt,{
+      toJSON(){executed++;return {state:'RESERVED'};},
+    });
+    return receipt;
+  };
+  f.authority.verifyReceipt=async()=>{verified++;return true;};
+  await assert.rejects(f.run(),deny);
+  assert.equal(executed,0);
+  assert.equal(verified,0);
+  assert.equal(f.events.includes('invoke'),false);
+});
