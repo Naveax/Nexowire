@@ -10,6 +10,9 @@
 1. `runRecoverableSystemHubCutover` no longer calls automatic `rollback()` when `commit()` throws. Publication of `AWAITING_PHYSICAL_ACCEPTANCE` can be durable even if its call fails. Treat this as **UNKNOWN**, preserve the independent recovery task and require operator reconciliation. Earlier failures still request the independently guarded recovery script, and its own failure remains explicit.
 2. `assertProtectedTargetDiskBudget` checks the authoritative launcher source volume as well as owner profile and protected destination headroom, then probes `SYSTEM_STATE_ROOT` on its actual filesystem; the floor is **ceil(4.1 GiB)** plus twice the receipt's durable bytes. This happens before and after full source/target digests.
 3. The offline staging budget now uses the same **ceil(4.1 GiB)** base plus two full state trees. It probes the source/profile/ProgramData volumes independently and the protected stage parent. An **8 GiB advisory** remains separate from the hard minimum.
+4. The legacy launcher path, port and SHA-256 are pinned in the private recovery journal. The current launcher and the independent original-launcher backup must both match before rollback. Re-read before quiesce/copy/receipt and **after SYSTEM shutdown before unregister**, with a guarded SYSTEM restart if late drift is detected.
+5. The recovery task rejects unrecognized journal phases and rechecks scheduled task name/path, SYSTEM principal, marker, PowerShell binary and exact arguments before any automatic SYSTEM restart. A swapped task action cannot be resumed.
+6. These changes are source-level guards. End-to-end Windows physical acceptance, alternate system-drive layout, actual `SQLITE_FULL`, native `READONLY`, reboot and failure recovery remain separate acceptance gates; no green CI result is used as a substitute.
 
 **Never interpret a successful SHA pair, SQLite `quick_check`, `HTTP 200`, a running task, or a green Linux test as Windows SYSTEM physical acceptance.** WAL and main SQLite are durable digest inputs. SHM is a rebuildable cache and is not treated as a durable receipt hash; its file identity, admissibility and stability still require verification.
 
@@ -22,6 +25,10 @@
 | Copy/receipt/install/verify fails | Exactly one request to independent rollback, whose own state equality check may deny | Existing orchestrator and protected-copy tests; source test only |
 | Commit journal write/fsync/readback is UNKNOWN | **No automatic rollback**; preserve independent task and both state trees | New orchestrator fault-injection regression; source test |
 | Rollback interrupted | Report rollback failure; retain evidence, do not claim restored | Existing orchestrator regression; real Windows NOT_RUN |
+| Recovery journal unknown phase | Reject before task change and do not infer `COMPLETE` | New discovered source test + isolated Windows fixture; physical NOT_RUN |
+| Launcher SHA or source/port changes at quiesce/copy/receipt | Reject; retain journal and original launcher backup | Discovered source-contract test; physical NOT_RUN |
+| Launcher replaced after SYSTEM stop | Recheck before unregister; attempt resume of exact trusted SYSTEM task | Isolated Windows failure injection + discovered source contract; OS result NOT_RUN unless separately executed |
+| SYSTEM task action replaced before resume | Never execute untrusted action; report `RESUME_FAILED` | Isolated Windows test fixture + discovered contract; OS result NOT_RUN unless separately executed |
 | Target/source mount below 4.1 GiB | Deny even when `C:\` is healthy | Disk-reserve tests + new source gates; physical NOT_RUN |
 | 8 GiB advisory not met while floor is met | Report recommendation as unmet, no fake physical PASS | Existing `test/ai04/system-cutover-disk-reserve.test.ts`; physical NOT_RUN |
 | Source changes during copy | Reject, preserve partial stage without auto-delete | Existing protected offline-copy test; physical NOT_RUN |
@@ -45,5 +52,7 @@
 ## Evidence collection template
 
 Record exact SHA, Windows build and Node version, source-root canonical path as redacted metadata, source/target volume identity, before/after free bytes, protected ACL evidence, the ordered event timeline, source/destination tree SHA-256, main SQLite and `-wal` SHA-256, durable file count/bytes, `quick_check`, idempotency row count, recovery journal phase, task principal, owner/PID incarnation, rollback decision and reason, reboot timestamps, and `PASS/FAIL/SKIP/NOT_RUN` by check. No live or private state is published.
+
+**Remaining coordinated review:** Physical rollback must not run without AI-09's exclusive execution lock and owner approval. The current C:-anchored protected path constants need separate non-C: Windows installation coverage with AI-01/AI-05 before claiming universal Windows installer compatibility. Root-level Windows PowerShell failure-injection tests are not necessarily executed by the current AI-04 CI workflow; proof must name the exact test command, runner, SHA and result.
 
 **Physical acceptance: NOT_RUN.** **Production state and tasks: UNCHANGED by AI-02.**
