@@ -70,3 +70,30 @@ No `Get-Content` on DPAPI blobs, bearer tokens, raw SQLite, task credential dump
 - No elevated local owner approval, task operation on production outside AI-09 or conflicting executor.
 
 **Rollout boundary:** No direct changes to `main`, #1160, Windows production tasks, SQLite/DPAPI, or releases from this AI-01 branch.
+
+## CI coverage gap and targeted operator test command (2026-11-23)
+
+- For source SHA `95a268549196474464b19abd79e640eed6769115`, Portable Root run `45181707698` recorded **655 tracked test files, 35 executed, 620 NOT_RUN**. It did **not** execute the new AI-01 startup-trigger test. This is evidence only for that older SHA; later PR commits require new exact-SHA receipts.
+- Generic CI `45181707815` passed on that older SHA but cannot be used as Windows PowerShell behavioral acceptance for the omitted tests.
+- #1205 / AI-08 owns the reviewed Windows-hosted shard and execution receipts. Do not edit shared CI or rerun already-active identical workflows from AI-01.
+- The SYSTEM install transaction now verifies the **actual registered task** (principal, action, AtStartup trigger, marker) **before stopping the legacy user Hub**, not only the preliminary candidate or registration arguments.
+
+On an authorized disposable Windows runner, after clean checkout of **exact PR HEAD** and `npm ci`, run:
+
+```powershell
+npm run typecheck
+$tests = @(
+  'test/hub-boot-startup-trigger-integrity.test.ts',
+  'test/hub-boot-handoff-transaction.test.ts',
+  'test/hub-boot-root-boundary.test.ts',
+  'test/hub-boot-status-legacy-user.test.ts',
+  'test/hub-boot-task-shell-trust.test.ts',
+  'test/hub-boot-hidden-task-visibility.test.ts',
+  'test/hub-boot-protected-state-gate.test.ts',
+  'test/hub-boot-shared-ancestor-trust.test.ts',
+  'test/hub-lifecycle.test.ts'
+)
+node --test --import tsx @tests
+```
+
+These are source/PowerShell identity tests; they do **not** install or mutate a SYSTEM Scheduled Task. Verify runner SHA in the receipt. If the physical shared ancestor ACL check is unsupported in CI, record its specific SKIP/FAIL rather than quietly turning it green.
