@@ -1,7 +1,7 @@
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import {readTestInventory} from './test-inventory.mjs';
+import {readTestInventory,summarizeTestFiles} from './test-inventory.mjs';
 import {APPROVED_ROOT_TEST_FILES,REVIEWED_ROOT_GIT_BLOBS} from './portable-root-execution-receipt.mjs';
 
 function deny(reason) {throw new Error('TEST_COVERAGE_' + reason)}
@@ -35,6 +35,16 @@ export function reconcileCoverage(entries,inventory,receipt) {
         tracked.has(entry.path)) deny('INVALID_INVENTORY');
     tracked.set(entry.path,entry.blob);
   }
+  // A caller may supply the correct 40/64-character labels alongside a
+  // different set of unreviewed files. Recompute the canonical Git manifest
+  // before emitting NOT_RUN counts; a matching file count is not a proof.
+  let actualInventory;
+  try { actualInventory=summarizeTestFiles(entries,inventory.commitSha); }
+  catch {deny('INVALID_INVENTORY');}
+  if(actualInventory.manifestSha256!==inventory.manifestSha256 ||
+     actualInventory.trackedTsTestFiles!==inventory.trackedTsTestFiles ||
+     JSON.stringify(actualInventory.byDepth)!==JSON.stringify(inventory.byDepth))
+    deny('INVENTORY_MANIFEST_MISMATCH');
   // This receipt format promises reviewed portable-root execution only.
   // A matching Git manifest is insufficient: an unapproved tracked test must
   // never acquire PASS evidence merely by being included in a forged receipt.
@@ -61,13 +71,20 @@ export function reconcileCoverage(entries,inventory,receipt) {
     passed+=f.pass;
   }
   if(passed!==receipt.testsPassed)deny('TOTAL_COUNTERS_INVALID');
-  const notRun=entries.map(e=>e.path).filter(p=>!executed.has(p));
+  const notRun=entries.map(e=>e.path).filter(p=>!executed.has(p)).sort();
+  const fileStates=entries.map(e=>({
+    path:e.path, gitBlobSha:e.blob,
+    result:executed.has(e.path)?'PASS':'NOT_RUN',
+  })).sort((a,b)=>a.path.localeCompare(b.path,'en'));
+  const statusCounts={PASS:executed.size,FAIL:0,SKIP:0,NOT_RUN:notRun.length};
   return {
     schemaVersion:1, sourceCommitSha:inventory.commitSha,
     sourceManifestSha256:inventory.manifestSha256,
     trackedFileCount:entries.length, executedFileCount:executed.size,
     notRunFileCount:notRun.length, passedAssertions:passed,
-    executedFiles:[...executed].sort(),notRunFiles:notRun.sort(),
+    executedFiles:[...executed].sort(),notRunFiles:notRun,
+    fileStates,statusCounts,
+    statusSemantics:'RECEIPT_ONLY_NO_GLOBAL_CI_INFERENCE',
     scope:'RECEIPT_RECONCILIATION_ONLY',
     comprehensiveCoverage:executed.size===entries.length,
     physicalWindowsAcceptance:'NOT_INFERRED',
