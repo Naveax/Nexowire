@@ -127,12 +127,17 @@ export function systemHubRecoveryTaskAbsencePreflightScript():string{
     "'OK'",
   ].join('\r\n');
 }
-function runPS(code:string):string{
+const TASK_READBACK_TIMEOUT_MS=45_000;
+// Match the independent recovery task's existing five-minute execution budget.
+// The recovery script may spend 45s probing SYSTEM health, 20s waiting for
+// shutdown, and 30s verifying legacy health, excluding filesystem hashing.
+export const SYSTEM_HUB_ROLLBACK_TIMEOUT_MS=5*60_000;
+function runPS(code:string,timeoutMs=TASK_READBACK_TIMEOUT_MS):string{
   const r=spawnSync(POWERSHELL,[
     '-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-EncodedCommand',
     Buffer.from(code,'utf16le').toString('base64')],
     {cwd:'C:\\Windows\\System32',windowsHide:true,shell:false,
-      env:protectedWindowsAclEnvironment(),encoding:'utf8',timeout:45000,maxBuffer:256*1024});
+      env:protectedWindowsAclEnvironment(),encoding:'utf8',timeout:timeoutMs,maxBuffer:256*1024});
   if(r.status!==0||r.error)throw new Error('AI04_ELEVATED_TASK_OPERATION_FAILED');
   return (r.stdout??'').trim();
 }
@@ -416,7 +421,7 @@ function validateRecoveredScript():void{
 }
 function runRollbackScript():void{
   validateRecoveredScript();
-  runPS('& '+psLiteral(RECOVERY));
+  runPS('& '+psLiteral(RECOVERY),SYSTEM_HUB_ROLLBACK_TIMEOUT_MS);
 }
 export async function controlledSystemHubCutover(
   trustedCli:string,
@@ -491,7 +496,7 @@ export async function controlledSystemHubCutover(
         "$startup=New-ScheduledTaskTrigger -AtStartup",
         "$timeout=New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(15) -RepetitionInterval (New-TimeSpan -Minutes 15) -RepetitionDuration (New-TimeSpan -Days 365)",
         "$principal=New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest",
-        "$settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 5)",
+        "$settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Seconds "+(SYSTEM_HUB_ROLLBACK_TIMEOUT_MS/1000)+")",
         "Register-ScheduledTask -TaskName "+psLiteral(TASK)+" -TaskPath '\\' -Action $action -Trigger @($startup,$timeout) -Principal $principal -Settings $settings -ErrorAction Stop|Out-Null",
         ].join('\n'));
       const taskCheck=runPS(systemHubRecoveryTaskReadbackScript());

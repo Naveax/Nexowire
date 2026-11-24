@@ -11,6 +11,7 @@ import {
   SYSTEM_HUB_RECOVERY_RESUME_TASK_PS,
   assertRecoveryArtifactPresent,
   assertDurableRollbackConfirmation,
+  SYSTEM_HUB_ROLLBACK_TIMEOUT_MS,
   decodeCutoverLauncherProof,
 } from '../../scripts/ai04-controlled-system-hub-cutover.js';
 
@@ -153,4 +154,17 @@ test('rollback confirmation accepts UTF-8 BOM but requires the exact durable tra
     assert.throws(()=>assertDurableRollbackConfirmation(invalid,expected),
       /AI04_ROLLBACK_DURABLE_CONFIRMATION_MISSING/);
   }
+});
+
+test('manual rollback and scheduled rollback use the same bounded execution budget',()=>{
+  const waits=[...SYSTEM_HUB_RECOVERY_PS.matchAll(/\.AddSeconds\((\d+)\)/g)]
+    .map(match=>Number(match[1])*1000);
+  assert.deepEqual(waits,[45_000,20_000,30_000]);
+  assert.ok(SYSTEM_HUB_ROLLBACK_TIMEOUT_MS>waits.reduce((sum,ms)=>sum+ms,0));
+  assert.equal(SYSTEM_HUB_ROLLBACK_TIMEOUT_MS,300_000);
+  const source=readFileSync(new URL('../../scripts/ai04-controlled-system-hub-cutover.ts',import.meta.url),'utf8');
+  assert.ok(source.includes("runPS('& '+psLiteral(RECOVERY),SYSTEM_HUB_ROLLBACK_TIMEOUT_MS)"));
+  assert.ok(source.includes('timeout:timeoutMs'));
+  assert.ok(source.includes('New-TimeSpan -Seconds "+(SYSTEM_HUB_ROLLBACK_TIMEOUT_MS/1000)+'));
+  assert.ok(source.includes('TASK_READBACK_TIMEOUT_MS=45_000'));
 });
