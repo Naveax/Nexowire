@@ -758,6 +758,28 @@ export async function hubBootLifecycleStatus(
   });
 }
 
+const HubBootHandoffReceiptSchema=z.discriminatedUnion('ok',[
+  z.object({
+    ok:z.literal(true),legacyMutationAttempted:z.boolean(),systemStartAttempted:z.literal(true),
+  }).strict(),
+  z.object({
+    ok:z.literal(false),legacyMutationAttempted:z.boolean(),systemStartAttempted:z.boolean(),
+    error:z.string().min(1),
+  }).strict(),
+]);
+
+/**
+ * A pre-handoff failure is not permission to undo another actor's task state.
+ * Missing receipts or an attempted SYSTEM start require independently verified
+ * recovery; the new Hub might already have written to the protected state.
+ */
+export function classifyHubBootHandoffFailure(receipt:unknown):
+'rollback-boot-only'|'rollback-boot-and-legacy'|'preserve-for-recovery'{
+  const parsed=HubBootHandoffReceiptSchema.safeParse(receipt);
+  if(!parsed.success||parsed.data.systemStartAttempted)return 'preserve-for-recovery';
+  return parsed.data.legacyMutationAttempted?'rollback-boot-and-legacy':'rollback-boot-only';
+}
+
 export async function installHubBootLifecycle(
   options: HubBootLifecycleOptions = {},
 ): Promise<HubBootLifecycleStatus> {
@@ -931,13 +953,17 @@ export async function installHubBootLifecycle(
   // An exclusive ephemeral task marker prevents a failed install from
   // unregistering another process's same-name task during rollback.
   let switched = false;
+  let handoffReceipt:z.infer<typeof HubBootHandoffReceiptSchema>|null=null;
   try {
     // The PowerShell transaction can modify the user task before a later
     // command fails, so rollback must be armed before the first mutation.
     switched = true;
-    await runPowerShellJson<{ ok: true }>(
+    handoffReceipt=HubBootHandoffReceiptSchema.parse(await runPowerShellJson<unknown>(
       [
         "$ErrorActionPreference='Stop'",
+        "$legacyMutationAttempted=$false",
+        "$systemStartAttempted=$false",
+        "try {",
         '$boot=$env:NEXOWIRE_HUB_BOOT_TASK_NAME',
         '$user=$env:NEXOWIRE_HUB_TASK_NAME',
         '$marker='+psLiteral(installMarker),
@@ -972,6 +998,7 @@ export async function installHubBootLifecycle(
         "$actualLegacyState=if($userTask){[string]$userTask.State}else{'NotInstalled'}",
         "if($actualLegacyState -cne $expectedLegacyState){throw 'HUB_USER_TASK_STATE_RACE'}",
         'if($userTask){',
+        "$legacyMutationAttempted=$true",
         '  Stop-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
         '  Disable-ScheduledTask -TaskName $user -TaskPath \\ | Out-Null',
         '}',
@@ -983,11 +1010,16 @@ export async function installHubBootLifecycle(
         '  Start-Sleep -Milliseconds 250',
         '} while((Get-Date) -lt $deadline)',
         "if($listeners.Count -gt 0){throw 'HUB_LEGACY_PORT_STILL_OWNED'}",
+        "$systemStartAttempted=$true",
         'Start-ScheduledTask -TaskName $boot -TaskPath \\',
-        '[pscustomobject]@{ok=$true}|ConvertTo-Json -Compress',
+        "[pscustomobject]@{ok=$true;legacyMutationAttempted=$legacyMutationAttempted;systemStartAttempted=$systemStartAttempted}|ConvertTo-Json -Compress",
+        "} catch {",
+        "[pscustomobject]@{ok=$false;legacyMutationAttempted=$legacyMutationAttempted;systemStartAttempted=$systemStartAttempted;error=[string]$_.Exception.Message}|ConvertTo-Json -Compress",
+        "}",
       ].join('\n'),
       envForTask,
-    );
+    ));
+    if(!handoffReceipt.ok)throw new Error(handoffReceipt.error);
     await waitForBootHub(port, p.pid);
     await writeManifest(
       options,
@@ -998,6 +1030,13 @@ export async function installHubBootLifecycle(
     hardenProgramDataAcl(p.root);
     return await hubBootLifecycleStatus(options);
   } catch (error) {
+    const disposition=classifyHubBootHandoffFailure(handoffReceipt);
+    if(switched&&disposition==='preserve-for-recovery'){
+      // A lost receipt or attempted SYSTEM start cannot establish that no
+      // writes occurred. Keep the protected launcher, task and both trees
+      // for the independently verified cutover recovery path.
+      throw new Error('HUB_BOOT_HANDOFF_RECOVERY_REQUIRED',{cause:error});
+    }
     let taskRollbackFailure:unknown=null;
     if (switched) {
       try {
@@ -1008,6 +1047,7 @@ export async function installHubBootLifecycle(
             '$user=$env:NEXOWIRE_HUB_TASK_NAME',
             '$marker='+psLiteral(installMarker),
             '$expectedLegacyState='+psLiteral(taskPreflight.legacyState),
+            '$restoreLegacyState='+(disposition==='rollback-boot-and-legacy'?'$true':'$false'),
             "$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue",
             hubBootTaskVisibilityProbe,
             "$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue",
@@ -1017,7 +1057,7 @@ export async function installHubBootLifecycle(
             'if($bootTask){',
             '  Stop-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue',
             '  Unregister-ScheduledTask -TaskName $boot -TaskPath \\ -Confirm:$false',
-            '  if($userTask){',
+            '  if($userTask -and $restoreLegacyState){',
             "    if($expectedLegacyState -ne 'Disabled' -and $expectedLegacyState -ne 'NotInstalled'){Enable-ScheduledTask -TaskName $user -TaskPath \\ | Out-Null}",
             "    if($expectedLegacyState -eq 'Running'){Start-ScheduledTask -TaskName $user -TaskPath \\}",
             '  }',
