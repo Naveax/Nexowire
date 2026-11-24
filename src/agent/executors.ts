@@ -6,6 +6,7 @@ import path from 'node:path';
 import * as z from 'zod';
 import type { Capability } from '../protocol/capabilities.js';
 import { PathPolicy, PathDeniedError } from './path-policy.js';
+import { NATIVE_MAX_FILE_OFFSET, readNativeTransferRange, hashNativeTransferFile } from './native-transfer-io.js';
 import { executeWindowsCapability } from './windows-control.js';
 import { executeWindowsEnvironmentCapability } from './windows-environment.js';
 import { executeWindowsWindowCapability } from './windows-window-control.js';
@@ -82,7 +83,7 @@ const FileReadInputSchema = z.object({
   max_bytes: z.number().int().min(1).max(16_777_216).default(2_097_152),
   include_sha256: z.boolean().default(false),
   // Optional fixed byte offset for low-payload, bounded cross-device reads.
-  offset_bytes: z.number().int().min(0).max(268_435_456).optional(),
+  offset_bytes: z.number().int().min(0).max(NATIVE_MAX_FILE_OFFSET).optional(),
 });
 
 const FileReadManyInputSchema = z.object({
@@ -112,7 +113,7 @@ const FileWriteInputSchema = z.object({
   content: z.string().max(22_369_624),
   encoding: z.enum(['utf8', 'base64']).default('utf8'),
   mode: z.enum(['overwrite', 'append', 'create', 'write_at']).default('overwrite'),
-  offset_bytes: z.number().int().min(0).max(268_435_456).optional(),
+  offset_bytes: z.number().int().min(0).max(NATIVE_MAX_FILE_OFFSET).optional(),
   create_parents: z.boolean().default(false),
 });
 
@@ -122,7 +123,7 @@ const FileStatInputSchema = z.object({
 
 const FileHashInputSchema = z.object({
   path: z.string().min(1).max(4096),
-  max_bytes: z.number().int().min(1).max(268_435_456).default(67_108_864),
+  max_bytes: z.number().int().min(1).max(NATIVE_MAX_FILE_OFFSET).default(67_108_864),
 });
 
 const FileMkdirInputSchema = z.object({
@@ -498,46 +499,11 @@ async function executeWsl(input: unknown): Promise<unknown> {
 async function readFile(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = FileReadInputSchema.parse(input);
   const target = await policy.resolveExisting(parsed.path);
-  const stat = await fs.stat(target);
-  if (!stat.isFile()) throw new Error('Requested path is not a file.');
-  // Legacy full-file reads keep their original strict size limit.
-  if (parsed.offset_bytes === undefined) {
-    if (stat.size > parsed.max_bytes) {
-      throw new Error(
-        `File size ${stat.size} exceeds max_bytes ${parsed.max_bytes}.`,
-      );
-    }
-    const content = await fs.readFile(target);
-    return {
-      data: {
-        path: target,
-        size: stat.size,
-        encoding: parsed.encoding,
-        ...(parsed.include_sha256 ? { sha256: sha256Buffer(content) } : {}),
-        content: parsed.encoding === 'base64'
-          ? content.toString('base64') : content.toString('utf8'),
-      },
-    };
-  }
-  if (parsed.offset_bytes > stat.size) {
-    throw new Error('Read offset exceeds file size.');
-  }
-  const maxRead = Math.min(parsed.max_bytes, stat.size - parsed.offset_bytes);
-  const buffer=Buffer.alloc(maxRead);
-  const handle=await fs.open(target,'r');
-  let bytesRead=0;
-  try {
-    while(bytesRead<maxRead){
-      const r=await handle.read(buffer,bytesRead,maxRead-bytesRead,
-        parsed.offset_bytes+bytesRead);
-      if(r.bytesRead===0)break;
-      bytesRead+=r.bytesRead;
-    }
-  }finally{await handle.close()}
-  const content=buffer.subarray(0,bytesRead);
+  const result=await readNativeTransferRange(target,parsed.offset_bytes,parsed.max_bytes);
+  const content=result.content;
   return {data:{
-    path:target,size:stat.size,encoding:parsed.encoding,
-    offsetBytes:parsed.offset_bytes,bytesRead,
+    path:target,size:result.size,encoding:parsed.encoding,
+    ...(parsed.offset_bytes!==undefined?{offsetBytes:result.offsetBytes,bytesRead:result.bytesRead}:{}),
     ...(parsed.include_sha256?{sha256:sha256Buffer(content)}:{}),
     content:parsed.encoding==='base64'
       ?content.toString('base64'):content.toString('utf8'),
@@ -604,8 +570,11 @@ async function writeFile(input: unknown, policy: PathPolicy): Promise<unknown> {
     if(parsed.offset_bytes===undefined){
       throw new Error('write_at requires an explicit offset_bytes.');
     }
+    if(parsed.offset_bytes>NATIVE_MAX_FILE_OFFSET-content.byteLength){
+      throw new Error('Positioned write exceeds exact offset representation.');
+    }
     const info=await fs.lstat(target);
-    if(!info.isFile()||info.isSymbolicLink()||parsed.offset_bytes>info.size){
+    if(!info.isFile()||info.isSymbolicLink()||!Number.isSafeInteger(info.size)||parsed.offset_bytes>info.size){
       throw new Error('write_at target is not a regular file or offset creates a gap.');
     }
     const handle=await fs.open(target,'r+');
@@ -614,7 +583,7 @@ async function writeFile(input: unknown, policy: PathPolicy): Promise<unknown> {
       // swapped for another file or symlink between lstat and open.
       const openedInfo=await handle.stat();
       if(!openedInfo.isFile()||openedInfo.dev!==info.dev||
-         openedInfo.ino!==info.ino||parsed.offset_bytes>openedInfo.size){
+         openedInfo.ino!==info.ino||!Number.isSafeInteger(openedInfo.size)||parsed.offset_bytes>openedInfo.size){
         throw new Error('write_at target changed between validation and open.');
       }
       let written=0;
@@ -661,19 +630,8 @@ async function statPath(input: unknown, policy: PathPolicy): Promise<unknown> {
 async function hashFile(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = FileHashInputSchema.parse(input);
   const target = await policy.resolveExisting(parsed.path);
-  const stat = await fs.stat(target);
-  if (!stat.isFile()) throw new Error('Hash target is not a file.');
-  if (stat.size > parsed.max_bytes) {
-    throw new Error(`File size ${stat.size} exceeds hash max_bytes ${parsed.max_bytes}.`);
-  }
-  return {
-    data: {
-      path: target,
-      size: stat.size,
-      sha256: await sha256File(target, parsed.max_bytes),
-      modifiedAt: stat.mtime.toISOString(),
-    },
-  };
+  const result=await hashNativeTransferFile(target,parsed.max_bytes);
+  return {data:{path:target,...result}};
 }
 
 async function makeDirectory(input: unknown, policy: PathPolicy): Promise<unknown> {

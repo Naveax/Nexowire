@@ -22,6 +22,7 @@ export const RUNTIME_FIXTURES=Object.freeze({
   'test/ai05/core-native-hotkey-alias.test.ts':Object.freeze({blob:'c79b488372677933dd7210fe501a6c94494821d0',minimum:1,timeoutMs:120000}),
   'test/windows-privileged-runtime-trust.test.ts':Object.freeze({blob:'779fb882a3ef1bfe36ad2e28702c19c87fc4f0f0',minimum:10,timeoutMs:180000}),
   'test/windows-runtime-shared-ancestor-acl.test.ts':Object.freeze({blob:'08d91da02316cdaf78192da8b795dd4f21186b78',minimum:2,timeoutMs:180000}),
+  'test/mcp/ai08-native-agent-transfer-boundary.test.ts':Object.freeze({blob:'cd222c215ac2df066021de761b1988150c4abcd3',minimum:2,timeoutMs:240000}),
 });
 export const GROUPS=Object.freeze({
   runtime:Object.freeze({scope:'REVIEWED_WINDOWS_SIGNED_RUNTIME_INSTALLER_ACL_FIXTURES_ONLY',fixtures:RUNTIME_FIXTURES}),
@@ -41,7 +42,18 @@ const installerDependencies=Object.freeze({
 const runtimeDependencies=Object.freeze({
   'scripts/build-windows-user-bundle.ts':'3f71be3ce204e25b68fdf94d7bc33035e864f58f',
   'src/agent/native-agent-lifecycle.ts':'5c054ee34c306f3490a2fabd3b7c8e4ff1b1c382',
-  'src/agent/native-agent.ts':'21b04771b8d84884bd61e2d9b84754a57296c08f',
+  // Reviewed #1285 additive protected transfer path. Retain strict exact pin;
+  // no fallback to unreviewed content or earlier receipt.
+  'src/agent/native-agent.ts':'6bfdefae6a90790634045a4d6ac87b79c8c8d64d',
+  'src/agent/native-transfer-wire.ts':'5d8091f6d87b21b4b2a4b0cb209a25d2bab574a4',
+  'src/agent/native-transfer-publisher.ts':'e920d8a736aacc81882baefea156329b9d580ec5',
+  'src/agent/native-transfer-io.ts':'11f887d00a479c5ff7200a269d5231a6120bc921',
+  'src/agent/native-atomic-effect-admission.ts':'0cb78a4ca0d4760429aff3476a16d02c7c044f96',
+  'src/agent/remote-mutation-cas.ts':'aaf39646fd125962c1ef4928643e362f32ad934f',
+  'src/agent/path-policy.ts':'7c3d07497462fffbe2fcbd2d4b521eb734b72a99',
+  'src/protocol/agent.ts':'6bd55d19f898021fd1e70e78045ddba656aaf4e5',
+  'src/protocol/capabilities.ts':'f661b6e27794184bacf7dfbcf3f53e7fc5f5919d',
+  'test/fixtures/agent-remote-cas-fixture.ts':'6d3e6e680543818d5c859409db291364be3ae1eb',
   'src/agent/windows-core-console-native.ts':'f3b7dddab82bc94075375866b12ee51e0ffb5909',
   'src/hub/hub-boot-lifecycle.ts':'daa88893c1b447b41fcfd8d91f9e5b312552d80c',
   'src/security/windows-privileged-runtime-trust.ts':'2eb3029f9790cd7b94aa7bf87711a2296e3d3df3',

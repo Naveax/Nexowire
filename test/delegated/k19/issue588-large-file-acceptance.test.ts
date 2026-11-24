@@ -166,9 +166,11 @@ test('T-365: pre-existing destination and unsafe overwrite request leave user by
     await writeFile(dest, existing);
     const fixture = nativeFixture(source, f.sourcePolicy, f.destinationPolicy);
     await assert.rejects(transferCrossDeviceFile(dest, fixture.ops, {newId: () => ID}),
-      /EEXIST|Destination already exists/);
+      {code:'TRANSFER_PUBLISH_OUTCOME_UNKNOWN'});
     assert.deepEqual(await readFile(dest), existing);
-    assert.equal((await readdir(f.destination)).length, 1);
+    const retained=dest+'.nexowire-upload-'+ID+'.tmp';
+    assert.deepEqual(await readFile(retained),await readFile(source));
+    assert.equal((await readdir(f.destination)).length, 2);
 
     const stage = path.join(f.destination, 'other-stage.tmp');
     await writeFile(stage, 'new data');

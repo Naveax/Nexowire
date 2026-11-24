@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { executeTrustedNativeMutation, type TrustedNativeMutationProvider } from './native-atomic-effect-admission.js';
+import { NATIVE_TRANSFER_CAPABILITIES, isNativeTransferCapability, executeNativeTransferWire } from './native-transfer-wire.js';
+import type { NativeTransferPublisher } from './native-transfer-publisher.js';
 import {setTimeout as sleep} from 'node:timers/promises';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
@@ -463,6 +465,7 @@ export async function runNativeAgent(
   env: NodeJS.ProcessEnv = process.env,
   trustedNativeMutationProvider?: TrustedNativeMutationProvider,
   trustedCoreConsentProvider?: NativeCoreConsentAuthority,
+  trustedNativeTransferPublisher?: NativeTransferPublisher,
 ): Promise<never> {
   const preloginBootstrap=getWindowsPreloginAgentMode(env);
   if(preloginBootstrap){
@@ -534,9 +537,12 @@ export async function runNativeAgent(
     ? new RemoteMutationCasClient({endpoint:casEndpoint,token:casToken,
         authorityId:casAuthorityId,epoch:casEpoch,deviceId:identity.id})
     : undefined;
+  const nativeTransferEnabled=Boolean(!preloginBootstrap&&remoteCas&&trustedNativeMutationProvider&&
+    trustedNativeTransferPublisher&&env.NEXOWIRE_AGENT_REQUIRE_ATOMIC_EFFECT_ADMISSION==='1');
   const advertisedCapabilities = filterWindowsPreloginCapabilities(
     await capabilitiesForAgent(process.platform,env),preloginBootstrap,
   );
+  if(nativeTransferEnabled)advertisedCapabilities.push(...NATIVE_TRANSFER_CAPABILITIES);
 
   let stopped = false;
   const shutdown = new AbortController();
@@ -713,6 +719,7 @@ export async function runNativeAgent(
           const request = HubRequestSchema.safeParse(decoded);
           if (!request.success) return;
 
+          const nativeTransferRequest=isNativeTransferCapability(request.data.capability);
           let response: AgentResponse;
           try {
             const fingerprint = fingerprintAgentRequest(
@@ -729,6 +736,9 @@ export async function runNativeAgent(
                   error:{code:'AGENT_PRELOGIN_CAPABILITY_UNAVAILABLE',
                     message:'The pre-login transport accepts only bounded machine status. Sign in for owner capabilities.'},
                 }
+              : nativeTransferRequest&&(!nativeTransferEnabled||request.data.accessMode!=='full')
+                ? {type:'response',requestId:request.data.requestId,ok:false,
+                   error:{code:'NATIVE_TRANSFER_AUTHORITY_REQUIRED',message:'Protected Native transfer admission unavailable.'}}
               : await requestCache.run(
               request.data.requestId,
               fingerprint,
@@ -792,7 +802,10 @@ export async function runNativeAgent(
                 }
                 let outcome: AgentResponse;
                 try {
-                  const execute = () => executeCapability(
+                  const execute = () => nativeTransferRequest
+                    ? executeNativeTransferWire(trustedNativeTransferPublisher,identity.id,request.data.requestId,
+                        request.data.capability,request.data.input,policy)
+                    : executeCapability(
                     request.data.capability,
                     request.data.input,
                     policy,
@@ -817,7 +830,7 @@ export async function runNativeAgent(
                   // Opt-in mode refuses effects when the independently trusted
                   // authority is unavailable; do not infer a grant from the wire.
                   const data = mutation &&
-                    env.NEXOWIRE_AGENT_REQUIRE_ATOMIC_EFFECT_ADMISSION === '1'
+                    (nativeTransferRequest||env.NEXOWIRE_AGENT_REQUIRE_ATOMIC_EFFECT_ADMISSION === '1')
                     ? await executeTrustedNativeMutation({
                         provider: trustedNativeMutationProvider,
                         deviceId: identity.id,
