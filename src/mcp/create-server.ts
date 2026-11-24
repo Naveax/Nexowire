@@ -5,6 +5,7 @@ import {transferCrossDeviceFile,CROSS_DEVICE_MAX_BYTES} from './cross-device-fil
 import { resolveOwnerDeviceTarget } from '../product/device-target-resolution.js';
 import { registerArtifactBridgeTools } from './artifact-bridge-tools.js';
 import { registerLargeTransferTools, type LargeTransferRuntime } from './large-transfer-tools.js';
+import { brokerNativeTransferClient } from './broker-native-transfer-client.js';
 import type { LargeTransferRemote } from './durable-large-transfer.js';
 import { performance } from 'node:perf_hooks';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -70,7 +71,7 @@ export interface McpContext {
   workspaces: WorkspaceStore;
   skills: SkillRegistry;
   /** Trusted Hub bootstrap only; never populate from bearer/tool arguments. */
-  largeTransferRuntime?: LargeTransferRuntime;
+  largeTransferRuntime?: Omit<LargeTransferRuntime,'native'>;
 }
 
 function applyToolRegistrationFilters(
@@ -6628,8 +6629,9 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
 
   // Experimental durable large transfer is installed ONLY by a trusted Hub
   // runtime. Ordinary files.write/move are never a substitute for fenced IO.
-  if(ctx.largeTransferRuntime){
-    const runtime=ctx.largeTransferRuntime;
+  const protectedTransferClient=ctx.largeTransferRuntime?brokerNativeTransferClient(ctx.broker):undefined;
+  if(ctx.largeTransferRuntime&&protectedTransferClient){
+    const runtime:LargeTransferRuntime={...ctx.largeTransferRuntime,native:protectedTransferClient};
     const readNative=async(device:string,capability:string,input:Record<string,unknown>,allowMissing=false)=>{
       if(await resolveDevice(ctx,device)!==device)throw Error('TRANSFER_DEVICE_SCOPE_DENIED');
       const response=await execute(ctx,capability,input,device);
@@ -6643,7 +6645,11 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       return value.data as Record<string,unknown>;
     };
     const remote:LargeTransferRemote={
-      limits:device=>runtime.native.limits(device),
+      limits:async device=>{
+        if(await resolveDevice(ctx,device)!==device)throw Error('TRANSFER_DEVICE_SCOPE_DENIED');
+        await ctx.policies?.assertAllowed(device,'files.transfer.limits');
+        return runtime.native.limits(device);
+      },
       stat:async(device,file)=>{
         const d=await readNative(device,'files.stat',{path:file},true);
         if(!d)return undefined;
@@ -6663,21 +6669,25 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       writeFenced:async(b,l,p,content,first)=>{
         if(await resolveDevice(ctx,b.targetDeviceId)!==b.targetDeviceId)throw Error('TRANSFER_DEVICE_SCOPE_DENIED');
         await ctx.policies?.assertAllowed(b.targetDeviceId,'files.write');
+        await ctx.policies?.assertAllowed(b.targetDeviceId,'files.transfer.write_fenced');
         return runtime.native.writeFenced(b,l,p,content,first);
       },
       publishFenced:async(b,l,p)=>{
         if(await resolveDevice(ctx,b.targetDeviceId)!==b.targetDeviceId)throw Error('TRANSFER_DEVICE_SCOPE_DENIED');
         await ctx.policies?.assertAllowed(b.targetDeviceId,'files.move');
+        await ctx.policies?.assertAllowed(b.targetDeviceId,'files.transfer.publish_fenced');
         return runtime.native.publishFenced(b,l,p);
       },
     };
     registerLargeTransferTools(server,ctx.toolAuthorization,runtime,remote,async scope=>{
       for(const device of [scope.sourceDeviceId,scope.targetDeviceId]){
         if(await resolveDevice(ctx,device)!==device)throw Error('TRANSFER_DEVICE_SCOPE_DENIED');
-        for(const capability of ['files.stat','files.hash','files.read'])await ctx.policies?.assertAllowed(device,capability);
+        for(const capability of ['files.stat','files.hash','files.read','files.transfer.limits'])await ctx.policies?.assertAllowed(device,capability);
       }
       await ctx.policies?.assertAllowed(scope.targetDeviceId,'files.write');
       await ctx.policies?.assertAllowed(scope.targetDeviceId,'files.move');
+      await ctx.policies?.assertAllowed(scope.targetDeviceId,'files.transfer.write_fenced');
+      await ctx.policies?.assertAllowed(scope.targetDeviceId,'files.transfer.publish_fenced');
     });
   }
 
