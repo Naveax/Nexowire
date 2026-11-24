@@ -6,14 +6,14 @@ import path from 'node:path';
 import {readTestInventory} from '../../scripts/ci/test-inventory.mjs';
 import {reconcileLaneCoverage} from '../../scripts/ci/test-execution-coverage.mjs';
 import {reviewedLanes,extractReviewedBootSource,reconcileDirectory} from '../../scripts/ci/combined-lane-coverage.mjs';
-import {CORE_FIXTURES,INSTALLER_FIXTURES,validateGroupSource,reconcileGroupResult} from '../../scripts/ci/windows-installer-core-fixture-receipt.mjs';
+import {CORE_FIXTURES,INSTALLER_FIXTURES,RUNTIME_FIXTURES,validateGroupSource,reconcileGroupResult} from '../../scripts/ci/windows-installer-core-fixture-receipt.mjs';
 const root=process.cwd();
 test('actual repository inventory admits all independent policies but no missing receipt becomes PASS',()=>{
   const {entries,report}=readTestInventory(root);
   for(const platform of ['win32','linux']){
     const target={platform,nodeVersion:'v22.23.5'};
     const lanes=reviewedLanes(target);
-    assert.equal(lanes.length,platform==='win32'?8:2);
+    assert.equal(lanes.length,platform==='win32'?9:2);
     const r=reconcileLaneCoverage(entries,report,target,lanes.map(l=>l.policy),[]);
     assert.equal(r.requiredLaneAcceptance,'INCOMPLETE');
     assert.equal(r.statusCounts.NOT_RUN,entries.length);
@@ -29,7 +29,7 @@ test('immutable Release Readiness boot program extraction rejects changed workfl
   assert.throws(()=>extractReviewedBootSource(Buffer.concat([bytes,Buffer.from('\n')])),/BOOT_WORKFLOW_REVIEW_REQUIRED/);
 });
 test('CORE and installer source pins match checked-out bytes, skips and truncated TAP deny',()=>{
-  for(const [group,plan] of [['core',CORE_FIXTURES],['installer',INSTALLER_FIXTURES]]){
+  for(const [group,plan] of [['core',CORE_FIXTURES],['installer',INSTALLER_FIXTURES],['runtime',RUNTIME_FIXTURES]]){
     for(const [file,pin] of Object.entries(plan)){
       assert.equal(validateGroupSource(group,file,{path:file,blob:pin.blob},readFileSync(path.join(root,file))),pin);
       assert.throws(()=>validateGroupSource(group,file,{path:file,blob:pin.blob},Buffer.from('wrong')),/SOURCE_REVIEW_REQUIRED/);
@@ -46,4 +46,19 @@ test('empty receipt directory is incomplete, not a green global CI claim',t=>{
   assert.equal(r.requiredLaneAcceptance,'INCOMPLETE');
   assert.equal(r.statusCounts.PASS,0);
   assert.equal(r.comprehensiveCoverage,false);
+});
+
+test('runtime scope has six exact files and 25 minimum cases, no silent signed-host skip',()=>{
+  assert.equal(Object.keys(RUNTIME_FIXTURES).length,6);
+  assert.equal(Object.values(RUNTIME_FIXTURES).reduce((n,p)=>n+p.minimum,0),25);
+  const lanes=reviewedLanes({platform:'win32',nodeVersion:'v24.22.3'});
+  const runtime=lanes.find(l=>l.policy.id==='runtime');
+  assert.equal(runtime.policy.scope,'REVIEWED_WINDOWS_SIGNED_RUNTIME_INSTALLER_ACL_FIXTURES_ONLY');
+  assert.equal(runtime.policy.schemaVersion,2);
+  assert.equal(runtime.policy.files.length,6);
+  for(const [file,pin] of Object.entries(RUNTIME_FIXTURES)){
+    const n=pin.minimum;
+    const skip=['TAP version 13','1..'+n,'# tests '+n,'# pass '+(n-1),'# fail 0','# cancelled 0','# skipped 1','# todo 0',''].join('\n');
+    assert.throws(()=>reconcileGroupResult('runtime',file,{status:0,stdout:skip}));
+  }
 });

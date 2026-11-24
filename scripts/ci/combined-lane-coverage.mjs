@@ -52,6 +52,7 @@ export function reviewedLanes(target){
     lane(target,'authority','REVIEWED_WINDOWS_AUTHORITY_AND_LEDGER_SOURCE_FIXTURES_ONLY',2,asPins(REVIEWED_AUTHORITY_LEDGER_FIXTURES),'windows-authority-ledger-fixture-receipt.mjs'),
     lane(target,'cross-owner','REVIEWED_WINDOWS_CROSS_OWNER_SOURCE_FIXTURES_ONLY',2,asPins(REVIEWED_CROSS_OWNER_FIXTURES),'windows-cross-owner-fixture-receipt.mjs',['--json'],3300000),
     lane(target,'core',GROUPS.core.scope,2,asPins(GROUPS.core.fixtures),'windows-installer-core-fixture-receipt.mjs',['core','--json']),
+    lane(target,'runtime',GROUPS.runtime.scope,2,asPins(GROUPS.runtime.fixtures),'windows-installer-core-fixture-receipt.mjs',['runtime','--json']),
     lane(target,'installer',GROUPS.installer.scope,2,asPins(GROUPS.installer.fixtures),'windows-installer-core-fixture-receipt.mjs',['installer','--json']),
   ];
 }
