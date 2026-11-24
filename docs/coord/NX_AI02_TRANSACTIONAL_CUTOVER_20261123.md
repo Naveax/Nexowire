@@ -59,3 +59,5 @@ Record exact SHA, Windows build and Node version, source-root canonical path as 
 **Remaining coordinated review:** Physical rollback must not run without AI-09's exclusive execution lock and owner approval. The current C:-anchored protected path constants need separate non-C: Windows installation coverage with AI-01/AI-05 before claiming universal Windows installer compatibility. Root-level Windows PowerShell failure-injection tests are not necessarily executed by the current AI-04 CI workflow; proof must name the exact test command, runner, SHA and result.
 
 **Physical acceptance: NOT_RUN.** **Production state and tasks: UNCHANGED by AI-02.**
+
+**Hosted negative-fixture isolation:** scheduler operations are intercepted by local PowerShell functions; unexpected task identities, COM/CIM access, legacy task enablement and HTTP calls fail the fixture. This lane is intended only for disposable CI runners, not the Work-PC. Actual PowerShell results remain NOT_RUN until the CI owner records exact-head evidence.

@@ -1,7 +1,7 @@
 /** AI-02 source contract: does not mutate Windows scheduled tasks. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {promises as fs} from 'node:fs';
+import {promises as fs,readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
@@ -109,4 +109,18 @@ test('launcher proof hashes exact bytes including BOM, Unicode and CRLF',()=>{
   assert.throws(()=>decodeCutoverLauncherProof(lossy),/AI04_LEGACY_LAUNCHER_ENCODING_UNTRUSTED/);
   assert.notEqual(decodeCutoverLauncherProof(Buffer.from('# fixture\n')).digest,
     decodeCutoverLauncherProof(Buffer.from('# fixture\r\n')).digest);
+});
+
+test('Windows negative fixture shadows every scheduler, COM, CIM and HTTP command used by recovery',()=>{
+  const fixture=readFileSync(new URL('../system-hub-recovery-failure-injection.test.ts',import.meta.url),'utf8');
+  for(const command of [
+    'Get-ScheduledTask','Stop-ScheduledTask','Start-ScheduledTask','Unregister-ScheduledTask',
+    'Enable-ScheduledTask','Get-NetTCPConnection','New-Object','Get-CimInstance',
+    'Invoke-CimMethod','Invoke-WebRequest',
+  ]){
+    assert.ok(SYSTEM_HUB_RECOVERY_PS.includes(command),command+' no longer used; review fixture scope');
+    assert.ok(fixture.includes('function '+command+' '),command+' must be locally shadowed');
+  }
+  assert.ok(fixture.includes('AI04_FIXTURE_UNEXPECTED_OS_CALL'));
+  assert.ok(fixture.includes('AI04_FIXTURE_UNEXPECTED_TASK'));
 });

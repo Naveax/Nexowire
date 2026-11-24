@@ -48,12 +48,13 @@ function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-
     const taskAction='-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "C:\\ProgramData\\Nexowire\\hub-boot\\launch.ps1"';
     const setup=[
       "$ErrorActionPreference='Stop'",
-      '$script:stopCount=0;$script:resumeCount=0;$script:removeCount=0',
+      '$script:stopCount=0;$script:resumeCount=0;$script:removeCount=0;$script:unexpectedCalls=0',
       '$script:fakeBoot=[pscustomobject]@{TaskName='+psQuote('Nexowire Hub Boot')+';TaskPath='+psQuote('\\')+';Principal=[pscustomobject]@{UserId='+psQuote('SYSTEM')+
         '};Description='+psQuote(marker)+';Actions=@([pscustomobject]@{Execute='+
         psQuote(powershell)+';Arguments='+psQuote(taskAction)+'})}',
-      'function Get-ScheduledTask { [CmdletBinding()] param([string]$TaskName,[string]$TaskPath); return $script:fakeBoot }',
-      'function Stop-ScheduledTask { [CmdletBinding()] param([string]$TaskName,[string]$TaskPath); $script:stopCount++;'+
+      'function Assert-FiBootTask { param([string]$TaskName,[string]$TaskPath); if($TaskName -cne "Nexowire Hub Boot" -or $TaskPath -cne '+psQuote('\\')+'){ $script:unexpectedCalls++;throw "AI04_FIXTURE_UNEXPECTED_TASK" } }',
+      'function Get-ScheduledTask { [CmdletBinding()] param([string]$TaskName,[string]$TaskPath); Assert-FiBootTask $TaskName $TaskPath; if($script:removeCount -eq 0){return $script:fakeBoot} }',
+      'function Stop-ScheduledTask { [CmdletBinding()] param([string]$TaskName,[string]$TaskPath); Assert-FiBootTask $TaskName $TaskPath; $script:stopCount++;'+
         (mode==='late-shutdown-write'
           ?' Set-Content -LiteralPath '+psQuote(targetFile)+" -Value 'late-system-write' -Encoding Ascii -NoNewline;"
           :mode==='late-launcher-swap'
@@ -63,22 +64,29 @@ function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-
               :mode==='boot-action-swapped-no-write'
                 ?" $script:fakeBoot.Actions[0].Execute='untrusted.exe';"
                 :'')+' }',
-      'function Start-ScheduledTask { [CmdletBinding()] param([string]$TaskName,[string]$TaskPath); $script:resumeCount++ }',
-      'function Unregister-ScheduledTask { [CmdletBinding()] param([string]$TaskName,[string]$TaskPath,[switch]$Confirm); $script:removeCount++;'+
+      'function Start-ScheduledTask { [CmdletBinding()] param([string]$TaskName,[string]$TaskPath); Assert-FiBootTask $TaskName $TaskPath; $script:resumeCount++ }',
+      'function Unregister-ScheduledTask { [CmdletBinding()] param([string]$TaskName,[string]$TaskPath,[switch]$Confirm); Assert-FiBootTask $TaskName $TaskPath; $script:removeCount++;'+
         (mode==='late-write-after-unregister'
           ?' Set-Content -LiteralPath '+psQuote(targetFile)+" -Value 'late-system-write' -Encoding Ascii -NoNewline;"
           :'')+' }',
       'function Get-NetTCPConnection { [CmdletBinding()] param([string]$State); return @() }',
+      // Unexpected fallthrough must fail locally, never invoke real OS/network APIs.
+      'function Enable-ScheduledTask { [CmdletBinding()] param([string]$TaskName,[string]$TaskPath); $script:unexpectedCalls++;throw "AI04_FIXTURE_FORBIDDEN_ENABLE" }',
+      'function New-Object { [CmdletBinding()] param([string]$ComObject); $script:unexpectedCalls++;throw "AI04_FIXTURE_FORBIDDEN_COM" }',
+      'function Get-CimInstance { [CmdletBinding()] param([string]$ClassName,[string]$Filter); $script:unexpectedCalls++;throw "AI04_FIXTURE_FORBIDDEN_CIM" }',
+      'function Invoke-CimMethod { [CmdletBinding()] param($InputObject,[string]$MethodName); $script:unexpectedCalls++;throw "AI04_FIXTURE_FORBIDDEN_CIM_METHOD" }',
+      'function Invoke-WebRequest { [CmdletBinding()] param([string]$Uri,[switch]$UseBasicParsing,[int]$TimeoutSec); $script:unexpectedCalls++;throw "AI04_FIXTURE_FORBIDDEN_HTTP" }',
       ...(phase==='AWAITING_PHYSICAL_ACCEPTANCE'?[
         'function Start-Sleep { [CmdletBinding()] param([int]$Milliseconds) }',
         'function Get-Date { [CmdletBinding()] param();$script:dateCalls++;return [datetime]::UtcNow.AddMinutes($script:dateCalls) }',
       ]:[]),
-      'foreach($name in @("Get-ScheduledTask","Stop-ScheduledTask","Start-ScheduledTask","Unregister-ScheduledTask","Get-NetTCPConnection")){'+
+      'foreach($name in @("Get-ScheduledTask","Stop-ScheduledTask","Start-ScheduledTask","Unregister-ScheduledTask","Get-NetTCPConnection","Enable-ScheduledTask","New-Object","Get-CimInstance","Invoke-CimMethod","Invoke-WebRequest")){'+
         'if((Get-Command $name -ErrorAction Stop).CommandType -ne "Function"){throw "AI04_FIXTURE_UNSAFE_COMMAND"}}',
       '$body=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('+
         psQuote(Buffer.from(body,'utf8').toString('base64'))+'))',
       '$failure=$null',
       'try{& ([scriptblock]::Create($body))}catch{$failure=$_.Exception.Message}',
+      'if($script:unexpectedCalls -ne 0){throw ("AI04_FIXTURE_UNEXPECTED_OS_CALL: "+$script:unexpectedCalls)}',
       'if(-not $failure){throw "AI04_EXPECTED_RECOVERY_REJECTION"}',
       'if($script:stopCount -ne '+(['late-shutdown-write','late-launcher-swap','boot-action-swapped','boot-action-swapped-no-write','late-write-after-unregister'].includes(mode)?'1':'0')+
         ' -or $script:resumeCount -ne '+(['late-shutdown-write','late-launcher-swap'].includes(mode)?'1':'0')+
