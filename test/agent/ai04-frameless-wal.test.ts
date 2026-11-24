@@ -22,7 +22,7 @@ async function fixture(t:import('node:test').TestContext){
   t.after(()=>rm(root,{recursive:true,force:true,maxRetries:10,retryDelay:100}));
   const live=path.join(root,'live.sqlite');
   let db:DatabaseSync|undefined=new DatabaseSync(live);
-  let empty!:Snapshot,hot!:Snapshot,fresh!:Snapshot;
+  let empty!:Snapshot,prefix!:Snapshot,hot!:Snapshot,fresh!:Snapshot;
   try{
     db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA wal_autocheckpoint=0;');
     db.exec('CREATE TABLE ledger(request_id TEXT PRIMARY KEY,status TEXT NOT NULL)');
@@ -32,15 +32,20 @@ async function fixture(t:import('node:test').TestContext){
     empty=await snapshot(live);
     assert.equal(empty.wal.length,0,'authentic TRUNCATE empties the WAL');
     assert.equal(u32(empty.shm,16),0);
+    db.prepare('INSERT INTO ledger VALUES(?,?)').run('prefix-only','succeeded');
+    prefix=await snapshot(live);
     db.prepare('INSERT INTO ledger VALUES(?,?)').run('wal-only','unknown');
     hot=await snapshot(live);
+    assert.ok(hot.wal.length>prefix.wal.length);
+    assert.deepEqual(hot.wal.subarray(0,prefix.wal.length),prefix.wal);
+    assert.ok(u32(hot.shm,16)>u32(prefix.shm,16));
     assert.ok(hot.wal.length>32);
     assert.ok(u32(hot.shm,16)>0,'authentic index must report committed WAL frames');
     assert.equal(u32(hot.shm,96),0,'the new row must not be backfilled into the base');
     db.close();
     db=undefined;
     db=new DatabaseSync(live);
-    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM ledger').get()!.n,2);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM ledger').get()!.n,3);
     fresh=await snapshot(live);
     assert.equal(fresh.wal.length,0,'fresh read on cleanly closed WAL-mode DB');
     assert.equal(u32(fresh.shm,16),0);
@@ -54,7 +59,7 @@ async function fixture(t:import('node:test').TestContext){
     if(shm!==null)await writeFile(file+'-shm',shm);
     return file;
   }
-  return {copy,empty,hot,fresh};
+  return {copy,empty,prefix,hot,fresh};
 }
 
 async function unchanged(file:string,s:Snapshot,wal=s.wal,shm:Buffer|null=s.shm){
@@ -114,6 +119,49 @@ test('AI-04 frameless WAL: disagreeing index headers do not authorize empty WAL 
   const shm=Buffer.from(f.empty.shm);
   shm[48+16]!^=1;
   const file=await f.copy('disagree',f.empty,f.empty.wal,shm);
+  await assert.rejects(verifyAgentJournalWal(file),{code:'AGENT_JOURNAL_WAL_CORRUPT'});
+  await unchanged(file,f.empty,f.empty.wal,shm);
+});
+
+// A complete older commit is still a lossy prefix when the retained index
+// of that same WAL generation reports a subsequent committed transaction.
+test('AI-04 frameless WAL: complete committed prefix cannot hide a later indexed commit',async t=>{
+  const f=await fixture(t);
+  const file=await f.copy('prefix',f.hot,f.prefix.wal);
+  const oracleFile=await f.copy('prefix-oracle',f.hot,f.prefix.wal);
+  const oracle=new DatabaseSync(oracleFile);
+  try{
+    assert.equal(oracle.prepare('PRAGMA quick_check').get()!.quick_check,'ok');
+    assert.equal(oracle.prepare('SELECT status FROM ledger WHERE request_id=?')
+      .get('prefix-only')!.status,'succeeded');
+    assert.equal(oracle.prepare('SELECT status FROM ledger WHERE request_id=?')
+      .get('wal-only'),undefined);
+  }finally{oracle.close();}
+  await assert.rejects(verifyAgentJournalWal(file),{code:'AGENT_JOURNAL_WAL_CORRUPT'});
+  await unchanged(file,f.hot,f.prefix.wal);
+});
+
+test('AI-04 frameless WAL: full committed WAL can legitimately be ahead of stale index',async t=>{
+  const f=await fixture(t);
+  const file=await f.copy('lagging-index',f.hot,f.hot.wal,f.prefix.shm);
+  await verifyAgentJournalWal(file);
+  await unchanged(file,f.hot,f.hot.wal,f.prefix.shm);
+});
+
+test('AI-04 frameless WAL: no-history zero-filled index with empty WAL is accepted unchanged',async t=>{
+  const f=await fixture(t);
+  const shm=Buffer.alloc(f.empty.shm.length);
+  const file=await f.copy('uninitialized',f.empty,f.empty.wal,shm);
+  await verifyAgentJournalWal(file);
+  await unchanged(file,f.empty,f.empty.wal,shm);
+});
+
+test('AI-04 frameless WAL: nonzero backfill counter contradicts zero-frame index',async t=>{
+  const f=await fixture(t);
+  const shm=Buffer.from(f.empty.shm);
+  if(os.endianness()==='BE')shm.writeUInt32BE(1,96);
+  else shm.writeUInt32LE(1,96);
+  const file=await f.copy('backfill',f.empty,f.empty.wal,shm);
   await assert.rejects(verifyAgentJournalWal(file),{code:'AGENT_JOURNAL_WAL_CORRUPT'});
   await unchanged(file,f.empty,f.empty.wal,shm);
 });

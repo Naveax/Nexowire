@@ -7,7 +7,8 @@ On an isolated Linux Node 22.16.0 SQLite fixture, a normal TRUNCATE checkpoint p
 
 ## Scoped change
 - `src/agent/operation-journal-wal.ts`: require stable, coherent zero-frame index evidence when a frameless WAL retains SHM; deny contradictory frame/backfill counts, disagreement, malformed header or unstable file. Preserve legitimate zero-byte WAL after authentic TRUNCATE or a clean first read, and the no-index case. A zero-filled uninitialized index does not constitute a trusted anti-rollback witness.
-- `test/agent/ai04-frameless-wal.test.ts`: six isolated SQLite cases: legitimate TRUNCATE, fresh read, empty allocation without SHM, zero/header-only WAL with still-committed index, and index-copy disagreement. Compare candidate DB/WAL/SHM bytes before/after; the SQLite oracle is a separate disposable copy.
+- `test/agent/ai04-frameless-wal.test.ts`: ten isolated SQLite cases: legitimate TRUNCATE, fresh read, empty allocation without SHM, zero/header-only WAL with still-committed index, index-copy disagreement, valid earlier-commit prefix truncation, legitimate WAL ahead of index, zero-filled uninitialized index, and nonzero backfill contradiction. Compare candidate DB/WAL/SHM bytes before/after; the SQLite oracle is a separate disposable copy.
+- For a nonempty, fully checksummed WAL without old allocation tail, additionally reject a stable coherent index of the same generation reporting more committed frames (or contradicting the final commit checksum at the same count). Missing, uninitialized, torn, unrelated-generation or lagging index does not alone reject an otherwise valid full WAL. The existing strict retained-generation reuse check is unchanged.
 - No existing test or workflow/provenance matrix changes. No automatic checkpoint/repair of an actual journal. The fixture-only checkpoint generates a known SQLite state.
 
 ## Acceptance
@@ -20,3 +21,8 @@ npm run typecheck
 Exact-head Node22/24 CI and hosted Windows test execution required. The new one-level file is discoverable by Linux npm test; explicitly select it in reviewed Windows fixtures (AI-08 owns workflow). No PASS inferred before actual logs. Missing both sidecars or an attacker-controlled coherently rewritten index remains outside what local WAL structure can authenticate; independent rollback-resistant authority and native ownership remain necessary. Physical packaged Agent, reboot/recycle and actual cross-SID acceptance remain AI-09 NOT_RUN.
 
 Rollback: revert this isolated follow-up commit if source review rejects it; do not roll back or modify the user's actual database. #974/#1001 stay open.
+
+## Local red/green evidence before hosted CI
+- The initial six-case test file and exact original source were reconstructed with verified Git blobs. Node v22.16.0, TypeScript transpileModule (ESNext/ES2022), then Node test: original blob `11742f529242f343bc16918ee3723b34c0ecb7bd` 3 PASS / 3 FAIL; initial fix `5b3e96df3ba4807d31619bfe7c3ab46ee9c659c1` 6/6 PASS. No skips.
+- A second actual SQLite fixture showed complete previous commit prefix 8272 bytes vs full WAL 16512 bytes, coherent mxFrame=4, nBackfill=0; initial fix accepted the shortened valid prefix and SQLite quick_check=ok with the later UNKNOWN absent. The expanded patch fixes that positive contradiction, allowing the inverse legitimate WAL-ahead-of-index case.
+- Local exact final candidate blobs `e2ec2c808e128a1d4a7b11f88c61abb69a055b45` (source) and `7ab5780e65995842126fc04e8cd96c67aa990592` (test) passed **10/10**, zero fail/skip/cancel/todo, using Node v22.16.0 and TypeScript transpilation. This is targeted local execution, not whole-repository typecheck or Windows proof.
