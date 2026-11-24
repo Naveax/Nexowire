@@ -39,7 +39,7 @@ const EXPECTED=Object.freeze({
   'test/security-tokens.test.ts':'92ea5c61df1c707f2970e1305a34b56d5cf7b8e0',
   'test/scale-s5-staging-acceptance.test.ts':'b381c0cc734d7a29f650bf922beb168074817e3d',
   'src/protocol/agent.ts':'6bd55d19f898021fd1e70e78045ddba656aaf4e5',
-  'src/protocol/capabilities.ts':'5e92ce4db343bb4c1fda33d5da0603dfd35f4e84',
+  'src/protocol/capabilities.ts':'f661b6e27794184bacf7dfbcf3f53e7fc5f5919d',
   'src/product/plans.ts':'9ac634f06f475d4c4ae9c12032ebda68e2b2ee04',
   'src/product/usage-policy.ts':'8bcc7539dbdb6ac85e080791306dd60432a59d7d',
   'src/product/transport-policy.ts':'ea0593dfc9bf29b6be40120cc4a1cb2a61f46788',
