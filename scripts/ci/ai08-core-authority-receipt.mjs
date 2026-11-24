@@ -2,21 +2,9 @@ import {execFileSync,spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {readFileSync,lstatSync,mkdirSync,writeFileSync} from 'node:fs';
 import path from 'node:path';
-import {assertTapSummary} from './assert-tap-summary.mjs';
+import {WINDOWS_PLAN as windows,COMPOSITION,COMPOSITION_IMPORTS,validateWindowsPlan,assertCoreExactTap} from './ai08-core-authority-plan.mjs';
 import {readTestInventory} from './test-inventory.mjs';
-const windows={
- 'test/broker-dispatch-authority-handler.test.ts':['02ebe8b4d58af98464e84eb0c00ce920107aaf9b',12],
- 'test/https-broker-dispatch-authority.test.ts':['d2c950ac40095f06000ef77e099cc3362f05cbe4',3],
- 'test/core-native-verifier-server.test.ts':['e3d554e90a22aba4d5e394253a66bac0ab24d6bd',9],
- 'test/core-native-enrollment-verifier-handler.test.ts':['f68edeb23be731297820fa868cd772e931de07a1',19],
- 'test/core-native-consent-transport.test.ts':['c10b207816ee58113ae2468da7de9a95167743c9',13],
- 'test/ai03/native-verifier-composition.test.ts':['a7e7fca6dc5b9dbd69269b4c0af0aa515bc4b00d',2],
- 'test/ai03/postgres-dispatch-credential-store.test.ts':['91d0ce45d0135447d5febe08b560a726d5620107',3],
- 'test/ai03/protected-dispatch-credential-recheck.test.ts':['e0d3ecdc465a0ccf2ddecc0f54ad6fc29a313592',1],
- 'test/ai03/protected-dispatch-mtls-client.test.ts':['987af4c60fd0a93e718e63b842ac5c6950d1c50f',4],
- 'test/ai03/protected-dispatch-native-installation-readback.test.ts':['61ef1709f0b2e88f8fd8efcd2ba9032e4429d468',1],
- 'test/ai03/protected-dispatch-service.test.ts':['7f022cd93e3f79bfcb5e3455828b46a3b117332b',3]
-};
+validateWindowsPlan();
 const postgres={
  'test/ai08/core-credential-postgres-live.test.ts':['3763a40865c7b79435eb05f555138f826a1e1d69',5]
 };
@@ -46,15 +34,17 @@ const git=(...a)=>execFileSync('git',a,{encoding:'utf8'}).trim();
 const blob=b=>createHash('sha1').update('blob '+b.length+'\0').update(b).digest('hex');
 const {report,entries}=readTestInventory(process.cwd());
 if(report.commitSha!==process.env.NEXOWIRE_EXPECTED_COMMIT_SHA||git('rev-parse','HEAD')!==report.commitSha)throw Error('HEAD_MISMATCH');
-const pins={...deps,...Object.fromEntries(Object.entries(tests).map(([f,[b]])=>[f,b]))};
+const covered=lane==='windows'?COMPOSITION_IMPORTS:{};
+const pins={...deps,...Object.fromEntries(Object.entries(covered).map(([f,p])=>[f,p.blob])),...Object.fromEntries(Object.entries(tests).map(([f,[b]])=>[f,b]))};
 const check=()=>{for(const [f,b] of Object.entries(pins)){
  const st=lstatSync(f);
  if(!st.isFile()||st.isSymbolicLink()||git('rev-parse','HEAD:'+f)!==b||blob(readFileSync(f))!==b)throw Error('PIN_MISMATCH:'+f);
 }};
 check();
 for(const [f,[b]] of Object.entries(tests))if(!entries.some(e=>e.path===f&&e.blob===b))throw Error('INVENTORY_MISMATCH:'+f);
+for(const [f,p] of Object.entries(covered))if(!entries.some(e=>e.path===f&&e.blob===p.blob))throw Error('IMPORTED_INVENTORY_MISMATCH:'+f);
 const dir='ai08-core-authority-receipts';mkdirSync(dir,{recursive:true});
-const receipt={schemaVersion:1,sourceCommitSha:report.commitSha,sourceManifestSha256:report.manifestSha256,platform:process.platform,nodeVersion:process.version,workflowRunId:process.env.GITHUB_RUN_ID,jobId:process.env.NX_JOB_ID,runAttempt:process.env.GITHUB_RUN_ATTEMPT,lane,scope:'HOSTED_CORE_AUTHORITY_SOURCE_ONLY',pins,files:Object.entries(tests).map(([file,[blob,expected]])=>({file,blob,expected,status:'NOT_RUN'}))};
+const receipt={schemaVersion:1,sourceCommitSha:report.commitSha,sourceManifestSha256:report.manifestSha256,platform:process.platform,nodeVersion:process.version,workflowRunId:process.env.GITHUB_RUN_ID,jobId:process.env.NX_JOB_ID,runAttempt:process.env.GITHUB_RUN_ATTEMPT,lane,scope:'HOSTED_CORE_AUTHORITY_SOURCE_ONLY',pins,importedSuites:Object.entries(covered).map(([file,p])=>({file,blob:p.blob,expected:p.tests,executedVia:COMPOSITION})),files:Object.entries(tests).map(([file,[blob,expected]])=>({file,blob,expected,status:'NOT_RUN'}))};
 const save=()=>writeFileSync(path.join(dir,'receipt.json'),JSON.stringify(receipt,null,2)+'\n');
 save();
 for(const r of receipt.files){
@@ -66,8 +56,7 @@ for(const r of receipt.files){
  r.tapSha256=createHash('sha256').update(tap).digest('hex');r.exitCode=child.status;r.signal=child.signal;
  try{
   if(child.error||child.signal||child.status!==0)throw Error('CHILD_FAILED');
-  r.counts=assertTapSummary(tap,r.expected);
-  if(r.counts.tests!==r.expected)throw Error('EXACT_TEST_COUNT_MISMATCH');
+  r.counts=assertCoreExactTap(r.file,tap,r.expected);
   r.status='PASS';
  }catch(e){r.status='FAIL';r.failure=e.message;}
  save();
