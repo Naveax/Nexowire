@@ -58,6 +58,8 @@ export interface DispatchReleaseRequest {
   brokerId:string;
   request:BrokerDispatchRequest;
 }
+/** Server-side transport identity, derived from authenticated TLS peer and bearer hash; never a wire request field. */
+export type AuthenticatedDispatchCredential=Readonly<{credentialSha256:string;certificateSha256:string}>;
 export interface ExternalBrokerDispatchAuthority {
   /**
    * Atomically serialize against revoke/re-pair and allocate a single-use
@@ -72,14 +74,14 @@ export interface ExternalBrokerDispatchAuthority {
    * ambiguous authority state fails closed.
    */
   beginIfCurrent(operation:BrokerDispatchRequest,
-    broker:ProtectedBrokerEvidence,challengeNonce:string):Promise<DispatchClaim>;
+    broker:ProtectedBrokerEvidence,challengeNonce:string,credential?:AuthenticatedDispatchCredential):Promise<DispatchClaim>;
   /**
    * Remote atomic linearization of actual effect ADMISSION against
    * revokeAndDrain. A pre-revoke RESERVED claim is not executable.
    */
   commitIfCurrent(operation:BrokerDispatchRequest,
     broker:ProtectedBrokerEvidence,dispatchId:string,
-    challengeNonce:string):Promise<DispatchClaim>;
+    challengeNonce:string,credential?:AuthenticatedDispatchCredential):Promise<DispatchClaim>;
   /**
    * Revoke and fence NEW claims immediately. Return only after all
    * previously admitted claims finish, or return UNKNOWN without replay.

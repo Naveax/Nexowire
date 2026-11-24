@@ -104,7 +104,7 @@ export async function startProtectedBrokerDispatchService(config:ProtectedBroker
   try{
     const authority=new PostgresBrokerDispatchAuthority({pool:db.pool,authorityId,
       privateKeyPem,verifyProvenance,readProtectedBroker,verifyOwnerRevocation,
-      verifyNativeDrain,permitMs,drainTimeoutMs});
+      verifyNativeDrain,permitMs,drainTimeoutMs,requireCredentialFence:true});
     const handler=createBrokerDispatchAuthorityHandler({authorityId,publicKeyPem,
       authority,authenticateBroker,requireMutualTls:true,
       readProtectedBroker:(_principal,operation)=>readProtectedBroker(operation),
