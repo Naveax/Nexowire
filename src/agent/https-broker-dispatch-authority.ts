@@ -49,9 +49,12 @@ function deny(code:string):never{throw new BrokerDispatchTransportError(code)}
 export class HttpsBrokerDispatchAuthority implements ExternalBrokerDispatchAuthority {
   private readonly base:URL;
   private readonly timeoutMs:number;
+  private readonly transport:typeof fetch;
   private readonly brokerCredential:()=>Promise<string|undefined>;
   constructor(config:{
     endpoint:string;timeoutMs?:number;
+    /** Protected composition supplies the pinned mTLS adapter. Legacy fixture transport is not production. */
+    transport?:typeof fetch;
     /** Resolve only from authenticated protected Broker enrollment. */
     brokerCredential:()=>Promise<string|undefined>;
   }){
@@ -63,11 +66,13 @@ export class HttpsBrokerDispatchAuthority implements ExternalBrokerDispatchAutho
       deny('BROKER_DISPATCH_ENDPOINT_INVALID');
     const timeout=config.timeoutMs??3500;
     if(!Number.isSafeInteger(timeout)||timeout<100||timeout>10000||
-       typeof config.brokerCredential!=='function')
+       typeof config.brokerCredential!=='function'||
+       (config.transport!==undefined&&typeof config.transport!=='function'))
       deny('BROKER_DISPATCH_TRANSPORT_CONFIGURATION_INVALID');
     this.base=url;
     this.timeoutMs=timeout;
     this.brokerCredential=config.brokerCredential;
+    this.transport=config.transport??fetch;
   }
   private async send(
     action:'begin'|'commit'|'revoke-and-drain'|'release',
@@ -97,7 +102,7 @@ export class HttpsBrokerDispatchAuthority implements ExternalBrokerDispatchAutho
       checked();
       if(typeof token!=='string'||!/^[^\s,\x00-\x1f\x7f]{16,4096}$/.test(token))
         return deny('BROKER_DISPATCH_CREDENTIAL_MISSING');
-      const response=await Promise.race([fetch(new URL('/v1/broker-dispatch/'+action,this.base),{
+      const response=await Promise.race([this.transport(new URL('/v1/broker-dispatch/'+action,this.base),{
         method:'POST',redirect:'error',cache:'no-store',
         headers:{authorization:'Bearer '+token,'content-type':'application/json'},
         body,signal:controller.signal,
