@@ -54,7 +54,7 @@ test('production transaction records attempts before side effects and denies aut
   const cleanup=install.indexOf('await fs.rm(p.root',enable);
   const order=[registration,race,legacyAttempt,stop,port,systemAttempt,start,receipt,
     failureReceipt,wait,preserve,throwPreserve,rollback,restore,enable,cleanup];
-  assert.ok(order.every((value,i)=>value>=0&&(i===0||value>order[i-1])),String(order));
+  assert.ok(order.every((value,i)=>value>=0&&(i===0||value>order[i-1]!)),String(order));
   assert.match(install,/handoffReceipt=HubBootHandoffReceiptSchema\.parse\(await runPowerShellJson<unknown>/);
   assert.match(install,/if\(!handoffReceipt\.ok\)throw new Error\(handoffReceipt\.error\)/);
   assert.match(install,/\$restoreLegacyState='\+\(disposition==='rollback-boot-and-legacy'\?/);
