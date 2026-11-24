@@ -386,6 +386,28 @@ export async function assertRecoveryArtifactPresent(file:string):Promise<void>{
   if(!stat.isFile()||stat.isSymbolicLink()||stat.nlink!==1)
     throw new Error('AI04_ROLLBACK_ARTIFACT_UNTRUSTED');
 }
+/** Read back PowerShell 5.1 UTF-8 (with BOM) or Node UTF-8 journal bytes.
+ * A terminal phase from a different transaction is not recovery evidence.
+ */
+export function assertDurableRollbackConfirmation(
+  bytes:Buffer,expected:Pick<Journal,'version'|'host'|'marker'|'sourceRoot'|'launcherPath'|'launcherSha256'|'port'|'originalUserPrincipal'|'createdAt'>,
+):void{
+  let restored:unknown;
+  try{
+    const decoded=new TextDecoder('utf-8',{fatal:true}).decode(bytes);
+    restored=JSON.parse(decoded);
+  }catch(error){
+    throw new Error('AI04_ROLLBACK_DURABLE_CONFIRMATION_MISSING',{cause:error});
+  }
+  if(!restored||typeof restored!=='object'||Array.isArray(restored))
+    throw new Error('AI04_ROLLBACK_DURABLE_CONFIRMATION_MISSING');
+  const record=restored as Record<string,unknown>;
+  if(record.phase!=='ROLLED_BACK'||([
+    'version','host','marker','sourceRoot','launcherPath','launcherSha256',
+    'port','originalUserPrincipal','createdAt',
+  ] as const).some(key=>record[key]!==expected[key]))
+    throw new Error('AI04_ROLLBACK_DURABLE_CONFIRMATION_MISSING');
+}
 function validateRecoveredScript():void{
   trustedAncestors();
   verifyWindowsPrivateAcl(ROOT);
@@ -569,9 +591,7 @@ export async function controlledSystemHubCutover(
       runRollbackScript();
       // PowerShell may exit successfully for a previously COMPLETE cutover.
       // Do not report a rollback unless the durable journal confirms one.
-      const restored=JSON.parse(await fs.readFile(JOURNAL,'utf8')) as {phase?:unknown};
-      if(restored.phase!=='ROLLED_BACK')
-        throw new Error('AI04_ROLLBACK_DURABLE_CONFIRMATION_MISSING');
+      assertDurableRollbackConfirmation(await fs.readFile(JOURNAL),journal);
     },
   });
 }

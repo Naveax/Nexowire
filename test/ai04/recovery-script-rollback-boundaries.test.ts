@@ -10,6 +10,7 @@ import {
   SYSTEM_HUB_RECOVERY_LAUNCHER_PROOF_PS,
   SYSTEM_HUB_RECOVERY_RESUME_TASK_PS,
   assertRecoveryArtifactPresent,
+  assertDurableRollbackConfirmation,
   decodeCutoverLauncherProof,
 } from '../../scripts/ai04-controlled-system-hub-cutover.js';
 
@@ -123,4 +124,33 @@ test('Windows negative fixture shadows every scheduler, COM, CIM and HTTP comman
   }
   assert.ok(fixture.includes('AI04_FIXTURE_UNEXPECTED_OS_CALL'));
   assert.ok(fixture.includes('AI04_FIXTURE_UNEXPECTED_TASK'));
+});
+
+test('rollback confirmation accepts UTF-8 BOM but requires the exact durable transaction',()=>{
+  const expected={
+    version:1 as const,host:'FIXTURE',marker:'fixture-transaction',
+    sourceRoot:'fixture-source',launcherPath:'fixture-launcher',
+    launcherSha256:'a'.repeat(64),port:43110,
+    originalUserPrincipal:'fixture-user',createdAt:'2026-11-24T00:00:00.000Z',
+  };
+  const terminal={...expected,phase:'ROLLED_BACK'};
+  const raw=Buffer.from(JSON.stringify(terminal),'utf8');
+  const bom=Buffer.concat([Buffer.from([0xef,0xbb,0xbf]),raw]);
+  assertDurableRollbackConfirmation(raw,expected);
+  assertDurableRollbackConfirmation(bom,expected);
+  for(const key of Object.keys(expected) as (keyof typeof expected)[]){
+    assert.throws(()=>assertDurableRollbackConfirmation(Buffer.from(JSON.stringify({
+      ...terminal,[key]:null,
+    })),expected),/AI04_ROLLBACK_DURABLE_CONFIRMATION_MISSING/);
+  }
+  for(const phase of ['COMPLETE','AWAITING_PHYSICAL_ACCEPTANCE','rolled_back']){
+    assert.throws(()=>assertDurableRollbackConfirmation(Buffer.from(JSON.stringify({
+      ...terminal,phase,
+    })),expected),/AI04_ROLLBACK_DURABLE_CONFIRMATION_MISSING/);
+  }
+  for(const invalid of [Buffer.from([0xff]),Buffer.from('{'),Buffer.from('null'),
+    Buffer.from('[]'),Buffer.concat([Buffer.from([0xef,0xbb,0xbf]),bom])]){
+    assert.throws(()=>assertDurableRollbackConfirmation(invalid,expected),
+      /AI04_ROLLBACK_DURABLE_CONFIRMATION_MISSING/);
+  }
 });

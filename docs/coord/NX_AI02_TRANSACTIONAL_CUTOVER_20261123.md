@@ -26,6 +26,7 @@
 | Commit journal write/fsync/readback is UNKNOWN | **No automatic rollback**; preserve independent task and both state trees | New orchestrator fault-injection regression; source test |
 | Rollback interrupted | Report rollback failure; retain evidence, do not claim restored | Existing orchestrator regression; real Windows NOT_RUN |
 | Recovery script missing, inaccessible, directory or multiply linked | Fail rollback explicitly; never report recovery without artifact and durable journal evidence | Cross-platform disposable-file regression; physical NOT_RUN |
+| PowerShell 5.1 UTF-8 BOM journal or foreign terminal receipt | Decode valid UTF-8 with optional BOM, require exact terminal phase and all original transaction identity fields | Portable byte/transaction regression; Windows execution NOT_RUN |
 | Recovery journal unknown or incorrectly cased terminal phase | Case-sensitive canonical allowlist before the existing AI-07 terminal exit; reject before task change and do not infer `COMPLETE` | Discovered source test + isolated Windows fixture; physical NOT_RUN |
 | Lossy launcher UTF-8 or byte drift | Reject lossy decode; hash exact original bytes to agree with PowerShell Get-FileHash | Cross-platform byte proof regression; physical NOT_RUN |
 | Launcher SHA or source/port changes at quiesce/copy/receipt | Reject; retain journal and original launcher backup | Discovered source-contract test; physical NOT_RUN |
