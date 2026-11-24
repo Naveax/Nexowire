@@ -132,6 +132,116 @@ test('insecure origin, absent trust bootstrap and unresponsive verifier never au
     .currentReadback(binding(p)),false);
 });
 
+test('omitted protected transport refuses global fetch fallback before exposing bearer',async()=>{
+  const p=proofFor(challenge()),wire:CoreNativeWireRequest={version:1,operation:'current-readback',
+    nonce:randomUUID(),expected:{receiptId:p.receiptId}};
+  const trust={origin:'https://protected-native-verifier.example',
+    credential:'fixture-valid-bearer-only',pinnedSpkiBase64:pin};
+  await assert.rejects(callProtectedCoreNativeAuthority(trust,wire),
+    /CORE_NATIVE_PROTECTED_TRANSPORT_REQUIRED/);
+  const verifier=new RemoteTrustedNativeCoreEnrollmentVerifier(trust);
+  assert.equal(await verifier.currentReadback(binding(p)),false,
+    'missing transport must fail closed, not silently use global fetch');
+});
+
+test('shared authority transport rejects ambiguous HTTP media metadata even with a valid signature',async()=>{
+  const p=proofFor(challenge()),wire:CoreNativeWireRequest={version:1,
+    operation:'current-readback',nonce:randomUUID(),expected:{receiptId:p.receiptId}};
+  const trust={origin:'https://127.0.0.1:18764',credential:'fixture-valid-bearer-only',
+    pinnedSpkiBase64:pin};
+  const response=(contentType:string,contentEncoding?:string):typeof fetch=>
+    (async(_url,init)=>{
+      const incoming=JSON.parse(String(init?.body)) as CoreNativeWireRequest;
+      return new Response(JSON.stringify(signed(incoming,p)),{status:200,headers:{
+        'content-type':contentType,...(contentEncoding?{'content-encoding':contentEncoding}:{})
+      }});
+    }) as typeof fetch;
+  for(const [kind,contentType,contentEncoding] of [
+    ['html', 'text/html',undefined],
+    ['json-substring', 'text/plain; application/json',undefined],
+    ['duplicate', 'application/json, application/json',undefined],
+    ['wrong-charset','application/json; charset=iso-8859-1',undefined],
+    ['gzip','application/json','gzip'],
+    ['duplicate-encoding','application/json','identity, identity'],
+  ] as const){
+    await assert.rejects(callProtectedCoreNativeAuthority({...trust,
+      fetchImpl:response(contentType,contentEncoding)},wire),/CORE_NATIVE_RESPONSE_NOT_JSON/,
+    kind);
+  }
+  for(const [contentType,contentEncoding] of [
+    ['application/json',undefined],
+    ['application/json; charset=UTF-8','identity'],
+  ] as const){
+    const value=await callProtectedCoreNativeAuthority({...trust,
+      fetchImpl:response(contentType,contentEncoding)},wire);
+    assert.deepEqual(value.proof,p);
+  }
+});
+
+test('signed non-200 success responses are terminal and never accepted as verifier ACK',async()=>{
+  const p=proofFor(challenge());
+  const wire:CoreNativeWireRequest={version:1,operation:'current-readback',nonce:randomUUID(),
+    expected:{receiptId:p.receiptId}};
+  const trust={origin:'https://127.0.0.1:18764',
+    credential:'fixture-valid-bearer-only',pinnedSpkiBase64:pin};
+  for(const status of [201,202,206] as const){
+    let dispatched=0;
+    const fake=(async(_url,init)=>{
+      dispatched++;
+      const request=JSON.parse(String(init?.body)) as CoreNativeWireRequest;
+      return Response.json(signed(request,p),{status});
+    }) as typeof fetch;
+    await assert.rejects(callProtectedCoreNativeAuthority({...trust,fetchImpl:fake},wire),
+      /CORE_NATIVE_AUTHORITY_UNAVAILABLE/,String(status));
+    assert.equal(dispatched,1,'non-200 response never permits a retry');
+  }
+  const ok=(async(_url,init)=>{
+    const request=JSON.parse(String(init?.body)) as CoreNativeWireRequest;
+    return Response.json(signed(request,p),{status:200});
+  }) as typeof fetch;
+  assert.deepEqual((await callProtectedCoreNativeAuthority({...trust,fetchImpl:ok},wire)).proof,p);
+});
+
+test('native authority deadline is absolute when injected transport, body or cancel ignores abort',async()=>{
+  const p=proofFor(challenge()),request:CoreNativeWireRequest={
+    version:1,operation:'current-readback',nonce:randomUUID(),expected:{receiptId:p.receiptId}};
+  const trust={origin:'https://127.0.0.1:18764',
+    credential:'fixture-valid-bearer-only',pinnedSpkiBase64:pin,timeoutMs:120};
+  const bounded=async(work:Promise<unknown>,expected:RegExp)=>{
+    let timer:ReturnType<typeof setTimeout>|undefined;
+    try{
+      await assert.rejects(Promise.race([work,new Promise<never>((_,reject)=>{
+        timer=setTimeout(()=>reject(Error('TEST_NATIVE_AUTHORITY_WATCHDOG_EXPIRED')),900);
+      })]),expected);
+    }finally{if(timer)clearTimeout(timer)}
+  };
+
+  // The first promise ignores both the passed signal and the timeout clock.
+  const ignoredFetch=(async()=>new Promise<Response>(()=>{})) as typeof fetch;
+  await bounded(callProtectedCoreNativeAuthority({...trust,fetchImpl:ignoredFetch},request),
+    /CORE_NATIVE_CALL_ABORTED/);
+
+  // Valid HTTP metadata does not make an unresponsive response body acceptable.
+  const stuckBody=new ReadableStream<Uint8Array>({start(){}});
+  const ignoredBody=(async()=>new Response(stuckBody,{status:200,
+    headers:{'content-type':'application/json'}})) as typeof fetch;
+  await bounded(callProtectedCoreNativeAuthority({...trust,fetchImpl:ignoredBody},request),
+    /CORE_NATIVE_CALL_ABORTED/);
+
+  // Even stream.cancel() can intentionally never resolve. Bounded rejection
+  // must not wait for a remote peer to cooperate with cleanup.
+  let cancelCalled=0;
+  const oversizedBody=new ReadableStream<Uint8Array>({
+    start(c){c.enqueue(new Uint8Array(8193))},
+    cancel(){cancelCalled++;return new Promise<void>(()=>{})},
+  });
+  const ignoredCancel=(async()=>new Response(oversizedBody,{status:200,
+    headers:{'content-type':'application/json'}})) as typeof fetch;
+  await bounded(callProtectedCoreNativeAuthority({...trust,fetchImpl:ignoredCancel},request),
+    /CORE_NATIVE_RESPONSE_TOO_LARGE/);
+  assert.equal(cancelCalled,1);
+});
+
 test('approval response cannot follow a caller owner/session change during transport await',async()=>{
   const c=challenge(),original={...c};
   const forged=proofFor({...c,ownerAccountId:'other-owner-account',grantGeneration:22});
