@@ -149,15 +149,16 @@ test('incomplete write never commits and stage is cleaned',async()=>{
 test('failed exclusive stage creation does not delete a stage owned by another writer',async()=>{
  const f=fixture(Buffer.alloc(100,4),{rejectWrite:true});
  await assert.rejects(transferCrossDeviceFile('dst.bin',f.ops,{newId:()=>goodId}),
-  /synthetic write failure/);
+  (e:unknown)=>e instanceof CrossDeviceTransferError&&e.code==='TRANSFER_WRITE_OUTCOME_UNKNOWN');
  assert.equal(f.destination,null);
  assert.equal(f.cleaned,0);
 });
-test('commit refusal leaves prior destination untouched',async()=>{
+test('unclassified commit rejection preserves staging for reconciliation',async()=>{
  const f=fixture(Buffer.alloc(80000,5),{rejectCommit:true});
  await assert.rejects(transferCrossDeviceFile('dst.bin',f.ops,{newId:()=>goodId}),
-  /commit refused/);
- assert.equal(f.destination,null);assert.equal(f.cleaned,1);
+  (e:unknown)=>e instanceof CrossDeviceTransferError&&e.code==='TRANSFER_PUBLISH_OUTCOME_UNKNOWN');
+ assert.equal(f.destination,null);assert.equal(f.cleaned,0);
+ assert.deepEqual(f.staged,Buffer.alloc(80000,5));
 });
 test('protects against directories and oversized inputs',async()=>{
  const f=fixture(Buffer.alloc(400,6));
