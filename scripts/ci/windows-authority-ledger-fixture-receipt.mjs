@@ -15,7 +15,7 @@ export const REVIEWED_AUTHORITY_LEDGER_FIXTURES=Object.freeze({
   'test/guardian-sqlite-replay-ledger.test.ts':Object.freeze({blob:'85a8958f7b4480ff4f4e9011a1f07e5337eb16dc',minimum:14}),
   'test/guardian-sqlite-signed-command.test.ts':Object.freeze({blob:'3ef6a0da300300847784745b76764f4d1bc3fe15',minimum:3}),
   'test/privileged-broker-denial.test.ts':Object.freeze({blob:'c8daa89bb4233f9f2b4cc186aa1a8dd94ea7425f',minimum:2}),
-  'test/privileged-broker-health.test.ts':Object.freeze({blob:'1e1965b21fab810896dcbcecc60ddbeb56e0a683',minimum:1}),
+  'test/privileged-broker-health.test.ts':Object.freeze({blob:'a947b08cb039ae0bc5889758dc8fe7d77e86be4b',minimum:1}),
   'test/windows-programdata-acl.test.ts':Object.freeze({blob:'c137ace0c2f00386e785f033adaa638bf436a40a',minimum:12}),
   'test/windows-uac-status.test.ts':Object.freeze({blob:'ce60dada49a8f9e6cad6c1afe2f5e645115e2d2d',minimum:6}),
 });
