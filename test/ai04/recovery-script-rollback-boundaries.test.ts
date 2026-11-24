@@ -1,10 +1,14 @@
 /** AI-02 source contract: does not mutate Windows scheduled tasks. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {promises as fs} from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {
   SYSTEM_HUB_RECOVERY_PS,
   SYSTEM_HUB_RECOVERY_LAUNCHER_PROOF_PS,
   SYSTEM_HUB_RECOVERY_RESUME_TASK_PS,
+  assertRecoveryArtifactPresent,
 } from '../../scripts/ai04-controlled-system-hub-cutover.js';
 
 test('rollback only recognizes explicit durable journal phases',()=>{
@@ -67,4 +71,19 @@ test('durable state is revalidated after SYSTEM removal and before user fallback
   const secondRecheck=script.lastIndexOf('& $validateState',legacy);
   assert.ok(unregister>=0&&firstRecheck>unregister&&absence>firstRecheck);
   assert.ok(secondRecheck>absence&&legacy>secondRecheck);
+});
+
+test('missing or nonregular rollback artifact is an error, not recovery success',async(t)=>{
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'nx-ai02-recovery-artifact-'));
+  t.after(()=>fs.rm(root,{recursive:true,force:true}));
+  const file=path.join(root,'rollback.ps1');
+  await assert.rejects(()=>assertRecoveryArtifactPresent(file),/AI04_ROLLBACK_ARTIFACT_MISSING/);
+  await fs.mkdir(file);
+  await assert.rejects(()=>assertRecoveryArtifactPresent(file),/AI04_ROLLBACK_ARTIFACT_UNTRUSTED/);
+  await fs.rmdir(file);
+  await fs.writeFile(file,'# inert fixture');
+  await assertRecoveryArtifactPresent(file);
+  const alias=path.join(root,'alias.ps1');
+  await fs.link(file,alias);
+  await assert.rejects(()=>assertRecoveryArtifactPresent(file),/AI04_ROLLBACK_ARTIFACT_UNTRUSTED/);
 });

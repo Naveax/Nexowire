@@ -20,7 +20,7 @@ function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-
     const sourceFile=path.join(source,'record.txt');
     const targetFile=path.join(target,'record.txt');
     writeFileSync(sourceFile,'legacy-state','utf8');
-    writeFileSync(targetFile,['late-shutdown-write','late-launcher-swap','boot-action-swapped','boot-action-swapped-no-write'].includes(mode)?'legacy-state':'new-system-data','utf8');
+    writeFileSync(targetFile,['late-shutdown-write','late-launcher-swap','boot-action-swapped','boot-action-swapped-no-write','late-write-after-unregister'].includes(mode)?'legacy-state':'new-system-data','utf8');
     const launcherFile=path.join(temp,'legacy-launch.ps1');
     const originalLauncher='# synthetic user-Hub launcher\\n';
     writeFileSync(launcherFile,originalLauncher,'utf8');

@@ -360,6 +360,17 @@ export const SYSTEM_HUB_RECOVERY_PS=[
   "Move-Item -LiteralPath $temp -Destination $journalPath -Force -ErrorAction Stop",
 ].join('\r\n');
 
+/** Non-mutating recovery admission; distinguish inaccessible from absent files. */
+export async function assertRecoveryArtifactPresent(file:string):Promise<void>{
+  let stat;
+  try{stat=await fs.lstat(file)}catch(error){
+    if((error as NodeJS.ErrnoException).code==='ENOENT')
+      throw new Error('AI04_ROLLBACK_ARTIFACT_MISSING',{cause:error});
+    throw error;
+  }
+  if(!stat.isFile()||stat.isSymbolicLink()||stat.nlink!==1)
+    throw new Error('AI04_ROLLBACK_ARTIFACT_UNTRUSTED');
+}
 function validateRecoveredScript():void{
   trustedAncestors();
   verifyWindowsPrivateAcl(ROOT);
@@ -536,10 +547,10 @@ export async function controlledSystemHubCutover(
       // independent DPAPI, SQLite, CORE, Broker and reboot acceptance.
     },
     async rollback(){
-      try{await fs.lstat(RECOVERY)}catch{
-        // The preflight never touched the legacy Hub before recovery creation.
-        return;
-      }
+      // The orchestrator only requests rollback after recovery was armed and
+      // quiescence was attempted. Missing evidence is a failed rollback, never
+      // proof that the original writer is restored.
+      await assertRecoveryArtifactPresent(RECOVERY);
       runRollbackScript();
       // PowerShell may exit successfully for a previously COMPLETE cutover.
       // Do not report a rollback unless the durable journal confirms one.
