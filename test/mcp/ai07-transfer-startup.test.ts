@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {assertSelectedTransferHelper,withVerifiedTransferHelper,runProtectedTransferNativeAgent,type TransferHelperRuntimeAuthority} from '../../src/agent/protected-transfer-startup.js';
 import {installedTransferHelperPath,type HelperSelection,type TransferHelperArtifactStore} from '../../src/installer/protected-transfer-helper-lifecycle.js';
 import {runProtectedTransferHub} from '../../src/mcp/protected-transfer-hub-startup.js';
+import {startProtectedTransferAndCoreServices} from '../../src/security/protected-transfer-services-startup.js';
 
 const pin={sha256:'a'.repeat(64),signerSha256:'b'.repeat(64)};
 function fixture(){
@@ -44,4 +45,8 @@ test('missing or non-entered runtime lease fails closed before activation',async
 test('ordinary native and Hub startup without protected composition cannot activate transfer',async()=>{
   await assert.rejects(runProtectedTransferNativeAgent({} as Parameters<typeof runProtectedTransferNativeAgent>[0],{}),/PROTECTED_NATIVE_TRANSFER_STARTUP_REQUIRED/);
   await assert.rejects(runProtectedTransferHub({} as Parameters<typeof runProtectedTransferHub>[0],{} as Parameters<typeof runProtectedTransferHub>[1]),/PROTECTED_TRANSFER_HUB_STARTUP_REQUIRED/);
+});
+test('combined CORE/transfer service denies mismatched authority before any DB or listener startup',async()=>{
+  const config={core:{authorityId:'one',database:{}},transfer:{authority:{authorityId:'two'},server:{authorityId:'two'},database:{}},startupScope:{}};
+  await assert.rejects(startProtectedTransferAndCoreServices(config as unknown as Parameters<typeof startProtectedTransferAndCoreServices>[0]),/TRANSFER_CORE_SHARED_AUTHORITY_STARTUP_REQUIRED/);
 });
