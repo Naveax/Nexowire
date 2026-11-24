@@ -45,6 +45,7 @@ function fixture(){
     batch:async statements=>{db.exec('BEGIN');try{const r=await Promise.all(statements.map(s=>s.run()));db.exec('COMMIT');return r;}catch(e){db.exec('ROLLBACK');throw e;}}};
   // In-memory fixture is explicitly NOT a trusted native OS approval source.
   let nativeReceipt:NativeCoreConsentProof|null=null,readbackEnabled=true,authorityReadbackEnabled=true;
+  let approvedIssuer:string|undefined;
   let currentLogon={windowsUserSid:'S-1-5-21-101-202-303-1001',windowsSessionId:1,
     windowsLogonLuid:'0000000000000001',windowsLogonSessionEpoch:randomUUID()};
   let beforeNativeReadback:(()=>void)|undefined;
@@ -59,7 +60,7 @@ function fixture(){
     if(!readbackEnabled||!nativeReceipt||consumedNativeReceipts.has(proof.receiptId)||
       (Object.keys(nativeReceipt) as Array<keyof NativeCoreConsentProof>)
         .some(key=>proof[key]!==nativeReceipt![key])||
-      proof.enrollmentId!==expected.enrollmentId||!sameLogon(proof))return false;
+      proof.enrollmentId!==expected.enrollmentId||approvedIssuer!==expected.issuerSpkiSha256||!sameLogon(proof))return false;
     consumedNativeReceipts.add(proof.receiptId);return true;
   },currentReadback:async expected=>{
     // Tests can hold one independent readback open to interleave duplicate
@@ -101,7 +102,10 @@ function fixture(){
     nativeConsent:{
       approveAndConsume:async(challenge:NativeCoreConsentChallenge)=>{
         consents++;
-        const next:NativeCoreConsentProof={...challenge,receiptId:randomUUID(),
+        const {issuerSpkiSha256,...scope}=challenge;
+        assert.match(issuerSpkiSha256??'',/^[a-f0-9]{64}$/,'issuer must precede native approval');
+        approvedIssuer=issuerSpkiSha256;
+        const next:NativeCoreConsentProof={...scope,receiptId:randomUUID(),
           ...currentLogon,approvedAtMs:Date.now(),consumed:true};
         nativeReceipt=forgedNativeReceipt?.(next)??next;
         return structuredClone(nativeReceipt);
