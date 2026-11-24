@@ -157,6 +157,21 @@ function snapshotPlainJson(value:unknown,depth=0,
   }finally{ancestors.delete(value)}
 }
 
+/** Validate and pin each protected readback before reading any of its fields.
+ * The provider's object is not the authenticated evidence itself. Its getters,
+ * Proxy traps and later changes must not affect the scope we compare.
+ */
+function snapshotBinding(raw:unknown):BrokerVerifiedEffectBinding {
+  let copy:unknown;
+  try{copy=snapshotPlainJson(raw);}catch{deny()}
+  if(!copy||typeof copy!=='object'||Array.isArray(copy))deny();
+  const binding=copy as BrokerVerifiedEffectBinding;
+  // Only the declared binding fields are admissible. In particular an extra
+  // function, nested object or serialization hook is not part of the proof.
+  if(Object.keys(binding).length!==11||!bindingValid(binding))deny();
+  return binding;
+}
+
 /** Freeze exact request bytes before the first await. No post-hash mutation. */
 function frozenEffectInput(capability:string,input:unknown):
   {readonly input:unknown;readonly inputSha256:string} {
@@ -253,12 +268,11 @@ export async function invokeBrokerEffectOnce<T>(
      !Number.isSafeInteger(startedAtMs)||startedAtMs<=0)deny();
   const captured=frozenEffectInput(capability,input);
   if(!SHA.test(captured.inputSha256))deny();
-  let first:BrokerVerifiedEffectBinding|null;
-  try{first=await authority.readVerifiedBinding()}catch{deny()}
-  if(!bindingValid(first))deny();
+  let binding:BrokerVerifiedEffectBinding;
+  try{binding=snapshotBinding(await authority.readVerifiedBinding())}catch{deny()}
   // Use the ORIGINAL wall-time budget, capped at the 30 s binding limit.
   // Do not refresh the budget after begin/commit/readback awaits.
-  const remainingMs=Math.min(MAX_FUTURE_MS,first.expiresAtMs-startedAtMs);
+  const remainingMs=Math.min(MAX_FUTURE_MS,binding.expiresAtMs-startedAtMs);
   if(!Number.isSafeInteger(remainingMs)||remainingMs<=0)deny();
   const budgetNs=BigInt(remainingMs)*1_000_000n;
   let lastNs=startedNs;
@@ -270,7 +284,6 @@ export async function invokeBrokerEffectOnce<T>(
     lastNs=nowNs;
   };
   assertMonotonicFresh();
-  const binding=Object.freeze({...first});
   const request:BrokerEffectRequest=Object.freeze({
     operationId,capability,inputSha256:captured.inputSha256,binding,
   });
@@ -305,18 +318,18 @@ export async function invokeBrokerEffectOnce<T>(
   assertMonotonicFresh();
   if(!sameSignedPayload(committed)||
      !receiptMatches(committed.receipt,'COMMITTED',request,commitNonce,ticket))deny();
-  let recent:BrokerVerifiedEffectBinding|null;
-  try{recent=await authority.readVerifiedBinding()}catch{deny()}
+  let recent:BrokerVerifiedEffectBinding;
+  try{recent=snapshotBinding(await authority.readVerifiedBinding())}catch{deny()}
   assertMonotonicFresh();
-  if(!bindingValid(recent)||!sameBinding(binding,recent))deny();
+  if(!sameBinding(binding,recent))deny();
   // Elevation probe may synchronously spawn Windows tooling and take seconds.
   // Run it BEFORE the last protected readback, never after it. No await or
   // slow OS operation may separate the fresh authority state from callback.
   try{if(verifyWindowsElevationNow()!==true)deny()}catch{deny()}
   assertMonotonicFresh();
-  let immediate:BrokerVerifiedEffectBinding|null;
-  try{immediate=authority.readVerifiedBindingNow()}catch{deny()}
-  if(!bindingValid(immediate)||!sameBinding(binding,immediate))deny();
+  let immediate:BrokerVerifiedEffectBinding;
+  try{immediate=snapshotBinding(authority.readVerifiedBindingNow())}catch{deny()}
+  if(!sameBinding(binding,immediate))deny();
   assertMonotonicFresh();
   return execute(captured.input);
 }
