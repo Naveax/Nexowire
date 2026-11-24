@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { test } from 'node:test';
+import { parseChecksumFile, sha256File } from '../../scripts/smoke-windows-user-setup.js';
 
 const root = process.cwd();
 const stagePath = path.join(root, 'scripts', 'Build-Nexowire-SystemHubStage.ps1');
@@ -119,3 +122,33 @@ for (const scenario of ['upgrade-preserve', 'upgrade-checksum-mismatch']) {
     assert.equal(evidence.oauthOrDevicePairingVerified, false);
   });
 }
+
+test('AI-05 installer smoke checksum manifest requires exactly two unique canonical artifacts', () => {
+  const setup = 'a'.repeat(64) + '  Nexowire-Setup.cmd';
+  const zip = 'B'.repeat(64) + '  Nexowire-Windows-x64.zip';
+  assert.deepEqual([...parseChecksumFile(setup + '\r\n' + zip + '\r\n')], [
+    ['Nexowire-Setup.cmd', 'a'.repeat(64)],
+    ['Nexowire-Windows-x64.zip', 'b'.repeat(64)],
+  ]);
+  assert.throws(() => parseChecksumFile(setup + '\n' + zip + '\n' + setup), /Duplicate Windows checksum filename/);
+  assert.throws(() => parseChecksumFile(setup + '\n' + zip + '\n' + 'c'.repeat(64) + '  Nexowire-Setup.cmd'), /Duplicate Windows checksum filename/);
+  assert.throws(() => parseChecksumFile(setup + '\n'), /Missing Windows checksum filename/);
+  assert.throws(() => parseChecksumFile(zip + '\n'), /Missing Windows checksum filename/);
+  assert.throws(() => parseChecksumFile(setup + '\n' + zip + '\n' + 'c'.repeat(64) + '  ../Nexowire-Setup.cmd'), /Unexpected Windows checksum filename/);
+  assert.throws(() => parseChecksumFile(setup + '\n' + zip + '\n' + 'c'.repeat(64) + '  extra.zip'), /Unexpected Windows checksum filename/);
+  assert.throws(() => parseChecksumFile('invalid digest  Nexowire-Setup.cmd\n' + zip), /Invalid Windows checksum line/);
+});
+
+test('AI-05 streamed ZIP hashing matches SHA-256 across multiple chunks', async () => {
+  const fixture = mkdtempSync(path.join(tmpdir(), 'nw-ai05-hash-'));
+  try {
+    const bytes = Buffer.alloc(192 * 1024 + 17);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = i % 251;
+    const filename = path.join(fixture, 'fixture.zip');
+    writeFileSync(filename, bytes);
+    assert.equal(await sha256File(filename), createHash('sha256').update(bytes).digest('hex'));
+    await assert.rejects(sha256File(path.join(fixture, 'missing.zip')), { code: 'ENOENT' });
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
+});

@@ -6,6 +6,7 @@ import { promises as fs } from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 function fail(message: string): never {
   throw new Error(message);
@@ -66,19 +67,27 @@ function parseArgs(args: readonly string[]): {
   };
 }
 
-async function sha256File(file: string): Promise<string> {
+export async function sha256File(file: string): Promise<string> {
   const hash = createHash('sha256');
-  hash.update(await fs.readFile(file));
+  // Keep the installer ZIP out of a single large Buffer on hosted runners.
+  for await (const chunk of createReadStream(file)) hash.update(chunk);
   return hash.digest('hex');
 }
 
-function parseChecksumFile(text: string): Map<string, string> {
+export function parseChecksumFile(text: string): Map<string, string> {
+  const expected = new Set(['Nexowire-Setup.cmd', 'Nexowire-Windows-x64.zip']);
   const result = new Map<string, string>();
   for (const line of text.split(/\r?\n/)) {
     if (!line.trim()) continue;
     const match = /^([a-fA-F0-9]{64})\s{2}(.+)$/.exec(line);
     if (!match) fail('Invalid Windows checksum line: ' + line);
-    result.set(match[2]!, match[1]!.toLowerCase());
+    const filename = match[2]!;
+    if (!expected.has(filename)) fail('Unexpected Windows checksum filename: ' + filename);
+    if (result.has(filename)) fail('Duplicate Windows checksum filename: ' + filename);
+    result.set(filename, match[1]!.toLowerCase());
+  }
+  for (const filename of expected) {
+    if (!result.has(filename)) fail('Missing Windows checksum filename: ' + filename);
   }
   return result;
 }
@@ -569,4 +578,6 @@ async function main(): Promise<void> {
   }
 }
 
-await main();
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  await main();
+}
