@@ -148,6 +148,11 @@ test('native source requires the system WebAuthn API, user verification and neve
   assert.match(source,/LOAD_LIBRARY_SEARCH_SYSTEM32/);
   assert.match(source,/WebAuthNAuthenticatorGetAssertion/);
   assert.match(source,/WebAuthNCancelCurrentOperation/);
+  assert.match(source,/--assert-bound/);
+  assert.match(source,/TokenStatistics/);
+  assert.match(source,/TokenSessionId/);
+  assert.match(source,/OpenThreadToken/);
+  assert.match(source,/same_luid\(before\.ModifiedId,after\.ModifiedId\)/);
   assert.doesNotMatch(source,/\b(?:ShellExecute|CreateService|AdjustTokenPrivileges|SwitchDesktop|SendInput|MessageBox)\w*\s*\(/);
 });
 
@@ -160,6 +165,11 @@ test('real Windows API probe never opens approval UI or grants CORE',{
     const invalid=spawnSync(exe,args,{encoding:'utf8',timeout:3000,windowsHide:true});
     assert.equal(invalid.status,64,String(invalid.error??invalid.stderr));assert.equal(invalid.stdout,'');
   }
+  // An impossible owner token/session must be denied BEFORE any native UI.
+  const mismatch=spawnSync(exe,['--assert-bound','core.fixture.invalid','a'.repeat(64),'00',
+    'S-1-5-18','4294967294','0000000000000001'],{encoding:'utf8',timeout:3000,windowsHide:true});
+  assert.equal(mismatch.status,77,String(mismatch.error??mismatch.stderr));
+  assert.equal(JSON.parse(mismatch.stdout).reason,'OWNER_TOKEN_BINDING_MISMATCH');
   const result=spawnSync(exe,['--probe'],{encoding:'utf8',timeout:5000,windowsHide:true});
   assert.ok(result.status===0||result.status===77,String(result.error??result.stderr));
   const raw=JSON.parse(result.stdout) as Record<string,unknown>;
