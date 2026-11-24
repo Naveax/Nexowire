@@ -116,7 +116,7 @@ jobs:
   ai08-windows-hub-boot-fixtures:
     name: AI-08 Windows Hub Boot source fixtures (Node ${{ matrix.node-version }})
     runs-on: windows-latest
-    timeout-minutes: 12
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -185,17 +185,33 @@ jobs:
               throw Error('WINDOWS_FIXTURE_REVIEW_REQUIRED: '+file);
           };
           for(const [file,blob] of Object.entries(reviewed))check(file,blob);
+          // DPAPI shell-trust performs seven sequential PowerShell calls,
+          // each with a production 180-second deadline. The outer runner
+          // must not terminate the test before the inner deadlines resolve.
+          const fixtureTimeoutMs=file=>file==='test/windows-dpapi-shell-trust.test.ts'
+            ?7*180000+60000:90000;
           const files=[];
           for(const [file,blob] of Object.entries(reviewed)){
             check(file,blob);
+            const timeoutMs=fixtureTimeoutMs(file);
+            const started=Date.now();
             const r=spawnSync(process.execPath,[
               '--test','--test-reporter=tap','--import','tsx','--test-concurrency=1',file,
-            ],{encoding:'utf8',timeout:90000,maxBuffer:2*1024*1024,windowsHide:true});
+            ],{encoding:'utf8',timeout:timeoutMs,maxBuffer:2*1024*1024,windowsHide:true});
             if(r.stdout)process.stdout.write(r.stdout);
             if(r.stderr)process.stderr.write(r.stderr);
-            if(r.error||r.status!==0)throw Error('WINDOWS_FIXTURE_EXECUTION_FAILED: '+file);
+            // Record only process metadata, never DPAPI input or ciphertext.
+            const elapsedMs=Date.now()-started;
+            if(r.error||r.status!==0){
+              process.stderr.write(JSON.stringify({
+                sourceCommitSha:report.commitSha,path:file,
+                result:'FAIL',errorCode:r.error?.code??null,
+                exitCode:r.status,signal:r.signal,elapsedMs,timeoutMs,
+              })+'\n');
+              throw Error('WINDOWS_FIXTURE_EXECUTION_FAILED: '+file);
+            }
             const counts=assertTapSummary(r.stdout);
-            files.push({path:file,gitBlobSha:blob,result:'PASS',...counts});
+            files.push({path:file,gitBlobSha:blob,result:'PASS',elapsedMs,timeoutMs,...counts});
           }
           const count=files.length;
           process.stdout.write(JSON.stringify({
