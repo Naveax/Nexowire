@@ -40,7 +40,8 @@ test('PostgreSQL protected transfer: immutable claim, epoch fence, recovery, can
   await admin.query("INSERT INTO transfer_authority.grants(authority_id,owner_id,project_id,source_device_id,target_device_id,source_device_epoch,source_session_epoch,source_owner_epoch,source_generation,target_device_epoch,target_session_epoch,target_owner_epoch,target_generation,source_root,target_root,target_public_key_pem,state,expires_ms) VALUES($1,$2,$3,$4,$5,$6,$7,1,1,$8,$9,1,1,$10,$11,$12,'ACTIVE',$13)",[authorityId,ownerId,projectId,sourceDeviceId,targetDeviceId,srcEpoch,srcSession,dstEpoch,dstSession,sourceRoot,targetRoot,key.publicKey.export({type:'spki',format:'pem'}).toString(),Date.now()+600000]);
   let outcome:IndependentTransferObservation['state']|undefined;
   let receipt:LargeTransferFinalReceipt|undefined;
-  const a=new PostgresProtectedTransferAuthority({authorityId,pool:service as DispatchStorePool,verifyProvenance:async()=>({verified:true,authorityId,validUntil:Date.now()+30000}),observeNativeIntent:async(b,p,c)=>outcome?{jobId:b.id,requestId:p.requestId,epoch:p.epoch,intentSha256:c.intentSha256,sealed:true,state:outcome,offset:p.offset,length:p.length,sha256:p.sha256}:undefined,readNativeReceipt:async()=>receipt});
+  const makeAuthority=(pool:Pool)=>new PostgresProtectedTransferAuthority({authorityId,pool:pool as DispatchStorePool,verifyProvenance:async()=>({verified:true,authorityId,validUntil:Date.now()+30000}),observeNativeIntent:async(b,p,c)=>outcome?{jobId:b.id,requestId:p.requestId,epoch:p.epoch,intentSha256:c.intentSha256,sealed:true,state:outcome,offset:p.offset,length:p.length,sha256:p.sha256}:undefined,readNativeReceipt:async()=>receipt});
+  const a=makeAuthority(service);
   const binding=(name:string):LargeTransferBinding=>{const id=randomUUID(),targetPath=targetRoot+'\\'+name;return {id,ownerId,projectId,sourceDeviceId,targetDeviceId,sourcePath:sourceRoot+'\\input.bin',targetPath,stagePath:targetPath+'.nexowire-upload-'+id+'.part',size:3,sha256:sha('abc')};};
   const b=binding('output.bin'),l=await a.acquire(b,0);
   const p:LargeTransferIntent={kind:'write',requestId:randomUUID(),epoch:l.epoch,offset:0,length:3,sha256:b.sha256,dispatched:true};
@@ -49,19 +50,31 @@ test('PostgreSQL protected transfer: immutable claim, epoch fence, recovery, can
   const c=results.find(r=>r.status==='fulfilled');assert(c&&c.status==='fulfilled');
   await a.settleNativeEffect(b,l,p,c.value,'unknown');
   await assert.rejects(a.acquire(b,l.epoch),/TRANSFER_PG_NATIVE_DRAIN_UNVERIFIED/);
+  // The rejected acquisition must roll back rather than consume an epoch.
+  const rolledBack=(await admin.query('SELECT epoch,pending_id FROM transfer_authority.jobs WHERE id=$1',[b.id])).rows[0];
+  assert.equal(Number(rolledBack.epoch),l.epoch);
+  assert.equal(rolledBack.pending_id,p.requestId);
+  assert.equal((await admin.query('SELECT state FROM transfer_authority.claims WHERE request_id=$1',[p.requestId])).rows[0].state,'UNKNOWN');
   const drain=composeTransferDrainObserver({authorityId,pool:service as DispatchStorePool,verifyNativeDrain:async()=>true});
   assert.equal(await drain({ownerId,deviceId:targetDeviceId}),false);
-  outcome='applied';const newer=await a.acquire(b,l.epoch);
+  // Reopen with a distinct connection pool and authority object. This is an
+  // authority-service restart fixture, NOT a database server restart.
+  const reopenedPool=new Pool({...common,user:'nexowire_transfer_runtime'});
+  t.after(()=>reopenedPool.end());
+  const reopened=makeAuthority(reopenedPool);
+  outcome='applied';const newer=await reopened.acquire(b,l.epoch);
   assert(newer.epoch>l.epoch);
   await assert.rejects(a.assertCurrent(b,l,0),/TRANSFER_PG_LEASE_FENCED/);
-  await a.assertCurrent(b,newer,3);
+  await reopened.assertCurrent(b,newer,3);
   const pub:LargeTransferIntent={kind:'publish',requestId:randomUUID(),epoch:newer.epoch,offset:3,length:0,sha256:b.sha256,dispatched:true};
-  const claim=await a.claimNativeEffect(b,newer,pub);
-  await a.settleNativeEffect(b,newer,pub,claim,'completed');
+  const claim=await reopened.claimNativeEffect(b,newer,pub);
+  await reopened.settleNativeEffect(b,newer,pub,claim,'completed');
   const unsigned={jobId:b.id,requestId:pub.requestId,epoch:pub.epoch,targetDeviceId:b.targetDeviceId,targetPath:b.targetPath,size:b.size,sha256:b.sha256};
   receipt={...unsigned,proof:sign(null,finalTransferSigningBytes(b,unsigned),key.privateKey).toString('base64url')};
-  const commit=await a.commitRecoveredPublication(b,pub,receipt);
+  const commit=await reopened.commitRecoveredPublication(b,pub,receipt);
   assert.deepEqual(await a.recoverPublished(b,pub),{receipt,commit});
+  // A second connection must see the same immutable completion, not publish.
+  assert.deepEqual(await reopened.recoverPublished(b,pub),{receipt,commit});
   await assert.rejects(a.claimNativeEffect(b,newer,pub));
   const second=binding('cancel.bin'),secondLease=await a.acquire(second,0);
   await a.cancelTransfer(second,secondLease);await a.cancelTransfer(second,secondLease);
