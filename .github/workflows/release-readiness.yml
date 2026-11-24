@@ -14,6 +14,12 @@ on:
       - "src/security/protected-secret-files.ts"
       - "test/config.test.ts"
       - "test/hub-lifecycle.test.ts"
+      - "test/hub-boot-status-legacy-user.test.ts"
+      - "test/hub-boot-task-shell-trust.test.ts"
+      - "test/hub-boot-root-boundary.test.ts"
+      - "test/hub-boot-handoff-transaction.test.ts"
+      - "test/hub-boot-startup-trigger-integrity.test.ts"
+      - "scripts/ci/assert-tap-summary.mjs"
       - "test/windows-dpapi-secret.test.ts"
       - "test/protected-secret-files.test.ts"
       - "test/version.test.ts"
@@ -103,8 +109,93 @@ jobs:
       - name: Reject forged approved test execution receipts
         run: node --test test/ci/test-execution-coverage.test.mjs
 
+  ai08-windows-hub-boot-fixtures:
+    name: AI-08 Windows Hub Boot source fixtures (Node ${{ matrix.node-version }})
+    runs-on: windows-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - name: Run only reviewed Windows source fixtures with exact-head TAP evidence
+        env:
+          NEXOWIRE_EXPECTED_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        shell: pwsh
+        run: |
+          @'
+          import {spawnSync} from 'node:child_process';
+          import {readFileSync} from 'node:fs';
+          import {createHash} from 'node:crypto';
+          import {readTestInventory} from './scripts/ci/test-inventory.mjs';
+          import {assertTapSummary} from './scripts/ci/assert-tap-summary.mjs';
+          const baselineReviewed = {
+            'test/hub-boot-status-legacy-user.test.ts':'66d93e212bce277217b3a2cbc027251ed7c73c00',
+            'test/hub-boot-task-shell-trust.test.ts':'6dc4e0a7da26bf3dc02877174688448d6348822d',
+            'test/hub-boot-root-boundary.test.ts':'d6e564dd581e9dce198afc2b94c2c36ebda56a11',
+            'test/hub-boot-handoff-transaction.test.ts':'2c700196272174cdfdc84ecc953365d2946d275f',
+          };
+          // Reviewed together against AI-01 PR #1242 at ebeadc0a; use the
+          // complete compatible profile, never mix baseline and new fixtures.
+          const startupReviewed = {
+            'test/hub-boot-status-legacy-user.test.ts':'800ca3e6bc6b892c26f102ec7f250754cc1372f3',
+            'test/hub-boot-task-shell-trust.test.ts':'ce31e6c39b63647c5bb11e579262690694829b12',
+            'test/hub-boot-root-boundary.test.ts':'dee621f126f5b132cd0f25de8cb7469df244833c',
+            'test/hub-boot-handoff-transaction.test.ts':'8ad2c05bfe6c08ceae3e15792d493099e44ec20d',
+            'test/hub-boot-startup-trigger-integrity.test.ts':'61062ecab51d2852c750cccd03fae79f7b45286a',
+          };
+          if(process.platform!=='win32') throw Error('WINDOWS_FIXTURE_PLATFORM_REQUIRED');
+          const {entries,report}=readTestInventory(process.cwd());
+          if(report.commitSha!==process.env.NEXOWIRE_EXPECTED_COMMIT_SHA)
+            throw Error('WINDOWS_FIXTURE_HEAD_MISMATCH');
+          const tracked=new Map(entries.map(e=>[e.path,e.blob]));
+          const hasStartup=tracked.has('test/hub-boot-startup-trigger-integrity.test.ts');
+          const reviewed=hasStartup?startupReviewed:baselineReviewed;
+          const reviewProfile=hasStartup?'AI01_STARTUP_REVIEW_EBEADC0A':'BASELINE_B04BF428';
+          const check=(file,blob)=>{
+            const bytes=readFileSync(file);
+            const actual=createHash('sha1').update('blob '+bytes.length+'\0').update(bytes).digest('hex');
+            if(tracked.get(file)!==blob||actual!==blob)
+              throw Error('WINDOWS_FIXTURE_REVIEW_REQUIRED: '+file);
+          };
+          for(const [file,blob] of Object.entries(reviewed))check(file,blob);
+          const files=[];
+          for(const [file,blob] of Object.entries(reviewed)){
+            check(file,blob);
+            const r=spawnSync(process.execPath,[
+              '--test','--test-reporter=tap','--import','tsx','--test-concurrency=1',file,
+            ],{encoding:'utf8',timeout:90000,maxBuffer:2*1024*1024,windowsHide:true});
+            if(r.stdout)process.stdout.write(r.stdout);
+            if(r.stderr)process.stderr.write(r.stderr);
+            if(r.error||r.status!==0)throw Error('WINDOWS_FIXTURE_EXECUTION_FAILED: '+file);
+            const counts=assertTapSummary(r.stdout);
+            files.push({path:file,gitBlobSha:blob,result:'PASS',...counts});
+          }
+          const count=files.length;
+          process.stdout.write(JSON.stringify({
+            schemaVersion:1,reviewProfile,sourceCommitSha:report.commitSha,
+            sourceManifestSha256:report.manifestSha256,platform:process.platform,
+            nodeVersion:process.version,trackedFileCount:entries.length,
+            executedFileCount:count,notRunFileCount:entries.length-count,
+            statusCounts:{PASS:count,FAIL:0,SKIP:0,NOT_RUN:entries.length-count},
+            passedAssertions:files.reduce((n,f)=>n+f.pass,0),
+            scope:'EXPLICIT_WINDOWS_SOURCE_FIXTURES_ONLY',
+            physicalWindowsAcceptance:'NOT_INFERRED',files,
+          })+'\n');
+          '@ | node --input-type=module
+          if ($LASTEXITCODE -ne 0) { throw 'AI08_WINDOWS_HUB_BOOT_FIXTURE_GATE_FAILED' }
+
   package:
-    needs: ai08-coverage-reconciliation
+    needs: [ai08-coverage-reconciliation, ai08-windows-hub-boot-fixtures]
     strategy:
       fail-fast: false
       matrix:

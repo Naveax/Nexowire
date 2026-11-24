@@ -13,6 +13,11 @@ const required = [
   'test/ci/v109-core-readonly-preflight.test.mjs',
   'test/ci/v109-experimental-source-audit.test.mjs',
   'test/ci/release-path-coverage.test.mjs',
+  'test/hub-boot-status-legacy-user.test.ts',
+  'test/hub-boot-task-shell-trust.test.ts',
+  'test/hub-boot-root-boundary.test.ts',
+  'test/hub-boot-handoff-transaction.test.ts',
+  'scripts/ci/assert-tap-summary.mjs',
   'scripts/ci/test-inventory.mjs',
   'scripts/ci/test-execution-plan.mjs',
   'scripts/ci/test-execution-coverage.mjs',
@@ -71,7 +76,28 @@ test('tag release attestation and publication require exact-head AI-08 receipt c
   assert.match(workflow,/NEXOWIRE_EXPECTED_COMMIT_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
   assert.match(workflow,/matrix:\s*\n\s*node-version: \[22, 24\]/);
   assert.match(workflow,/run: node --test test\/ci\/test-execution-coverage\.test\.mjs/);
-  assert.match(workflow,/  package:\s*\n    needs: ai08-coverage-reconciliation/);
+  assert.match(workflow,/  package:\s*\n    needs: \[ai08-coverage-reconciliation, ai08-windows-hub-boot-fixtures\]/);
   assert.match(workflow,/  attest:[\s\S]*?needs: package/);
   assert.match(workflow,/  publish:[\s\S]*?needs: \[package, attest\]/);
+});
+
+test('Windows Hub Boot source fixture lane is exact-head, bounded and mandatory for packaging',()=>{
+  const lane=workflow.split('\n  ai08-windows-hub-boot-fixtures:\n')[1]?.split('\n  package:')[0];
+  assert.ok(lane,'missing independent Windows fixture job');
+  assert.match(lane,/runs-on: windows-latest/);
+  assert.match(lane,/timeout-minutes: 12/);
+  assert.match(lane,/node-version: \[22, 24\]/);
+  assert.match(lane,/ref: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
+  assert.match(lane,/persist-credentials: false/);
+  assert.match(lane,/WINDOWS_FIXTURE_HEAD_MISMATCH/);
+  assert.match(lane,/WINDOWS_FIXTURE_REVIEW_REQUIRED/);
+  assert.match(lane,/WINDOWS_FIXTURE_PLATFORM_REQUIRED/);
+  assert.match(lane,/assertTapSummary\(r\.stdout\)/);
+  assert.match(lane,/r\.error\|\|r\.status!==0/);
+  assert.match(lane,/physicalWindowsAcceptance:'NOT_INFERRED'/);
+  assert.match(lane,/hasStartup\?startupReviewed:baselineReviewed/);
+  assert.match(lane,/'test\/hub-boot-startup-trigger-integrity\.test\.ts':'61062ecab51d2852c750cccd03fae79f7b45286a'/);
+  assert.match(prSection,/"test\/hub-boot-startup-trigger-integrity\.test\.ts"/,
+    'future AI-01 fixture-only changes must trigger release review');
+  assert.doesNotMatch(lane,/continue-on-error:\s*true|self-hosted/);
 });
