@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {readTestInventory} from '../../scripts/ci/test-inventory.mjs';
-import {reconcileCoverage} from '../../scripts/ci/test-execution-coverage.mjs';
+import {readTestInventory,summarizeTestFiles} from '../../scripts/ci/test-inventory.mjs';
+import {reconcileCoverage,reconcileLaneCoverage} from '../../scripts/ci/test-execution-coverage.mjs';
 import {APPROVED_ROOT_TEST_FILES} from '../../scripts/ci/portable-root-execution-receipt.mjs';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
@@ -137,4 +137,93 @@ test('emits exhaustive file states without laundering NOT_RUN into PASS',()=>{
   }
   assert.equal(coverage.statusSemantics,'RECEIPT_ONLY_NO_GLOBAL_CI_INFERENCE');
   assert.equal(coverage.comprehensiveCoverage,false);
+});
+
+const unionTarget={platform:'win32',nodeVersion:'v22.23.5'};
+const scope='REVIEWED_WINDOWS_BROKER_AND_PRELOGIN_SOURCE_FIXTURES_ONLY';
+const authorityScope='REVIEWED_WINDOWS_AUTHORITY_AND_LEDGER_SOURCE_FIXTURES_ONLY';
+const mixedScope='REVIEWED_PLATFORM_ACL_AND_SIDECAR_SOURCE_FIXTURES_ONLY';
+const unionEntries=['a','b','c','d'].map((name,i)=>({
+  path:'test/'+name+'.test.ts',mode:'100644',blob:String(i+1).repeat(40),
+}));
+const unionInventory=summarizeTestFiles(unionEntries,'a'.repeat(40));
+const pin=(i,extra={})=>({path:unionEntries[i].path,gitBlobSha:unionEntries[i].blob,minimum:1,...extra});
+const policy=(id,files,extra={})=>({id,scope,schemaVersion:1,...unionTarget,files,...extra});
+const pass=f=>({path:f.path,gitBlobSha:f.gitBlobSha,result:'PASS',tests:1,pass:1,
+  fail:0,skipped:0,cancelled:0,todo:0});
+const laneReceipt=(p,files=p.files.map(pass))=>{
+  const counts={PASS:0,FAIL:0,SKIP:0,NOT_RUN:unionEntries.length-files.length};
+  for(const f of files)counts[f.result]++;
+  return {id:p.id,receipt:{schemaVersion:p.schemaVersion,scope:p.scope,...unionTarget,
+    sourceCommitSha:unionInventory.commitSha,sourceManifestSha256:unionInventory.manifestSha256,
+    physicalWindowsAcceptance:'NOT_INFERRED',trackedFileCount:unionEntries.length,
+    executedFileCount:files.length,notRunFileCount:counts.NOT_RUN,
+    passedAssertions:files.reduce((n,f)=>n+(f.pass??0),0),statusCounts:counts,files,
+    ...(p.schemaVersion===2?{attemptedFileCount:files.length,acceptance:counts.FAIL?'FAIL':'PASS'}:{})}};
+};
+const combine=(policies,receipts,target=unionTarget)=>reconcileLaneCoverage(
+  unionEntries,unionInventory,target,policies,receipts);
+test('union deduplicates overlap and does not aggregate assertion totals across lanes',()=>{
+  const a=policy('a',[pin(0),pin(1)]),b=policy('b',[pin(1),pin(2)]);
+  const r=combine([a,b],[laneReceipt(b),laneReceipt(a)]);
+  assert.deepEqual(r.statusCounts,{PASS:3,FAIL:0,SKIP:0,NOT_RUN:1});
+  assert.equal(r.uniqueAttemptedFileCount,3);
+  assert.equal(r.requiredLaneAcceptance,'PASS');
+  assert.equal(r.comprehensiveCoverage,false);
+  assert.equal(r.passedAssertions,undefined);
+  assert.deepEqual(r.fileStates[1].lanes,[{id:'a',result:'PASS'},{id:'b',result:'PASS'}]);
+  assert.deepEqual(r,combine([b,a],[laneReceipt(a),laneReceipt(b)]));
+});
+test('missing required lane is incomplete even when another lane passed the same file',()=>{
+  const a=policy('a',[pin(0)]),b=policy('b',[pin(0),pin(1)]);
+  const r=combine([a,b],[laneReceipt(a)]);
+  assert.deepEqual(r.missingLaneIds,['b']);
+  assert.equal(r.requiredLaneAcceptance,'INCOMPLETE');
+  assert.equal(r.fileStates[0].result,'PASS');
+  assert.equal(r.fileStates[1].result,'NOT_RUN');
+  assert.equal(r.comprehensiveCoverage,false);
+});
+test('a failed exact child dominates duplicate PASS and has no trusted assertion counters',()=>{
+  const a=policy('a',[pin(0)]),b=policy('b',[pin(0),pin(1)],{schemaVersion:2,scope:authorityScope});
+  const bad={path:pin(0).path,gitBlobSha:pin(0).gitBlobSha,result:'FAIL',exitCode:1};
+  const failed=laneReceipt(b,[bad,pass(pin(1))]);
+  const r=combine([a,b],[laneReceipt(a),failed]);
+  assert.equal(r.fileStates[0].result,'FAIL');
+  assert.equal(r.requiredLaneAcceptance,'FAIL');
+  assert.deepEqual(r.statusCounts,{PASS:1,FAIL:1,SKIP:0,NOT_RUN:2});
+  failed.receipt.files[0].pass=1;
+  assert.throws(()=>combine([a,b],[laneReceipt(a),failed]),/UNION_FAILED_COUNTERS/);
+});
+test('named platform skips stay partial even alongside overlapping PASS',()=>{
+  const cases=[{name:'present',result:'PASS'},{name:'other OS',result:'SKIP'}];
+  const a=policy('a',[pin(0)]),b=policy('b',[pin(0,{minimum:2,caseStates:cases})],{scope:mixedScope});
+  const f={...pass(pin(0)),result:'SKIP',tests:2,skipped:1,caseStates:cases.map(c=>({...c}))};
+  const r=combine([a,b],[laneReceipt(a),laneReceipt(b,[f])]);
+  assert.equal(r.fileStates[0].result,'SKIP');
+  assert.equal(r.requiredLaneAcceptance,'PASS_WITH_EXPECTED_PLATFORM_SKIPS');
+  f.caseStates[1].name='wrong case';
+  assert.throws(()=>combine([a,b],[laneReceipt(a),laneReceipt(b,[f])]),/UNION_CASE_STATES/);
+});
+test('union rejects different SHA, manifest, OS, full Node version, scope and malformed totals',()=>{
+  const a=policy('a',[pin(0)]);
+  for(const [key,value] of [
+    ['sourceCommitSha','b'.repeat(40)],['sourceManifestSha256','b'.repeat(64)],
+    ['platform','linux'],['nodeVersion','v22.23.6'],['scope',authorityScope],
+    ['physicalWindowsAcceptance','PASS'],['passedAssertions',2],['executedFileCount',2],
+  ]){
+    const r=laneReceipt(a);r.receipt[key]=value;
+    assert.throws(()=>combine([a],[r]),/TEST_COVERAGE_UNION_/);
+  }
+  assert.throws(()=>combine([a],[laneReceipt(a),laneReceipt(a)]),/UNION_UNKNOWN_OR_DUPLICATE_RECEIPT/);
+  assert.throws(()=>combine([a],[laneReceipt(policy('unknown',[pin(0)]))]),/UNION_UNKNOWN_OR_DUPLICATE_RECEIPT/);
+});
+test('union rejects policy drift, unapproved substitutions and forged complete file sets',()=>{
+  const a=policy('a',[pin(0)]);
+  assert.throws(()=>combine([policy('a',[pin(0,{gitBlobSha:'f'.repeat(40)})])],[]),/UNION_POLICY_FILE_INVALID/);
+  assert.throws(()=>combine([a],[laneReceipt(a,[pass(pin(1))])]),/UNION_RECEIPT_FILE_SET/);
+  assert.throws(()=>combine([a],[laneReceipt(a,[])]),/UNION_RECEIPT_FILE_SET/);
+  const all=policy('all',unionEntries.map((_,i)=>pin(i)));
+  assert.equal(combine([all],[laneReceipt(all)]).comprehensiveCoverage,true);
+  const tampered=unionEntries.map((e,i)=>i===3?{...e,blob:'f'.repeat(40)}:e);
+  assert.throws(()=>reconcileLaneCoverage(tampered,unionInventory,unionTarget,[a],[laneReceipt(a)]),/UNION_INVENTORY_MISMATCH/);
 });
