@@ -8,7 +8,7 @@ import type {LargeTransferScope,LargeTransferBinding,LargeTransferLease,LargeTra
 
 const MAX=32768,DOMAIN='nexowire.large-transfer-authority.v1',ROUTE='/v1/large-transfer-authority';
 const hex=/^[a-f0-9]{64}$/,uuid=/^[a-f0-9]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const actions=['grant','acquire','current','no-effect','verify-final','commit','recover-commit','recover-native','commit-recovered','claim-native','settle-native'] as const;
+const actions=['grant','acquire','current','no-effect','verify-final','commit','recover-commit','recover-native','commit-recovered','claim-native','settle-native','cancel'] as const;
 type Action=typeof actions[number];
 type Role='hub'|'native';
 const nativeActions=new Set<Action>(['claim-native','settle-native']);
@@ -134,6 +134,7 @@ export class ProtectedTransferAuthorityClient implements LargeTransferAuthority 
   async recoverPublished(raw:LargeTransferBinding,p:LargeTransferIntent){const b=this.scoped(raw),i=intent(p,b),v=await this.call('recover-commit',{binding:b,intent:i});if(v===null)return undefined;const x=obj(v,['receipt','commit']),r=this.verified(b,x.receipt,i);return {receipt:r,commit:commit(x.commit,b,r)};}
   async recoverNativeReceipt(raw:LargeTransferBinding,p:LargeTransferIntent){const b=this.scoped(raw),i=intent(p,b),v=await this.call('recover-native',{binding:b,intent:i});return v===null?undefined:this.verified(b,v,i);}
   async commitRecoveredPublication(raw:LargeTransferBinding,p:LargeTransferIntent,r:LargeTransferFinalReceipt){const b=this.scoped(raw),i=intent(p,b),v=this.verified(b,r,i);return commit(await this.call('commit-recovered',{binding:b,intent:i,receipt:v}),b,v);}
+  async cancelTransfer(raw:LargeTransferBinding,l:LargeTransferLease){const b=this.scoped(raw);ack(await this.call('cancel',{binding:b,lease:lease(l)}));}
   async claimNativeEffect(raw:LargeTransferBinding,l:LargeTransferLease,p:LargeTransferIntent){const b=this.scoped(raw),current=lease(l),i=intent(p,b);if(!i.dispatched||i.epoch!==current.epoch)return fail('TRANSFER_AUTHORITY_INTENT_INVALID');return claim(await this.call('claim-native',{binding:b,lease:current,intent:i}),b,current,i);}
   async settleNativeEffect(raw:LargeTransferBinding,l:LargeTransferLease,p:LargeTransferIntent,c:TransferNativeClaim,outcome:'completed'|'unknown'){
     const b=this.scoped(raw),current=lease(l),i=intent(p,b);if(!i.dispatched||i.epoch!==current.epoch||(outcome!=='completed'&&outcome!=='unknown'))return fail('TRANSFER_AUTHORITY_INTENT_INVALID');
@@ -170,6 +171,7 @@ export function createProtectedNativeTransferAdmission(client:ProtectedTransferA
   }};
 }
 export interface ProtectedTransferAuthorityBackend extends LargeTransferAuthority {
+  cancelTransfer(b:LargeTransferBinding,l:LargeTransferLease):Promise<void>;
   /** Atomically reserve the immutable request UUID and pin the current lease,
    * exact offset, source/destination grant and protected namespace. Durable
    * active claims participate in the same revoke/drain boundary. */
@@ -185,7 +187,7 @@ export function createProtectedTransferAuthorityServer(config:{
   verifyIndependentProvenance:()=>Promise<boolean>;
   backend:ProtectedTransferAuthorityBackend;
 }){
-  if(!config.tls.key||!config.tls.cert||!config.tls.ca||!str(config.authorityId,128)||typeof config.resolvePrincipal!=='function'||typeof config.verifyIndependentProvenance!=='function'||!config.backend||!['assertGrant','acquire','assertCurrent','proveWriteNoEffect','verifyFinal','commitPublished','recoverPublished','recoverNativeReceipt','commitRecoveredPublication','claimNativeEffect','settleNativeEffect'].every(k=>typeof (config.backend as unknown as Record<string,unknown>)[k]==='function'))return fail('TRANSFER_AUTHORITY_SERVER_CONFIG_INVALID');
+  if(!config.tls.key||!config.tls.cert||!config.tls.ca||!str(config.authorityId,128)||typeof config.resolvePrincipal!=='function'||typeof config.verifyIndependentProvenance!=='function'||!config.backend||!['assertGrant','acquire','assertCurrent','proveWriteNoEffect','verifyFinal','commitPublished','recoverPublished','recoverNativeReceipt','commitRecoveredPublication','claimNativeEffect','settleNativeEffect','cancelTransfer'].every(k=>typeof (config.backend as unknown as Record<string,unknown>)[k]==='function'))return fail('TRANSFER_AUTHORITY_SERVER_CONFIG_INVALID');
   const key=keyPrivate(config.authorityPrivateKeyPem),backend=config.backend;
   const dispatch=async(w:Wire)=>{
     const a=w.args;
@@ -203,6 +205,7 @@ export function createProtectedTransferAuthorityServer(config:{
       case 'recover-commit':{obj(a,['binding','intent']);const i=intent(a.intent,b);if(i.kind!=='publish'||!i.dispatched)return fail('TRANSFER_AUTHORITY_INTENT_INVALID');const value=await backend.recoverPublished(b,i);if(!value)return null;const r=receipt(value.receipt,b,i);if(await backend.verifyFinal(b,r)!==true)return fail('TRANSFER_AUTHORITY_RECEIPT_INVALID');return {receipt:r,commit:commit(value.commit,b,r)};}
       case 'recover-native':{obj(a,['binding','intent']);const i=intent(a.intent,b);if(i.kind!=='publish'||!i.dispatched)return fail('TRANSFER_AUTHORITY_INTENT_INVALID');const v=await backend.recoverNativeReceipt!(b,i);if(!v)return null;const r=receipt(v,b,i);if(await backend.verifyFinal(b,r)!==true)return fail('TRANSFER_AUTHORITY_RECEIPT_INVALID');return r;}
       case 'commit-recovered':{obj(a,['binding','intent','receipt']);const i=intent(a.intent,b),r=receipt(a.receipt,b,i);if(await backend.verifyFinal(b,r)!==true)return fail('TRANSFER_AUTHORITY_RECEIPT_INVALID');return commit(await backend.commitRecoveredPublication!(b,i,r),b,r);}
+      case 'cancel':{obj(a,['binding','lease']);await backend.cancelTransfer(b,lease(a.lease));return {accepted:true};}
       case 'claim-native':{obj(a,['binding','lease','intent']);const l=lease(a.lease),i=intent(a.intent,b);if(!i.dispatched||i.epoch!==l.epoch)return fail('TRANSFER_AUTHORITY_INTENT_INVALID');return claim(await backend.claimNativeEffect(b,l,i),b,l,i);}
       case 'settle-native':{obj(a,['binding','lease','intent','claim','outcome']);const l=lease(a.lease),i=intent(a.intent,b);if(!i.dispatched||i.epoch!==l.epoch||a.outcome!=='completed'&&a.outcome!=='unknown')return fail('TRANSFER_AUTHORITY_INTENT_INVALID');await backend.settleNativeEffect(b,l,i,claim(a.claim,b,l,i),a.outcome);return {accepted:true};}
       default:return fail('TRANSFER_AUTHORITY_ACTION_INVALID');

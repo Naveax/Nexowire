@@ -16,6 +16,8 @@ export interface LargeTransferWriteReceipt {requestId:string;epoch:number;offset
 export interface LargeTransferFinalReceipt {jobId:string;requestId:string;epoch:number;targetDeviceId:string;targetPath:string;size:number;sha256:string;proof:string}
 export interface LargeTransferCommit {jobId:string;requestId:string;epoch:number;sha256:string;commitId:string}
 export interface LargeTransferAuthority {
+  /** External cancellation fence. A retry may only confirm the same cancellation. */
+  cancelTransfer?(binding:Readonly<LargeTransferBinding>,lease:Readonly<LargeTransferLease>):Promise<void>;
   assertGrant(scope:Readonly<LargeTransferScope>):Promise<void>;
   /** Atomically allocate a higher external epoch for the immutable binding. */
   acquire(binding:Readonly<LargeTransferBinding>,previousEpoch:number):Promise<LargeTransferLease>;
@@ -235,9 +237,15 @@ export class DurableLargeTransfer {
   }
   async cancel(id:string,scope:LargeTransferScope){
     const j=this.load(id,scope);await this.authority.assertGrant(j.binding);
-    if(j.state==='COMPLETE'||j.state==='CANCELLED')return view(j);
+    if(j.state==='COMPLETE')return view(j);
     if(j.intent?.kind==='publish')return deny('TRANSFER_PUBLICATION_UNRESOLVED');
-    if(j.cancelRequested)return view(j);
-    return view(this.cas(j,{...j,cancelRequested:true,state:j.intent||j.stageCreated?'UNKNOWN':'CANCELLED'}));
+    const cancelled=j.cancelRequested||j.state==='CANCELLED'?j:this.cas(j,{...j,cancelRequested:true,state:j.intent||j.stageCreated?'UNKNOWN':'CANCELLED'});
+    // Persist the local stop before the off-host fence. On lost ACK, never
+    // resume work; repeat cancellation can only confirm the original fence.
+    if(this.authority.cancelTransfer){
+      try{await this.authority.cancelTransfer(cancelled.binding,cancelled.lease);}
+      catch{return deny('TRANSFER_CANCEL_AUTHORITY_UNKNOWN');}
+    }
+    return view(cancelled);
   }
 }
