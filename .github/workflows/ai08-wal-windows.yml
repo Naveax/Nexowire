@@ -1,0 +1,51 @@
+name: AI-08 Windows WAL Snapshot Acceptance
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/ai08-wal-windows.yml'
+      - 'scripts/ci/ai08-wal-windows-receipt.mjs'
+      - 'src/agent/operation-journal*.ts'
+      - 'test/agent/ai04-*.test.ts'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  windows:
+    name: wal-windows-${{ matrix.node }}
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - name: Bind receipt job ID
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NX_JOB_NAME: wal-windows-${{ matrix.node }}
+        run: |
+          set -euo pipefail
+          id=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" --jq '.jobs[] | [.name,.id] | @tsv' | awk -F '\t' -v name="$NX_JOB_NAME" '$1==name {print $2}')
+          [[ "$id" =~ ^[0-9]+$ ]]
+          echo "NX_JOB_ID=$id" >> "$GITHUB_ENV"
+      - name: Execute three WAL and owner suites
+        run: node scripts/ci/ai08-wal-windows-receipt.mjs
+        env:
+          NX_EXPECTED_NODE: "${{ matrix.node }}"
+          NEXOWIRE_EXPECTED_COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ai08-wal-windows-node-${{ matrix.node }}-${{ github.event.pull_request.head.sha }}
+          path: ai08-wal-receipts/
+          if-no-files-found: error
