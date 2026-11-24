@@ -15,8 +15,9 @@ test('exactly seven reviewed Windows storage/recovery files with independently r
   assert.equal(paths.reduce((n,p)=>n+REVIEWED_STORAGE_FIXTURES[p].minimum,0),29);
   for(const p of paths){
     const pin=REVIEWED_STORAGE_FIXTURES[p];
+    assert.match(pin.blob,/^[0-9a-f]{40}$/,p);
     const bytes=readFileSync(new URL('../../'+p,import.meta.url));
-    assert.equal(validateFixtureSource(p,{path:p,blob:pin.blob},bytes),pin);
+    assert.equal(validateFixtureSource(p,{path:p,blob:pin.blob},bytes),pin,p);
   }
 });
 test('unreviewed path, mismatched Git identity and worktree substitutions are rejected',()=>{

@@ -17,7 +17,7 @@ export const REVIEWED_STORAGE_FIXTURES=Object.freeze({
   'test/journal-unknown-save-sticky.test.ts':Object.freeze({blob:'987c663a5337c0a48541e4d4f3b02cb5e20912d3',minimum:6}),
   'test/journal-save-admission.test.ts':Object.freeze({blob:'61d2c9b2b24c4336b109f2c8955e086661b2e0bc',minimum:2}),
   'test/journal-save-identity-integrity.test.ts':Object.freeze({blob:'a10929da4921564ac2eb3e39806883cc75470a27',minimum:2}),
-  'test/system-hub-cutover-recovery.test.ts':Object.freeze({blob:'3327f05964007ac47eb86755fad207f1e81fc',minimum:3}),
+  'test/system-hub-cutover-recovery.test.ts':Object.freeze({blob:'3327f05964007ac47eb13786755fad207f1e81fc',minimum:3}),
 });
 const SHA=/^[0-9a-f]{40}$/;
 const TIMEOUT_MS=180000;
@@ -27,10 +27,11 @@ function deny(reason){throw Error('WINDOWS_STORAGE_FIXTURE_'+reason);}
 export function validateFixtureSource(file,entry,bytes){
   const reviewed=Object.hasOwn(REVIEWED_STORAGE_FIXTURES,file)?REVIEWED_STORAGE_FIXTURES[file]:null;
   if(!reviewed)deny('UNREVIEWED_PATH');
+  if(!SHA.test(reviewed.blob))deny('INVALID_REVIEW_PIN: '+file);
   if(!entry||entry.path!==file||entry.blob!==reviewed.blob||!Buffer.isBuffer(bytes))
-    deny('SOURCE_REVIEW_REQUIRED');
+    deny('SOURCE_REVIEW_REQUIRED: '+file);
   const actual=createHash('sha1').update('blob '+bytes.length+'\0').update(bytes).digest('hex');
-  if(actual!==reviewed.blob)deny('WORKTREE_BLOB_MISMATCH');
+  if(actual!==reviewed.blob)deny('WORKTREE_BLOB_MISMATCH: '+file);
   return reviewed;
 }
 export function reconcileFixtureResult(file,result){
