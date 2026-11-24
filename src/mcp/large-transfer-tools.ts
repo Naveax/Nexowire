@@ -26,7 +26,7 @@ function validRuntime(runtime:LargeTransferRuntime){
     !!runtime.authority&&['assertGrant','acquire','assertCurrent','proveWriteNoEffect','verifyFinal','commitPublished','recoverPublished','recoverNativeReceipt','commitRecoveredPublication'].every(k=>typeof (runtime.authority as unknown as Record<string,unknown>)[k]==='function')&&
     !!runtime.native&&['limits','writeFenced','publishFenced'].every(k=>typeof (runtime.native as unknown as Record<string,unknown>)[k]==='function');
 }
-export function registerLargeTransferTools(server:McpServer,auth:BearerAuthorization|undefined,runtime:LargeTransferRuntime|undefined,remote:LargeTransferRemote,authorize:(scope:LargeTransferScope)=>Promise<void>){
+export function registerLargeTransferTools(server:McpServer,auth:BearerAuthorization|undefined,runtime:LargeTransferRuntime|undefined,remote:LargeTransferRemote,authorize:(scope:LargeTransferScope,requireOnline:boolean)=>Promise<void>){
   // Only explicitly scoped control-plane identities may use this new route.
   // A static token, empty device list or provider absence is not permission.
   if(!runtime||!validRuntime(runtime)||auth?.kind!=='control-plane'||auth.scope!=='mcp'||!auth.accountId||!deps.every(d=>isMcpToolAuthorized(auth,d)))return;
@@ -40,7 +40,7 @@ export function registerLargeTransferTools(server:McpServer,auth:BearerAuthoriza
     try{
       if(!isMcpToolAuthorized(auth,name))throw new LargeTransferError('TRANSFER_SCOPE_DENIED');
       const scope=scopeFor(a);
-      await authorize(scope);
+      await authorize(scope,name!=='large_file_transfer_status'&&name!=='large_file_transfer_cancel');
       // Open/close per RPC; the durable journal, not an MCP session, owns jobs.
       worker=new DurableLargeTransfer(runtime.journalPath,remote,runtime.authority);
       return result({ok:true,data:await fn(worker,scope)});
