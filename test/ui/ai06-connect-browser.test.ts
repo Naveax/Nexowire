@@ -70,9 +70,9 @@ async function until<T>(label:string,read:()=>Promise<T>,accept:(value:T)=>boole
 
 test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pairing', {
   skip:enabled?false:'Linux Chromium CI or NEXOWIRE_AI06_BROWSER opt-in required',
-  timeout:90_000,
+  timeout:150_000,
 },async t=>{
-  const browser=[process.env.NEXOWIRE_AI06_BROWSER,'/usr/bin/google-chrome',
+  const browser=[process.env.NEXOWIRE_AI06_BROWSER,process.env.CHROME_BIN,'/usr/bin/google-chrome',
     '/usr/bin/google-chrome-stable','/usr/bin/chromium','/usr/bin/chromium-browser']
     .find((candidate):candidate is string=>Boolean(candidate&&existsSync(candidate)));
   assert.ok(browser,'Chromium executable is required in Linux hosted CI; never treat absence as PASS');
@@ -139,20 +139,58 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
   // CI Chrome needs its own sandbox-compatible runner configuration; --no-sandbox
   // is limited to this ephemeral fixture process, not a system/browser setting.
   child=spawn(browser,[
-    '--headless=new','--no-sandbox','--disable-dev-shm-usage','--no-first-run',
+    '--headless=new','--no-sandbox','--disable-dev-shm-usage','--disable-gpu','--no-first-run',
     '--no-default-browser-check','--disable-background-networking','--disable-sync',
     '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1',
     '--remote-debugging-address=127.0.0.1','--remote-debugging-port=0',
     '--user-data-dir='+root,'about:blank',
-  ],{stdio:'ignore'});
+  ],{stdio:['ignore','ignore','pipe']});
   let launchError:Error|undefined;
+  let stderr='';
+  let reportedPort=0;
   child.on('error',error=>{launchError=error});
-  const port=await until('Chromium DevTools',async()=>{
+  child.stderr?.setEncoding('utf8');
+  child.stderr?.on('data',(chunk:string)=>{
+    // Only diagnostic output from this disposable process; keep a bounded tail.
+    stderr=(stderr+chunk).slice(-8192);
+    const match=stderr.match(/DevTools listening on ws:\/\/127\.0\.0\.1:(\d+)\/devtools\/browser\/[a-f0-9-]+/i);
+    if(match)reportedPort=Number(match[1]);
+  });
+  const validPort=(value:number)=>Number.isInteger(value)&&value>0&&value<=65535;
+  // CI starts this test alongside many other Node tests. Allow bounded cold
+  // startup and observe both supported readiness channels of the owned process.
+  // A renderer or functional failure is never retried or considered a skip.
+  const startupDeadline=Date.now()+45_000;
+  let port=0;
+  while(Date.now()<startupDeadline){
     if(launchError)throw launchError;
-    if(child!.exitCode!==null)throw Error('Chromium exited '+child!.exitCode);
-    const raw=await readFile(join(root,'DevToolsActivePort'),'utf8');
-    return Number(raw.split('\n')[0]);
-  },value=>Number.isInteger(value)&&value>0&&value<=65535);
+    if(child.exitCode!==null||child.signalCode!==null)
+      throw Error('Chromium startup exited: '+child.exitCode+'/'+child.signalCode+'\n'+stderr);
+    let filePort=0;
+    try{
+      filePort=Number((await readFile(join(root,'DevToolsActivePort'),'utf8')).split('\n')[0]);
+    }catch(error){
+      if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;
+    }
+    if(validPort(filePort)&&validPort(reportedPort))
+      assert.equal(filePort,reportedPort,'Chromium readiness channels disagree');
+    const candidate=validPort(filePort)?filePort:reportedPort;
+    if(validPort(candidate)){
+      try{
+        const probe=await fetch('http://127.0.0.1:'+candidate+'/json/version',{signal:AbortSignal.timeout(1000)});
+        if(probe.ok){
+          const version=await probe.json() as {webSocketDebuggerUrl?:string;Browser?:string};
+          if(version.webSocketDebuggerUrl?.startsWith('ws://127.0.0.1:'+candidate+'/devtools/browser/')
+            && typeof version.Browser==='string'){
+            port=candidate;break;
+          }
+        }
+      }catch{/* The owned DevTools listener may still be starting. */}
+    }
+    await delay(100);
+  }
+  assert.ok(validPort(port),'Chromium DevTools startup timed out (45s); executable='+browser+'\n'+stderr);
+  t.diagnostic('Chromium DevTools ready on owned loopback port; executable='+browser);
   const target=await until('page target',async()=>{
     const response=await fetch('http://127.0.0.1:'+port+'/json/list',{signal:AbortSignal.timeout(2000)});
     const pages=await response.json() as Array<{type:string;webSocketDebuggerUrl?:string}>;
