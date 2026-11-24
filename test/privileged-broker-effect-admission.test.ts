@@ -626,7 +626,9 @@ test('protected binding readbacks reject accessors and Proxies before reading fi
             enumerable:true,configurable:true,get(){hooks++;return value.ownerEpoch;},
           });
         }
-        if(shape==='extra')return {...value,unexpected:true};
+        if(shape==='extra'){
+          const extra={...value,unexpected:true};return extra;
+        }
         const handler={
           getPrototypeOf(){hooks++;throw Error('unexpected prototype read');},
           ownKeys(){hooks++;throw Error('unexpected keys read');},
