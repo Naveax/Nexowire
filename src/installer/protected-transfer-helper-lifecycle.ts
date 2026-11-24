@@ -137,23 +137,26 @@ const digest=(bytes:Buffer)=>createHash('sha256').update(bytes).digest('hex');
 // Fixed path; no caller-controlled shell text or ACL changes to existing roots.
 const provisionScript=String.raw`
 $ErrorActionPreference='Stop'
+$ProgressPreference='SilentlyContinue'
+$WarningPreference='Stop'
 $root='C:\ProgramData\Nexowire-TransferRuntime'
 $parent=[IO.DirectoryInfo]::new('C:\ProgramData')
 if(-not $parent.Exists -or ($parent.Attributes -band [IO.FileAttributes]::ReparsePoint)){throw 'TRANSFER_HELPER_ROOT_PARENT_UNTRUSTED'}
 if([IO.Directory]::Exists($root) -or [IO.File]::Exists($root)){throw 'TRANSFER_HELPER_ROOT_ALREADY_EXISTS'}
-$acl=New-Object Security.AccessControl.DirectorySecurity
+$acl=[Security.AccessControl.DirectorySecurity]::new()
 $acl.SetAccessRuleProtection($true,$false)
-$admin=New-Object Security.Principal.SecurityIdentifier('S-1-5-32-544')
-$system=New-Object Security.Principal.SecurityIdentifier('S-1-5-18')
+$admin=[Security.Principal.SecurityIdentifier]::new('S-1-5-32-544')
+$system=[Security.Principal.SecurityIdentifier]::new('S-1-5-18')
 $acl.SetOwner($admin)
 foreach($sid in @($admin,$system)){
-  $rule=New-Object Security.AccessControl.FileSystemAccessRule($sid,'FullControl','ContainerInherit,ObjectInherit','None','Allow')
+  $inherit=[Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [Security.AccessControl.InheritanceFlags]::ObjectInherit
+  $rule=[Security.AccessControl.FileSystemAccessRule]::new($sid,[Security.AccessControl.FileSystemRights]::FullControl,$inherit,[Security.AccessControl.PropagationFlags]::None,[Security.AccessControl.AccessControlType]::Allow)
   $acl.AddAccessRule($rule)
 }
 # .NET Framework's security-descriptor overload applies the private ACL at
 # directory creation, never creates a user-writable staging namespace.
 [void][IO.Directory]::CreateDirectory($root,$acl)
-Write-Output 'TRANSFER_HELPER_ROOT_PROVISIONED_VERIFY_REQUIRED'
+[Console]::WriteLine('TRANSFER_HELPER_ROOT_PROVISIONED_VERIFY_REQUIRED')
 `;
 const signatureScript=String.raw`
 $ErrorActionPreference='Stop'
@@ -219,7 +222,14 @@ export function createWindowsTransferHelperArtifactStore(assertInstalledRuntime:
       const result=await run('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',[
         '-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(provisionScript,'utf16le').toString('base64'),
       ],{cwd:'C:\\Windows\\System32',env:protectedWindowsAclEnvironment(),windowsHide:true,timeout:30000,maxBuffer:16384});
-      if(result.stderr.trim()||result.stdout.trim()!=='TRANSFER_HELPER_ROOT_PROVISIONED_VERIFY_REQUIRED')return deny('TRANSFER_HELPER_ROOT_PROVISION_UNVERIFIED');
+      const marker=result.stdout.trim()==='TRANSFER_HELPER_ROOT_PROVISIONED_VERIFY_REQUIRED';
+      if(result.stderr.trim()||!marker){
+        // No raw child output/path/credential in diagnostics. Never ignore
+        // unexpected stderr, even a PowerShell progress record.
+        return deny('TRANSFER_HELPER_ROOT_PROVISION_UNVERIFIED: marker='+String(marker)+
+          '; stdoutBytes='+Buffer.byteLength(result.stdout)+'; stderrBytes='+Buffer.byteLength(result.stderr)+
+          '; progressRecord='+String(/ProgressRecord|<PR>/i.test(result.stderr)));
+      }
     }
     const stat=await fs.lstat(TRANSFER_HELPER_ROOT);
     if(!stat.isDirectory()||stat.isSymbolicLink()||(await fs.realpath(TRANSFER_HELPER_ROOT)).toLowerCase()!==TRANSFER_HELPER_ROOT.toLowerCase())return deny('TRANSFER_HELPER_ROOT_UNTRUSTED');
