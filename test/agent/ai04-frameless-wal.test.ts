@@ -165,3 +165,36 @@ test('AI-04 frameless WAL: nonzero backfill counter contradicts zero-frame index
   await assert.rejects(verifyAgentJournalWal(file),{code:'AGENT_JOURNAL_WAL_CORRUPT'});
   await unchanged(file,f.empty,f.empty.wal,shm);
 });
+
+
+// Model interruption between the two index-header copies using only real
+// SQLite-generated previous/current headers from the same WAL generation.
+// Neither copy is forged, and the genuine full WAL must remain readable.
+for(const offset of [0,48]){
+  test('AI-04 WAL: split index header at '+offset+' cannot hide later committed history',async t=>{
+    const f=await fixture(t);
+    assert.deepEqual(f.prefix.shm.subarray(32,40),f.hot.shm.subarray(32,40));
+    const shm=Buffer.from(f.hot.shm);
+    f.prefix.shm.copy(shm,offset,0,48);
+    assert.notDeepEqual(shm.subarray(0,48),shm.subarray(48,96));
+    const file=await f.copy('split-prefix',f.hot,f.prefix.wal,shm);
+    const oracleFile=await f.copy('split-oracle',f.hot,f.prefix.wal,shm);
+    const oracle=new DatabaseSync(oracleFile);
+    try{
+      assert.equal(oracle.prepare('PRAGMA quick_check').get()!.quick_check,'ok');
+      assert.equal(oracle.prepare('SELECT status FROM ledger WHERE request_id=?')
+        .get('wal-only'),undefined);
+    }finally{oracle.close();}
+    await assert.rejects(verifyAgentJournalWal(file),{code:'AGENT_JOURNAL_WAL_CORRUPT'});
+    await unchanged(file,f.hot,f.prefix.wal,shm);
+  });
+  test('AI-04 WAL: split index header at '+offset+' permits intact full WAL unchanged',async t=>{
+    const f=await fixture(t);
+    const shm=Buffer.from(f.hot.shm);
+    f.prefix.shm.copy(shm,offset,0,48);
+    assert.notDeepEqual(shm.subarray(0,48),shm.subarray(48,96));
+    const file=await f.copy('split-intact',f.hot,f.hot.wal,shm);
+    await verifyAgentJournalWal(file);
+    await unchanged(file,f.hot,f.hot.wal,shm);
+  });
+}
