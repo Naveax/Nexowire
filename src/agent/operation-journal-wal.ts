@@ -99,18 +99,22 @@ async function readIndexSnapshot(dbFile:string,strictShape:boolean):Promise<Inde
   }finally{await handle.close();}
 }
 
-function coherentIndexHeader(bytes:Buffer):boolean{
+function validIndexHeader(bytes:Buffer):boolean{
   const nativeBig=endianness()==='BE';
   const u32=(at:number)=>nativeBig?bytes.readUInt32BE(at):bytes.readUInt32LE(at);
   const checksum=fold(bytes,40,nativeBig,{s0:0,s1:0});
   const encodedPage=nativeBig?bytes.readUInt16BE(14):bytes.readUInt16LE(14);
   const pageSize=encodedPage===1?65536:encodedPage;
-  return bytes.subarray(0,48).equals(bytes.subarray(48,96))&&
-    u32(0)===3007000&&u32(4)===0&&bytes[12]===1&&
+  return u32(0)===3007000&&u32(4)===0&&bytes[12]===1&&
     (bytes[13]===0||bytes[13]===1)&&
     (pageSize===0||(pageSize>=512&&pageSize<=65536&&
       (pageSize&(pageSize-1))===0))&&
     u32(40)===checksum.s0&&u32(44)===checksum.s1;
+}
+
+function coherentIndexHeader(bytes:Buffer):boolean{
+  return bytes.subarray(0,48).equals(bytes.subarray(48,96))&&
+    validIndexHeader(bytes.subarray(0,48));
 }
 
 // A zero-byte WAL or a valid header without frames can be legitimate after
@@ -131,25 +135,30 @@ async function readFramelessIndex(dbFile:string):Promise<IndexSnapshot|undefined
 
 // For a fully checksummed nonempty WAL, SQLite may recover even if its
 // volatile index is absent, uninitialized, torn, or behind the durable WAL.
-// Only a coherent index of the SAME generation can prove a contradiction.
-// A greater commit count or a different terminal checksum at the same count
-// indicates that accepting the physical prefix could silently lose history.
+// Inspect both header copies independently. SQLite can be interrupted during
+// its index-header update; disagreement does not erase positive evidence from
+// a structurally valid, checksummed header of the SAME WAL generation.
+// A greater commit count or different terminal checksum at the same count
+// is a contradiction, not proof of authenticity. A torn or lagging index
+// without such evidence must still permit a fully checksummed WAL.
 async function rejectContradictoryCommitIndex(dbFile:string,walHeader:Buffer,
   pageSize:number,currentFrames:number,commitPages:number,digest:Checksum):Promise<void>{
   const index=await readIndexSnapshot(dbFile,false);
   if(!index)return;
-  const {bytes}=index;
-  if(!coherentIndexHeader(bytes))return;
   const nativeBig=endianness()==='BE';
-  const u32=(at:number)=>nativeBig?bytes.readUInt32BE(at):bytes.readUInt32LE(at);
-  const encodedPage=nativeBig?bytes.readUInt16BE(14):bytes.readUInt16LE(14);
-  if(!bytes.subarray(32,40).equals(walHeader.subarray(16,24))||
-    encodedPage!==(pageSize===65536?1:pageSize)||
-    bytes[13]!==Number(walHeader.readUInt32BE(0)===0x377f0683))return;
-  const committed=u32(16);
-  if(committed>currentFrames||
-    (committed===currentFrames&&(u32(20)!==commitPages||
-      u32(24)!==digest.s0||u32(28)!==digest.s1)))fail();
+  for(const offset of [0,48]){
+    const bytes=index.bytes.subarray(offset,offset+48);
+    if(!validIndexHeader(bytes))continue;
+    const u32=(at:number)=>nativeBig?bytes.readUInt32BE(at):bytes.readUInt32LE(at);
+    const encodedPage=nativeBig?bytes.readUInt16BE(14):bytes.readUInt16LE(14);
+    if(!bytes.subarray(32,40).equals(walHeader.subarray(16,24))||
+      encodedPage!==(pageSize===65536?1:pageSize)||
+      bytes[13]!==Number(walHeader.readUInt32BE(0)===0x377f0683))continue;
+    const committed=u32(16);
+    if(committed>currentFrames||
+      (committed===currentFrames&&(u32(20)!==commitPages||
+        u32(24)!==digest.s0||u32(28)!==digest.s1)))fail();
+  }
 }
 
 async function assertFramelessWal(dbFile:string,walFile:string,opened:FileSnapshot,
