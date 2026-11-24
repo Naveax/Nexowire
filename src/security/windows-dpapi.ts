@@ -1,9 +1,30 @@
 import { spawn, spawnSync } from 'node:child_process';
 
+export type DpapiChildStage='before-script'|'script-start'|'assembly-loaded'|'stdin-read'|'input-decoded'|'crypto-start'|'crypto-rejected'|'crypto-complete'|'output-complete';
+export type DpapiChildFailure='spawn'|'stdin'|'output-limit'|'timeout'|'terminated'|'crypto-rejected'|'child-exit';
+export interface DpapiChildDiagnostic {
+  readonly operation:'protect'|'unprotect';readonly scope:WindowsDpapiScope;
+  readonly stage:DpapiChildStage;readonly failure:DpapiChildFailure;readonly elapsedMs:number;
+}
+const stageOrder:readonly DpapiChildStage[]=['script-start','assembly-loaded','stdin-read','input-decoded','crypto-start','crypto-complete','output-complete'];
+/** Exact fixed markers only; never echo PowerShell stderr or payload. */
+export function dpapiChildStage(stderr:string):DpapiChildStage {
+  let stage:DpapiChildStage='before-script';let next=0;
+  for(const line of stderr.split(/\r?\n/)){
+    if(!line.startsWith('NWX_DPAPI_STAGE:'))continue;
+    const value=line.slice('NWX_DPAPI_STAGE:'.length);
+    if(value==='crypto-rejected'&&stage==='crypto-start'){stage=value;next=-1;continue}
+    if(next<0||value!==stageOrder[next])return 'before-script';
+    stage=stageOrder[next++]!;
+  }
+  return stage;
+}
+
 export class WindowsDpapiError extends Error {
   constructor(
     public readonly code: string,
     message: string,
+    public readonly diagnostic?:Readonly<DpapiChildDiagnostic>,
   ) {
     super(message);
     this.name = 'WindowsDpapiError';
@@ -117,14 +138,22 @@ function powershellScript(
     dpapiScopeExpression(scope);
   return [
     "$ErrorActionPreference='Stop'",
+    "[Console]::Error.WriteLine('NWX_DPAPI_STAGE:script-start')",
     'Add-Type -AssemblyName System.Security',
-    '$payload=[Console]::In.ReadToEnd() | ConvertFrom-Json',
+    "[Console]::Error.WriteLine('NWX_DPAPI_STAGE:assembly-loaded')",
+    '$raw=[Console]::In.ReadToEnd()',
+    "[Console]::Error.WriteLine('NWX_DPAPI_STAGE:stdin-read')",
+    '$payload=$raw | ConvertFrom-Json',
     '$inputBytes=[Convert]::FromBase64String([string]$payload.input)',
     '$entropy=[Convert]::FromBase64String([string]$payload.entropy)',
     '$scope=[Security.Cryptography.DataProtectionScope]::' +
       dataProtectionScope,
-    `$output=[Security.Cryptography.ProtectedData]::${method}($inputBytes,$entropy,$scope)`,
+    "[Console]::Error.WriteLine('NWX_DPAPI_STAGE:input-decoded')",
+    "[Console]::Error.WriteLine('NWX_DPAPI_STAGE:crypto-start')",
+    `try { $output=[Security.Cryptography.ProtectedData]::${method}($inputBytes,$entropy,$scope) } catch { $e=$_.Exception; while ($null -ne $e -and -not ($e -is [Security.Cryptography.CryptographicException])) { $e=$e.InnerException }; if ($null -ne $e) { [Console]::Error.WriteLine('NWX_DPAPI_STAGE:crypto-rejected'); exit 23 }; exit 24 }`,
+    "[Console]::Error.WriteLine('NWX_DPAPI_STAGE:crypto-complete')",
     '[Console]::Out.Write([Convert]::ToBase64String($output))',
+    "[Console]::Error.WriteLine('NWX_DPAPI_STAGE:output-complete')",
   ].join('; ');
 }
 
@@ -156,6 +185,15 @@ function decodeOutput(
   }
 }
 
+function childFailure(operation:'protect'|'unprotect',scope:WindowsDpapiScope,stderr:string,
+  failure:DpapiChildFailure,started:bigint):WindowsDpapiError {
+  const elapsedMs=Number((process.hrtime.bigint()-started)/1000000n);
+  const stage=dpapiChildStage(stderr);
+  const diagnostic=Object.freeze({operation,scope,stage,failure,elapsedMs});
+  return new WindowsDpapiError('WINDOWS_DPAPI_FAILED',
+    'Windows DPAPI child failed: '+operation+'/'+scope+'; stage='+stage+'; failure='+failure+'; elapsedMs='+elapsedMs,diagnostic);
+}
+
 async function runDpapi(
   operation: 'protect' | 'unprotect',
   value: Buffer,
@@ -165,6 +203,7 @@ async function runDpapi(
   assertWindows();
 
   return await new Promise<Buffer>((resolve, reject) => {
+    const started=process.hrtime.bigint();
     const child = spawn(
       DPAPI_POWERSHELL,
       [
@@ -184,7 +223,8 @@ async function runDpapi(
       },
     );
 
-    const stdout: Buffer[] = [];
+    const stdout: Buffer[] = [], stderr:Buffer[]=[];
+    const readStages=()=>Buffer.concat(stderr).toString('utf8');
     let collected = 0;
     let exceededLimit = false;
     child.stdout.on('data', (chunk: Buffer) => {
@@ -201,22 +241,26 @@ async function runDpapi(
       if (collected > DPAPI_MAX_BYTES) {
         exceededLimit = true;
         child.kill();
-      }
+      } else {stderr.push(chunk);}
     });
 
     child.once('error', () => reject(
-      new WindowsDpapiError('WINDOWS_DPAPI_FAILED', 'Windows DPAPI child could not start.'),
+      childFailure(operation,scope,readStages(),'spawn',started),
     ));
     child.stdin.on('error', () => reject(
-      new WindowsDpapiError('WINDOWS_DPAPI_FAILED', 'Windows DPAPI input transport failed.'),
+      childFailure(operation,scope,readStages(),'stdin',started),
     ));
     child.once('close', (code, signal) => {
       if (exceededLimit) {
-        reject(new WindowsDpapiError('WINDOWS_DPAPI_FAILED', 'Windows DPAPI output exceeded bound.'));
+        reject(childFailure(operation,scope,readStages(),'output-limit',started));
         return;
       }
       if (code !== 0 || signal !== null) {
-        reject(new WindowsDpapiError('WINDOWS_DPAPI_FAILED', 'Windows DPAPI child failed or timed out.'));
+        const stages=readStages();
+        const elapsed=process.hrtime.bigint()-started;
+        const failure:DpapiChildFailure=code===23&&signal===null&&dpapiChildStage(stages)==='crypto-rejected'
+          ?'crypto-rejected':elapsed>=BigInt(DPAPI_TIMEOUT_MS)*1000000n?'timeout':signal!==null?'terminated':'child-exit';
+        reject(childFailure(operation,scope,stages,failure,started));
         return;
       }
       const out = Buffer.concat(stdout).toString('utf8');
@@ -240,6 +284,7 @@ function runDpapiSync(
 ): Buffer {
   assertWindows();
 
+  const started=process.hrtime.bigint();
   const result = spawnSync(
     DPAPI_POWERSHELL,
     [
@@ -262,13 +307,15 @@ function runDpapiSync(
   );
 
   if (result.error) {
-    throw new WindowsDpapiError('WINDOWS_DPAPI_FAILED', 'Windows DPAPI child failed or timed out.');
+    const failure:DpapiChildFailure=(result.error as NodeJS.ErrnoException).code==='ETIMEDOUT'?'timeout':
+      (result.error as NodeJS.ErrnoException).code==='ENOBUFS'?'output-limit':'spawn';
+    throw childFailure(operation,scope,result.stderr??'',failure,started);
   }
   if (result.status !== 0) {
-    throw new WindowsDpapiError(
-      'WINDOWS_DPAPI_FAILED',
-      `Windows DPAPI ${operation} failed.`,
-    );
+    const stages=result.stderr??'';
+    const failure:DpapiChildFailure=result.status===23&&result.signal===null&&dpapiChildStage(stages)==='crypto-rejected'
+      ?'crypto-rejected':result.signal!==null?'terminated':'child-exit';
+    throw childFailure(operation,scope,stages,failure,started);
   }
   return decodeOutput(operation, result.stdout);
 }

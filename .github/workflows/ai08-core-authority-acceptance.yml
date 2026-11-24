@@ -1,0 +1,115 @@
+name: AI-08 CORE Protected Authority Acceptance
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/ai08-core-authority-acceptance.yml'
+      - 'scripts/ci/ai08-core-authority-receipt.mjs'
+      - 'scripts/ci/ai08-core-authority-plan.mjs'
+      - 'test/ci/ai08-core-authority-plan.test.mjs'
+      - 'src/agent/*dispatch*.ts'
+      - 'src/security/core-native-*.ts'
+      - 'src/security/postgres-core-approval-ledger.ts'
+      - 'src/protocol/core-native-consent-transport.ts'
+      - 'test/ai03/**'
+      - 'test/ai08/**'
+      - 'test/*dispatch*.test.ts'
+      - 'test/core-native-*.test.ts'
+      - 'sql/core-broker-dispatch*.sql'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  windows:
+    name: windows-node-${{ matrix.node }}
+    runs-on: windows-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: node --test test/ci/ai08-core-authority-plan.test.mjs
+      - name: Bind exact job ID
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NX_JOB_NAME: windows-node-${{ matrix.node }}
+        run: |
+          set -euo pipefail
+          id=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" --jq '.jobs[] | [.name,.id] | @tsv' | awk -F '\t' -v name="$NX_JOB_NAME" '$1==name {print $2}')
+          [[ "$id" =~ ^[0-9]+$ ]]
+          echo "NX_JOB_ID=$id" >> "$GITHUB_ENV"
+      - name: Execute exact CORE authority fixtures
+        run: node scripts/ci/ai08-core-authority-receipt.mjs windows
+        env:
+          NX_EXPECTED_NODE: "${{ matrix.node }}"
+          NEXOWIRE_EXPECTED_COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ai08-core-authority-windows-node-${{ matrix.node }}-${{ github.event.pull_request.head.sha }}
+          path: ai08-core-authority-receipts/
+          if-no-files-found: error
+  postgres:
+    name: postgres-node-${{ matrix.node }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    services:
+      credential-postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: nexowire_dispatch_ci
+          POSTGRES_USER: nexowire_dispatch_ci
+          POSTGRES_PASSWORD: ci-only-not-a-production-credential
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nexowire_dispatch_ci -d nexowire_dispatch_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: node --test test/ci/ai08-core-authority-plan.test.mjs
+      - name: Bind exact job ID
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NX_JOB_NAME: postgres-node-${{ matrix.node }}
+        run: |
+          set -euo pipefail
+          id=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" --jq '.jobs[] | [.name,.id] | @tsv' | awk -F '\t' -v name="$NX_JOB_NAME" '$1==name {print $2}')
+          [[ "$id" =~ ^[0-9]+$ ]]
+          echo "NX_JOB_ID=$id" >> "$GITHUB_ENV"
+      - name: Execute exact CORE authority fixtures
+        run: node scripts/ci/ai08-core-authority-receipt.mjs postgres
+        env:
+          NX_EXPECTED_NODE: "${{ matrix.node }}"
+          NEXOWIRE_EXPECTED_COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+          NEXOWIRE_PG_DISPATCH_INTEGRATION: '1'
+          NEXOWIRE_PG_DISPATCH_TEST_PORT: '5432'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ai08-core-authority-postgres-node-${{ matrix.node }}-${{ github.event.pull_request.head.sha }}
+          path: ai08-core-authority-receipts/
+          if-no-files-found: error

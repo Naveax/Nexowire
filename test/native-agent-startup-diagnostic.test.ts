@@ -4,9 +4,12 @@ import {mkdtemp, readFile, rm, writeFile, symlink, stat, mkdir} from 'node:fs/pr
 import os from 'node:os';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
+import {promises as fs} from 'node:fs';
+import {DatabaseSync} from 'node:sqlite';
 import {initializeNativeAgentState, nativeAgentStartupDiagnosticPath,
   readNativeAgentStartupDiagnostic} from '../src/agent/native-agent-startup-diagnostic.js';
-import {AgentJournalWalError} from '../src/agent/operation-journal-wal.js';
+import {AgentJournalWalError, AgentJournalWalUnstableError,
+  verifyAgentJournalWal} from '../src/agent/operation-journal-wal.js';
 
 async function sandbox(t: TestContext) {
   const homeDir = await mkdtemp(path.join(os.tmpdir(), 'nw-startup-diagnostic-'));
@@ -122,4 +125,143 @@ test('startup diagnostics bind the process and a cutover nonce without treating 
     {homeDir, env: {NEXOWIRE_UPDATE_STARTUP_NONCE: 'Bearer secret-canary'}});
   assert.equal((await readNativeAgentStartupDiagnostic({homeDir}))?.startupNonce, undefined);
   assert.doesNotMatch(await readFile(nativeAgentStartupDiagnosticPath({homeDir}), 'utf8'), /secret-canary|Bearer/);
+});
+
+
+// #1289: real persistent SHM timestamp drift must surface as UNSTABLE,
+// never CORRUPT, IN_USE, readiness, repair or mutation authority.
+test('persistent WAL snapshot instability preserves exact startup failure and journal history', async t => {
+  const {homeDir} = await sandbox(t);
+  const live = path.join(homeDir, 'live.sqlite');
+  const journal = path.join(homeDir, 'copy.sqlite');
+  const db = new DatabaseSync(live);
+  const suffixes = ['', '-wal', '-shm'] as const;
+  const bytes: Buffer[] = [];
+  try {
+    db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA wal_autocheckpoint=0;');
+    db.exec("CREATE TABLE ledger(id TEXT PRIMARY KEY,status TEXT NOT NULL)");
+    db.prepare('INSERT INTO ledger VALUES(?,?)').run('durable-reservation','unknown');
+    for (const suffix of suffixes) bytes.push(await readFile(live + suffix));
+  } finally { db.close(); }
+  assert.ok(bytes[1]!.length > 32, 'ordinary committed WAL required');
+  for (const [index, suffix] of suffixes.entries()) await writeFile(journal + suffix, bytes[index]!);
+
+  const nonce = randomUUID();
+  const options = {homeDir, env: {
+    NEXOWIRE_AGENT_OPERATION_JOURNAL_FILE: journal,
+    NEXOWIRE_UPDATE_STARTUP_NONCE: nonce,
+  }};
+  const realLstat = fs.lstat.bind(fs);
+  let reads = 0;
+  let changes = 0;
+  const drift = t.mock.method(fs, 'lstat', async (target: string) => {
+    if (target === journal + '-shm' && ++reads % 2 === 0) {
+      const before = await realLstat(target);
+      await fs.utimes(target, before.atime, new Date(before.mtimeMs + 60000));
+      const after = await realLstat(target);
+      assert.equal(after.dev, before.dev);
+      assert.equal(after.ino, before.ino);
+      assert.equal(after.size, before.size);
+      assert.notEqual(after.mtimeMs, before.mtimeMs);
+      changes++;
+      return after;
+    }
+    return realLstat(target);
+  });
+  try {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      let original: unknown;
+      let reachedReady = false;
+      await assert.rejects(initializeNativeAgentState(async () => {
+        try { await verifyAgentJournalWal(journal); }
+        catch (error) { original = error; throw error; }
+        reachedReady = true;
+      }, options), error => error === original &&
+        error instanceof AgentJournalWalUnstableError &&
+        error.code === 'AGENT_JOURNAL_WAL_UNSTABLE');
+      assert.equal(reachedReady, false);
+      assert.equal(changes, attempt * 3);
+      const diagnostic = await readNativeAgentStartupDiagnostic(options);
+      assert.equal(diagnostic?.schemaVersion, 1);
+      assert.equal(diagnostic?.phase, 'initialization-failed');
+      assert.equal(diagnostic?.failureCode, 'AGENT_JOURNAL_WAL_UNSTABLE');
+      assert.equal(diagnostic?.consecutiveFailures, attempt);
+      assert.equal(diagnostic?.restartLoopDetected, attempt >= 3);
+      assert.equal(diagnostic?.processId, process.pid);
+      assert.equal(diagnostic?.startupNonce, nonce);
+      assert.equal(diagnostic?.automaticJournalRepair, false);
+      assert.equal(diagnostic?.activeConnectionVerified, false);
+      assert.equal(diagnostic?.coreAuthorityVerified, false);
+      for (const [index, suffix] of suffixes.entries())
+        assert.deepEqual(await readFile(journal + suffix), bytes[index]);
+    }
+  } finally { drift.mock.restore(); }
+
+  // A separate genuine, stable preflight is required to clear the failure.
+  await initializeNativeAgentState(() => verifyAgentJournalWal(journal), options);
+  const ready = await readNativeAgentStartupDiagnostic(options);
+  assert.equal(ready?.phase, 'local-state-ready');
+  assert.equal(ready?.failureCode, null);
+  assert.equal(ready?.consecutiveFailures, 0);
+  assert.equal(ready?.restartLoopDetected, false);
+  assert.equal(ready?.automaticJournalRepair, false);
+  assert.equal(ready?.activeConnectionVerified, false);
+  assert.equal(ready?.coreAuthorityVerified, false);
+  for (const [index, suffix] of suffixes.entries())
+    assert.deepEqual(await readFile(journal + suffix), bytes[index]);
+});
+
+test('startup diagnostic distinguishes UNSTABLE, CORRUPT, IN_USE and unrecognized failures without leaking messages', async t => {
+  const options = await sandbox(t);
+  const unstable = new AgentJournalWalUnstableError();
+  const corrupt = new AgentJournalWalError('secret-canary');
+  const inUse = Object.assign(new Error('secret-canary'), {code: 'AGENT_JOURNAL_IN_USE'});
+  const unknown = Object.assign(new Error('secret-canary'), {code: 'UNTRUSTED_CANARY'});
+  const cases = [
+    [unstable, 'AGENT_JOURNAL_WAL_UNSTABLE'],
+    [corrupt, 'AGENT_JOURNAL_WAL_CORRUPT'],
+    [inUse, 'AGENT_JOURNAL_IN_USE'],
+    [unknown, 'NATIVE_AGENT_INITIALIZATION_FAILED'],
+  ] as const;
+  for (const [index, [error, code]] of cases.entries()) {
+    await assert.rejects(initializeNativeAgentState(async () => { throw error; }, options),
+      actual => actual === error);
+    const value = await readNativeAgentStartupDiagnostic(options);
+    assert.equal(value?.failureCode, code);
+    assert.equal(value?.phase, 'initialization-failed');
+    assert.equal(value?.consecutiveFailures, index + 1);
+    assert.equal(value?.restartLoopDetected, index >= 2);
+    assert.equal(value?.automaticJournalRepair, false);
+    assert.equal(value?.activeConnectionVerified, false);
+    assert.equal(value?.coreAuthorityVerified, false);
+  }
+  assert.doesNotMatch(await readFile(nativeAgentStartupDiagnosticPath(options), 'utf8'),
+    /secret-canary|UNTRUSTED_CANARY/);
+});
+
+test('UNSTABLE diagnostic cannot claim readiness or authority and diagnostic I/O cannot mask the original error', async t => {
+  const options = await sandbox(t);
+  const error = new AgentJournalWalUnstableError();
+  await assert.rejects(initializeNativeAgentState(async () => { throw error; }, options),
+    actual => actual === error);
+  const file = nativeAgentStartupDiagnosticPath(options);
+  const valid = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
+  assert.equal(valid.failureCode, 'AGENT_JOURNAL_WAL_UNSTABLE');
+  for (const forged of [
+    {...valid, phase: 'local-state-ready'},
+    {...valid, phase: 'local-state-ready', consecutiveFailures: 0},
+    {...valid, automaticJournalRepair: true},
+    {...valid, activeConnectionVerified: true},
+    {...valid, coreAuthorityVerified: true},
+    {...valid, consecutiveFailures: 0},
+    {...valid, restartLoopDetected: true},
+  ]) {
+    await writeFile(file, JSON.stringify(forged));
+    assert.equal(await readNativeAgentStartupDiagnostic(options), null);
+  }
+  await rm(path.dirname(file), {recursive: true, force: true});
+  await writeFile(path.dirname(file), 'not a directory');
+  await assert.rejects(initializeNativeAgentState(async () => { throw error; }, options),
+    actual => actual === error);
+  assert.equal(await readNativeAgentStartupDiagnostic(options), null);
 });
