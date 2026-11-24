@@ -1,0 +1,12 @@
+# AI-05 offline protected transfer helper artifact handoff
+
+Upstream #1283 exact 1977d5191cc540e8cf3af9a8bbab53c07ff53129, reviewed C# Git blob 7a62bf6c027544dfceb14f3ca939d7d76eb2ced9. This branch builds only a disposable unsigned executable using the exact reviewed source and independently pinned signed x64 compiler. No key handling, signing, installation, helper execution, ACL changes or elevation. Build requires independent source SHA-256 and compiler binary/certificate SHA-256 pins. Output is explicitly UNSIGNED_BUILD_ONLY and never production-eligible.
+
+The release authority signs externally with its approved code-signing certificate, independently records the signed binary SHA-256 and SHA-256 of certificate RawData (not the SHA-1 thumbprint), then uses VerifySigned. Verification is read-only and rejects invalid Authenticode, wrong pins or reparse paths. Its receipt is NOT a protected runtime/ACL witness.
+
+## Deployment handoff
+- AI-07 #1283 publisher expects separate canonical private C:\ProgramData roots and independent config pins flushHelperSha256 / flushHelperSignerSha256. Do not put the helper in a user-writable one-click bundle, or assume the existing Program Files SYSTEM Hub installer meets that contract.
+- AI-01/AI-03/AI-07 coordinate the protected Broker provisioning interface and independent config authority. AI-09 alone may perform real elevated deployment and validate ACLs, signer/DPAPI scope, actual runtime witness and native volume flush.
+- Clean install must leave transfer disabled until independently signed helper, roots, enrolled key and authority all pass. Upgrade stages side-by-side signed bytes; old working helper and existing owner data/receipts remain unchanged until verified cutover. Uninstall removes only approved installed binaries after quiesce, not receipts, enrolled keys, SQLite or user files. Rollback uses a separately verified signed prior artifact and does not replay UNKNOWN operations. These are required acceptance conditions, not implemented production operations.
+- AI-08 #1281 signed runtime/installer/ACL fixtures are not evidence of helper signing or protected publication. Add reviewed test/ai05/transfer-flush-artifact.test.ts to a disposable Windows lane; positive signed build/verify needs a real independently approved signing authority, not self-signed test trust.
+- Current native publisher fixture #1283 runs unsigned source-only helper with synthetic authority, not production acceptance. No source ref, release, main or physical device mutation outside this follow-up.
