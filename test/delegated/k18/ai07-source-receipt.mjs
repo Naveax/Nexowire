@@ -15,6 +15,7 @@ const sources={
 const suites=[
   {path:'test/delegated/k18/ai07-cross-device-transfer-evidence.test.ts',blob:'a73b5290829820ca5aa9b5bf35585693af855927',expected:5},
   {path:'test/delegated/k18/ai07-offline-progress-boundary.test.ts',blob:'4571fd0c5b54ec944d9e8a9794ebaf88a43d417f',expected:8},
+  {path:'test/delegated/k18/ai07-source-receipt.test.mjs',blob:'89219217bcb6a8f31ac69c39c031455670f54598',expected:7},
 ];
 const keys=['tests','pass','fail','cancelled','skipped','todo'];
 export function gitBlob(bytes){
@@ -37,6 +38,13 @@ export function exactTap(tap,expected){
     throw Error('TAP_COUNTS_DO_NOT_MATCH_REVIEWED_SUITE');
   }
   return {...counts};
+}
+// Node's test worker sets NODE_TEST_CONTEXT. Passing it to another node
+// --test invocation may silently skip test files while returning exit 0.
+export function childTestEnv(parent=process.env){
+  const env={...parent,NODE_OPTIONS:''};
+  delete env.NODE_TEST_CONTEXT;
+  return env;
 }
 export function acceptChild(result,expected){
   if(result.error||result.signal||result.status!==0)throw Error('TEST_PROCESS_FAILED');
@@ -64,7 +72,7 @@ function run(root,expectedSha){
   const receipt={schemaVersion:1,classification:'SYNTHETIC_SOURCE_ONLY',physicalAcceptance:'NOT_RUN',sourceCommitSha:expectedSha,node:process.version,reviewedSourceBlobs:sources,suites:suites.map(s=>({...s,status:'NOT_RUN',counts:null})),status:'NOT_RUN'};
   try{preflight(root,expectedSha)}catch(error){receipt.reason=error.message;return receipt}
   for(const suite of receipt.suites){
-    const result=spawnSync(process.execPath,['--import','tsx','--test','--test-reporter=tap','--test-concurrency=1',suite.path],{cwd:root,encoding:'utf8',timeout:120000,maxBuffer:4*1024*1024,env:{...process.env,NODE_OPTIONS:''}});
+    const result=spawnSync(process.execPath,['--import','tsx','--test','--test-reporter=tap','--test-concurrency=1',suite.path],{cwd:root,encoding:'utf8',timeout:120000,maxBuffer:4*1024*1024,env:childTestEnv()});
     process.stderr.write(result.stdout||'');
     try{
       suite.counts=acceptChild(result,suite.expected);
