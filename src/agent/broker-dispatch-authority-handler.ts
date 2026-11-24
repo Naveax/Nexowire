@@ -170,6 +170,16 @@ export function createBrokerDispatchAuthorityHandler(config:{
       const parsedPrincipal=principal.safeParse(resolved);
       if(!parsedPrincipal.success){respond(res,403,{error:'denied'});return}
       const p=Object.freeze(parsedPrincipal.data);
+      // A protected credential can rotate/revoke while the body or native
+      // observer is pending. Re-read the complete principal before handing
+      // off to the authority. This is not the atomic DB grant fence itself.
+      const stillCurrent=async()=>{
+        if(!requireMutualTls)return true;
+        if(res.destroyed||res.writableEnded||socket.destroyed||!req.complete)return false;
+        const current=principal.safeParse(await authenticateBroker(auth[1]!,peer));
+        return current.success&&!res.destroyed&&!res.writableEnded&&!socket.destroyed&&
+          (Object.keys(p) as Array<keyof DispatchBrokerPrincipal>).every(k=>p[k]===current.data[k]);
+      };
       const limit=16384;
       if(Number(req.headers['content-length'])>limit){respond(res,413,{error:'too_large'});return}
       const chunks:Buffer[]=[];let size=0;
@@ -190,6 +200,7 @@ export function createBrokerDispatchAuthorityHandler(config:{
         }
         const op:DispatchReleaseRequest=parsed.data;
         Object.freeze(op.request.scope);Object.freeze(op.request);Object.freeze(op);
+        if(!await stillCurrent()){respond(res,403,{error:'denied'});return}
         await authority.release(op);
         respond(res,204);return;
       }
@@ -203,6 +214,7 @@ export function createBrokerDispatchAuthorityHandler(config:{
         if(await verifyOwnerRevocation(op)!==true){
           respond(res,403,{error:'denied'});return;
         }
+        if(!await stillCurrent()){respond(res,403,{error:'denied'});return}
         const receipt=await authority.revokeAndDrain(op,challengeNonce);
         respond(res,200,checkedRevoke(receipt,op,challengeNonce));return;
       }
@@ -221,6 +233,7 @@ export function createBrokerDispatchAuthorityHandler(config:{
         respond(res,403,{error:'denied'});return;
       }
       const broker=Object.freeze(observed.data);
+      if(!await stillCurrent()){respond(res,403,{error:'denied'});return}
       if(action==='begin'){
         const receipt=await authority.beginIfCurrent(op,broker,input.challengeNonce);
         respond(res,200,checkedPermit(receipt,op,broker,input.challengeNonce,'begin'));
