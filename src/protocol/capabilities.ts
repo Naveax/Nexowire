@@ -160,6 +160,7 @@ export function capabilitiesForPlatform(platform: NodeJS.Platform): string[] {
 }
 
 export const READ_ONLY_CAPABILITIES = new Set<string>([
+  'files.transfer.limits',
   'machine.snapshot',
   'machine.health',
   'agent.operation.status',
