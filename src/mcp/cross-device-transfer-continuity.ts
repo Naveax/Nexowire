@@ -76,6 +76,7 @@ export type PublishedArtifactReadback = (
 >;
 
 const sha = /^[0-9a-f]{64}$/;
+const emptySha256 = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const safeBytes = (n: number) => Number.isSafeInteger(n) && n >= 0;
 const copy = (record: TransferCheckpoint): TransferCheckpoint => ({
@@ -102,7 +103,8 @@ function validateBinding(binding: TransferBinding): void {
       !binding.ownerId || !binding.sourceDeviceId || !binding.destinationDeviceId ||
       binding.sourceDeviceId === binding.destinationDeviceId ||
       !sha.test(binding.sourceSha256) ||
-      !safeBytes(binding.totalBytes)) {
+      !safeBytes(binding.totalBytes) ||
+      (binding.totalBytes === 0 && binding.sourceSha256 !== emptySha256)) {
     deny('TRANSFER_BINDING_INVALID', 'Invalid immutable transfer owner/device/source binding.');
   }
 }
@@ -133,7 +135,9 @@ export class DurableTransferContinuity {
     validateBinding(binding);
     const row: TransferCheckpoint = {
       binding: { ...binding }, revision: 0, epoch: route.epoch,
-      offset: 0, status: 'ready',
+      // An empty source has no chunks to reserve. Publication still requires
+      // independent, authenticated destination size and digest readback.
+      offset: 0, status: binding.totalBytes === 0 ? 'verified' : 'ready',
     };
     assertScope(row, route);
     if (!await this.store.insert(row)) {
@@ -269,7 +273,13 @@ export class DurableTransferContinuity {
    * This method requires an independently authenticated destination reader. */
   async confirmPublished(jobId: string, route: AuthenticatedTransferRoute): Promise<TransferCheckpoint> {
     const old = await this.inspect(jobId, route);
-    if (old.status !== 'verified' || old.pending || old.offset !== old.binding.totalBytes ||
+    // Older persisted empty jobs were initialized as ready and cannot reserve
+    // a zero-length chunk. Allow only that precise legacy state to proceed to
+    // the same independent final readback and revision CAS.
+    const legacyEmpty = old.status === 'ready' && old.binding.totalBytes === 0;
+    if ((old.status !== 'verified' && !legacyEmpty) || old.pending ||
+        old.offset !== old.binding.totalBytes ||
+        (old.binding.totalBytes === 0 && old.binding.sourceSha256 !== emptySha256) ||
         !this.publishedReadback) {
       return deny('TRANSFER_PUBLISH_UNVERIFIED', 'Published artifact attestation is unavailable.');
     }

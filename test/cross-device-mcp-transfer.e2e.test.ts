@@ -127,7 +127,10 @@ async function runTwoAgentTransfer(t:TestContext,benchmarkBytes:number){
  const rejected=second.structuredContent as {ok:boolean;error?:{code:string}};
  assert.equal(rejected.ok,false,'existing destination cannot be overwritten');
  assert.deepEqual(await fs.readFile(destPath),file);
- assert.deepEqual((await fs.readdir(destRoot)).filter(n=>n.includes('nexowire-upload-')),[]);
+ assert.equal(rejected.error?.code,'TRANSFER_PUBLISH_OUTCOME_UNKNOWN');
+ const retained=(await fs.readdir(destRoot)).filter(n=>n.includes('nexowire-upload-'));
+ assert.equal(retained.length,1);
+ assert.deepEqual(await fs.readFile(path.join(destRoot,retained[0]!)),file);
  const bad=await client.callTool({name:'file_transfer_between_devices',arguments:{
   source_device_id:'unknown',destination_device_id:'destination',
   source_path:sourcePath,destination_path:path.join(destRoot,'other.bin')
