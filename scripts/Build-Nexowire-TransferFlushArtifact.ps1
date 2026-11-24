@@ -18,6 +18,8 @@ param(
   [ValidatePattern('^[0-9a-f]{64}$')][string]$ExpectedCompilerSha256,
   [Parameter(Mandatory=$true,ParameterSetName='Build')]
   [ValidatePattern('^[0-9a-f]{64}$')][string]$ExpectedCompilerSignerSha256,
+  [Parameter(Mandatory=$true,ParameterSetName='Build')]
+  [ValidatePattern('^[0-9a-f]{64}$')][string]$ExpectedReferenceSha256,
   [Parameter(Mandatory=$true,ParameterSetName='Verify')]
   [string]$ArtifactPath,
   [Parameter(Mandatory=$true,ParameterSetName='Verify')]
@@ -30,6 +32,14 @@ $ErrorActionPreference='Stop'
 if([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT -or
    -not [Environment]::Is64BitOperatingSystem -or -not [Environment]::Is64BitProcess){
   throw 'AI05_TRANSFER_WINDOWS_X64_REQUIRED'
+}
+
+# Load only OS inbox modules in a fresh, no-profile PowerShell process.
+$windows=[Environment]::GetFolderPath([Environment+SpecialFolder]::Windows)
+if([string]::IsNullOrWhiteSpace($windows)){throw 'AI05_TRANSFER_WINDOWS_DIRECTORY_MISSING'}
+$modules=Join-Path $windows 'System32\WindowsPowerShell\v1.0\Modules'
+foreach($name in @('Microsoft.PowerShell.Security','Microsoft.PowerShell.Utility','Microsoft.PowerShell.Management')){
+  Import-Module -Name (Join-Path $modules ($name+'\'+$name+'.psd1')) -ErrorAction Stop
 }
 
 function Get-HexDigest([byte[]]$bytes,[string]$algorithm){
@@ -58,16 +68,16 @@ function Assert-PlainPath([string]$inputPath,[bool]$directory){
 function Assert-SignedArtifact([string]$file,[string]$expectedHash,[string]$expectedSigner,[long]$maxBytes){
   $item=Assert-PlainPath $file $false
   if($item.Length -lt 1 -or $item.Length -gt $maxBytes){throw 'AI05_TRANSFER_ARTIFACT_SIZE_INVALID'}
-  $actual=(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+  $actual=(Microsoft.PowerShell.Utility\Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
   if($actual -cne $expectedHash){throw 'AI05_TRANSFER_ARTIFACT_HASH_MISMATCH'}
-  $signature=Get-AuthenticodeSignature -LiteralPath $file
+  $signature=Microsoft.PowerShell.Security\Get-AuthenticodeSignature -LiteralPath $file
   if($signature.Status -ne 'Valid' -or $null -eq $signature.SignerCertificate){
     throw 'AI05_TRANSFER_AUTHENTICODE_INVALID'
   }
   $certHash=Get-HexDigest $signature.SignerCertificate.RawData 'SHA256'
   if($certHash -cne $expectedSigner){throw 'AI05_TRANSFER_SIGNER_PIN_MISMATCH'}
   [void](Assert-PlainPath $file $false)
-  if((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant() -cne $actual){
+  if((Microsoft.PowerShell.Utility\Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant() -cne $actual){
     throw 'AI05_TRANSFER_ARTIFACT_CHANGED'
   }
   return [pscustomobject]@{sha256=$actual;signerSha256=$certHash;authenticode='Valid'}
@@ -94,11 +104,16 @@ $header=[Text.Encoding]::ASCII.GetBytes(('blob '+$sourceBytes.Length+[char]0))
 $gitBytes=[byte[]]($header+$sourceBytes)
 if((Get-HexDigest $gitBytes 'SHA1') -cne $reviewedSourceBlob){throw 'AI05_TRANSFER_SOURCE_REVIEW_REQUIRED'}
 
-$windows=[Environment]::GetFolderPath([Environment+SpecialFolder]::Windows)
 $framework=Join-Path $windows 'Microsoft.NET\Framework64\v4.0.30319'
 $compiler=Join-Path $framework 'csc.exe'
 $reference=Join-Path $framework 'mscorlib.dll'
-[void](Assert-PlainPath $reference $false)
+function Assert-Reference {
+  [void](Assert-PlainPath $reference $false)
+  if((Microsoft.PowerShell.Utility\Get-FileHash -LiteralPath $reference -Algorithm SHA256).Hash.ToLowerInvariant() -cne $ExpectedReferenceSha256){
+    throw 'AI05_TRANSFER_REFERENCE_HASH_MISMATCH'
+  }
+}
+Assert-Reference
 [void](Assert-SignedArtifact $compiler $ExpectedCompilerSha256 $ExpectedCompilerSignerSha256 (32MB))
 
 # Only a fresh child of the current user's existing Temp directory is used.
@@ -120,15 +135,17 @@ try {
   [IO.File]::WriteAllBytes($source,$sourceBytes)
   & $compiler '/nologo' '/noconfig' '/nostdlib+' '/target:exe' '/platform:x64' '/optimize+' '/debug-' ('/reference:'+$reference) ('/out:'+$binary) $source | Out-Host
   if($LASTEXITCODE -ne 0){throw 'AI05_TRANSFER_COMPILE_FAILED'}
+  Assert-Reference
   [void](Assert-SignedArtifact $compiler $ExpectedCompilerSha256 $ExpectedCompilerSignerSha256 (32MB))
   $out=Assert-PlainPath $binary $false
   if($out.Length -lt 1 -or $out.Length -gt 8MB){throw 'AI05_TRANSFER_ARTIFACT_SIZE_INVALID'}
-  if((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant() -cne $ExpectedSourceSha256){throw 'AI05_TRANSFER_SOURCE_CHANGED'}
-  $digest=(Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant()
+  if((Microsoft.PowerShell.Utility\Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant() -cne $ExpectedSourceSha256){throw 'AI05_TRANSFER_SOURCE_CHANGED'}
+  $digest=(Microsoft.PowerShell.Utility\Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant()
   $result=[pscustomobject]@{
     status='UNSIGNED_BUILD_ONLY';artifactPath=$binary;sha256=$digest
     sourceGitBlob=$reviewedSourceBlob;sourceSha256=$ExpectedSourceSha256
     compilerSha256=$ExpectedCompilerSha256;compilerSignerSha256=$ExpectedCompilerSignerSha256
+    referenceSha256=$ExpectedReferenceSha256
     installed=$false;executed=$false;productionEligible=$false
   }
   $success=$true
