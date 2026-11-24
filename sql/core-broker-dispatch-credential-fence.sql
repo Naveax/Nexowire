@@ -32,8 +32,9 @@ CREATE OR REPLACE FUNCTION core_dispatch.lock_active_broker_credential(
  a uuid, digest text, cert text, broker uuid, owner_id_arg uuid, device uuid,
  device_epoch_arg uuid, session_epoch_arg uuid)
  RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
-DECLARE c core_dispatch.broker_credentials%ROWTYPE;
-DECLARE now_ms bigint;
+DECLARE
+ c core_dispatch.broker_credentials%ROWTYPE;
+ now_ms bigint;
 BEGIN
  SELECT * INTO c FROM core_dispatch.broker_credentials
  WHERE authority_id=a AND credential_sha256=digest
