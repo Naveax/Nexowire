@@ -227,3 +227,16 @@ test('union rejects policy drift, unapproved substitutions and forged complete f
   const tampered=unionEntries.map((e,i)=>i===3?{...e,blob:'f'.repeat(40)}:e);
   assert.throws(()=>reconcileLaneCoverage(tampered,unionInventory,unionTarget,[a],[laneReceipt(a)]),/UNION_INVENTORY_MISMATCH/);
 });
+
+test('cross-owner, CORE negative and disposable installer scopes require schema v2 and exact target',()=>{
+  for(const scope of ["REVIEWED_WINDOWS_CROSS_OWNER_SOURCE_FIXTURES_ONLY","REVIEWED_WINDOWS_CORE_NEGATIVE_SOURCE_FIXTURES_ONLY","REVIEWED_WINDOWS_DISPOSABLE_INSTALLER_FIXTURES_ONLY"]){
+    const p=policy('new-lane',[pin(0)],{scope,schemaVersion:2});
+    const r=combine([p],[laneReceipt(p)]);
+    assert.equal(r.requiredLaneAcceptance,'PASS');
+    assert.equal(r.statusCounts.PASS,1);
+    assert.throws(()=>combine([{...p,schemaVersion:1}],[]),/UNION_POLICY_SCHEMA/);
+    const failed=laneReceipt(p,[{path:pin(0).path,gitBlobSha:pin(0).gitBlobSha,result:'FAIL'}]);
+    assert.equal(combine([p],[failed]).requiredLaneAcceptance,'FAIL');
+    assert.equal(combine([p],[]).requiredLaneAcceptance,'INCOMPLETE');
+  }
+});

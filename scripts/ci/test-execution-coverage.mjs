@@ -121,6 +121,9 @@ export function reconcileLaneCoverage(entries,inventory,target,policies,receipts
     'REVIEWED_WINDOWS_STORAGE_AND_RECOVERY_SOURCE_FIXTURES_ONLY',
     'REVIEWED_PLATFORM_ACL_AND_SIDECAR_SOURCE_FIXTURES_ONLY',
     'REVIEWED_WINDOWS_AUTHORITY_AND_LEDGER_SOURCE_FIXTURES_ONLY',
+    'REVIEWED_WINDOWS_CROSS_OWNER_SOURCE_FIXTURES_ONLY',
+    'REVIEWED_WINDOWS_CORE_NEGATIVE_SOURCE_FIXTURES_ONLY',
+    'REVIEWED_WINDOWS_DISPOSABLE_INSTALLER_FIXTURES_ONLY',
   ]);
   for(const policy of policies){
     if(!policy||!cleanId(policy.id)||expected.has(policy.id)||!scopes.has(policy.scope)||
@@ -129,8 +132,12 @@ export function reconcileLaneCoverage(entries,inventory,target,policies,receipts
       deny('UNION_POLICY_INVALID');
     if(policy.scope.includes('WINDOWS')&&target.platform!=='win32')
       deny('UNION_POLICY_PLATFORM');
-    if((policy.scope==='REVIEWED_WINDOWS_AUTHORITY_AND_LEDGER_SOURCE_FIXTURES_ONLY')!==
-       (policy.schemaVersion===2))deny('UNION_POLICY_SCHEMA');
+    if(([
+      'REVIEWED_WINDOWS_AUTHORITY_AND_LEDGER_SOURCE_FIXTURES_ONLY',
+      'REVIEWED_WINDOWS_CROSS_OWNER_SOURCE_FIXTURES_ONLY',
+      'REVIEWED_WINDOWS_CORE_NEGATIVE_SOURCE_FIXTURES_ONLY',
+      'REVIEWED_WINDOWS_DISPOSABLE_INSTALLER_FIXTURES_ONLY',
+    ].includes(policy.scope))!==(policy.schemaVersion===2))deny('UNION_POLICY_SCHEMA');
     const files=new Map();
     for(const f of policy.files){
       if(!f||!tracked.has(f.path)||tracked.get(f.path)!==f.gitBlobSha||
