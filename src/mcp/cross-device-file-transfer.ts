@@ -51,7 +51,7 @@ export async function transferCrossDeviceFile(
   if(!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(id))
     throw new CrossDeviceTransferError('TRANSFER_ID_INVALID','Invalid transfer ID.');
   const stage=destinationPath+'.nexowire-upload-'+id+'.tmp';
-  let created=false,bytesTransferred=0;
+  let created=false,cleanupSafe=true,bytesTransferred=0;
   try{
     for(let offset=0;offset<stat.size||offset===0;){
       const expected=Math.min(chunkBytes,stat.size-offset);
@@ -78,7 +78,16 @@ export async function transferCrossDeviceFile(
       // Only clean up a stage we know was created by this transfer.
       // In particular, a failed exclusive create may mean the stage already
       // belonged to another writer; deleting it would destroy their data.
-      const wrote=await ops.writeStage(stage,part.content,offset,offset===0);
+      let wrote:number;
+      try{
+        wrote=await ops.writeStage(stage,part.content,offset,offset===0);
+      }catch{
+        // A rejected transport call does not prove that the write had no effect.
+        // Never delete or retry a possibly durable stage without reconciliation.
+        cleanupSafe=false;
+        throw new CrossDeviceTransferError('TRANSFER_WRITE_OUTCOME_UNKNOWN',
+          'Write outcome is unknown; retain staging and verify before retrying. Transfer ID: '+id);
+      }
       created=true;
       if(wrote!==expected){
         throw new CrossDeviceTransferError('TRANSFER_WRITE_INCOMPLETE',
@@ -100,7 +109,15 @@ export async function transferCrossDeviceFile(
       throw new CrossDeviceTransferError('TRANSFER_HASH_MISMATCH',
         'The destination staging digest does not match the source.');
     }
-    await ops.commitStage(stage,destinationPath);
+    try{
+      await ops.commitStage(stage,destinationPath);
+    }catch{
+      // The move may have happened before its acknowledgement was lost.
+      // Neither retry publication nor erase a possibly still-owned stage.
+      cleanupSafe=false;
+      throw new CrossDeviceTransferError('TRANSFER_PUBLISH_OUTCOME_UNKNOWN',
+        'Publication outcome is unknown; independently inspect staging and destination. Transfer ID: '+id);
+    }
     // Publishing can change the effective destination (or lose its final ACK).
     // Never report COMPLETE solely from the digest of the temporary stage.
     created=false;
@@ -120,6 +137,6 @@ export async function transferCrossDeviceFile(
       sha256:startingHash,chunkBytes,chunkCount:Math.max(1,Math.ceil(stat.size/chunkBytes)),
       destination:destinationPath};
   }finally{
-    if(created)await ops.cleanupStage(stage).catch(()=>undefined);
+    if(created&&cleanupSafe)await ops.cleanupStage(stage).catch(()=>undefined);
   }
 }
