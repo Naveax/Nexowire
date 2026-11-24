@@ -97,7 +97,10 @@ try {
   $sourceManifest=Get-Content -LiteralPath (Join-Path $sourceDir 'package.json') -Raw -Encoding UTF8 | ConvertFrom-Json
   $packageName=[string]$sourceManifest.name
   $packageVersion=[string]$sourceManifest.version
-  if($packageName -cne 'nexowire' -or $packageVersion -cnotmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?
+  if($packageName -cne 'nexowire' -or $packageVersion -cnotmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$'){
+    throw 'AI01_STAGE_PACKAGE_IDENTITY_UNTRUSTED'
+  }
+  $expectedFilename=$packageName+'-'+$packageVersion+'.tgz'
   Push-Location -LiteralPath $sourceDir
   try {
     Invoke-Checked 'npm.cmd' @('ci','--ignore-scripts','--no-audit','--no-fund') 'AI01_STAGE_DEV_INSTALL_FAILED'
@@ -112,89 +115,6 @@ try {
     throw 'AI01_STAGE_PACK_IDENTITY_MISMATCH'
   }
   if($filename -cne $expectedFilename){
-    throw 'AI01_STAGE_PACK_FILENAME_UNTRUSTED'
-  }
-  $tarball=Join-Path $work $filename
-  if(-not(Test-Path -LiteralPath $tarball -PathType Leaf)){throw 'AI01_STAGE_PACK_FILE_MISSING'}
-  New-Item -ItemType Directory -Path $extract -ErrorAction Stop|Out-Null
-  Invoke-Checked $tarExecutable @('-xzf',$tarball,'-C',$extract) 'AI01_STAGE_EXTRACT_FAILED'
-  Assert-NoReparse $stage
-  $pkgSha=(Get-FileHash -LiteralPath (Join-Path $sourceDir 'package.json') -Algorithm SHA256).Hash
-  $packedPkgSha=(Get-FileHash -LiteralPath (Join-Path $stage 'package.json') -Algorithm SHA256).Hash
-  if($pkgSha -cne $packedPkgSha){throw 'AI01_STAGE_PACKAGED_MANIFEST_MISMATCH'}
-  Copy-Item -LiteralPath (Join-Path $sourceDir 'package-lock.json') -Destination (Join-Path $stage 'package-lock.json') -ErrorAction Stop
-  Push-Location -LiteralPath $stage
-  try {
-    Invoke-Checked 'npm.cmd' @('ci','--omit=dev','--ignore-scripts','--no-audit','--no-fund') 'AI01_STAGE_PRODUCTION_INSTALL_FAILED'
-    Invoke-Checked 'node.exe' @('dist/src/cli.js','--version') 'AI01_STAGE_CLI_VERSION_FAILED'
-    Invoke-Checked 'node.exe' @('dist/src/cli.js','--help') 'AI01_STAGE_CLI_HELP_FAILED'
-  } finally {Pop-Location}
-  Assert-NoReparse $stage
-  if((Get-FileHash -LiteralPath (Join-Path $stage 'package-lock.json') -Algorithm SHA256).Hash.ToLowerInvariant() -cne $lockSha){
-    throw 'AI01_STAGE_LOCKFILE_CHANGED'
-  }
-  $planText=(& $powershell51 -NoLogo -NoProfile -NonInteractive -File $installer -Action Plan -SourceDirectory $stage -ExpectedTreeSha256 ('0'*64) | Out-String)
-  if($LASTEXITCODE -ne 0){throw 'AI01_STAGE_INSTALLER_PLAN_FAILED'}
-  $firstPlan=$planText|ConvertFrom-Json
-  $treeSha=[string]$firstPlan.treeSha256
-  if($treeSha -notmatch '^[0-9a-f]{64}$'){throw 'AI01_STAGE_TREE_DIGEST_UNVERIFIED'}
-  $planText=(& $powershell51 -NoLogo -NoProfile -NonInteractive -File $installer -Action Plan -SourceDirectory $stage -ExpectedTreeSha256 $treeSha | Out-String)
-  if($LASTEXITCODE -ne 0){throw 'AI01_STAGE_RECHECK_PLAN_FAILED'}
-  $finalPlan=$planText|ConvertFrom-Json
-  if([string]$finalPlan.treeSha256 -cne $treeSha){throw 'AI01_STAGE_TREE_DIGEST_CHANGED'}
-  $sourceBlockers=@($finalPlan.blockers|Where-Object {$_ -notin @('TARGET_ALREADY_EXISTS','TARGET_EXISTENCE_UNVERIFIED')})
-  if($sourceBlockers.Count -gt 0){throw ('AI01_STAGE_SOURCE_PREFLIGHT_BLOCKED: '+($sourceBlockers -join ', '))}
-  if(Test-Path -LiteralPath $output){throw 'AI01_STAGE_OUTPUT_RACE'}
-  Move-Item -LiteralPath $stage -Destination $output -ErrorAction Stop
-  # Verify again at the *published* path, not only the temporary path. If
-  # any byte changes during promotion, do not issue a provenance receipt.
-  $publishedText=(& $powershell51 -NoLogo -NoProfile -NonInteractive -File $installer -Action Plan -SourceDirectory $output -ExpectedTreeSha256 $treeSha | Out-String)
-  if($LASTEXITCODE -ne 0){throw 'AI01_STAGE_PUBLISHED_PLAN_FAILED'}
-  $publishedPlan=$publishedText|ConvertFrom-Json
-  if([string]$publishedPlan.treeSha256 -cne $treeSha -or
-     [int]$publishedPlan.files -ne [int]$finalPlan.files -or
-     [long]$publishedPlan.bytes -ne [long]$finalPlan.bytes){
-    throw 'AI01_STAGE_PUBLISHED_TREE_MISMATCH'
-  }
-  $publishedBlockers=@($publishedPlan.blockers|Where-Object {$_ -notin @('TARGET_ALREADY_EXISTS','TARGET_EXISTENCE_UNVERIFIED')})
-  if($publishedBlockers.Count -gt 0){throw ('AI01_STAGE_PUBLISHED_BLOCKED: '+($publishedBlockers -join ', '))}
-  $record['treeSha256']=$treeSha
-  $record['files']=[int]$finalPlan.files
-  $record['bytes']=[long]$finalPlan.bytes
-  $record['lockfileSha256']=$lockSha
-  $record['tarballSha256']=(Get-FileHash -LiteralPath $tarball -Algorithm SHA256).Hash.ToLowerInvariant()
-  $record['installerPlanBlockers']=@($finalPlan.blockers)
-  $record['sourceReadyForElevatedInstallerPlan']=$true
-  $record['productionInstalled']=$false
-  $record['taskChanged']=$false
-  $record['sqliteChanged']=$false
-  $record['version']=[string]$packages[0].version
-  $record['provenanceFormat']=1
-  $recordJson=[pscustomobject]$record|ConvertTo-Json -Depth 6
-  [IO.File]::WriteAllText($output+'.provenance.json',$recordJson,(New-Object Text.UTF8Encoding($false)))
-  $recordJson
-} finally {
-  if(Test-Path -LiteralPath $work){
-    $item=Get-Item -LiteralPath $work -Force -ErrorAction SilentlyContinue
-    if($null -ne $item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0){
-      Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
-    }
-  }
-}){
-    throw 'AI01_STAGE_PACKAGE_IDENTITY_UNTRUSTED'
-  }
-  $expectedFilename=$packageName+'-'+$packageVersion+'.tgz'
-  Push-Location -LiteralPath $sourceDir
-  try {
-    Invoke-Checked 'npm.cmd' @('ci','--ignore-scripts','--no-audit','--no-fund') 'AI01_STAGE_DEV_INSTALL_FAILED'
-    Invoke-Checked 'node.exe' @('node_modules/typescript/bin/tsc','-p','tsconfig.json') 'AI01_STAGE_BUILD_FAILED'
-    $packJson=(& npm.cmd pack --ignore-scripts --json --pack-destination $work | Out-String)
-    if($LASTEXITCODE -ne 0){throw 'AI01_STAGE_PACK_FAILED'}
-  } finally {Pop-Location}
-  $packages=@($packJson|ConvertFrom-Json)
-  if($packages.Count -ne 1){throw 'AI01_STAGE_PACK_RESPONSE_UNTRUSTED'}
-  $filename=[string]$packages[0].filename
-  if($filename -notmatch '^nexowire-[0-9]+\.[0-9]+\.[0-9]+\.tgz$'){
     throw 'AI01_STAGE_PACK_FILENAME_UNTRUSTED'
   }
   $tarball=Join-Path $work $filename
