@@ -18,6 +18,7 @@ on:
       - "test/hub-boot-task-shell-trust.test.ts"
       - "test/hub-boot-root-boundary.test.ts"
       - "test/hub-boot-handoff-transaction.test.ts"
+      - "test/hub-boot-startup-trigger-integrity.test.ts"
       - "scripts/ci/assert-tap-summary.mjs"
       - "test/windows-dpapi-secret.test.ts"
       - "test/protected-secret-files.test.ts"
@@ -137,17 +138,29 @@ jobs:
           import {createHash} from 'node:crypto';
           import {readTestInventory} from './scripts/ci/test-inventory.mjs';
           import {assertTapSummary} from './scripts/ci/assert-tap-summary.mjs';
-          const reviewed = {
+          const baselineReviewed = {
             'test/hub-boot-status-legacy-user.test.ts':'66d93e212bce277217b3a2cbc027251ed7c73c00',
             'test/hub-boot-task-shell-trust.test.ts':'6dc4e0a7da26bf3dc02877174688448d6348822d',
             'test/hub-boot-root-boundary.test.ts':'d6e564dd581e9dce198afc2b94c2c36ebda56a11',
             'test/hub-boot-handoff-transaction.test.ts':'2c700196272174cdfdc84ecc953365d2946d275f',
+          };
+          // Reviewed together against AI-01 PR #1242 at ebeadc0a; use the
+          // complete compatible profile, never mix baseline and new fixtures.
+          const startupReviewed = {
+            'test/hub-boot-status-legacy-user.test.ts':'800ca3e6bc6b892c26f102ec7f250754cc1372f3',
+            'test/hub-boot-task-shell-trust.test.ts':'ce31e6c39b63647c5bb11e579262690694829b12',
+            'test/hub-boot-root-boundary.test.ts':'dee621f126f5b132cd0f25de8cb7469df244833c',
+            'test/hub-boot-handoff-transaction.test.ts':'8ad2c05bfe6c08ceae3e15792d493099e44ec20d',
+            'test/hub-boot-startup-trigger-integrity.test.ts':'61062ecab51d2852c750cccd03fae79f7b45286a',
           };
           if(process.platform!=='win32') throw Error('WINDOWS_FIXTURE_PLATFORM_REQUIRED');
           const {entries,report}=readTestInventory(process.cwd());
           if(report.commitSha!==process.env.NEXOWIRE_EXPECTED_COMMIT_SHA)
             throw Error('WINDOWS_FIXTURE_HEAD_MISMATCH');
           const tracked=new Map(entries.map(e=>[e.path,e.blob]));
+          const hasStartup=tracked.has('test/hub-boot-startup-trigger-integrity.test.ts');
+          const reviewed=hasStartup?startupReviewed:baselineReviewed;
+          const reviewProfile=hasStartup?'AI01_STARTUP_REVIEW_EBEADC0A':'BASELINE_B04BF428';
           const check=(file,blob)=>{
             const bytes=readFileSync(file);
             const actual=createHash('sha1').update('blob '+bytes.length+'\0').update(bytes).digest('hex');
@@ -169,7 +182,7 @@ jobs:
           }
           const count=files.length;
           process.stdout.write(JSON.stringify({
-            schemaVersion:1,sourceCommitSha:report.commitSha,
+            schemaVersion:1,reviewProfile,sourceCommitSha:report.commitSha,
             sourceManifestSha256:report.manifestSha256,platform:process.platform,
             nodeVersion:process.version,trackedFileCount:entries.length,
             executedFileCount:count,notRunFileCount:entries.length-count,
