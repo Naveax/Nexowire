@@ -96,3 +96,45 @@ test('reviewed-only receipt cannot claim full test inventory execution',()=>{
   assert.equal(coverage.notRunFileCount,entries.length-APPROVED_ROOT_TEST_FILES.length);
   assert.equal(coverage.comprehensiveCoverage,false);
 });
+
+test('recomputes the complete Git manifest, not only receipt-selected blobs',()=>{
+  const untouched=entries.find(e=>!APPROVED_ROOT_TEST_FILES.includes(e.path));
+  assert.ok(untouched);
+  const changed=entries.map(e=>e.path===untouched.path?
+    {...e,blob:'f'.repeat(40)}:e);
+  assert.throws(()=>reconcileCoverage(changed,report,receipt()),
+    /TEST_COVERAGE_INVENTORY_MANIFEST_MISMATCH/);
+  const renamed=entries.map(e=>e.path===untouched.path?
+    {...e,path:'test/forged-unreviewed-coverage.test.ts'}:e);
+  assert.throws(()=>reconcileCoverage(renamed,report,receipt()),
+    /TEST_COVERAGE_INVENTORY_MANIFEST_MISMATCH/);
+});
+
+test('rejects reordered inventory and fabricated path-depth statistics',()=>{
+  const reversed=[...entries].reverse();
+  assert.throws(()=>reconcileCoverage(reversed,report,receipt()),
+    /TEST_COVERAGE_INVENTORY_MANIFEST_MISMATCH/);
+  const fakedDepth={...report,byDepth:{...report.byDepth,root:report.byDepth.root+1}};
+  assert.throws(()=>reconcileCoverage(entries,fakedDepth,receipt()),
+    /TEST_COVERAGE_INVENTORY_MANIFEST_MISMATCH/);
+});
+
+test('emits exhaustive file states without laundering NOT_RUN into PASS',()=>{
+  const coverage=reconcileCoverage(entries,report,receipt());
+  assert.deepEqual(coverage.statusCounts,{
+    PASS:subset.length,FAIL:0,SKIP:0,NOT_RUN:entries.length-subset.length,
+  });
+  assert.equal(coverage.fileStates.length,entries.length);
+  assert.equal(coverage.fileStates.filter(e=>e.result==='PASS').length,subset.length);
+  assert.equal(coverage.fileStates.filter(e=>e.result==='NOT_RUN').length,
+    entries.length-subset.length);
+  const byPath=new Map(coverage.fileStates.map(e=>[e.path,e]));
+  assert.equal(byPath.size,entries.length);
+  for(const entry of entries){
+    const reported=byPath.get(entry.path);
+    assert.equal(reported.gitBlobSha,entry.blob);
+    assert.equal(reported.result,subset.some(e=>e.path===entry.path)?'PASS':'NOT_RUN');
+  }
+  assert.equal(coverage.statusSemantics,'RECEIPT_ONLY_NO_GLOBAL_CI_INFERENCE');
+  assert.equal(coverage.comprehensiveCoverage,false);
+});
