@@ -4,6 +4,8 @@ import { isReadOnlyCapability } from '../protocol/capabilities.js';
 import {transferCrossDeviceFile,CROSS_DEVICE_MAX_BYTES} from './cross-device-file-transfer.js';
 import { resolveOwnerDeviceTarget } from '../product/device-target-resolution.js';
 import { registerArtifactBridgeTools } from './artifact-bridge-tools.js';
+import { registerLargeTransferTools, type LargeTransferRuntime } from './large-transfer-tools.js';
+import type { LargeTransferRemote } from './durable-large-transfer.js';
 import { performance } from 'node:perf_hooks';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as z from 'zod';
@@ -67,6 +69,8 @@ export interface McpContext {
   audit?: AuditLog;
   workspaces: WorkspaceStore;
   skills: SkillRegistry;
+  /** Trusted Hub bootstrap only; never populate from bearer/tool arguments. */
+  largeTransferRuntime?: LargeTransferRuntime;
 }
 
 function applyToolRegistrationFilters(
@@ -120,7 +124,9 @@ function applyToolRegistrationFilters(
       ? ['file_read','file_stat','file_hash','file_write','file_move','file_delete']
       : name === 'artifact_bridge_ingest_device_file'
         ? ['file_read', 'file_stat', 'file_hash']
-        : [];
+        : name.startsWith('large_file_transfer_')
+          ? ['file_read','file_stat','file_hash','file_write','file_move']
+          : [];
     const dependenciesAuthorized = transferDependencies.every((dependency) =>
       isMcpToolAuthorized(input.authorization,dependency));
     const dependenciesAvailable =
@@ -6619,6 +6625,61 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     },
     async () => toolResult({ checkpoints: await ctx.workspaces.list() }),
   );
+
+  // Experimental durable large transfer is installed ONLY by a trusted Hub
+  // runtime. Ordinary files.write/move are never a substitute for fenced IO.
+  if(ctx.largeTransferRuntime){
+    const runtime=ctx.largeTransferRuntime;
+    const readNative=async(device:string,capability:string,input:Record<string,unknown>,allowMissing=false)=>{
+      if(await resolveDevice(ctx,device)!==device)throw Error('TRANSFER_DEVICE_SCOPE_DENIED');
+      const response=await execute(ctx,capability,input,device);
+      const value=response.structuredContent as Record<string,unknown>|undefined;
+      if(value?.ok!==true){
+        const error=value?.error as Record<string,unknown>|undefined;
+        if(allowMissing&&typeof error?.code==='string'&&['ENOENT','FILE_NOT_FOUND','PATH_NOT_FOUND'].includes(error.code))return undefined;
+        throw Error('TRANSFER_NATIVE_READBACK_UNAVAILABLE');
+      }
+      if(!value.data||typeof value.data!=='object'||Array.isArray(value.data))throw Error('TRANSFER_NATIVE_READBACK_INVALID');
+      return value.data as Record<string,unknown>;
+    };
+    const remote:LargeTransferRemote={
+      limits:device=>runtime.native.limits(device),
+      stat:async(device,file)=>{
+        const d=await readNative(device,'files.stat',{path:file},true);
+        if(!d)return undefined;
+        if(typeof d.type!=='string'||typeof d.size!=='number')throw Error('TRANSFER_NATIVE_READBACK_INVALID');
+        return {type:d.type,size:d.size};
+      },
+      hash:async(device,file,maxBytes)=>{
+        const d=await readNative(device,'files.hash',{path:file,max_bytes:maxBytes});
+        if(typeof d?.sha256!=='string')throw Error('TRANSFER_NATIVE_READBACK_INVALID');
+        return d.sha256;
+      },
+      read:async(device,file,offset,length)=>{
+        const d=await readNative(device,'files.read',{path:file,encoding:'base64',offset_bytes:offset,max_bytes:length});
+        if(typeof d?.size!=='number'||typeof d.offsetBytes!=='number'||typeof d.bytesRead!=='number'||typeof d.content!=='string')throw Error('TRANSFER_NATIVE_READBACK_INVALID');
+        return {sourceBytes:d.size,offsetBytes:d.offsetBytes,bytesRead:d.bytesRead,contentBase64:d.content};
+      },
+      writeFenced:async(b,l,p,content,first)=>{
+        if(await resolveDevice(ctx,b.targetDeviceId)!==b.targetDeviceId)throw Error('TRANSFER_DEVICE_SCOPE_DENIED');
+        await ctx.policies?.assertAllowed(b.targetDeviceId,'files.write');
+        return runtime.native.writeFenced(b,l,p,content,first);
+      },
+      publishFenced:async(b,l,p)=>{
+        if(await resolveDevice(ctx,b.targetDeviceId)!==b.targetDeviceId)throw Error('TRANSFER_DEVICE_SCOPE_DENIED');
+        await ctx.policies?.assertAllowed(b.targetDeviceId,'files.move');
+        return runtime.native.publishFenced(b,l,p);
+      },
+    };
+    registerLargeTransferTools(server,ctx.toolAuthorization,runtime,remote,async scope=>{
+      for(const device of [scope.sourceDeviceId,scope.targetDeviceId]){
+        if(await resolveDevice(ctx,device)!==device)throw Error('TRANSFER_DEVICE_SCOPE_DENIED');
+        for(const capability of ['files.stat','files.hash','files.read'])await ctx.policies?.assertAllowed(device,capability);
+      }
+      await ctx.policies?.assertAllowed(scope.targetDeviceId,'files.write');
+      await ctx.policies?.assertAllowed(scope.targetDeviceId,'files.move');
+    });
+  }
 
   registerArtifactBridgeTools(
     server, ctx.workspaces, ctx.toolAuthorization,
