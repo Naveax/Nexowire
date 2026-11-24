@@ -26,6 +26,31 @@ test('AI-05 SYSTEM stage honors relocated Documents and Windows directories', ()
   assert.doesNotMatch(stage, /Register-ScheduledTask|Unregister-ScheduledTask|Stop-ScheduledTask/);
 });
 
+
+test('AI-05 stage accepts the exact archived package version, including prereleases', () => {
+  const pattern = stage.match(/\$packageVersion -cnotmatch '([^']+)'/);
+  assert.ok(pattern, 'Missing manifest-version validation');
+  const version = new RegExp(pattern[1]!);
+  const pkg = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')) as {
+    name: string; version: string;
+  };
+  assert.equal(pkg.name, 'nexowire');
+  assert.ok(version.test(pkg.version), 'Current candidate version must be stageable');
+  for (const accepted of ['1.0.8', '1.0.9-exp.0', '1.1.0-rc.1']) {
+    assert.ok(version.test(accepted), accepted);
+  }
+  for (const rejected of ['../1.0.9', '1.0.9/evil', '1.0.9\\evil', '01.0.9', '1.0.9-', '1.0.9.tgz']) {
+    assert.equal(version.test(rejected), false, rejected);
+  }
+  assert.match(stage, /\$sourceManifest=Get-Content -LiteralPath \(Join-Path \$sourceDir 'package\.json'\)/);
+  assert.match(stage, /\$expectedFilename=\$packageName\+'-'\+\$packageVersion\+'\.tgz'/);
+  assert.match(stage, /\[string\]\$packages\[0\]\.name -cne \$packageName/);
+  assert.match(stage, /\[string\]\$packages\[0\]\.version -cne \$packageVersion/);
+  assert.match(stage, /if\(\$filename -cne \$expectedFilename\)/);
+  assert.ok(stage.indexOf('AI01_STAGE_PACK_IDENTITY_MISMATCH') <
+    stage.indexOf('$tarball=Join-Path $work $filename'));
+});
+
 test('AI-05 smoke covers an installed 1.0.8 during both successful and rejected upgrades', () => {
   assert.match(smoke, /'upgrade-preserve'/);
   assert.match(smoke, /'upgrade-checksum-mismatch'/);
