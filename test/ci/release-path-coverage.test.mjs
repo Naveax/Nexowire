@@ -89,7 +89,7 @@ test('Windows Hub Boot source fixture lane is exact-head, bounded and mandatory 
   const lane=workflow.split('\n  ai08-windows-hub-boot-fixtures:\n')[1]?.split('\n  package:')[0];
   assert.ok(lane,'missing independent Windows fixture job');
   assert.match(lane,/runs-on: windows-latest/);
-  assert.match(lane,/timeout-minutes: 12/);
+  assert.match(lane,/timeout-minutes: 40/);
   assert.match(lane,/node-version: \[22, 24\]/);
   assert.match(lane,/ref: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
   assert.match(lane,/persist-credentials: false/);
@@ -125,4 +125,17 @@ test('both reviewed Windows boot profiles include the same four state, ACL, unin
   assert.ok(lane.includes('for(const [file,blob] of Object.entries(reviewed))check(file,blob);'));
   assert.ok(lane.includes('schemaVersion:1,reviewProfile,reviewExtension,sourceCommitSha:'));
   assert.ok(lane.includes("STATE_ACL_UNINSTALL_DPAPI_D2696376"));
+});
+
+test('DPAPI fixture budget preserves inner deadlines and does not relax other fixture bounds',()=>{
+  const lane=workflow.split('\n  ai08-windows-hub-boot-fixtures:\n')[1]?.split('\n  package:')[0];
+  assert.ok(lane);
+  assert.match(lane,/const fixtureTimeoutMs=file=>file==='test\/windows-dpapi-shell-trust\.test\.ts'\s*\?7\*180000\+60000:90000;/);
+  assert.match(lane,/const timeoutMs=fixtureTimeoutMs\(file\)/);
+  assert.match(lane,/timeout:timeoutMs,maxBuffer:2\*1024\*1024,windowsHide:true/);
+  assert.match(lane,/errorCode:r\.error\?\.code\?\?null/);
+  assert.match(lane,/exitCode:r\.status,signal:r\.signal,elapsedMs,timeoutMs/);
+  assert.match(lane,/throw Error\('WINDOWS_FIXTURE_EXECUTION_FAILED: '\+file\)/);
+  assert.match(lane,/const counts=assertTapSummary\(r\.stdout\)/);
+  assert.match(lane,/result:'PASS',elapsedMs,timeoutMs,\.\.\.counts/);
 });
