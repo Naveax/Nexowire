@@ -64,11 +64,14 @@ async function readExactly(handle:fs.FileHandle,buf:Buffer,length:number,at:numb
 // These checks do not replace native-singleton ownership or an atomic SQLite
 // open/verify handoff in the journal owner.
 type FileSnapshot={dev:number;ino:number;size:number;mtimeMs:number;ctimeMs:number};
+function assertSnapshotIdentity(current:FileSnapshot,opened:FileSnapshot):void{
+  if(current.dev!==opened.dev||current.ino!==opened.ino||
+     current.size!==opened.size)fail();
+}
 function assertSnapshotMetadata(current:FileSnapshot,opened:FileSnapshot,
   retryIndexTimestamp:boolean):void{
   // Identity and size changes are not the narrow retryable condition.
-  if(current.dev!==opened.dev||current.ino!==opened.ino||
-     current.size!==opened.size)fail();
+  assertSnapshotIdentity(current,opened);
   if(current.mtimeMs!==opened.mtimeMs||current.ctimeMs!==opened.ctimeMs){
     if(retryIndexTimestamp)throw new AgentJournalWalUnstableError();
     fail();
@@ -84,17 +87,28 @@ async function assertStablePath(file:string,opened:FileSnapshot,
 
 
 type IndexSnapshot=FileSnapshot&{bytes:Buffer};
+type WalWitness={file:FileSnapshot;header:Buffer;currentFrames:number;
+  commitPages:number;digest:Checksum};
+type RetryAnchor={wal:WalWitness;index:FileSnapshot;indexHeaders:Buffer};
+type RetryState={anchor?:RetryAnchor};
+type RetryRead={state:RetryState;wal:WalWitness};
 
 // A stable index snapshot is corroboration, not a trusted rollback witness.
 // A complete WAL may legitimately outlive a missing/uninitialized index.
-async function readIndexSnapshot(dbFile:string,strictShape:boolean):Promise<IndexSnapshot|undefined>{
+async function readIndexSnapshot(dbFile:string,strictShape:boolean,
+  retry?:RetryRead):Promise<IndexSnapshot|undefined>{
   const file=dbFile+'-shm';
+  const anchor=retry?.state.anchor;
   let prior;
   try{prior=await fs.lstat(file);}catch(e){
-    if((e as NodeJS.ErrnoException).code==='ENOENT')return undefined;
+    if((e as NodeJS.ErrnoException).code==='ENOENT'){
+      if(anchor)fail();
+      return undefined;
+    }
     throw e;
   }
   if(!prior.isFile()||prior.isSymbolicLink())fail();
+  if(anchor)assertSnapshotIdentity(prior,anchor.index);
   let handle:fs.FileHandle;
   try{handle=await fs.open(file,'r');}catch(e){
     if((e as NodeJS.ErrnoException).code==='ENOENT')fail();
@@ -103,18 +117,25 @@ async function readIndexSnapshot(dbFile:string,strictShape:boolean):Promise<Inde
   try{
     const opened=await handle.stat();
     if(!opened.isFile())fail();
-    // Only ordinary, already fully checksummed WALs allow a fresh scan
-    // after SHM timestamp drift. Frameless/reuse checks stay strict.
-    assertSnapshotMetadata(opened,prior,!strictShape);
+    // No retry before the index headers have been read. The ordinary
+    // WAL retry must retain positive evidence across attempts.
+    assertSnapshotMetadata(opened,prior,false);
     if(opened.size<32768||opened.size%32768!==0){
       if(strictShape)fail();
       return undefined;
     }
     const bytes=Buffer.alloc(136);
     await readExactly(handle,bytes,bytes.length,0);
+    if(anchor&&!bytes.subarray(0,96).equals(anchor.indexHeaders))fail();
+    if(retry&&!anchor){
+      // Preserve both commit-header copies and the fully verified WAL.
+      // Reader marks may legitimately move; commit evidence may not vanish.
+      retry.state.anchor={wal:retry.wal,index:opened,
+        indexHeaders:Buffer.from(bytes.subarray(0,96))};
+    }
     const after=await handle.stat();
-    assertSnapshotMetadata(after,opened,!strictShape);
-    await assertStablePath(file,opened,!strictShape);
+    assertSnapshotMetadata(after,opened,Boolean(retry));
+    await assertStablePath(file,opened,Boolean(retry));
     return {bytes,dev:opened.dev,ino:opened.ino,size:opened.size,
       mtimeMs:opened.mtimeMs,ctimeMs:opened.ctimeMs};
   }finally{await handle.close();}
@@ -163,8 +184,9 @@ async function readFramelessIndex(dbFile:string):Promise<IndexSnapshot|undefined
 // is a contradiction, not proof of authenticity. A torn or lagging index
 // without such evidence must still permit a fully checksummed WAL.
 async function rejectContradictoryCommitIndex(dbFile:string,walHeader:Buffer,
-  pageSize:number,currentFrames:number,commitPages:number,digest:Checksum):Promise<void>{
-  const index=await readIndexSnapshot(dbFile,false);
+  pageSize:number,currentFrames:number,commitPages:number,digest:Checksum,
+  retry:RetryRead):Promise<void>{
+  const index=await readIndexSnapshot(dbFile,false,retry);
   if(!index)return;
   const nativeBig=endianness()==='BE';
   for(const offset of [0,48]){
@@ -261,8 +283,9 @@ export async function verifyAgentJournalWal(dbFile:string):Promise<void>{
   // both files from byte zero, at most twice. Only the journal's existing
   // OS incarnation + transaction checks can decide ownership.
   const backoff=[10,25] as const;
+  const state:RetryState={};
   for(let attempt=0;;attempt++){
-    try{await verifyAgentJournalWalOnce(dbFile);return;}
+    try{await verifyAgentJournalWalOnce(dbFile,state);return;}
     catch(error){
       const wait=backoff[attempt];
       if(!(error instanceof AgentJournalWalUnstableError)||wait===undefined)throw error;
@@ -271,11 +294,15 @@ export async function verifyAgentJournalWal(dbFile:string):Promise<void>{
   }
 }
 
-async function verifyAgentJournalWalOnce(dbFile:string):Promise<void>{
+async function verifyAgentJournalWalOnce(dbFile:string,state:RetryState):Promise<void>{
+  const anchor=state.anchor;
   const walFile=dbFile+'-wal';
   let prior;
   try{prior=await fs.lstat(walFile)}catch(e){
     if((e as NodeJS.ErrnoException).code==='ENOENT'){
+      // An observed committed WAL must not become a clean-start case
+      // just because both sidecars disappear between retry attempts.
+      if(anchor)fail();
       // A missing WAL with an orphaned SHM can conceal committed WAL-only
       // journal entries (including UNKNOWN anti-replay tombstones). SQLite
       // may reopen the base database without those entries. This is not the
@@ -292,6 +319,7 @@ async function verifyAgentJournalWalOnce(dbFile:string):Promise<void>{
   if(!prior.isFile()||prior.isSymbolicLink()){
     throw new AgentJournalWalError('SQLite WAL path is not a regular file.');
   }
+  if(anchor)assertSnapshotMetadata(prior,anchor.wal.file,false);
   // An observed WAL that vanishes before open is not the same as a WAL
   // that was absent at initial lstat. Deny with the journal's fail-closed
   // diagnostic code rather than leaking a raw filesystem ENOENT.
@@ -376,6 +404,9 @@ async function verifyAgentJournalWalOnce(dbFile:string):Promise<void>{
     // history: every nonempty current generation must end at a commit frame.
     // Ordinary RESTART/reuse tails remain valid after their committed prefix.
     if(currentFrames>0&&lastCommitPages===0)fail();
+    if(anchor&&(reuseIndex||!header.equals(anchor.wal.header)||
+      currentFrames!==anchor.wal.currentFrames||lastCommitPages!==anchor.wal.commitPages||
+      digest.s0!==anchor.wal.digest.s0||digest.s1!==anchor.wal.digest.s1))fail();
     const after=await handle.stat();
     if(after.size!==opened.size||after.mtimeMs!==opened.mtimeMs||
        after.ctimeMs!==opened.ctimeMs)fail();
@@ -409,7 +440,8 @@ async function verifyAgentJournalWalOnce(dbFile:string):Promise<void>{
          !finalIndex.bytes.equals(reuseIndex.bytes))fail();
     }else{
       await rejectContradictoryCommitIndex(dbFile,header,pageSize,
-        currentFrames,lastCommitPages,digest);
+        currentFrames,lastCommitPages,digest,{state,wal:{file:opened,
+          header,currentFrames,commitPages:lastCommitPages,digest}});
       await assertStablePath(walFile,opened);
     }
   }finally{
