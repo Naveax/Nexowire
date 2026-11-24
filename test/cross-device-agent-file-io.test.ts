@@ -154,8 +154,10 @@ test('full isolated transfer via native agent chunk reads and positional stage w
   assert.equal(first.sha256,sha(bytes));
   assert.equal(chunks,5);
   assert.deepEqual(await fs.readFile(dst),bytes);
-  await assert.rejects(run(),/(Destination already exists|EEXIST)/);
+  await assert.rejects(run(),{code:'TRANSFER_PUBLISH_OUTCOME_UNKNOWN'});
   assert.deepEqual(await fs.readFile(dst),bytes);
-  assert.equal((await fs.readdir(root)).filter(x=>x.includes('.nexowire-upload-')).length,0);
+  const retained=(await fs.readdir(root)).filter(x=>x.includes('.nexowire-upload-'));
+  assert.equal(retained.length,1);
+  assert.deepEqual(await fs.readFile(path.join(root,retained[0]!)),bytes);
  }finally{await fs.rm(root,{recursive:true,force:true})}
 });
