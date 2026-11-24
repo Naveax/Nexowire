@@ -16,6 +16,9 @@ async function fixture(t:import('node:test').TestContext,identity:BearerAuthoriz
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'nx-large-mcp-'));
   const server=new McpServer({name:'transfer-fixture',version:'1.0.0'});
   const client=new Client({name:'test',version:'1.0.0'});
+  // The SDK installs tools/list only after the first registration. Production
+  // has other tools; keep that condition in this negative registration fixture.
+  server.registerTool('fixture_status',{description:'Unrelated fixture tool',inputSchema:{}},async()=>({content:[{type:'text',text:'fixture'}]}));
   let reads=0,writes=0,publishes=0,stage=false,complete=false;
   const remote:LargeTransferRemote={
     async limits(){return {maxHashBytes:4*1024**3,maxOffsetBytes:Number.MAX_SAFE_INTEGER};},
@@ -37,8 +40,12 @@ async function fixture(t:import('node:test').TestContext,identity:BearerAuthoriz
 }
 test('large transfer MCP surface is absent without trusted runtime or account identity',async t=>{
   const a=await fixture(t,auth,false),b=await fixture(t,{kind:'static',scope:'mcp'});
-  assert.equal((await a.client.listTools()).tools.length,0);
-  assert.equal((await b.client.listTools()).tools.length,0);
+  for(const f of [a,b]){
+    assert.deepEqual((await f.client.listTools()).tools.map(x=>x.name),['fixture_status']);
+    const result=await f.client.callTool({name:'large_file_transfer_start',arguments:{source_device_id:'s',target_device_id:'t',source_path:'source',target_path:'target'}});
+    assert.equal(result.isError,true);
+    assert.deepEqual(f.counts(),{reads:0,writes:0,publishes:0});
+  }
 });
 test('MCP full explicit device grants are required before native read or mutation',async t=>{
   const f=await fixture(t,{...auth,deviceAccessModes:{s:'full',t:'safe'}});

@@ -7,6 +7,7 @@ import {brokerNativeTransferClient} from '../../src/mcp/broker-native-transfer-c
 import {NATIVE_TRANSFER_CAPABILITIES,executeNativeTransferWire} from '../../src/agent/native-transfer-wire.js';
 import {NativeTransferPublisher,type NativeTransferAdmission} from '../../src/agent/native-transfer-publisher.js';
 import {PathPolicy} from '../../src/agent/path-policy.js';
+import {isReadOnlyCapability,capabilitiesForPlatform} from '../../src/protocol/capabilities.js';
 import type {AgentBroker} from '../../src/core/agent-broker.js';
 import type {LargeTransferBinding,LargeTransferIntent} from '../../src/mcp/durable-large-transfer.js';
 const id=randomUUID(),target=path.join(os.tmpdir(),'target');
@@ -44,4 +45,12 @@ test('Native wire rejects absent provider, foreign outer UUID and mismatched tar
   await assert.rejects(executeNativeTransferWire(publisher,'target',randomUUID(),'files.transfer.write_fenced',input,policy),/SCOPE_MISMATCH/);
   await assert.rejects(executeNativeTransferWire(publisher,'foreign',intent.requestId,'files.transfer.write_fenced',input,policy),/SCOPE_MISMATCH/);
   assert.equal(admitted,0);
+});
+
+test('only transfer limits are read-only; new protected mutations are never default-advertised',()=>{
+  assert.equal(isReadOnlyCapability('files.transfer.limits'),true);
+  assert.equal(isReadOnlyCapability('files.transfer.write_fenced'),false);
+  assert.equal(isReadOnlyCapability('files.transfer.publish_fenced'),false);
+  for(const platform of ['win32','linux','darwin'] as const)
+    for(const c of NATIVE_TRANSFER_CAPABILITIES)assert.equal(capabilitiesForPlatform(platform).includes(c),false);
 });
