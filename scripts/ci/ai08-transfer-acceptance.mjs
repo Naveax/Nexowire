@@ -63,11 +63,11 @@ function run() {
     if (git('rev-parse','HEAD:'+file)!==blob || git('hash-object','--path='+file,file)!==blob)
       throw new Error('SOURCE_PIN_MISMATCH:'+file);
   }
-  const inventory = git('ls-tree','-r','HEAD','--','test');
+  const inventory = git('ls-tree','-r','HEAD','--','test')+'\n';
   const inventoryHash = createHash('sha256').update(inventory).digest('hex');
   const output = path.resolve('ai08-transfer-receipts');
   mkdirSync(output,{recursive:true});
-  writeFileSync(path.join(output,'inventory.txt'),inventory+'\n');
+  writeFileSync(path.join(output,'inventory.txt'),inventory);
   const receipt = {
     schemaVersion:1, sourceCommitSha:sha, sourceInventorySha256:inventoryHash,
     platform:process.platform,nodeVersion:process.version,workflowRunId:process.env.GITHUB_RUN_ID,
