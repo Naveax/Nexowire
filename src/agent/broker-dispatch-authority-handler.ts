@@ -1,4 +1,4 @@
-import {createPublicKey,verify,type KeyObject} from 'node:crypto';
+import {createHash,createPublicKey,verify,type KeyObject} from 'node:crypto';
 import type {IncomingMessage,ServerResponse} from 'node:http';
 import type {TLSSocket} from 'node:tls';
 import * as z from 'zod';
@@ -47,6 +47,7 @@ const revoked=z.object({kind:z.literal('broker_dispatch_revocation_v1'),
   revoked:z.literal(true)}).strict();
 
 export type DispatchBrokerPrincipal=z.infer<typeof principal>;
+export type DispatchTlsPeer=Readonly<{certificateSha256:string}>;
 type Action='begin'|'commit'|'revoke-and-drain'|'release';
 
 /**
@@ -61,7 +62,9 @@ type Action='begin'|'commit'|'revoke-and-drain'|'release';
 export function createBrokerDispatchAuthorityHandler(config:{
   authorityId:string;publicKeyPem:string;
   authority:ExternalBrokerDispatchAuthority;
-  authenticateBroker:(credential:string)=>Promise<DispatchBrokerPrincipal|undefined>;
+  authenticateBroker:(credential:string,peer?:DispatchTlsPeer)=>Promise<DispatchBrokerPrincipal|undefined>;
+  /** Required by the protected service; legacy source fixtures may omit it. */
+  requireMutualTls?:boolean;
   readProtectedBroker:(principal:DispatchBrokerPrincipal,
     operation:BrokerDispatchRequest)=>Promise<ProtectedBrokerEvidence|undefined>;
   verifyOwnerRevocation:(request:DispatchRevokeRequest)=>Promise<boolean>;
@@ -82,6 +85,7 @@ export function createBrokerDispatchAuthorityHandler(config:{
   if(key.asymmetricKeyType!=='ed25519')throw new Error('DISPATCH_HANDLER_KEY_INVALID');
   const authority=config.authority,authorityId=config.authorityId;
   const authenticateBroker=config.authenticateBroker;
+  const requireMutualTls=config.requireMutualTls===true;
   const readProtectedBroker=config.readProtectedBroker;
   const verifyOwnerRevocation=config.verifyOwnerRevocation;
   const now=config.now??Date.now;
@@ -142,13 +146,27 @@ export function createBrokerDispatchAuthorityHandler(config:{
   return (req,res)=>{
     void (async()=>{
       // Do not allow an accidental plaintext listener or forwarded TLS claim.
-      if(!(req.socket as TLSSocket).encrypted){respond(res,403,{error:'denied'});return}
+      const socket=req.socket as TLSSocket;
+      if(!socket.encrypted){respond(res,403,{error:'denied'});return}
+      let peer:DispatchTlsPeer|undefined;
+      if(requireMutualTls){
+        if(socket.authorized!==true||socket.getProtocol()!=='TLSv1.3'||
+          req.headersDistinct.authorization?.length!==1||
+          req.headersDistinct['content-type']?.length!==1||
+          req.headersDistinct['content-type'][0]!=='application/json'||
+          req.headersDistinct['content-encoding']!==undefined){
+          respond(res,403,{error:'denied'});return;
+        }
+        const raw=socket.getPeerCertificate().raw;
+        if(!Buffer.isBuffer(raw)||raw.length===0){respond(res,403,{error:'denied'});return}
+        peer=Object.freeze({certificateSha256:createHash('sha256').update(raw).digest('hex')});
+      }
       const action=req.url?.match(/^\/v1\/broker-dispatch\/(begin|commit|revoke-and-drain|release)$/)?.[1] as Action|undefined;
       if(req.method!=='POST'||!action){respond(res,404,{error:'not_found'});return}
       const auth=req.headers.authorization?.match(/^Bearer ([^\s]{16,4096})$/);
       if(!auth){respond(res,403,{error:'denied'});return}
       let resolved:DispatchBrokerPrincipal|undefined;
-      try{resolved=await authenticateBroker(auth[1]!)}catch{}
+      try{resolved=await authenticateBroker(auth[1]!,peer)}catch{}
       const parsedPrincipal=principal.safeParse(resolved);
       if(!parsedPrincipal.success){respond(res,403,{error:'denied'});return}
       const p=Object.freeze(parsedPrincipal.data);
