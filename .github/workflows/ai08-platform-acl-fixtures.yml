@@ -1,0 +1,56 @@
+name: AI-08 Platform ACL Source Fixtures
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/ai08-platform-acl-fixtures.yml"
+      - "scripts/ci/platform-acl-fixture-receipt.mjs"
+      - "scripts/ci/test-inventory.mjs"
+      - "scripts/ci/assert-tap-summary.mjs"
+      - "test/ci/platform-acl-fixture-receipt.test.mjs"
+      - "test/privileged-broker-task-control-acl.test.ts"
+      - "test/guardian-sqlite-sidecar-preflight.test.ts"
+      - "test/windows-local-listener-owner.test.ts"
+      - "test/windows-runtime-acl-audit.test.ts"
+      - "test/windows-generic-acl-readonly-audit.test.ts"
+      - "test/windows-private-acl-generic.test.ts"
+      - "scripts/audit-windows-runtime-acl.ps1"
+      - "src/agent/**"
+      - "src/hub/**"
+      - "src/security/**"
+      - "package.json"
+      - "package-lock.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai08-platform-acl-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  platform-acl-fixtures:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - name: Verify fixture pins and named platform SKIP contracts
+        run: node --test test/ci/platform-acl-fixture-receipt.test.mjs
+      - name: Execute reviewed platform fixtures and report per-case truth
+        env:
+          NEXOWIRE_EXPECTED_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/ci/platform-acl-fixture-receipt.mjs --json
