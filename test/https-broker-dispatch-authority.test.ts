@@ -261,3 +261,80 @@ test('HTTPS transport rejects downgrade and malformed endpoints',()=>{
   }),{code:'BROKER_DISPATCH_ENDPOINT_INVALID'});
  }
 });
+
+test('dispatch HTTPS ACKs must be exact and bounded, including credential delay',async t=>{
+ const dir=await mkdtemp(path.join(process.cwd(),'test','nx-dispatch-ack-'));
+ const ca=await isolatedRemoteCas(dir);
+ const prior=tls.getCACertificates('default');
+ tls.setDefaultCACertificates([...prior,await readFile(ca.certificate,'utf8')]);
+ const brokerId=randomUUID();
+ const request={requestId:randomUUID(),fingerprint:'a'.repeat(64),capability:'fixture.no-effect',
+   scope:{ownerId:randomUUID(),deviceId:ca.deviceId,deviceEpoch:ca.epoch,sessionEpoch:randomUUID(),
+     ownerEpoch:1,expectedGeneration:1,requiredPrivilege:'CORE' as const}};
+ const broker={verified:true as const,brokerId,ownerEpoch:1,grantGeneration:1,
+   highIntegrityToken:true as const,signedProtectedImage:true as const,protectedParentAndImports:true as const};
+ const receipt={payload:'YWJj',signature:'YWJj'};
+ let calls=0,observed:unknown,mode='ok';
+ const server=createServer({key:await readFile(path.join(ca.root,'cas.key')),
+   cert:await readFile(ca.certificate)},(req,res)=>{
+   void(async()=>{
+    const chunks:Buffer[]=[];
+    for await(const chunk of req)chunks.push(Buffer.from(chunk));
+    calls++;observed=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    if(mode==='release200'){res.writeHead(200,{'content-type':'application/json'});res.end('{}');return;}
+    if(mode==='release204'){res.writeHead(204);res.end();return;}
+    if(mode==='partial'){res.writeHead(206,{'content-type':'application/json'});res.end(JSON.stringify(receipt));return;}
+    if(mode==='wrongtype'){res.writeHead(200,{'content-type':'text/plain'});res.end(JSON.stringify(receipt));return;}
+    if(mode==='duplicate'){res.writeHead(200,{'content-type':['application/json','text/plain']});res.end(JSON.stringify(receipt));return;}
+    res.writeHead(200,{'content-type':'application/json'});
+    if(mode==='oversize'){res.end('x'.repeat(8193));return;}
+    if(mode==='stall'){res.write('{"payload":');return;}
+    res.end(JSON.stringify(receipt));
+   })().catch(()=>res.destroy());
+ });
+ await new Promise<void>(resolve=>server.listen(0,'localhost',resolve));
+ t.after(async()=>{
+   server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));
+   tls.setDefaultCACertificates(prior);await ca.stop();
+   await rm(dir,{recursive:true,force:true,maxRetries:4,retryDelay:75});
+ });
+ const addr=server.address();assert.ok(addr&&typeof addr!=='string');
+ const config={endpoint:'https://localhost:'+addr.port+'/v1/broker-dispatch',
+   brokerCredential:async()=>ca.settings.token,timeoutMs:1000};
+ const client=new HttpsBrokerDispatchAuthority(config);
+ for(const [kind,code] of [['partial','BROKER_DISPATCH_REMOTE_REFUSED'],
+   ['wrongtype','BROKER_DISPATCH_RECEIPT_INVALID'],['duplicate','BROKER_DISPATCH_RECEIPT_INVALID'],
+   ['oversize','BROKER_DISPATCH_RECEIPT_INVALID']] as const){
+   mode=kind;const before=calls;
+   await assert.rejects(client.beginIfCurrent(request,broker,'a'.repeat(64)),{code});
+   assert.equal(calls,before+1,'no transport retry');
+ }
+ const release={dispatchId:randomUUID(),brokerId,request};
+ mode='release200';await assert.rejects(client.release(release),{code:'BROKER_DISPATCH_REMOTE_REFUSED'});
+ mode='release204';await client.release(release);
+ mode='stall';
+ const short=new HttpsBrokerDispatchAuthority({...config,timeoutMs:250});
+ await assert.rejects(short.beginIfCurrent(request,broker,'b'.repeat(64)),{code:'BROKER_DISPATCH_TRANSPORT_UNKNOWN'});
+ let resolveCredential!:(value:string)=>void;
+ const delayed=new Promise<string>(resolve=>{resolveCredential=resolve});
+ const hanging=new HttpsBrokerDispatchAuthority({...config,timeoutMs:100,brokerCredential:()=>delayed});
+ const before=calls;
+ await assert.rejects(hanging.beginIfCurrent(request,broker,'c'.repeat(64)),{code:'BROKER_DISPATCH_TRANSPORT_UNKNOWN'});
+ resolveCredential(ca.settings.token);
+ await new Promise<void>(resolve=>setTimeout(resolve,30));
+ assert.equal(calls,before,'late credential must not issue a request');
+ let unblock!:(value:string)=>void;
+ const gate=new Promise<string>(resolve=>{unblock=resolve});
+ const mutable={...config,brokerCredential:()=>gate};
+ const pinned=new HttpsBrokerDispatchAuthority(mutable);
+ mutable.brokerCredential=async()=>{throw Error('replacement must not execute')};
+ const mutableBroker={...broker},mutableRequest={...request,scope:{...request.scope}};
+ mode='ok';
+ const pending=pinned.beginIfCurrent(mutableRequest,mutableBroker,'d'.repeat(64));
+ mutableBroker.brokerId=randomUUID();mutableRequest.scope.ownerId=randomUUID();
+ unblock(ca.settings.token);
+ assert.deepEqual(await pending,receipt);
+ assert.deepEqual(observed,{request,broker,challengeNonce:'d'.repeat(64)});
+ assert.throws(()=>new HttpsBrokerDispatchAuthority({...config,timeoutMs:0}),
+   {code:'BROKER_DISPATCH_TRANSPORT_CONFIGURATION_INVALID'});
+});
