@@ -27,7 +27,7 @@ export interface TransferHelperDeploymentAuthority {
 }
 export interface TransferHelperArtifactStore {
   verifyInstalled(pin:HelperPin):Promise<void>;
-  stage(sourcePath:string,pin:HelperPin):Promise<void>;
+  stage(sourcePath:string,pin:HelperPin,allowProvisionEmptyRoot:boolean):Promise<void>;
 }
 function pin(value:HelperPin):HelperPin {
   if(!value||typeof value.sha256!=='string'||value.sha256.length!==64||!sha.test(value.sha256)||
@@ -81,7 +81,7 @@ export async function runTransferHelperLifecycle(input:HelperRequest,authority:T
     // Upgrade still requires a verified working predecessor.
     if(current.pin&&req.operation==='upgrade')await store.verifyInstalled(current.pin);
     if(req.desired){
-      if(req.sourcePath!==undefined)await store.stage(req.sourcePath,req.desired);
+      if(req.sourcePath!==undefined)await store.stage(req.sourcePath,req.desired,req.operation==='clean-install');
       await store.verifyInstalled(req.desired);
     }
     // Once dispatch starts, exceptions or UNKNOWN never cause another commit,
@@ -100,6 +100,27 @@ export async function runTransferHelperLifecycle(input:HelperRequest,authority:T
 const run=promisify(execFile);
 const MAX_BYTES=8*1024*1024;
 const digest=(bytes:Buffer)=>createHash('sha256').update(bytes).digest('hex');
+// Fixed path; no caller-controlled shell text or ACL changes to existing roots.
+const provisionScript=String.raw`
+$ErrorActionPreference='Stop'
+$root='C:\ProgramData\Nexowire-TransferRuntime'
+$parent=[IO.DirectoryInfo]::new('C:\ProgramData')
+if(-not $parent.Exists -or ($parent.Attributes -band [IO.FileAttributes]::ReparsePoint)){throw 'TRANSFER_HELPER_ROOT_PARENT_UNTRUSTED'}
+if([IO.Directory]::Exists($root) -or [IO.File]::Exists($root)){throw 'TRANSFER_HELPER_ROOT_ALREADY_EXISTS'}
+$acl=New-Object Security.AccessControl.DirectorySecurity
+$acl.SetAccessRuleProtection($true,$false)
+$admin=New-Object Security.Principal.SecurityIdentifier('S-1-5-32-544')
+$system=New-Object Security.Principal.SecurityIdentifier('S-1-5-18')
+$acl.SetOwner($admin)
+foreach($sid in @($admin,$system)){
+  $rule=New-Object Security.AccessControl.FileSystemAccessRule($sid,'FullControl','ContainerInherit,ObjectInherit','None','Allow')
+  $acl.AddAccessRule($rule)
+}
+# .NET Framework's security-descriptor overload applies the private ACL at
+# directory creation, never creates a user-writable staging namespace.
+[void][IO.Directory]::CreateDirectory($root,$acl)
+Write-Output 'TRANSFER_HELPER_ROOT_PROVISIONED_VERIFY_REQUIRED'
+`;
 const signatureScript=String.raw`
 $ErrorActionPreference='Stop'
 $env:PSModulePath='C:\Windows\System32\WindowsPowerShell\v1.0\Modules'
@@ -143,14 +164,25 @@ async function verifiedBytes(file:string,p:HelperPin,protectedFile:boolean):Prom
   return bytes;
 }
 /** Real Windows storage adapter. An independently installed private root and
- * trusted signed runtime are prerequisites. No ACL repair, auto-elevation,
+ * trusted signed runtime are prerequisites. Only clean-install can provision a
+ * missing fixed root with a private ACL at creation. No ACL repair, auto-elevation,
  * helper execution, remote download, active-pointer file or key access. */
 export function createWindowsTransferHelperArtifactStore(assertInstalledRuntime:()=>Promise<void>):TransferHelperArtifactStore{
   if(process.platform!=='win32'||typeof assertInstalledRuntime!=='function')return deny('TRANSFER_HELPER_WINDOWS_RUNTIME_REQUIRED');
-  async function root(){
+  async function root(allowProvision=false){
     assertNoPrivilegedNodeStartupFlags(process.execArgv);
     assertWindowsPrivilegedRuntimeTrusted({executable:process.execPath,cliEntrypoint:process.argv[1]??'',env:process.env});
     await assertInstalledRuntime();
+    verifyWindowsStackOuterAncestorAcl('C:\\');
+    verifyWindowsStackOuterAncestorAcl('C:\\ProgramData');
+    try{await fs.lstat(TRANSFER_HELPER_ROOT);}
+    catch(error){
+      if((error as NodeJS.ErrnoException).code!=='ENOENT'||!allowProvision)throw error;
+      const result=await run('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',[
+        '-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(provisionScript,'utf16le').toString('base64'),
+      ],{cwd:'C:\\Windows\\System32',env:protectedWindowsAclEnvironment(),windowsHide:true,timeout:30000,maxBuffer:16384});
+      if(result.stderr.trim()||result.stdout.trim()!=='TRANSFER_HELPER_ROOT_PROVISIONED_VERIFY_REQUIRED')return deny('TRANSFER_HELPER_ROOT_PROVISION_UNVERIFIED');
+    }
     const stat=await fs.lstat(TRANSFER_HELPER_ROOT);
     if(!stat.isDirectory()||stat.isSymbolicLink()||(await fs.realpath(TRANSFER_HELPER_ROOT)).toLowerCase()!==TRANSFER_HELPER_ROOT.toLowerCase())return deny('TRANSFER_HELPER_ROOT_UNTRUSTED');
     verifyWindowsStackOuterAncestorAcl('C:\\');
@@ -162,9 +194,11 @@ export function createWindowsTransferHelperArtifactStore(assertInstalledRuntime:
   }
   return Object.freeze({
     verifyInstalled,
-    async stage(sourcePath:string,value:HelperPin){
-      const p=pin(value);await root();
+    async stage(sourcePath:string,value:HelperPin,allowProvisionEmptyRoot:boolean){
+      const p=pin(value);
+      // Verify the signed offline input before creating even a fresh root.
       const bytes=await verifiedBytes(sourcePath,p,false);
+      await root(allowProvisionEmptyRoot===true);
       const dest=installedTransferHelperPath(p);
       await root();
       let file;

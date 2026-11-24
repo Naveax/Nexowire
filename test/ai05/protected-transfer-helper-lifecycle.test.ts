@@ -9,17 +9,18 @@ function fixture(initial:HelperSelection={revision:'0',pin:null}){
   const artifacts=new Set<string>();
   if(initial.pin)artifacts.add(initial.pin.sha256);
   const calls:string[]=[];
+  const provisions:boolean[]=[];
   let outcome:HelperCommit='COMMITTED',readbackFailure=false;
   const store:TransferHelperArtifactStore={
     async verifyInstalled(p){calls.push('verify:'+p.sha256);if(!artifacts.has(p.sha256))throw Error('MISSING_SIGNED_ARTIFACT');},
-    async stage(_source,p){calls.push('stage:'+p.sha256);artifacts.add(p.sha256);},
+    async stage(_source,p,provision){calls.push('stage:'+p.sha256);provisions.push(provision);artifacts.add(p.sha256);},
   };
   const authority:TransferHelperDeploymentAuthority={
     async withExclusiveQuiescedDeployment(req,effect){calls.push('admit:'+req.operation);return effect();},
     async readSelection(){if(readbackFailure&&calls.includes('commit'))throw Error('READBACK_FAILED');return selected;},
     async commitSelection(req){calls.push('commit');if(outcome==='COMMITTED'||outcome==='UNKNOWN')selected={revision:String(Number(selected.revision)+1),pin:req.desired};return outcome;},
   };
-  return {store,authority,artifacts,calls,get selected(){return selected;},setOutcome(v:HelperCommit){outcome=v;},failReadback(){readbackFailure=true;}};
+  return {store,authority,artifacts,calls,provisions,get selected(){return selected;},setOutcome(v:HelperCommit){outcome=v;},failReadback(){readbackFailure=true;}};
 }
 function request(operation:HelperRequest['operation'],expected:HelperSelection,desired:HelperPin|null,sourcePath?:string):HelperRequest{
   return {requestId:randomUUID(),operation,expected,desired,...(sourcePath===undefined?{}:{sourcePath})};
@@ -34,6 +35,7 @@ test('clean install, upgrade, rollback and detach retain both verified versions'
   assert.equal(result.binariesRetained,true);assert.equal(result.userDataMutationRequested,false);
   assert.deepEqual([...f.artifacts],[a.sha256,b.sha256]);
   assert.equal(f.calls.filter(x=>x==='commit').length,4);
+  assert.deepEqual(f.provisions,[true,false]);
 });
 test('stale revision is refused before staging or commit',async()=>{
   const f=fixture({revision:'2',pin:a});
