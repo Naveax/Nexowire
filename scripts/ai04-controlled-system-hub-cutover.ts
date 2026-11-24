@@ -35,6 +35,7 @@ const PARENT='C:\\ProgramData\\Nexowire';
 const ROOT=path.win32.join(PARENT,'hub-cutover-recovery');
 const JOURNAL=path.win32.join(ROOT,'journal.json');
 const RECOVERY=path.win32.join(ROOT,'rollback.ps1');
+const CUTOVER_LOCK=path.win32.join(ROOT,'cutover.lock');
 const TASK='Nexowire Hub Cutover Recovery';
 const POWERSHELL='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
 const LAUNCHER=path.win32.join(os.homedir(),'.nexowire','hub-service','launch.ps1');
@@ -242,6 +243,16 @@ export const SYSTEM_HUB_RECOVERY_RESUME_TASK_PS=[
 export const SYSTEM_HUB_RECOVERY_PS=[
   "$ErrorActionPreference='Stop'",
   "$root='C:\\ProgramData\\Nexowire\\hub-cutover-recovery'",
+  // The Node cutover holds this protected file open for write. Win32 rejects
+  // a FileShare.None open while such a handle exists; a second recovery is
+  // also excluded. Process exit releases the OS handle, not the evidence file.
+  "$lockPath=Join-Path $root 'cutover.lock'",
+  "try{",
+  "  $lockInfo=Get-Item -LiteralPath $lockPath -Force -ErrorAction Stop",
+  "  if($lockInfo.PSIsContainer -or $lockInfo.Length -ne 0 -or (($lockInfo.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)){throw 'AI04_RECOVERY_LOCK_UNTRUSTED'}",
+  "  $recoveryLock=[IO.File]::Open($lockPath,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)",
+  "}catch{throw 'AI04_RECOVERY_LOCK_UNAVAILABLE'}",
+  "try{",
   "$journalPath=Join-Path $root 'journal.json'",
   "$journal=Get-Content -LiteralPath $journalPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop",
   "if($journal.version -ne 1 -or [string]$journal.host -cne $env:COMPUTERNAME){throw 'AI04_RECOVERY_JOURNAL_FOREIGN'}",
@@ -378,6 +389,7 @@ export const SYSTEM_HUB_RECOVERY_PS=[
   "$temp=Join-Path $root ('recovery-'+[guid]::NewGuid().ToString()+'.tmp')",
   "$journal | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $temp -Encoding UTF8 -ErrorAction Stop",
   "Move-Item -LiteralPath $temp -Destination $journalPath -Force -ErrorAction Stop",
+  "}finally{$recoveryLock.Dispose()}",
 ].join('\r\n');
 
 /** Non-mutating recovery admission; distinguish inaccessible from absent files. */
@@ -433,6 +445,24 @@ export async function controlledSystemHubCutover(
     sourceRoot:'',launcherPath:LAUNCHER,launcherSha256:'',
     originalUserPrincipal:'',createdAt:new Date().toISOString(),
   };
+  let cutoverLock:Awaited<ReturnType<typeof fs.open>>|undefined;
+  const releaseCutoverLock=async():Promise<void>=>{
+    if(!cutoverLock)return;
+    await cutoverLock.close();
+    cutoverLock=undefined;
+  };
+  const assertCutoverLockHeld=async():Promise<void>=>{
+    if(!cutoverLock)throw new Error('AI04_CUTOVER_LOCK_UNVERIFIED');
+    const open=await cutoverLock.stat({bigint:true});
+    const named=await fs.lstat(CUTOVER_LOCK,{bigint:true});
+    if(!open.isFile()||!named.isFile()||named.isSymbolicLink()||
+       open.nlink!==1n||named.nlink!==1n||open.size!==0n||named.size!==0n||
+       open.dev!==named.dev||open.ino!==named.ino)
+      throw new Error('AI04_CUTOVER_LOCK_UNVERIFIED');
+  };
+  let cutoverFailed=false;
+  let cutoverFailure:unknown;
+  try{
   return await runRecoverableSystemHubCutover({
     async preflight(){
       // No recovery artifacts or user Hub changes when the state volume is full.
@@ -476,6 +506,10 @@ export async function controlledSystemHubCutover(
       setProtectedOwner(ROOT);
       hardenWindowsProgramDataAcl(ROOT);
       verifyWindowsPrivateAcl(ROOT);
+      // Create and harden the lock before publishing any recovery task.
+      await privateWrite(CUTOVER_LOCK,'');
+      cutoverLock=await fs.open(CUTOVER_LOCK,'r+');
+      await assertCutoverLockHeld();
       const backupLauncher=path.win32.join(ROOT,'original-user-launcher.ps1');
       await fs.copyFile(LAUNCHER,backupLauncher,fsConstants.COPYFILE_EXCL);
       privateFileAcl(backupLauncher);
@@ -510,6 +544,8 @@ export async function controlledSystemHubCutover(
         throw new Error('AI04_RECOVERY_TASK_CHANGED_BEFORE_QUIESCE');
       verifyWindowsPrivateAcl(RECOVERY);
       verifyWindowsPrivateAcl(JOURNAL);
+      verifyWindowsPrivateAcl(CUTOVER_LOCK);
+      await assertCutoverLockHeld();
       await assertLegacyLauncherBoundToJournal(journal);
       // Other processes can consume space while the recovery task is armed.
       // Recheck the authoritative source path as well as the protected target
@@ -517,6 +553,7 @@ export async function controlledSystemHubCutover(
       await assertSystemCutoverDiskReserve(undefined,os.homedir(),journal.sourceRoot);
     },
     async quiesceLegacy(){
+      await assertCutoverLockHeld();
       await advance(journal,'QUIESCING');
       runPS([
         "$ErrorActionPreference='Stop'",
@@ -540,6 +577,7 @@ export async function controlledSystemHubCutover(
       await advance(journal,'QUIESCED');
     },
     async copyProtectedState(){
+      await assertCutoverLockHeld();
       trustedAncestors();
       await assertLegacyLauncherBoundToJournal(journal);
       await prepareProtectedOfflineSystemHubStateCopy(LAUNCHER,true);
@@ -547,6 +585,7 @@ export async function controlledSystemHubCutover(
       await advance(journal,'COPIED');
     },
     async issueReceipt(){
+      await assertCutoverLockHeld();
       assertInteractiveHubTaskDisabledReadOnly();
       await assertLegacyLauncherBoundToJournal(journal);
       await issueOfflineSystemStateCutoverReceipt(LAUNCHER,true);
@@ -554,6 +593,7 @@ export async function controlledSystemHubCutover(
       await advance(journal,'RECEIPT_ISSUED');
     },
     async installSystemHub(){
+      await assertCutoverLockHeld();
       await advance(journal,'SYSTEM_INSTALLING');
       await installHubBootLifecycle({
         execPath:process.execPath,execArgv:[],
@@ -562,6 +602,7 @@ export async function controlledSystemHubCutover(
       await advance(journal,'SYSTEM_STARTED');
     },
     async verifySystemHub(){
+      await assertCutoverLockHeld();
       const status=await hubBootLifecycleStatus();
       if(!status.installed||status.state!=='running'||!status.pid)
         throw new Error('AI04_SYSTEM_HUB_NOT_RUNNING');
@@ -579,6 +620,7 @@ export async function controlledSystemHubCutover(
       await advance(journal,'HEALTHY');
     },
     async commit(){
+      await assertCutoverLockHeld();
       // A healthy SYSTEM PID and HTTP 200 are NOT sufficient for physical
       // acceptance. Never disarm recovery on this incomplete evidence.
       const disposition=postHealthSystemHubDisposition();
@@ -593,12 +635,25 @@ export async function controlledSystemHubCutover(
       // quiescence was attempted. Missing evidence is a failed rollback, never
       // proof that the original writer is restored.
       await assertRecoveryArtifactPresent(RECOVERY);
+      await assertCutoverLockHeld();
+      // Transfer execution to the PowerShell exclusive handle. If the
+      // scheduled recovery wins the race, the manual attempt fails closed.
+      await releaseCutoverLock();
       runRollbackScript();
       // PowerShell may exit successfully for a previously COMPLETE cutover.
       // Do not report a rollback unless the durable journal confirms one.
       assertDurableRollbackConfirmation(await fs.readFile(JOURNAL),journal);
     },
   });
+  }catch(error){
+    cutoverFailed=true;cutoverFailure=error;throw error;
+  }finally{
+    try{await releaseCutoverLock()}
+    catch(error){
+      if(cutoverFailed)throw new AggregateError([cutoverFailure,error],'AI04_CUTOVER_AND_LOCK_RELEASE_FAILED');
+      throw new Error('AI04_CUTOVER_LOCK_RELEASE_UNVERIFIED',{cause:error});
+    }
+  }
 }
 if(process.argv[1]&&pathToFileURL(path.resolve(process.argv[1])).href===import.meta.url){
   ensureElevated();

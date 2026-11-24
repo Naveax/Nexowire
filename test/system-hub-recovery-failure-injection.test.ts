@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {closeSync,mkdirSync,mkdtempSync,openSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {test} from 'node:test';
@@ -10,13 +10,15 @@ import {SYSTEM_HUB_RECOVERY_PS} from '../scripts/ai04-controlled-system-hub-cuto
 const psQuote=(value:string):string=>"'"+value.replaceAll("'","''")+"'";
 const powershell='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
 
-function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-write'|'tampered-launcher'|'late-launcher-swap'|'boot-action-swapped'|'boot-action-swapped-no-write'|'late-write-after-unregister',phase:'SYSTEM_STARTED'|'AWAITING_PHYSICAL_ACCEPTANCE'|'UNRECOGNIZED'|'complete'|'rolled_back'='SYSTEM_STARTED'):void{
+function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-write'|'tampered-launcher'|'late-launcher-swap'|'boot-action-swapped'|'boot-action-swapped-no-write'|'late-write-after-unregister'|'cutover-lock-held',phase:'SYSTEM_STARTED'|'AWAITING_PHYSICAL_ACCEPTANCE'|'UNRECOGNIZED'|'complete'|'rolled_back'='SYSTEM_STARTED'):void{
   const temp=mkdtempSync(path.join(os.tmpdir(),'ai04-fi-'));
   try{
     const source=path.join(temp,'legacy');
     const target=path.join(temp,'system');
     const recovery=path.join(temp,'recovery');
     mkdirSync(source);mkdirSync(target);mkdirSync(recovery);
+    const lockFile=path.join(recovery,'cutover.lock');
+    writeFileSync(lockFile,'','utf8');
     const sourceFile=path.join(source,'record.txt');
     const targetFile=path.join(target,'record.txt');
     writeFileSync(sourceFile,'legacy-state','utf8');
@@ -94,6 +96,8 @@ function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-
         'throw ("AI04_UNEXPECTED_MUTATIONS: stop="+$script:stopCount+" resume="+$script:resumeCount+" remove="+$script:removeCount+" reason="+$failure)}',
       'if($failure -notmatch "'+(['UNRECOGNIZED','complete','rolled_back'].includes(phase)
         ?'AI04_RECOVERY_UNKNOWN_PHASE'
+        :mode==='cutover-lock-held'
+          ?'AI04_RECOVERY_LOCK_UNAVAILABLE'
         :mode==='boot-action-swapped'
           ?'AI04_RECOVERY_SYSTEM_RESUME_FAILED'
         :mode==='boot-action-swapped-no-write'
@@ -108,12 +112,28 @@ function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-
     // contents but execute from a disposable file instead.
     const fixtureScript=path.join(temp,'run-isolated-recovery.ps1');
     writeFileSync(fixtureScript,setup.join('\r\n'),'utf8');
-    const result=spawnSync(powershell,
+    const invoke=()=>spawnSync(powershell,
       ['-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass',
         '-File',fixtureScript],
       {encoding:'utf8',windowsHide:true,timeout:15000,maxBuffer:512*1024});
+    const result=(()=>{
+      const held=mode==='cutover-lock-held'?openSync(lockFile,'r+'):undefined;
+      try{return invoke()}finally{if(held!==undefined)closeSync(held)}
+    })();
     assert.equal(result.status,0,result.stderr+'\n'+result.stdout);
     assert.match(result.stdout,/AI04_SIMULATED_REJECTION/);
+    if(mode==='cutover-lock-held'){
+      assert.match(result.stdout,/AI04_RECOVERY_LOCK_UNAVAILABLE/);
+      // Same file, same script, same journal: only the live Node handle
+      // is gone. Exclusive acquisition must now reach the divergence gate.
+      const retryScript=setup.join('\r\n').replace(
+        'AI04_RECOVERY_LOCK_UNAVAILABLE','AI04_ROLLBACK_UNRECONCILED_SYSTEM_WRITES');
+      writeFileSync(fixtureScript,retryScript,'utf8');
+      const retry=invoke();
+      assert.equal(retry.status,0,retry.stderr+'\n'+retry.stdout);
+      assert.match(retry.stdout,/AI04_ROLLBACK_UNRECONCILED_SYSTEM_WRITES/);
+      assert.equal(readFileSync(lockFile,'utf8'),'');
+    }
     assert.equal(readFileSync(sourceFile,'utf8'),'legacy-state');
     assert.equal(readFileSync(targetFile,'utf8'),
       ['late-shutdown-write','boot-action-swapped','late-write-after-unregister'].includes(mode)?'late-system-write':['late-launcher-swap','boot-action-swapped-no-write'].includes(mode)?'legacy-state':'new-system-data');
@@ -168,4 +188,9 @@ test('noncanonical terminal journal phases never silently report recovery succes
   {skip:process.platform!=='win32'},()=>{
     executeIsolatedRecoveryFailureInjection('pre-stop','complete');
     executeIsolatedRecoveryFailureInjection('pre-stop','rolled_back');
+  });
+
+test('live Node cutover handle excludes PowerShell recovery until the handle closes',
+  {skip:process.platform!=='win32'},()=>{
+    executeIsolatedRecoveryFailureInjection('cutover-lock-held');
   });

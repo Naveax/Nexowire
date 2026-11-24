@@ -168,3 +168,22 @@ test('manual rollback and scheduled rollback use the same bounded execution budg
   assert.ok(source.includes('New-TimeSpan -Seconds "+(SYSTEM_HUB_ROLLBACK_TIMEOUT_MS/1000)+'));
   assert.ok(source.includes('TASK_READBACK_TIMEOUT_MS=45_000'));
 });
+
+test('cutover and manual/scheduled recovery share a protected OS handle boundary',()=>{
+  const source=readFileSync(new URL('../../scripts/ai04-controlled-system-hub-cutover.ts',import.meta.url),'utf8');
+  const arm=source.indexOf('async armRecovery(){');
+  const lock=source.indexOf("await privateWrite(CUTOVER_LOCK,'')",arm);
+  const hold=source.indexOf("cutoverLock=await fs.open(CUTOVER_LOCK,'r+')",lock);
+  const register=source.indexOf('Register-ScheduledTask',hold);
+  assert.ok(arm>=0&&lock>arm&&hold>lock&&register>hold);
+  const ps=SYSTEM_HUB_RECOVERY_PS;
+  const exclusive=ps.indexOf('[IO.FileShare]::None');
+  assert.ok(exclusive>=0&&exclusive<ps.indexOf('$journal=Get-Content'));
+  assert.ok(ps.indexOf('AI04_RECOVERY_LOCK_UNAVAILABLE')<ps.indexOf('Stop-ScheduledTask'));
+  assert.ok(ps.indexOf('$recoveryLock.Dispose()')>ps.indexOf('Move-Item -LiteralPath $temp'));
+  const rollback=source.slice(source.indexOf('async rollback(){'));
+  assert.ok(rollback.indexOf('await assertCutoverLockHeld()')<rollback.indexOf('await releaseCutoverLock()'));
+  assert.ok(rollback.indexOf('await releaseCutoverLock()')<rollback.indexOf('runRollbackScript()'));
+  assert.match(source,/finally\{\s*try\{await releaseCutoverLock\(\)\}/);
+  assert.doesNotMatch(ps,/Remove-Item[^\r\n]*\$lockPath/);
+});
