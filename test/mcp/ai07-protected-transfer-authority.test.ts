@@ -45,6 +45,7 @@ test('protected transfer authority real mTLS: signed scoped replies, separate Na
   const tombstones=new Map<string,TransferNativeClaim>();
   let committed:{receipt:LargeTransferFinalReceipt;commit:LargeTransferCommit}|undefined;
   const backend:ProtectedTransferAuthorityBackend={
+    async cancelTransfer(binding,lease){assert.deepEqual(binding,b);assert.deepEqual(lease,l);},
     async assertGrant(s){grants++;assert(!revoked);assert.deepEqual(s,scope);},
     async acquire(_b,previous){assert.equal(previous,0);return l;},
     async assertCurrent(_b,lease,offset){assert.deepEqual(lease,l);assert.equal(offset,0);},
