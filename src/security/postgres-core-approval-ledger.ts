@@ -246,6 +246,20 @@ export class PostgresCoreApprovalLedger {
       return receipt;
     });
   }
+  /** Reconstruct a consumed owner assertion from the durable signed bytes.
+   * This is the first-stage proof only; it does not consume D1 enrollment.
+   * A legacy unbound intent or changed protected issuer cannot become consent. */
+  async readOwnerApprovalProof(receiptId:string,value:CoreApprovalBinding,issuerSpkiSha256:string):Promise<Readonly<CoreNativeProof>>{
+    z.string().uuid().parse(receiptId);const expected=binding(value);
+    const issuer=z.string().regex(/^[a-f0-9]{64}$/).parse(issuerSpkiSha256);
+    await this.trusted(expected,issuer);
+    return this.transaction(async tx=>{
+      const {proof,approvedIssuer}=await this.stored(tx,receiptId,expected);
+      if(approvedIssuer!==issuer)fail('ENROLLMENT_ISSUER_NOT_IN_APPROVED_INTENT');
+      await this.trusted(expected,issuer);await this.current(tx,expected);
+      return proof;
+    });
+  }
   private async stored(tx:Tx,receiptId:string,expected:CoreApprovalBinding){
     await this.current(tx,expected);
     const row=(await tx.db.query('SELECT * FROM core_approval.challenges WHERE receipt_id=$1',
