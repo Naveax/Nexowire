@@ -17,6 +17,9 @@ test('AI-05 offline helper build binds the independently reviewed source blob an
   assert.match(script,/AI05_TRANSFER_SOURCE_REVIEW_REQUIRED/);
   assert.match(script,/Assert-SignedArtifact \$compiler \$ExpectedCompilerSha256 \$ExpectedCompilerSignerSha256/);
   assert.match(script,/'\/platform:x64'/);
+  assert.match(script,/ExpectedReferenceSha256/);
+  assert.match(script,/AI05_TRANSFER_REFERENCE_HASH_MISMATCH/);
+  assert.match(script,/Microsoft\.PowerShell\.Security\\Get-AuthenticodeSignature/);
   assert.match(script,/UNSIGNED_BUILD_ONLY/);
   assert.match(script,/productionEligible=\$false/);
   assert.doesNotMatch(script,/Set-AuthenticodeSignature|Register-ScheduledTask|Start-Process|Set-Acl|New-SelfSignedCertificate/);

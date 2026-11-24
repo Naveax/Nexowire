@@ -1,0 +1,11 @@
+# AI-05 protected helper lifecycle follow-up
+
+Stacked on #1286 96c8309cd6cfe8f90843fede915007c502e3fc55. No production activation. New protected binary-only root proposed: C:\ProgramData\Nexowire-TransferRuntime. AI-07/AI-01/AI-03 must agree on root and authority; AI-09 alone creates/verifies it on physical devices. Existing user installer and shared roots unchanged.
+
+Build gate adds independent mscorlib SHA-256 pin, before/after compile recheck, explicit Windows inbox module imports. Still requires trusted build host, independently supplied pins, real compiler and approved signing authority. No hermetic compiler attestation claimed.
+
+Windows storage adapter verifies protected root and outer ancestors, signed hash-pinned source and installed destination, only creates hash-named binary with exclusive wx, syncs file, revalidates installed ACL/signature/hash. No repair or overwrite of ambiguous artifact. Existing verified same-hash artifact is reusable. This is not a native directory durability receipt; on crash independent authority must revalidate exact artifact before activation. No helper execution or key access.
+
+Lifecycle uses injected independent local deployment authority to authenticate request, quiesce/fence STOP/revoke, exclude concurrent operations and atomically CAS revision+pins. The implementation is not wired to any production caller until that authority exists. Clean install selects a verified staged binary; upgrade retains old; rollback selects already verified prior artifact; uninstall detaches selection and retains signed binaries/data. No physical purge implementation: explicit independently authorized retention/garbage collection still required. UNKNOWN/failed readback never retries, deletes or automatically rolls back. Fixture authority is synthetic; no actual local owner consent or Windows effect inferred.
+
+AI-08 #1281 now is integration #1160 head 9c30d6eb6d3c015336eb2087abcdb13cef46a869. #1286 is stacked on #1283; do not merge branches or repin AI08 native-agent fixture automatically. Request independent review of new exact blobs and combined CI. Physical install/upgrade/uninstall/rollback, true signed binary and native build remain NOT_RUN.
