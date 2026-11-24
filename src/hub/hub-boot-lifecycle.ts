@@ -292,6 +292,34 @@ function psArgument(value: string): string {
   return '"' + value + '"';
 }
 
+/**
+ * Keep the standalone launcher builder inside the same protected state,
+ * machine DPAPI and PID boundaries as the elevated install path. Otherwise a
+ * caller can accidentally persist the legacy user's writable state to SYSTEM.
+ */
+export function assertProtectedHubBootLauncherContext(
+  env: NodeJS.ProcessEnv,
+  pidFile: string,
+): void {
+  assertProtectedSystemHubStateRoot(env.NEXOWIRE_STATE_DIR);
+  const expectedSecret = path.win32.join(
+    PROTECTED_HUB_BOOT_ROOT,
+    'control-plane-service-token.machine.dpapi.json',
+  );
+  const expectedPid = path.win32.join(PROTECTED_HUB_BOOT_ROOT,'hub.pid');
+  if (
+    env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_DPAPI_FILE !== expectedSecret ||
+    env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_FILE !== undefined ||
+    env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_PLATFORM_NAME !== undefined ||
+    // User-Hub skills are outside the audited SYSTEM executable tree.
+    // The protected Hub resolves packaged skills from its trusted runtime.
+    env.NEXOWIRE_SKILLS_DIR !== undefined ||
+    pidFile !== expectedPid
+  ) {
+    throw new Error('HUB_BOOT_UNPROTECTED_LAUNCHER_CONTEXT');
+  }
+}
+
 export function buildHubBootLauncher(input: {
   env: NodeJS.ProcessEnv;
   executable: string;
@@ -299,10 +327,28 @@ export function buildHubBootLauncher(input: {
   pidFile: string;
 }): string {
   const env = persistedHubEnvironment(input.env);
+  assertProtectedHubBootLauncherContext(env,input.pidFile);
   const lines = [
     "$ErrorActionPreference='Stop'",
     "$ProgressPreference='SilentlyContinue'",
+    // A Scheduled Task starts in a fresh process. The caller's isolated
+    // task-registration shell is not inherited at AtStartup, so bootstrap
+    // PowerShell's module and command lookup with fixed OS paths again.
+    "$env:SystemRoot='C:\\Windows'",
+    "$env:windir='C:\\Windows'",
+    "$env:ComSpec='C:\\Windows\\System32\\cmd.exe'",
+    "$env:PATH='C:\\Windows\\System32;C:\\Windows;C:\\Windows\\System32\\WindowsPowerShell\\v1.0'",
+    "$env:PSModulePath='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules'",
   ];
+  // The AtStartup task inherits MACHINE environment, not the elevated
+  // install shell's isolated environment. Remove all ambient Nexowire
+  // settings before persisting the reviewed, per-launcher allowlist.
+  // Otherwise machine-scoped bearer tokens / endpoints / feature toggles
+  // could silently grant SYSTEM an unintended service identity.
+  lines.push(
+    "Get-ChildItem Env: | Where-Object { $_.Name -like 'NEXOWIRE_*' } | " +
+    "ForEach-Object { Remove-Item -LiteralPath ('Env:' + $_.Name) -ErrorAction Stop }",
+  );
   for (const [name, value] of Object.entries(env).sort(
     ([a], [b]) => a.localeCompare(b),
   )) {
@@ -315,6 +361,9 @@ export function buildHubBootLauncher(input: {
   lines.push('Remove-Item -Path ' +
     PRIVILEGED_NODE_INJECTION_ENV.map(name=>`Env:${name}`).join(',') +
     ' -ErrorAction SilentlyContinue');
+  // Do not inherit a machine or task environment skills override under
+  // SYSTEM even if the interactive launcher had no explicit override.
+  lines.push('Remove-Item -Path Env:NEXOWIRE_SKILLS_DIR -ErrorAction SilentlyContinue');
 
   const argumentList =
     '@(' +
@@ -355,11 +404,20 @@ if($null -ne $bootTask){
   }
   $expectedBootArgs='-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $env:NEXOWIRE_HUB_BOOT_LAUNCHER.Replace('"','""') + '"'
   $bootActions=@($bootTask.Actions)
+  # A matching principal and action are insufficient: a logon-only or
+  # disabled startup trigger cannot provide unattended pre-login recovery.
+  $bootTriggers=@($bootTask.Triggers)
+  $validStartupTrigger=($bootTriggers.Count -eq 1) -and
+    ($null -ne $bootTriggers[0]) -and
+    ([string]$bootTriggers[0].CimClass.CimClassName -ceq 'MSFT_TaskBootTrigger') -and
+    ([bool]$bootTriggers[0].Enabled)
   $bootSid=[string]$bootTask.Principal.UserId
   try {
     $bootSid=(New-Object System.Security.Principal.NTAccount($bootSid)).Translate([System.Security.Principal.SecurityIdentifier]).Value
   } catch { }
   if($bootActions.Count -ne 1 -or
+     -not $validStartupTrigger -or
+     [string]$bootActions[0].WorkingDirectory -ne '' -or
      ([string]$bootActions[0].Execute).Trim('"') -ine $expectedExe -or
      [string]$bootActions[0].Arguments -cne $expectedBootArgs -or
      $bootSid -ne 'S-1-5-18' -or
@@ -838,6 +896,8 @@ export async function installHubBootLifecycle(
     };
     delete env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_FILE;
     delete env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_PLATFORM_NAME;
+    // A former user's writable skills catalog cannot become a SYSTEM input.
+    delete env.NEXOWIRE_SKILLS_DIR;
 
     await fs.writeFile(
       p.launcher,
@@ -899,7 +959,18 @@ export async function installHubBootLifecycle(
         "if($actualLegacyState -cne $expectedLegacyState){throw 'HUB_USER_TASK_STATE_RACE'}",
         // No -Force: a concurrent registration must fail rather than replace.
         'Register-ScheduledTask -TaskName $boot -TaskPath \\ -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description $marker|Out-Null',
+        // Read back the *registered* task, not the plan or our preflight
+        // object. A replaced action, logon trigger or principal must be
+        // rejected before stopping the old Hub or launching privileged code.
+        '$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction Stop',
         '$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
+        hubBootRegisteredTaskIdentityGuard,
+        hubBootRollbackTaskOwnershipGuard,
+        // The user's task can be replaced or change state between the
+        // pre-registration preflight and this post-registration readback.
+        // Never stop a different or newly Running task on stale evidence.
+        "$actualLegacyState=if($userTask){[string]$userTask.State}else{'NotInstalled'}",
+        "if($actualLegacyState -cne $expectedLegacyState){throw 'HUB_USER_TASK_STATE_RACE'}",
         'if($userTask){',
         '  Stop-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
         '  Disable-ScheduledTask -TaskName $user -TaskPath \\ | Out-Null',

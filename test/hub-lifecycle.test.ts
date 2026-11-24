@@ -306,12 +306,13 @@ test('pre-logon Hub parser recovers persisted environment from the user launcher
 test('pre-logon Hub launcher tracks the SYSTEM child pid and protected secret reference', () => {
   const launcher = buildHubBootLauncher({
     env: {
+      NEXOWIRE_STATE_DIR: 'C:\\ProgramData\\Nexowire\\hub-state',
       NEXOWIRE_HTTP_HOST: '127.0.0.1',
       NEXOWIRE_HTTP_PORT: '43110',
       NEXOWIRE_CONTROL_PLANE_URL:
         'https://control.example.test',
       NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_DPAPI_FILE:
-        'C:\\ProgramData\\Nexowire\\hub-boot\\service.machine.dpapi.json',
+        'C:\\ProgramData\\Nexowire\\hub-boot\\control-plane-service-token.machine.dpapi.json',
     },
     executable: 'C:\\Program Files\\Nexowire\\node.exe',
     args: [
@@ -322,7 +323,7 @@ test('pre-logon Hub launcher tracks the SYSTEM child pid and protected secret re
       'C:\\ProgramData\\Nexowire\\hub-boot\\hub.pid',
   });
 
-  assert.match(launcher, /service\.machine\.dpapi\.json/);
+  assert.match(launcher, /control-plane-service-token\.machine\.dpapi\.json/);
   assert.match(launcher, /Start-Process/);
   assert.match(launcher, /hub\.pid/);
   assert.match(launcher, /WaitForExit/);
