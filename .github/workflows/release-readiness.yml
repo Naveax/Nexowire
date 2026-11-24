@@ -19,6 +19,10 @@ on:
       - "test/hub-boot-root-boundary.test.ts"
       - "test/hub-boot-handoff-transaction.test.ts"
       - "test/hub-boot-startup-trigger-integrity.test.ts"
+      - "test/hub-boot-protected-state-gate.test.ts"
+      - "test/hub-boot-shared-ancestor-trust.test.ts"
+      - "test/hub-boot-uninstall-task-absence.test.ts"
+      - "test/windows-dpapi-shell-trust.test.ts"
       - "scripts/ci/assert-tap-summary.mjs"
       - "test/windows-dpapi-secret.test.ts"
       - "test/protected-secret-files.test.ts"
@@ -112,7 +116,7 @@ jobs:
   ai08-windows-hub-boot-fixtures:
     name: AI-08 Windows Hub Boot source fixtures (Node ${{ matrix.node-version }})
     runs-on: windows-latest
-    timeout-minutes: 12
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -159,8 +163,21 @@ jobs:
             throw Error('WINDOWS_FIXTURE_HEAD_MISMATCH');
           const tracked=new Map(entries.map(e=>[e.path,e.blob]));
           const hasStartup=tracked.has('test/hub-boot-startup-trigger-integrity.test.ts');
-          const reviewed=hasStartup?startupReviewed:baselineReviewed;
+          // Independently reviewed on d2696376 and the AI-01 combined candidate.
+          // Shared fixtures are identical in both coherent boot profiles.
+          const sharedReviewed = {
+            'test/hub-boot-protected-state-gate.test.ts':'40994c7a1178b20946b4432c7ff2716f5a074dd1',
+            'test/hub-boot-shared-ancestor-trust.test.ts':'5ef2a796bd617c10130ad44ebd88bed22f6f2466',
+            'test/hub-boot-uninstall-task-absence.test.ts':'00457b3720774254d62b0cc378286e17bcbd30f2',
+            'test/windows-dpapi-shell-trust.test.ts':'638804ff36f66555d220bb0757ce189354703775',
+          };
+          const profileReviewed=hasStartup?startupReviewed:baselineReviewed;
+          for(const file of Object.keys(sharedReviewed)){
+            if(Object.hasOwn(profileReviewed,file))throw Error('WINDOWS_FIXTURE_DUPLICATE_REVIEW_PATH: '+file);
+          }
+          const reviewed={...profileReviewed,...sharedReviewed};
           const reviewProfile=hasStartup?'AI01_STARTUP_REVIEW_EBEADC0A':'BASELINE_B04BF428';
+          const reviewExtension='STATE_ACL_UNINSTALL_DPAPI_D2696376';
           const check=(file,blob)=>{
             const bytes=readFileSync(file);
             const actual=createHash('sha1').update('blob '+bytes.length+'\0').update(bytes).digest('hex');
@@ -168,21 +185,37 @@ jobs:
               throw Error('WINDOWS_FIXTURE_REVIEW_REQUIRED: '+file);
           };
           for(const [file,blob] of Object.entries(reviewed))check(file,blob);
+          // DPAPI shell-trust performs seven sequential PowerShell calls,
+          // each with a production 180-second deadline. The outer runner
+          // must not terminate the test before the inner deadlines resolve.
+          const fixtureTimeoutMs=file=>file==='test/windows-dpapi-shell-trust.test.ts'
+            ?7*180000+60000:90000;
           const files=[];
           for(const [file,blob] of Object.entries(reviewed)){
             check(file,blob);
+            const timeoutMs=fixtureTimeoutMs(file);
+            const started=Date.now();
             const r=spawnSync(process.execPath,[
               '--test','--test-reporter=tap','--import','tsx','--test-concurrency=1',file,
-            ],{encoding:'utf8',timeout:90000,maxBuffer:2*1024*1024,windowsHide:true});
+            ],{encoding:'utf8',timeout:timeoutMs,maxBuffer:2*1024*1024,windowsHide:true});
             if(r.stdout)process.stdout.write(r.stdout);
             if(r.stderr)process.stderr.write(r.stderr);
-            if(r.error||r.status!==0)throw Error('WINDOWS_FIXTURE_EXECUTION_FAILED: '+file);
+            // Record only process metadata, never DPAPI input or ciphertext.
+            const elapsedMs=Date.now()-started;
+            if(r.error||r.status!==0){
+              process.stderr.write(JSON.stringify({
+                sourceCommitSha:report.commitSha,path:file,
+                result:'FAIL',errorCode:r.error?.code??null,
+                exitCode:r.status,signal:r.signal,elapsedMs,timeoutMs,
+              })+'\n');
+              throw Error('WINDOWS_FIXTURE_EXECUTION_FAILED: '+file);
+            }
             const counts=assertTapSummary(r.stdout);
-            files.push({path:file,gitBlobSha:blob,result:'PASS',...counts});
+            files.push({path:file,gitBlobSha:blob,result:'PASS',elapsedMs,timeoutMs,...counts});
           }
           const count=files.length;
           process.stdout.write(JSON.stringify({
-            schemaVersion:1,reviewProfile,sourceCommitSha:report.commitSha,
+            schemaVersion:1,reviewProfile,reviewExtension,sourceCommitSha:report.commitSha,
             sourceManifestSha256:report.manifestSha256,platform:process.platform,
             nodeVersion:process.version,trackedFileCount:entries.length,
             executedFileCount:count,notRunFileCount:entries.length-count,

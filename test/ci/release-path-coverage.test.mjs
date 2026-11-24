@@ -17,6 +17,10 @@ const required = [
   'test/hub-boot-task-shell-trust.test.ts',
   'test/hub-boot-root-boundary.test.ts',
   'test/hub-boot-handoff-transaction.test.ts',
+  'test/hub-boot-protected-state-gate.test.ts',
+  'test/hub-boot-shared-ancestor-trust.test.ts',
+  'test/hub-boot-uninstall-task-absence.test.ts',
+  'test/windows-dpapi-shell-trust.test.ts',
   'scripts/ci/assert-tap-summary.mjs',
   'scripts/ci/test-inventory.mjs',
   'scripts/ci/test-execution-plan.mjs',
@@ -85,7 +89,7 @@ test('Windows Hub Boot source fixture lane is exact-head, bounded and mandatory 
   const lane=workflow.split('\n  ai08-windows-hub-boot-fixtures:\n')[1]?.split('\n  package:')[0];
   assert.ok(lane,'missing independent Windows fixture job');
   assert.match(lane,/runs-on: windows-latest/);
-  assert.match(lane,/timeout-minutes: 12/);
+  assert.match(lane,/timeout-minutes: 40/);
   assert.match(lane,/node-version: \[22, 24\]/);
   assert.match(lane,/ref: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
   assert.match(lane,/persist-credentials: false/);
@@ -100,4 +104,38 @@ test('Windows Hub Boot source fixture lane is exact-head, bounded and mandatory 
   assert.match(prSection,/"test\/hub-boot-startup-trigger-integrity\.test\.ts"/,
     'future AI-01 fixture-only changes must trigger release review');
   assert.doesNotMatch(lane,/continue-on-error:\s*true|self-hosted/);
+});
+
+test('both reviewed Windows boot profiles include the same four state, ACL, uninstall and DPAPI fixtures',()=>{
+  const lane=workflow.split('\n  ai08-windows-hub-boot-fixtures:\n')[1]?.split('\n  package:')[0];
+  assert.ok(lane);
+  const shared=lane.split('const sharedReviewed = {')[1]?.split('};')[0];
+  assert.ok(shared,'shared reviewed fixture set is required');
+  const pins=Object.fromEntries([...shared.matchAll(/'([^']+)':'([0-9a-f]{40})'/g)].map(m=>[m[1],m[2]]));
+  assert.deepEqual(pins, {
+    "test/hub-boot-protected-state-gate.test.ts": "40994c7a1178b20946b4432c7ff2716f5a074dd1",
+    "test/hub-boot-shared-ancestor-trust.test.ts": "5ef2a796bd617c10130ad44ebd88bed22f6f2466",
+    "test/hub-boot-uninstall-task-absence.test.ts": "00457b3720774254d62b0cc378286e17bcbd30f2",
+    "test/windows-dpapi-shell-trust.test.ts": "638804ff36f66555d220bb0757ce189354703775"
+  });
+  assert.equal([...shared.matchAll(/'([^']+)':'([0-9a-f]{40})'/g)].length,4);
+  assert.ok(lane.includes('const profileReviewed=hasStartup?startupReviewed:baselineReviewed;'));
+  assert.ok(lane.includes('WINDOWS_FIXTURE_DUPLICATE_REVIEW_PATH'));
+  assert.ok(lane.includes('const reviewed={...profileReviewed,...sharedReviewed};'));
+  assert.ok(lane.includes('for(const [file,blob] of Object.entries(reviewed))check(file,blob);'));
+  assert.ok(lane.includes('schemaVersion:1,reviewProfile,reviewExtension,sourceCommitSha:'));
+  assert.ok(lane.includes("STATE_ACL_UNINSTALL_DPAPI_D2696376"));
+});
+
+test('DPAPI fixture budget preserves inner deadlines and does not relax other fixture bounds',()=>{
+  const lane=workflow.split('\n  ai08-windows-hub-boot-fixtures:\n')[1]?.split('\n  package:')[0];
+  assert.ok(lane);
+  assert.match(lane,/const fixtureTimeoutMs=file=>file==='test\/windows-dpapi-shell-trust\.test\.ts'\s*\?7\*180000\+60000:90000;/);
+  assert.match(lane,/const timeoutMs=fixtureTimeoutMs\(file\)/);
+  assert.match(lane,/timeout:timeoutMs,maxBuffer:2\*1024\*1024,windowsHide:true/);
+  assert.match(lane,/errorCode:r\.error\?\.code\?\?null/);
+  assert.match(lane,/exitCode:r\.status,signal:r\.signal,elapsedMs,timeoutMs/);
+  assert.match(lane,/throw Error\('WINDOWS_FIXTURE_EXECUTION_FAILED: '\+file\)/);
+  assert.match(lane,/const counts=assertTapSummary\(r\.stdout\)/);
+  assert.match(lane,/result:'PASS',elapsedMs,timeoutMs,\.\.\.counts/);
 });
