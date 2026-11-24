@@ -61,6 +61,77 @@ async function assertStablePath(file:string,opened:FileSnapshot):Promise<void>{
      current.ctimeMs!==opened.ctimeMs)fail();
 }
 
+
+type FramelessIndex=FileSnapshot&{bytes:Buffer};
+
+// A zero-byte WAL or a valid header without frames can be legitimate after
+// TRUNCATE or before the first write. But a retained index reporting committed
+// frames contradicts an empty WAL: SQLite can silently ignore that history
+// and quick_check still succeeds. Do not open the database in that case.
+// An absent or uninitialized index provides no rollback/authenticity proof.
+async function readFramelessIndex(dbFile:string):Promise<FramelessIndex|undefined>{
+  const file=dbFile+'-shm';
+  let prior;
+  try{prior=await fs.lstat(file);}catch(e){
+    if((e as NodeJS.ErrnoException).code==='ENOENT')return undefined;
+    throw e;
+  }
+  if(!prior.isFile()||prior.isSymbolicLink())fail();
+  let handle:fs.FileHandle;
+  try{handle=await fs.open(file,'r');}catch(e){
+    if((e as NodeJS.ErrnoException).code==='ENOENT')fail();
+    throw e;
+  }
+  try{
+    const opened=await handle.stat();
+    if(!opened.isFile()||opened.dev!==prior.dev||opened.ino!==prior.ino||
+       opened.size!==prior.size||opened.mtimeMs!==prior.mtimeMs||
+       opened.ctimeMs!==prior.ctimeMs||
+       opened.size<32768||opened.size%32768!==0)fail();
+    const bytes=Buffer.alloc(136);
+    await readExactly(handle,bytes,bytes.length,0);
+    const nativeBig=endianness()==='BE';
+    const u32=(at:number)=>nativeBig?bytes.readUInt32BE(at):bytes.readUInt32LE(at);
+    // SQLite can leave an empty, not-yet-initialized index. A nonzero
+    // header must be coherent and prove zero committed frames.
+    if(!bytes.subarray(0,96).every(value=>value===0)){
+      const checksum=fold(bytes,40,nativeBig,{s0:0,s1:0});
+      const encodedPage=nativeBig?bytes.readUInt16BE(14):bytes.readUInt16LE(14);
+      const pageSize=encodedPage===1?65536:encodedPage;
+      if(!bytes.subarray(0,48).equals(bytes.subarray(48,96))||
+         u32(0)!==3007000||u32(4)!==0||bytes[12]!==1||
+         (bytes[13]!==0&&bytes[13]!==1)||
+         (pageSize!==0&&(pageSize<512||pageSize>65536||
+           (pageSize&(pageSize-1))!==0))||
+         u32(16)!==0||u32(40)!==checksum.s0||u32(44)!==checksum.s1)fail();
+    }
+    if(u32(96)!==0||u32(128)!==0)fail();
+    const after=await handle.stat();
+    if(after.size!==opened.size||after.mtimeMs!==opened.mtimeMs||
+       after.ctimeMs!==opened.ctimeMs)fail();
+    await assertStablePath(file,opened);
+    return {bytes,dev:opened.dev,ino:opened.ino,size:opened.size,
+      mtimeMs:opened.mtimeMs,ctimeMs:opened.ctimeMs};
+  }finally{await handle.close();}
+}
+
+async function assertFramelessWal(dbFile:string,walFile:string,opened:FileSnapshot,
+  handle:fs.FileHandle,header?:Buffer):Promise<void>{
+  const first=await readFramelessIndex(dbFile);
+  await assertStablePath(walFile,opened);
+  if(header){
+    const checked=Buffer.alloc(32);
+    await readExactly(handle,checked,checked.length,0);
+    if(!checked.equals(header))fail();
+  }
+  const second=await readFramelessIndex(dbFile);
+  if(Boolean(first)!==Boolean(second))fail();
+  if(first&&second&&(first.dev!==second.dev||first.ino!==second.ino||
+    first.size!==second.size||first.mtimeMs!==second.mtimeMs||
+    first.ctimeMs!==second.ctimeMs||!first.bytes.equals(second.bytes)))fail();
+  await assertStablePath(walFile,opened);
+}
+
 // SQLite reuses WAL allocation after RESTART without truncating old frames.
 // The volatile WAL-index only corroborates a clean current commit boundary.
 // It is NOT an authenticity/rollback witness or a replacement for external CAS.
@@ -155,10 +226,10 @@ export async function verifyAgentJournalWal(dbFile:string):Promise<void>{
     if(!opened.isFile()||opened.dev!==prior.dev||
        opened.ino!==prior.ino||opened.size!==prior.size||
        opened.mtimeMs!==prior.mtimeMs||opened.ctimeMs!==prior.ctimeMs)fail();
-    // An empty WAL is legitimate, but it must still resolve to the opened
-    // inode. Do not let the short-circuit omit the namespace readback.
+    // Empty allocation is legitimate only without contradictory index
+    // evidence. A retained committed index can reveal a lost WAL-only row.
     if(opened.size===0){
-      await assertStablePath(walFile,opened);
+      await assertFramelessWal(dbFile,walFile,opened,handle);
       return;
     }
     if(opened.size<32)fail();
@@ -176,6 +247,10 @@ export async function verifyAgentJournalWal(dbFile:string):Promise<void>{
        header.readUInt32BE(28)!==digest.s1)fail();
     const frameBytes=24+pageSize;
     if((opened.size-32)%frameBytes!==0)fail();
+    if(opened.size===32){
+      await assertFramelessWal(dbFile,walFile,opened,handle,header);
+      return;
+    }
     const frame=Buffer.allocUnsafe(frameBytes);
     let currentFrames=0,lastCommitPages=0;
     let oldSalt:Buffer|undefined;
