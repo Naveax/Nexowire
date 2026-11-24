@@ -10,7 +10,7 @@ import {SYSTEM_HUB_RECOVERY_PS} from '../scripts/ai04-controlled-system-hub-cuto
 const psQuote=(value:string):string=>"'"+value.replaceAll("'","''")+"'";
 const powershell='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
 
-function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-write'|'tampered-launcher'|'late-launcher-swap'|'boot-action-swapped'|'boot-action-swapped-no-write'|'late-write-after-unregister'|'cutover-lock-held',phase:'SYSTEM_STARTED'|'AWAITING_PHYSICAL_ACCEPTANCE'|'UNRECOGNIZED'|'complete'|'rolled_back'='SYSTEM_STARTED'):void{
+function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-write'|'tampered-launcher'|'late-launcher-swap'|'boot-action-swapped'|'boot-action-swapped-no-write'|'late-write-after-unregister'|'cutover-lock-held',phase:'SYSTEM_STARTED'|'AWAITING_PHYSICAL_ACCEPTANCE'|'UNRECOGNIZED'|'complete'|'rolled_back'|'ARMED'='SYSTEM_STARTED'):void{
   const temp=mkdtempSync(path.join(os.tmpdir(),'ai04-fi-'));
   try{
     const source=path.join(temp,'legacy');
@@ -96,6 +96,8 @@ function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-
         'throw ("AI04_UNEXPECTED_MUTATIONS: stop="+$script:stopCount+" resume="+$script:resumeCount+" remove="+$script:removeCount+" reason="+$failure)}',
       'if($failure -notmatch "'+(['UNRECOGNIZED','complete','rolled_back'].includes(phase)
         ?'AI04_RECOVERY_UNKNOWN_PHASE'
+        :phase==='ARMED'
+          ?'AI04_RECOVERY_QUIESCE_NOT_ATTEMPTED'
         :mode==='cutover-lock-held'
           ?'AI04_RECOVERY_LOCK_UNAVAILABLE'
         :mode==='boot-action-swapped'
@@ -193,4 +195,9 @@ test('noncanonical terminal journal phases never silently report recovery succes
 test('live Node cutover handle excludes PowerShell recovery until the handle closes',
   {skip:process.platform!=='win32'},()=>{
     executeIsolatedRecoveryFailureInjection('cutover-lock-held');
+  });
+
+test('ARMED recovery never changes tasks when no cutover mutation was attempted',
+  {skip:process.platform!=='win32'},()=>{
+    executeIsolatedRecoveryFailureInjection('pre-stop','ARMED');
   });

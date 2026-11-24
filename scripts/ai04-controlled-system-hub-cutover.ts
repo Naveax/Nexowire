@@ -261,6 +261,9 @@ export const SYSTEM_HUB_RECOVERY_PS=[
   // case-insensitive aliases of COMPLETE or ROLLED_BACK.
   "if([string]$journal.phase -cnotin @("+[...RECOVERABLE_JOURNAL_PHASES,'COMPLETE','ROLLED_BACK'].map(psLiteral).join(',')+")){throw 'AI04_RECOVERY_UNKNOWN_PHASE'}",
   "if($journal.phase -in @('COMPLETE','ROLLED_BACK')){exit 0}",
+  // ARMED is published before the first legacy mutation attempt. A later
+  // owner stop must not be undone by the independent recovery timer.
+  "if([string]$journal.phase -ceq 'ARMED'){throw 'AI04_RECOVERY_QUIESCE_NOT_ATTEMPTED'}",
   SYSTEM_HUB_RECOVERY_LAUNCHER_PROOF_PS,
   "$port=[int]$journal.port",
   "if($port -lt 1 -or $port -gt 65535){throw 'AI04_RECOVERY_PORT_UNTRUSTED'}",

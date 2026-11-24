@@ -187,3 +187,13 @@ test('cutover and manual/scheduled recovery share a protected OS handle boundary
   assert.match(source,/finally\{\s*try\{await releaseCutoverLock\(\)\}/);
   assert.doesNotMatch(ps,/Remove-Item[^\r\n]*\$lockPath/);
 });
+
+test('ARMED recovery cannot touch tasks before any quiescence attempt',()=>{
+  const ps=SYSTEM_HUB_RECOVERY_PS;
+  const armed=ps.indexOf("if([string]$journal.phase -ceq 'ARMED'){throw 'AI04_RECOVERY_QUIESCE_NOT_ATTEMPTED'}");
+  const journal=ps.indexOf('$journal=Get-Content');
+  const taskRead=ps.indexOf('Get-ScheduledTask');
+  assert.ok(journal>=0&&armed>journal&&taskRead>armed);
+  for(const command of ['Stop-ScheduledTask','Unregister-ScheduledTask','Enable-ScheduledTask','Start-ScheduledTask'])
+    assert.ok(ps.indexOf(command)>armed);
+});
