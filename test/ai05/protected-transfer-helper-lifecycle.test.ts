@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {installedTransferHelperPath,runTransferHelperLifecycle,type HelperPin,type HelperRequest,type HelperSelection,type HelperCommit,type TransferHelperArtifactStore,type TransferHelperDeploymentAuthority} from '../../src/installer/protected-transfer-helper-lifecycle.js';
+import {installedTransferHelperPath,readVerifiedTransferHelperBinding,runTransferHelperLifecycle,type HelperPin,type HelperRequest,type HelperSelection,type HelperCommit,type TransferHelperArtifactStore,type TransferHelperDeploymentAuthority} from '../../src/installer/protected-transfer-helper-lifecycle.js';
 const a:HelperPin={sha256:'a'.repeat(64),signerSha256:'1'.repeat(64)};
 const b:HelperPin={sha256:'b'.repeat(64),signerSha256:'2'.repeat(64)};
 function fixture(initial:HelperSelection={revision:'0',pin:null}){
@@ -97,4 +97,23 @@ test('pin and request ID reject final newline and non-string coercions',async()=
   const f=fixture();
   await assert.rejects(runTransferHelperLifecycle({...request('clean-install',f.selected,a,'offline-a'),requestId:randomUUID()+'\n'},f.authority,f.store),/REQUEST_INVALID/);
   assert.equal(f.calls.length,0);
+});
+
+test('publisher bootstrap receives exact verified selected helper pins, never a caller path',async()=>{
+  const f=fixture({revision:'3',pin:a});
+  assert.deepEqual(await readVerifiedTransferHelperBinding(f.authority,f.store),{
+    revision:'3',flushHelper:installedTransferHelperPath(a),flushHelperSha256:a.sha256,flushHelperSignerSha256:a.signerSha256,
+  });
+  assert.deepEqual(f.calls,['verify:'+a.sha256]);
+});
+test('publisher bootstrap denies detached, missing and changed selection',async()=>{
+  const empty=fixture();
+  await assert.rejects(readVerifiedTransferHelperBinding(empty.authority,empty.store),/NOT_SELECTED/);
+  const f=fixture({revision:'3',pin:a});f.artifacts.delete(a.sha256);
+  await assert.rejects(readVerifiedTransferHelperBinding(f.authority,f.store),/MISSING_SIGNED_ARTIFACT/);
+  f.artifacts.add(a.sha256);
+  let reads=0;
+  await assert.rejects(readVerifiedTransferHelperBinding({
+    async readSelection(){return {revision:String(++reads),pin:a};},
+  },f.store),/SELECTION_CHANGED/);
 });

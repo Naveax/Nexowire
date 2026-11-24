@@ -44,6 +44,18 @@ function samePin(a:HelperPin|null,b:HelperPin|null):boolean {
 export function installedTransferHelperPath(value:HelperPin):string {
   return path.win32.join(TRANSFER_HELPER_ROOT,'windows-transfer-volume-flush-'+pin(value).sha256+'.exe');
 }
+/** Read-only handoff to the protected publisher bootstrap. The caller must
+ * keep an independent startup/selection lease until activation completes.
+ * Double-read detects a changed selection; it does not create that lease. */
+export async function readVerifiedTransferHelperBinding(authority:Pick<TransferHelperDeploymentAuthority,'readSelection'>,store:TransferHelperArtifactStore){
+  const before=selection(await authority.readSelection());
+  if(!before.pin)return deny('TRANSFER_HELPER_NOT_SELECTED');
+  await store.verifyInstalled(before.pin);
+  const after=selection(await authority.readSelection());
+  if(after.revision!==before.revision||!samePin(after.pin,before.pin))return deny('TRANSFER_HELPER_SELECTION_CHANGED');
+  return Object.freeze({revision:before.revision,flushHelper:installedTransferHelperPath(before.pin),
+    flushHelperSha256:before.pin.sha256,flushHelperSignerSha256:before.pin.signerSha256});
+}
 function validate(input:HelperRequest):Readonly<HelperRequest>{
   if(!input||typeof input.requestId!=='string'||input.requestId.length!==36||!uuid.test(input.requestId))return deny('TRANSFER_HELPER_REQUEST_INVALID');
   const expected=selection(input.expected),desired=input.desired===null?null:pin(input.desired);
@@ -131,7 +143,8 @@ $h=[Security.Cryptography.SHA256]::Create()
 try{[BitConverter]::ToString($h.ComputeHash($s.SignerCertificate.RawData)).Replace('-','').ToLowerInvariant()}finally{$h.Dispose()}
 `;
 async function inspectPlainFile(file:string,protectedFile:boolean){
-  if(!/^[A-Za-z]:\\/.test(file)||file!==path.win32.resolve(file)||file.includes('/')||file.slice(2).includes(':'))return deny('TRANSFER_HELPER_PATH_INVALID');
+  if(!/^[A-Za-z]:\\/.test(file)||file!==path.win32.resolve(file)||file.includes('/')||file.slice(2).includes(':')||
+     file.split('\\').slice(1).some(part=>!part||/[. ]$/.test(part)||/[\x00-\x1f]/.test(part)||/^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i.test(part)))return deny('TRANSFER_HELPER_PATH_INVALID');
   const stat=await fs.lstat(file,{bigint:true});
   if(!stat.isFile()||stat.isSymbolicLink()||stat.nlink!==1n||stat.size<1n||stat.size>BigInt(MAX_BYTES)||
       (await fs.realpath(file)).toLowerCase()!==file.toLowerCase())return deny('TRANSFER_HELPER_FILE_UNTRUSTED');
@@ -163,16 +176,19 @@ async function verifiedBytes(file:string,p:HelperPin,protectedFile:boolean):Prom
   if(after.dev!==before.dev||after.ino!==before.ino||after.size!==before.size||after.mtimeNs!==before.mtimeNs||after.ctimeNs!==before.ctimeNs)return deny('TRANSFER_HELPER_FILE_CHANGED');
   return bytes;
 }
-/** Real Windows storage adapter. An independently installed private root and
- * trusted signed runtime are prerequisites. Only clean-install can provision a
+/** Real Windows storage adapter. An independently witnessed trusted signed
+ * runtime is prerequisite. Only clean-install can provision a
  * missing fixed root with a private ACL at creation. No ACL repair, auto-elevation,
  * helper execution, remote download, active-pointer file or key access. */
 export function createWindowsTransferHelperArtifactStore(assertInstalledRuntime:()=>Promise<void>):TransferHelperArtifactStore{
   if(process.platform!=='win32'||typeof assertInstalledRuntime!=='function')return deny('TRANSFER_HELPER_WINDOWS_RUNTIME_REQUIRED');
-  async function root(allowProvision=false){
+  async function runtime(){
     assertNoPrivilegedNodeStartupFlags(process.execArgv);
     assertWindowsPrivilegedRuntimeTrusted({executable:process.execPath,cliEntrypoint:process.argv[1]??'',env:process.env});
     await assertInstalledRuntime();
+  }
+  async function root(allowProvision=false){
+    await runtime();
     verifyWindowsStackOuterAncestorAcl('C:\\');
     verifyWindowsStackOuterAncestorAcl('C:\\ProgramData');
     try{await fs.lstat(TRANSFER_HELPER_ROOT);}
@@ -195,7 +211,7 @@ export function createWindowsTransferHelperArtifactStore(assertInstalledRuntime:
   return Object.freeze({
     verifyInstalled,
     async stage(sourcePath:string,value:HelperPin,allowProvisionEmptyRoot:boolean){
-      const p=pin(value);
+      const p=pin(value);await runtime();
       // Verify the signed offline input before creating even a fresh root.
       const bytes=await verifiedBytes(sourcePath,p,false);
       await root(allowProvisionEmptyRoot===true);
