@@ -1,3 +1,4 @@
+import {createProtectedOwnerConsentAuthority} from '../src/security/protected-owner-consent-authority.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash,generateKeyPairSync,randomBytes,randomUUID,sign,type KeyObject} from 'node:crypto';
@@ -554,5 +555,51 @@ test('real PostgreSQL enrollment: unbound legacy approval and issuer substitutio
       [proof.receiptId,bound.receiptId])).rows[0].n,'0');
     f.setIssuer('a'.repeat(64));
     assert.deepEqual(await f.create().consumeForEnrollment(bound,'a'.repeat(64)),bound);
+  }finally{await f.close()}
+});
+
+test('real PostgreSQL owner ceremony: exact native helper args, durable assertion and stale-owner denial',integration,async()=>{
+  const f=await fixture();try{
+    const issuerSpkiSha256='a'.repeat(64);
+    const owner={binding:f.binding,issuerSpkiSha256,rpId:f.rpId,credentialId:f.credentialId};
+    const challenge=()=>({version:1 as const,challengeId:randomUUID(),ownerAccountId:f.binding.ownerAccountId,
+      deviceId:f.binding.deviceId,installationId:f.binding.installationId,enrollmentId:f.binding.enrollmentId,
+      ownerEpoch:f.binding.ownerEpoch,grantGeneration:f.binding.grantGeneration,revokeEpoch:f.binding.revokeEpoch,
+      issuerSpkiSha256});
+    let current=owner,launches=0,changeDuringPrompt=false;
+    // This fixture signs with a software key. It does NOT open Windows UI or
+    // claim physical acceptance. Real PostgreSQL verifies the actual bytes.
+    const authority=createProtectedOwnerConsentAuthority({ledger:f.create(),
+      readCurrentOwner:async()=>current,
+      launcher:{async runBoundAssertion(input,signal){
+        launches++;assert.equal(signal.aborted,false);
+        assert.equal(input.helper,'windows-core-webauthn-approval.exe');
+        assert.equal(input.args[0],'--assert-bound');
+        assert.equal(input.args[1],f.rpId);
+        assert.equal(input.args[3],Buffer.from(f.credentialId,'base64url').toString('hex'));
+        assert.deepEqual(input.args.slice(4),[f.binding.windowsUserSid,String(f.binding.windowsSessionId),f.binding.windowsLogonLuid]);
+        const row=(await f.admin.query('SELECT intent FROM core_approval.challenges WHERE authority_id=$1 AND intent_sha256=$2',
+          [f.authorityId,input.args[2]])).rows[0];
+        assert.ok(row);const intent=row.intent as CoreWebAuthnIntent;
+        assert.equal(intent.issuerSpkiSha256,issuerSpkiSha256);
+        if(changeDuringPrompt)current={...owner,binding:{...owner.binding,windowsLogonLuid:'000000000000b101'}};
+        return assertion(intent,f.keys.privateKey,0);
+      }}});
+    const signal=new AbortController().signal;
+    const wrong=challenge();
+    assert.equal(await authority.approveAndConsume({...wrong,issuerSpkiSha256:'b'.repeat(64)},signal),null);
+    assert.equal(launches,0);
+    const first=challenge();
+    const proof=await authority.approveAndConsume(first,signal);
+    assert.ok(proof);assert.equal(proof.challengeId,first.challengeId);assert.equal(launches,1);
+    assert.deepEqual(await authority.currentReadback(proof.receiptId,signal),proof);
+    assert.equal(await authority.approveAndConsume(first,signal),null);
+    assert.equal(launches,1);
+    changeDuringPrompt=true;
+    const stale=challenge();
+    assert.equal(await authority.approveAndConsume(stale,signal),null);
+    assert.equal(launches,2);
+    assert.equal((await f.admin.query('SELECT state FROM core_approval.challenges WHERE challenge_id=$1',[stale.challengeId])).rows[0].state,'ISSUED');
+    assert.equal(await authority.currentReadback(proof.receiptId,signal),null);
   }finally{await f.close()}
 });
