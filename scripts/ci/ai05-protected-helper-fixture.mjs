@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
-import {promises as fs} from 'node:fs';
+import {promises as fs,constants} from 'node:fs';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {DatabaseSync} from 'node:sqlite';
@@ -42,8 +42,12 @@ async function observePin(file){
 // Observed fixture pins are NOT authorized Nexowire release pins. Neither
 // Windows compiler executable is ever launched from the helper namespace.
 const framework='C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319';
-const sourceA=path.join(framework,'csc.exe'),sourceB=path.join(framework,'vbc.exe');
-const a=await observePin(sourceA),b=await observePin(sourceB);
+const originalA=path.join(framework,'csc.exe'),originalB=path.join(framework,'vbc.exe');
+for(const file of [originalA,originalB]){
+  const st=await fs.lstat(file);
+  console.log(JSON.stringify({scope:'OS_FIXTURE_SOURCE_DIAGNOSTIC',name:path.basename(file),nlink:st.nlink,size:st.size,isFile:st.isFile(),canonical:(await fs.realpath(file)).toLowerCase()===file.toLowerCase()}));
+}
+const a=await observePin(originalA),b=await observePin(originalB);
 assert.notEqual(a.sha256,b.sha256);
 const codeRoot=path.dirname(fileURLToPath(import.meta.url));
 const runtimeFiles=['node.exe','package.json','fixture.mjs','dist/src/installer/protected-transfer-helper-lifecycle.js','dist/src/security/windows-programdata-acl.js','dist/src/security/windows-privileged-runtime-trust.js'];
@@ -68,10 +72,21 @@ const operation=(operation,desired,sourcePath)=>runTransferHelperLifecycle({
   requestId:randomUUID(),operation,expected:selected,desired,...(sourcePath===undefined?{}:{sourcePath})
 },authority,store);
 const binding=()=>authority.withExclusiveQuiescedDeployment(null,()=>readVerifiedTransferHelperBinding(authority,store));
-const data=await fs.mkdtemp(path.join(os.tmpdir(),'nx-ai05-data-'));
+const data=await fs.mkdtemp(path.join(await fs.realpath(os.tmpdir()),'nx-ai05-data-'));
+const sourceA=path.join(data,'inert-a.exe'),sourceB=path.join(data,'inert-b.exe');
 const dbPath=path.join(data,'state.sqlite');
 const db=new DatabaseSync(dbPath);
 try{
+  // Windows inbox binaries may be component-store hardlinks. Copy exact
+  // signed bytes to unique plain files; never loosen the production nlink gate.
+  await fs.copyFile(originalA,sourceA,constants.COPYFILE_EXCL);
+  await fs.copyFile(originalB,sourceB,constants.COPYFILE_EXCL);
+  for(const [file,expected] of [[sourceA,a],[sourceB,b]]){
+    const st=await fs.lstat(file);
+    assert.equal(st.nlink,1,'offline fixture must have exactly one file link');
+    assert.equal((await fs.realpath(file)).toLowerCase(),file.toLowerCase());
+    assert.deepEqual(await observePin(file),expected,'copied fixture must keep exact binary and signer pins');
+  }
   db.exec("PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; CREATE TABLE owner(id INTEGER PRIMARY KEY, value TEXT); INSERT INTO owner VALUES(1,'fixture-owner');");
   await fs.writeFile(path.join(data,'identity-envelope.bin'),Buffer.from('synthetic encrypted identity sentinel'));
   await fs.writeFile(path.join(data,'receipt.json'),JSON.stringify({status:'UNKNOWN',noReplay:true}));
