@@ -1,0 +1,63 @@
+name: AI-08 Cross-owner Windows Source Fixtures
+
+on:
+  pull_request:
+    paths:
+      - "scripts/ci/windows-cross-owner-fixture-receipt.mjs"
+      - "test/ci/windows-cross-owner-fixture-receipt.test.mjs"
+      - ".github/workflows/ai08-windows-cross-owner-fixtures.yml"
+      - "scripts/ci/test-inventory.mjs"
+      - "scripts/ci/assert-tap-summary.mjs"
+      - "test/hub-boot-handoff-receipt.test.ts"
+      - "test/system-hub-controlled-cutover.test.ts"
+      - "test/ai03/system-dpapi-acceptance.test.ts"
+      - "test/ai04/transactional-handoff-recovery-required.test.ts"
+      - "test/ai04/recovery-script-rollback-boundaries.test.ts"
+      - "test/ai05/system-stage-plan-windows.test.ts"
+      - "test/windows-installer-command-root-trust.test.ts"
+      - "test/windows-user-bundle-local-payload.test.ts"
+      - "scripts/ai03-system-dpapi-acceptance.ps1"
+      - "scripts/Build-Nexowire-SystemHubStage.ps1"
+      - "scripts/build-windows-user-bundle.ts"
+      - "scripts/ai04-controlled-system-hub-cutover.ts"
+      - "src/hub/**"
+      - "src/agent/windows-installer-job.ts"
+      - "package.json"
+      - "package-lock.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai08-cross-owner-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  reviewed-windows-cross-owner-fixtures:
+    runs-on: windows-latest
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - name: Verify non-SYSTEM hosted identity
+        shell: pwsh
+        run: |
+          if ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value -eq 'S-1-5-18') { throw 'AI08_NON_SYSTEM_HOST_REQUIRED' }
+      - name: Verify fixture pins and incomplete receipt rejection
+        run: node --test test/ci/windows-cross-owner-fixture-receipt.test.mjs
+      - name: Execute reviewed cross-owner source fixtures
+        env:
+          NEXOWIRE_EXPECTED_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/ci/windows-cross-owner-fixture-receipt.mjs --json
