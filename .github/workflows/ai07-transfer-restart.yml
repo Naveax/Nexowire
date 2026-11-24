@@ -1,0 +1,62 @@
+name: AI-07 PostgreSQL Restart Acceptance
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/ai07-transfer-restart.yml'
+      - 'test/mcp/ai07-postgres-transfer-restart.test.ts'
+      - 'test/mcp/ai07-transfer-startup.test.ts'
+      - 'src/agent/protected-transfer-startup.ts'
+      - 'src/mcp/protected-transfer-hub-startup.ts'
+      - 'src/security/postgres-protected-transfer-authority.ts'
+      - 'src/security/protected-transfer-services-startup.ts'
+      - 'src/agent/protected-broker-dispatch-service.ts'
+      - 'src/installer/protected-transfer-helper-lifecycle.ts'
+      - 'sql/large-transfer-authority.sql'
+      - 'sql/core-broker-dispatch-authority.sql'
+permissions:
+  contents: read
+jobs:
+  restart:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: nexowire_dispatch_ci
+          POSTGRES_USER: nexowire_dispatch_ci
+          POSTGRES_PASSWORD: ci-only-not-a-production-credential
+        ports:
+          - 5432/tcp
+        options: >-
+          --label org.nexowire.ai07.restart-run=${{ github.run_id }}
+          --health-cmd "pg_isready -U nexowire_dispatch_ci -d nexowire_dispatch_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - name: Protected startup and real disposable PostgreSQL crash recovery
+        shell: bash
+        env:
+          NEXOWIRE_PG_TRANSFER_RESTART_INTEGRATION: '1'
+          NEXOWIRE_PG_RESTART_CONTAINER: ${{ job.services.postgres.id }}
+          NEXOWIRE_PG_DISPATCH_TEST_PORT: ${{ job.services.postgres.ports[5432] }}
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          node --test --test-reporter=tap --import tsx --test-concurrency=1 test/mcp/ai07-transfer-startup.test.ts test/mcp/ai07-postgres-transfer-restart.test.ts | tee "$RUNNER_TEMP/ai07-transfer-restart.tap"
+          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/ai07-transfer-restart.tap" 6

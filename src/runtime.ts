@@ -25,7 +25,9 @@ export function requireBoundRemoteMutationAuthorization(
   return config.remoteAgentAuthOnly === true;
 }
 
-export async function createRuntime(config: NexowireConfig) {
+export async function createRuntime(config: NexowireConfig, protectedAtomic?: {requireAtomicMutationAuthority:true}) {
+  if(protectedAtomic && (protectedAtomic.requireAtomicMutationAuthority!==true || config.remoteAgentAuthOnly!==true))
+    throw Error('PROTECTED_HUB_ATOMIC_REMOTE_ONLY_REQUIRED');
   const devices = new DeviceDirectory(config.stateDir);
   await devices.initialize();
 
@@ -46,6 +48,7 @@ export async function createRuntime(config: NexowireConfig) {
 
   const broker = new AgentBroker({
     requireMutationReauthorization: requireBoundRemoteMutationAuthorization(config),
+    requireAtomicMutationAuthority: protectedAtomic?.requireAtomicMutationAuthority===true,
     onDeviceState: async (event) => {
       if (event.type === 'connected') {
         await devices.observeConnected(event.device, event.at);
