@@ -610,3 +610,75 @@ test('Proxy-backed reserve/commit receipts refuse before verifier and effect',as
     }
   }
 });
+
+
+test('protected binding readbacks reject accessors and Proxies before reading fields',async()=>{
+  for(const stage of ['initial','recent','immediate'] as const){
+    for(const shape of ['getter','proxy','revoked','extra'] as const){
+      const f=fixture();
+      let hooks=0,thenReads=0,reads=0;
+      const read=f.authority.readVerifiedBinding.bind(f.authority);
+      const sync=f.authority.readVerifiedBindingNow.bind(f.authority);
+      const alter=(value:BrokerVerifiedEffectBinding|null):BrokerVerifiedEffectBinding|null=>{
+        if(!value)return null;
+        if(shape==='getter'){
+          return Object.defineProperty({...value},'ownerEpoch',{
+            enumerable:true,configurable:true,get(){hooks++;return value.ownerEpoch;},
+          });
+        }
+        if(shape==='extra')return {...value,unexpected:true};
+        const handler={
+          getPrototypeOf(){hooks++;throw Error('unexpected prototype read');},
+          ownKeys(){hooks++;throw Error('unexpected keys read');},
+          getOwnPropertyDescriptor(){hooks++;throw Error('unexpected descriptor read');},
+          get(_target:object,key:string|symbol){
+            if(key==='then'){thenReads++;return undefined;}
+            hooks++;throw Error('unexpected property read');
+          },
+        };
+        if(shape==='revoked'){
+          const r=Proxy.revocable<BrokerVerifiedEffectBinding>(value,handler);
+          r.revoke();return r.proxy;
+        }
+        return new Proxy<BrokerVerifiedEffectBinding>(value,handler);
+      };
+      f.authority.readVerifiedBinding=async()=>{
+        const value=await read();reads++;
+        return (stage==='initial'&&reads===1)||(stage==='recent'&&reads===2)
+          ?alter(value):value;
+      };
+      f.authority.readVerifiedBindingNow=()=>stage==='immediate'?alter(sync()):sync();
+      await assert.rejects(f.run(),deny,stage+'/'+shape);
+      assert.equal(hooks,0,stage+'/'+shape);
+      if(shape==='proxy'&&stage!=='immediate')assert.ok(thenReads>0);
+      else assert.equal(thenReads,0);
+      assert.equal(f.events.includes('invoke'),false,stage+'/'+shape);
+      assert.equal(f.events.includes('begin'),stage!=='initial',stage+'/'+shape);
+      assert.equal(f.events.includes('commit'),stage!=='initial',stage+'/'+shape);
+    }
+  }
+});
+
+test('readback binding is detached and immutable before the first reservation',async()=>{
+  const f=fixture();
+  const original=proof();
+  f.setBinding(original);
+  let returned:BrokerVerifiedEffectBinding|undefined;
+  const read=f.authority.readVerifiedBinding.bind(f.authority);
+  f.authority.readVerifiedBinding=async()=>{
+    const b=await read();
+    if(!returned&&b)returned=b;
+    return b;
+  };
+  const begin=f.authority.begin.bind(f.authority);
+  f.authority.begin=async(req,nonce)=>{
+    assert.ok(returned);
+    assert.notEqual(req.binding,returned);
+    assert.equal(Object.isFrozen(req.binding),true);
+    Object.defineProperty(returned,'generation',{value:100,enumerable:true});
+    assert.equal(req.binding.generation,original.generation);
+    return begin(req,nonce);
+  };
+  assert.deepEqual(await f.run(),input);
+  assert.equal(f.events.filter(x=>x==='invoke').length,1);
+});
