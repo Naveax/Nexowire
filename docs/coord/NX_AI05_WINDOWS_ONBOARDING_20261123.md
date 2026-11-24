@@ -77,9 +77,48 @@ The stage script additionally rejects non-Windows platforms, 32-bit Windows and 
 
 The AI-05 branch is source-only: revert its three code/test changes, or close the Draft PR without merge. Existing installer payloads, published setup files, and real device state are unchanged. For any future controlled VM stage, use a disposable image snapshot before executing Build. AI-09 must separately approve any real Work-PC operation.
 
-## Current evidence
+## Evidence and remaining acceptance gates (2026-11-24)
 
-- Source contract inspection: 8/8 checks PASS in a read-only check; this does **not** mean Windows/TypeScript compilation PASS.
-- PowerShell 5.1 parse: NOT_RUN (non-Windows execution context).
-- Native Windows side-by-side bundle smoke: NOT_RUN (no Windows runner and vetted bundle in this environment).
-- TypeScript/Node CI: pending exact-head PR checks, do not claim success until GitHub reports it.
+Evidence is scoped to the exact source SHA and test environment; none of the following is proof of production SYSTEM or CORE authority.
+
+| Scope | Exact SHA / run or job | Result |
+| --- | --- | --- |
+| General CI / Release / Discovery / Portable | `c92f36d6bd526f1b4e4f078a147b7f9322f76bf3`: 45367020979 / 45367021428 / 45367021017 / 45367021027 | SUCCESS (all four, historical) |
+| Hosted Windows packaged upgrade matrix | `69abd9374bcb6d2a77e12fbf0d232ac683e63422`: job 138297701825 | PASS for five synthetic file/data sentinels and checksum rejection; no real old runtime/DPAPI/WAL migration |
+| Synced PR head | `86f1b9eb269aa9ea66393443d2db143476677c99` against `d2696376aae7a23aa9e0df01c19aa5c9b07f0595` | 0 behind, five scoped files |
+| Test Discovery Inventory | 45378526907 | SUCCESS at preparation time |
+| AI-03 Windows Control Plane Authority | 45378526901 | SKIPPED at preparation time |
+| Portable Root Test Smoke | 45378526904 | SUCCESS at preparation time |
+| CI | 45378526968 | IN_PROGRESS at preparation time |
+| Release Readiness | 45378526934 | IN_PROGRESS at preparation time |
+| Native Windows Plan and PS7 parse | reviewed fixture blob `e5b648e3b4bbbaa71108f5e345bff82d8775b4a9` | NOT_RUN in reviewed mandatory Windows lane; requested in #1252 |
+| Independent Stage Build | source blob `612445bfa2bb74037223ee67d03c1150c0e4b622` | NOT_RUN |
+| Physical Win10/11, UAC accept/decline, CORE/revoke, actual state migration and rollback | AI-09 / authorized local owner | NOT_RUN |
+
+The stage manifest now supports pinned prerelease package names (for example `1.0.9-exp.0`), while rejecting a mismatched package name/version/filename. The Plan test uses its own temporary Git repository, verifies four scenarios (clean SHA, wrong SHA, unsafe output, dirty tree), and checks no stage or provenance output. Run it on an explicitly reviewed disposable Windows runner:
+
+```powershell
+node --test --test-reporter=tap --import tsx --test-concurrency=1 test/ai05/system-stage-plan-windows.test.ts
+```
+
+Document absent or PowerShell 7 absent means an explicit test skip, not native acceptance. Coordinate the expected source blobs with AI-08; do not amend an active shared workflow from this branch.
+
+## Checksum smoke follow-up
+
+Source prepared in child commit `766f3b51f4497192dc435ee39c63511cd4bfc9ce`: reject ambiguous checksum manifests (duplicate, missing, malformed or unexpected names) and stream the ZIP digest. The real generated Windows checksum manifests have exactly two canonical entries. Tests import the helpers without executing the installer smoke. The two new regression cases plus an independent checked-in stable manifest case passed in an isolated extracted-helper Node 22.16.0 run (3 tests, 3 pass, 0 fail/skip). A synthetic 128 MiB file produced equal SHA-256 values with readFile and streamed hashing; observed peak Linux RSS was 157680 KiB and 53032 KiB respectively. This is not an installer benchmark, complete-repository CI or Windows acceptance.
+
+Full exact-head CI is still required after publishing the prepared candidate. No claim that the current same-build repair gap is fixed.
+
+## Exact shared-source blocker and handoff
+
+`scripts/build-windows-user-bundle.ts` blob `3f71be3ce204e25b68fdf94d7bc33035e864f58f`, renderSetupScript lines 214–237: the verified download/extract path is skipped when the destination already exists, then only the launcher path is checked before creating a shortcut. The success-only temp cleanup is at line 256. Coordinator #1160 comment 7129735664 asks for a single shared-symbol owner before changing it.
+
+Required acceptance before declaring installer repair complete:
+
+- Incomplete/damaged same-build target is refused or repaired only from verified artifacts; a complete valid retry is idempotent.
+- Corruption/interruption or collision never destroys a previous working version or user data; failed install does not claim success.
+- Explicit local consent, standard-user install, UAC accept/decline and task identity are verified separately; no disabling OS protections, no plaintext secret export.
+- Low disk, redirected Documents, separate volume, junction and unexpected task identity require reviewed disposable VM tests; no physical acceptance inferred.
+- AI-09 records real old-version data/identity, rollback and before-login behavior under the approved physical execution protocol. No production mutation by AI-05.
+
+A source rollback is limited to the AI-05 diff or closing the draft without merge; never use it as a substitute for real data rollback. Do not supersede matching active CI.
