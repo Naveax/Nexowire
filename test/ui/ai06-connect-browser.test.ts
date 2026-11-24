@@ -211,8 +211,16 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
     await until('loaded current page',()=>evaluate<boolean>('location.href==='+JSON.stringify(url)+' && document.readyState==="complete"'),Boolean);
   };
   const key=async(value:string,code:string,keyCode:number)=>{
-    await send('Input.dispatchKeyEvent',{type:'rawKeyDown',key:value,code,windowsVirtualKeyCode:keyCode,nativeVirtualKeyCode:keyCode});
-    await send('Input.dispatchKeyEvent',{type:'keyUp',key:value,code,windowsVirtualKeyCode:keyCode,nativeVirtualKeyCode:keyCode});
+    const params={key:value,code,windowsVirtualKeyCode:keyCode,nativeVirtualKeyCode:keyCode};
+    // CDP rawKeyDown + keyUp alone omits the Enter keypress/default button
+    // activation. Reproduced in real Chromium: zero clicks with rawKeyDown,
+    // exactly one with keyDown carrying CR. Navigation keys need no text.
+    if(value==='Enter'){
+      await send('Input.dispatchKeyEvent',{...params,type:'keyDown',text:'\r',unmodifiedText:'\r'});
+    }else{
+      await send('Input.dispatchKeyEvent',{...params,type:'rawKeyDown'});
+    }
+    await send('Input.dispatchKeyEvent',{...params,type:'keyUp'});
   };
   const setMedia=()=>send('Emulation.setEmulatedMedia',{features:[
     {name:'prefers-reduced-motion',value:'reduce'},{name:'forced-colors',value:'active'},
@@ -265,7 +273,12 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
   await layout('pairing');
   assert.equal(await evaluate<number>('document.querySelectorAll("#core-state-panel [aria-live=polite]").length'),1);
   await evaluate('document.querySelector("#approve").focus()');
+  assert.equal(await evaluate<string>('document.activeElement.id'),'approve');
+  assert.equal(await evaluate<boolean>('document.querySelector("#approve").disabled'),false);
   await key('Enter','Enter',13);
+  // Separate driver activation from the error rendering assertion, so a
+  // missing keyboard event cannot be mistaken for a failed HTTP response.
+  await until('keyboard activated pairing POST',async()=>requests,value=>value>=1);
   await until('uncertain pairing result',()=>evaluate<string>('document.querySelector("#error-message").textContent'),value=>value.includes('HTTP 503'));
   assert.equal(requests,1);
   assert.equal(await evaluate<boolean>('document.querySelector("#approve").disabled'),true);
