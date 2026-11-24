@@ -6679,9 +6679,11 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         return runtime.native.publishFenced(b,l,p);
       },
     };
-    registerLargeTransferTools(server,ctx.toolAuthorization,runtime,remote,async scope=>{
+    registerLargeTransferTools(server,ctx.toolAuthorization,runtime,remote,async (scope,requireOnline)=>{
       for(const device of [scope.sourceDeviceId,scope.targetDeviceId]){
-        if(await resolveDevice(ctx,device)!==device)throw Error('TRANSFER_DEVICE_SCOPE_DENIED');
+        // Status and cancellation touch only the durable journal. Exact
+        // explicit account scope and policy checks still apply offline.
+        if(requireOnline&&await resolveDevice(ctx,device)!==device)throw Error('TRANSFER_DEVICE_SCOPE_DENIED');
         for(const capability of ['files.stat','files.hash','files.read','files.transfer.limits'])await ctx.policies?.assertAllowed(device,capability);
       }
       await ctx.policies?.assertAllowed(scope.targetDeviceId,'files.write');
