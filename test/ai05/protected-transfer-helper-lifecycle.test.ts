@@ -31,7 +31,7 @@ test('clean install, upgrade, rollback and detach retain both verified versions'
   await runTransferHelperLifecycle(request('rollback',f.selected,a),f.authority,f.store);
   const result=await runTransferHelperLifecycle(request('uninstall',f.selected,null),f.authority,f.store);
   assert.equal(result.selection.pin,null);assert.equal(result.previous.pin?.sha256,a.sha256);
-  assert.equal(result.binariesRetained,true);assert.equal(result.userDataChanged,false);
+  assert.equal(result.binariesRetained,true);assert.equal(result.userDataMutationRequested,false);
   assert.deepEqual([...f.artifacts],[a.sha256,b.sha256]);
   assert.equal(f.calls.filter(x=>x==='commit').length,4);
 });
@@ -68,4 +68,31 @@ test('invalid transitions and path pins do not reach admission',async()=>{
   assert.throws(()=>installedTransferHelperPath({sha256:'..\\x',signerSha256:a.signerSha256}),/PIN_REQUIRED/);
   assert.equal(f.calls.length,0);
   assert.equal(installedTransferHelperPath(a),'C:\\ProgramData\\Nexowire-TransferRuntime\\windows-transfer-volume-flush-'+a.sha256+'.exe');
+});
+
+test('damaged selected binary does not block authorized detach or verified rollback',async()=>{
+  const detach=fixture({revision:'2',pin:a});
+  detach.artifacts.delete(a.sha256);
+  await runTransferHelperLifecycle(request('uninstall',detach.selected,null),detach.authority,detach.store);
+  assert.equal(detach.selected.pin,null);
+  assert.equal(detach.calls.some(x=>x.startsWith('verify:')),false);
+  const recover=fixture({revision:'3',pin:b});
+  recover.artifacts.delete(b.sha256);recover.artifacts.add(a.sha256);
+  await runTransferHelperLifecycle(request('rollback',recover.selected,a),recover.authority,recover.store);
+  assert.equal(recover.selected.pin?.sha256,a.sha256);
+  assert.deepEqual(recover.calls.filter(x=>x.startsWith('verify:')),['verify:'+a.sha256]);
+});
+test('authority callback reentry cannot dispatch a second selection commit',async()=>{
+  const f=fixture();
+  const reenter:TransferHelperDeploymentAuthority={...f.authority,
+    async withExclusiveQuiescedDeployment(_req,effect){await effect();return effect();},
+  };
+  await assert.rejects(runTransferHelperLifecycle(request('clean-install',f.selected,a,'offline-a'),reenter,f.store),/ADMISSION_REENTERED/);
+  assert.equal(f.calls.filter(x=>x==='commit').length,1);
+});
+test('pin and request ID reject final newline and non-string coercions',async()=>{
+  assert.throws(()=>installedTransferHelperPath({...a,sha256:a.sha256+'\n'}),/PIN_REQUIRED/);
+  const f=fixture();
+  await assert.rejects(runTransferHelperLifecycle({...request('clean-install',f.selected,a,'offline-a'),requestId:randomUUID()+'\n'},f.authority,f.store),/REQUEST_INVALID/);
+  assert.equal(f.calls.length,0);
 });

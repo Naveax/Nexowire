@@ -30,7 +30,8 @@ export interface TransferHelperArtifactStore {
   stage(sourcePath:string,pin:HelperPin):Promise<void>;
 }
 function pin(value:HelperPin):HelperPin {
-  if(!value||!sha.test(value.sha256)||!sha.test(value.signerSha256))return deny('TRANSFER_HELPER_PIN_REQUIRED');
+  if(!value||typeof value.sha256!=='string'||value.sha256.length!==64||!sha.test(value.sha256)||
+     typeof value.signerSha256!=='string'||value.signerSha256.length!==64||!sha.test(value.signerSha256))return deny('TRANSFER_HELPER_PIN_REQUIRED');
   return Object.freeze({sha256:value.sha256,signerSha256:value.signerSha256});
 }
 function selection(value:HelperSelection):HelperSelection {
@@ -44,7 +45,7 @@ export function installedTransferHelperPath(value:HelperPin):string {
   return path.win32.join(TRANSFER_HELPER_ROOT,'windows-transfer-volume-flush-'+pin(value).sha256+'.exe');
 }
 function validate(input:HelperRequest):Readonly<HelperRequest>{
-  if(!input||!uuid.test(input.requestId))return deny('TRANSFER_HELPER_REQUEST_INVALID');
+  if(!input||typeof input.requestId!=='string'||input.requestId.length!==36||!uuid.test(input.requestId))return deny('TRANSFER_HELPER_REQUEST_INVALID');
   const expected=selection(input.expected),desired=input.desired===null?null:pin(input.desired);
   const source=input.sourcePath;
   switch(input.operation){
@@ -69,10 +70,16 @@ function validate(input:HelperRequest):Readonly<HelperRequest>{
  * user files, secrets, SQLite, receipts or ambiguous staging artifacts. */
 export async function runTransferHelperLifecycle(input:HelperRequest,authority:TransferHelperDeploymentAuthority,store:TransferHelperArtifactStore){
   const req=validate(input);
+  let entered=false;
   return authority.withExclusiveQuiescedDeployment(req,async()=>{
+    if(entered)return deny('TRANSFER_HELPER_ADMISSION_REENTERED');
+    entered=true;
     const current=selection(await authority.readSelection());
     if(current.revision!==req.expected.revision||!samePin(current.pin,req.expected.pin))return deny('TRANSFER_HELPER_STALE_SELECTION');
-    if(current.pin)await store.verifyInstalled(current.pin);
+    // A broken selected artifact must not prevent a quiesced, explicitly
+    // authorized detach or rollback to an independently verified prior binary.
+    // Upgrade still requires a verified working predecessor.
+    if(current.pin&&req.operation==='upgrade')await store.verifyInstalled(current.pin);
     if(req.desired){
       if(req.sourcePath!==undefined)await store.stage(req.sourcePath,req.desired);
       await store.verifyInstalled(req.desired);
@@ -86,7 +93,7 @@ export async function runTransferHelperLifecycle(input:HelperRequest,authority:T
     let after:HelperSelection;
     try{after=selection(await authority.readSelection());}catch{return deny('TRANSFER_HELPER_COMMIT_READBACK_UNKNOWN');}
     if(after.revision===current.revision||!samePin(after.pin,req.desired))return deny('TRANSFER_HELPER_COMMIT_READBACK_UNKNOWN');
-    return Object.freeze({operation:req.operation,selection:after,previous:current,binariesRetained:true,userDataChanged:false});
+    return Object.freeze({operation:req.operation,selection:after,previous:current,binariesRetained:true,userDataMutationRequested:false});
   });
 }
 
