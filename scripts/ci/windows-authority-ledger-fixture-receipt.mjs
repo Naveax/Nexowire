@@ -42,6 +42,51 @@ export function reconcileFixtureResult(file,result){
   return {path:file,gitBlobSha:REVIEWED_AUTHORITY_LEDGER_FIXTURES[file].blob,result:'PASS',...counters};
 }
 
+/** Source admission failures abort; independent child failures are recorded
+ * and never prevent later reviewed files from supplying their own evidence.
+ * This helper is also exercised with synthetic results in contract tests.
+ */
+export function collectReviewedFixtureOutcomes(check,runOne){
+  const paths=Object.keys(REVIEWED_AUTHORITY_LEDGER_FIXTURES);
+  paths.forEach(check);
+  const files=[];
+  for(const file of paths){
+    check(file);
+    const {result,elapsedMs}=runOne(file);
+    try{
+      files.push({...reconcileFixtureResult(file,result),elapsedMs,timeoutMs:TIMEOUT_MS});
+    }catch(error){
+      files.push({path:file,gitBlobSha:REVIEWED_AUTHORITY_LEDGER_FIXTURES[file].blob,
+        result:'FAIL',errorCode:result?.error?.code??null,exitCode:result?.status??null,
+        signal:result?.signal??null,elapsedMs,timeoutMs:TIMEOUT_MS,
+        reason:error instanceof Error&&error.message.startsWith('WINDOWS_AUTHORITY_LEDGER_FIXTURE_')
+          ?'PROCESS_FAILED':'TAP_CONTRACT_FAILED'});
+    }
+  }
+  return files;
+}
+
+export function summarizeReviewedFixtureOutcomes(files,trackedFileCount){
+  const paths=Object.keys(REVIEWED_AUTHORITY_LEDGER_FIXTURES);
+  if(!Array.isArray(files)||files.length!==paths.length||
+     !Number.isSafeInteger(trackedFileCount)||trackedFileCount<paths.length||
+     files.some((f,i)=>!f||f.path!==paths[i]||
+       f.gitBlobSha!==REVIEWED_AUTHORITY_LEDGER_FIXTURES[paths[i]].blob||
+       !['PASS','FAIL'].includes(f.result)))deny('INVALID_OUTCOME_SET');
+  const passed=files.filter(f=>f.result==='PASS');
+  for(const f of passed){
+    if(!Number.isSafeInteger(f.pass)||f.pass<REVIEWED_AUTHORITY_LEDGER_FIXTURES[f.path].minimum||
+       f.tests!==f.pass||f.fail!==0||f.skipped!==0||f.cancelled!==0||f.todo!==0)
+      deny('INVALID_PASS_COUNTERS');
+  }
+  const failed=files.length-passed.length;
+  return {acceptance:failed?'FAIL':'PASS',attemptedFileCount:files.length,
+    executedFileCount:files.length,notRunFileCount:trackedFileCount-files.length,
+    executionSemantics:'FILE_ATTEMPT_COUNTS_NOT_ALL_SUBTESTS_EXECUTED',
+    statusCounts:{PASS:passed.length,FAIL:failed,SKIP:0,NOT_RUN:trackedFileCount-files.length},
+    passedAssertions:passed.reduce((sum,f)=>sum+f.pass,0)};
+}
+
 export function executeReviewedWindowsFixtures(root,expected){
   if(process.platform!=='win32')deny('WINDOWS_REQUIRED');
   if(!SHA.test(expected??''))deny('EXPECTED_HEAD_REQUIRED');
@@ -54,12 +99,7 @@ export function executeReviewedWindowsFixtures(root,expected){
     if(!stat.isFile()||stat.isSymbolicLink())deny('NOT_REGULAR_FILE');
     validateFixtureSource(file,indexed.get(file),readFileSync(abs));
   };
-  const paths=Object.keys(REVIEWED_AUTHORITY_LEDGER_FIXTURES);
-  // Validate all before launching anything; re-check immediately before launch.
-  paths.forEach(checked);
-  const files=[];
-  for(const file of paths){
-    checked(file);
+  const files=collectReviewedFixtureOutcomes(checked,file=>{
     const started=Date.now();
     const result=spawnSync(process.execPath,[
       '--test','--test-reporter=tap','--import','tsx','--test-concurrency=1',file,
@@ -67,23 +107,12 @@ export function executeReviewedWindowsFixtures(root,expected){
     const elapsedMs=Date.now()-started;
     if(result.stdout)process.stderr.write(result.stdout);
     if(result.stderr)process.stderr.write(result.stderr);
-    try{
-      files.push({...reconcileFixtureResult(file,result),elapsedMs,timeoutMs:TIMEOUT_MS});
-    }catch(error){
-      // Failure metadata only; never print an input secret or environment.
-      process.stderr.write(JSON.stringify({sourceCommitSha:report.commitSha,path:file,
-        result:'FAIL',errorCode:result.error?.code??null,exitCode:result.status,
-        signal:result.signal,elapsedMs,timeoutMs:TIMEOUT_MS})+'\n');
-      throw error;
-    }
-  }
-  const executed=files.length;
-  return {schemaVersion:1,sourceCommitSha:report.commitSha,
+    return {result,elapsedMs};
+  });
+  return {schemaVersion:2,sourceCommitSha:report.commitSha,
     sourceManifestSha256:report.manifestSha256,platform:process.platform,
     nodeVersion:process.version,trackedFileCount:entries.length,
-    executedFileCount:executed,notRunFileCount:entries.length-executed,
-    statusCounts:{PASS:executed,FAIL:0,SKIP:0,NOT_RUN:entries.length-executed},
-    passedAssertions:files.reduce((sum,f)=>sum+f.pass,0),
+    ...summarizeReviewedFixtureOutcomes(files,entries.length),
     scope:'REVIEWED_WINDOWS_AUTHORITY_AND_LEDGER_SOURCE_FIXTURES_ONLY',
     physicalWindowsAcceptance:'NOT_INFERRED',files};
 }
@@ -92,8 +121,9 @@ if(invoked){
   try{
     if(process.argv.length!==3||process.argv[2]!=='--json')deny('USAGE');
     const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
-    process.stdout.write(JSON.stringify(executeReviewedWindowsFixtures(root,
-      process.env.NEXOWIRE_EXPECTED_COMMIT_SHA))+'\n');
+    const receipt=executeReviewedWindowsFixtures(root,process.env.NEXOWIRE_EXPECTED_COMMIT_SHA);
+    process.stdout.write(JSON.stringify(receipt)+'\n');
+    if(receipt.acceptance!=='PASS')process.exitCode=1;
   }catch(error){
     process.stderr.write((error instanceof Error?error.message:'WINDOWS_AUTHORITY_LEDGER_FIXTURE_UNKNOWN')+'\n');
     process.exitCode=1;
