@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {createHmac} from 'node:crypto';
 import {readFileSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
@@ -9,6 +10,32 @@ const script=path.resolve('scripts/ai03-system-dpapi-acceptance.ps1');
 const powershell='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
 const nonce='73ab90cf'.repeat(8);
 const fixture='synthetic-AI03-credential-not-production-'+('x'.repeat(36));
+// Independent known-answer computation. No production token or DPAPI
+// plaintext is read by this Node test; the fixture is public synthetic data.
+function expectedProof(challenge: string) {
+  return createHmac('sha256',Buffer.from(fixture,'utf8'))
+    .update(Buffer.from('NEXOWIRE_SYSTEM_DPAPI_ACCEPTANCE_V1\0','utf8'))
+    .update(Buffer.from(challenge,'hex')).digest('hex');
+}
+function checkProof(raw:string,challenge:string) {
+  const parsed=JSON.parse(raw) as Record<string,unknown>;
+  assert.deepEqual(Object.keys(parsed).sort(),[
+    'schemaVersion','mode','checkedIdentitySid','scopeVerified','proofSha256',
+    'secretContentEmitted','physicalRebootAccepted','brokerEffectAccepted',
+  ].sort(),'proof output must be bounded and must not contain secret material');
+  assert.equal(parsed.schemaVersion,1);
+  assert.equal(parsed.mode,'Source');
+  assert.equal(typeof parsed.checkedIdentitySid,'string');
+  assert.match(String(parsed.checkedIdentitySid),/^S-1-/);
+  assert.notEqual(parsed.checkedIdentitySid,'S-1-5-18');
+  assert.equal(parsed.scopeVerified,true);
+  assert.equal(parsed.secretContentEmitted,false);
+  assert.equal(parsed.physicalRebootAccepted,false);
+  assert.equal(parsed.brokerEffectAccepted,false);
+  assert.equal(parsed.proofSha256,expectedProof(challenge),
+    'proof must bind exact domain separator, NUL byte and 32 decoded nonce bytes');
+  return parsed;
+}
 function run(args: string[]) {
   return spawnSync(powershell,['-NoLogo','-NoProfile','-NonInteractive','-File',script,...args],{
     encoding:'utf8',windowsHide:true,timeout:30000,maxBuffer:256*1024
@@ -50,10 +77,16 @@ test('PowerShell 5.1 parser accepts read-only attestation', {skip:process.platfo
 
 test('ordinary user cannot attest machine secret or override SYSTEM file', {
   skip:process.platform!=='win32'
-},()=>{
+},t=>{
   const sid=spawnSync(powershell,['-NoProfile','-NonInteractive','-Command',
-    '[Security.Principal.WindowsIdentity]::GetCurrent().User.Value'],{encoding:'utf8'});
-  if(sid.stdout.trim()==='S-1-5-18') return;
+    '[Security.Principal.WindowsIdentity]::GetCurrent().User.Value'],
+    {encoding:'utf8',windowsHide:true,timeout:20000,maxBuffer:256*1024});
+  assert.equal(sid.status,0,'independent runner identity probe failed');
+  assert.match(sid.stdout.trim(),/^S-1-/);
+  if(sid.stdout.trim()==='S-1-5-18'){
+    t.skip('ordinary-user negative case requires non-SYSTEM runner');
+    return;
+  }
   const r=run(['-Mode','System','-Nonce',nonce]);
   assert.notEqual(r.status,0);
   assert.match(r.stderr,/AI03_SYSTEM_IDENTITY_REQUIRED/);
@@ -85,18 +118,14 @@ test('synthetic CurrentUser DPAPI challenge HMAC is repeatable, secret-free, sco
     assert.equal(make.status,0,(make.stderr+make.stdout).slice(0,1000));
     const first=run(['-Mode','Source','-Nonce',nonce,'-SourceFile',file]);
     assert.equal(first.status,0,(first.stderr+first.stdout).slice(0,1000));
-    const parsed=JSON.parse(first.stdout.trim()) as {proofSha256:string;secretContentEmitted:boolean;scopeVerified:boolean;mode:string};
-    assert.match(parsed.proofSha256,/^[a-f0-9]{64}$/);
-    assert.equal(parsed.secretContentEmitted,false);
-    assert.equal(parsed.scopeVerified,true);
-    assert.equal(parsed.mode,'Source');
+    const parsed=checkProof(first.stdout.trim(),nonce);
     assert.doesNotMatch(first.stdout+first.stderr,new RegExp(fixture));
     const second=run(['-Mode','Source','-Nonce',nonce,'-SourceFile',file]);
     assert.equal(second.status,0);
-    assert.equal(JSON.parse(second.stdout).proofSha256,parsed.proofSha256);
+    assert.equal(checkProof(second.stdout,nonce).proofSha256,parsed.proofSha256);
     const differentNonce=run(['-Mode','Source','-Nonce','21'.repeat(32),'-SourceFile',file]);
     assert.equal(differentNonce.status,0);
-    assert.notEqual(JSON.parse(differentNonce.stdout).proofSha256,parsed.proofSha256);
+    assert.notEqual(checkProof(differentNonce.stdout,'21'.repeat(32)).proofSha256,parsed.proofSha256);
     const invalid=run(['-Mode','Source','-Nonce','bad','-SourceFile',file]);
     assert.notEqual(invalid.status,0);
     const wrongScope=JSON.parse(readFileSync(file,'utf8')) as Record<string,unknown>;
@@ -106,5 +135,15 @@ test('synthetic CurrentUser DPAPI challenge HMAC is repeatable, secret-free, sco
     assert.notEqual(denied.status,0);
     assert.match(denied.stderr,/AI03_DPAPI_ENVELOPE_SCOPE_OR_PURPOSE_INVALID/);
     assert.doesNotMatch(denied.stdout+denied.stderr,new RegExp(fixture));
+    // Keep a valid CurrentUser ciphertext but substitute its declared purpose.
+    // This is a metadata negative, not an attempt to decrypt another secret.
+    wrongScope.protection='windows-dpapi-current-user';
+    wrongScope.purpose='unrelated-synthetic-purpose';
+    writeFileSync(file,JSON.stringify(wrongScope));
+    const wrongPurpose=run(['-Mode','Source','-Nonce',nonce,'-SourceFile',file]);
+    assert.notEqual(wrongPurpose.status,0);
+    assert.match(wrongPurpose.stderr,/AI03_DPAPI_ENVELOPE_SCOPE_OR_PURPOSE_INVALID/);
+    assert.equal(wrongPurpose.stdout.trim(),'');
+    assert.doesNotMatch(wrongPurpose.stderr,new RegExp(fixture));
   } finally {rmSync(dir,{recursive:true,force:true})}
 });
