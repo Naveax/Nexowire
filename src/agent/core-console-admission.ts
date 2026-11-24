@@ -108,6 +108,9 @@ async function untilAborted<T>(work: Promise<T>, signal: AbortSignal): Promise<T
 export class CoreConsoleAdmission {
   private stopped = false;
   private abort = new AbortController();
+  // An outstanding local decision must never clear a newer STOP latch.
+  private enrolling?: AbortController;
+  private pendingRevocations = 0;
   private readonly requests = new Set<string>();
   private readonly inFlight = new Set<string>();
 
@@ -194,20 +197,33 @@ export class CoreConsoleAdmission {
   /** No remote reenrollment/reset method: STOP cannot be undone by a tool call. */
   async revoke(): Promise<void> {
     this.stopped = true;
-    this.abort.abort();
-    if (this.provider) await this.provider.revoke();
+    ++this.pendingRevocations;
+    try {
+      this.abort.abort();
+      this.enrolling?.abort();
+      if(this.provider)await this.provider.revoke();
+    } finally { --this.pendingRevocations; }
   }
 
   /** Only the provider's real local decision UI can reopen a stopped profile. */
   async enroll(signal:AbortSignal):Promise<boolean>{
     if(!this.provider?.enroll)throw failure('CORE_CONSOLE_PROVIDER_UNAVAILABLE');
-    const approved=await this.provider.enroll(signal);
-    if(approved===true&&!signal.aborted){
-      if(!this.provider.binding)throw failure('CORE_ENROLLMENT_BINDING_REQUIRED');
-      this.binding=Object.freeze({...this.provider.binding});this.abort=new AbortController();this.stopped=false;
-      return true;
-    }
-    return false;
+    if(signal.aborted||this.enrolling||this.pendingRevocations>0)return false;
+    const attempt=new AbortController();
+    this.enrolling=attempt;
+    const combined=AbortSignal.any([signal,attempt.signal]);
+    try {
+      const approved=await this.provider.enroll(combined);
+      // Even a provider that ignores cancellation cannot reopen this latch.
+      // The native provider still owns its durable revoke/enrollment fence.
+      if(approved===true&&!combined.aborted&&this.pendingRevocations===0){
+        if(!this.provider.binding)throw failure('CORE_ENROLLMENT_BINDING_REQUIRED');
+        this.binding=Object.freeze({...this.provider.binding});
+        this.abort=new AbortController();this.stopped=false;
+        return true;
+      }
+      return false;
+    } finally { this.enrolling=undefined; }
   }
   close():void {this.provider?.close?.();}
   get installed():boolean {return this.provider!==undefined;}

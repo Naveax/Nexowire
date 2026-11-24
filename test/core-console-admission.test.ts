@@ -302,3 +302,69 @@ test('CORE console rejects nested and revoked Proxy before native provider inspe
     assert.equal(executions,0);
   }
 });
+
+test('STOP cancels a pending enrollment and late approval cannot reopen CORE',async()=>{
+  let entered!:()=>void,release!:(approved:boolean)=>void;
+  const started=new Promise<void>(resolve=>{entered=resolve;});
+  const decision=new Promise<boolean>(resolve=>{release=resolve;});
+  let receivedSignal:AbortSignal|undefined,requests=0;
+  const f=fixture({binding,enroll:async signal=>{
+    receivedSignal=signal;++requests;entered();return decision;
+  }});
+  const pending=f.controller.enroll(new AbortController().signal);
+  try{
+    await started;
+    await f.controller.revoke();
+    assert.equal(receivedSignal?.aborted,true);
+    assert.equal(await f.controller.enroll(new AbortController().signal),false);
+    assert.equal(requests,1);
+    release(true);
+    assert.equal(await pending,false);
+    assert.equal((await f.controller.status('full')).state,'REVOKED_LOCALLY');
+    await assert.rejects(f.controller.execute('windows.pointer.click',{},randomUUID(),'full'),
+      code('REVOKED_LOCALLY'));
+    assert.equal(f.calls(),0);
+    // Only a new explicit provider enrollment after the old attempt drains
+    // may reopen the local latch; fresh native authority is still required.
+    assert.equal(await f.controller.enroll(new AbortController().signal),true);
+    assert.equal(requests,2);
+  }finally{release(false);await pending.catch(()=>{});}
+});
+
+test('CORE enrollment stays blocked until all pending durable revokes settle',async()=>{
+  let releaseFirst!:()=>void,releaseSecond!:()=>void;
+  const firstGate=new Promise<void>(resolve=>{releaseFirst=resolve;});
+  const secondGate=new Promise<void>(resolve=>{releaseSecond=resolve;});
+  let enrollments=0,revocations=0;
+  const f=fixture({binding,revoke:()=>++revocations===1?firstGate:secondGate,
+    enroll:async()=>{enrollments++;return true;}});
+  const first=f.controller.revoke(),second=f.controller.revoke();
+  try{
+    assert.equal(await f.controller.enroll(new AbortController().signal),false);
+    assert.equal(enrollments,0);
+    assert.equal((await f.controller.status('full')).state,'REVOKED_LOCALLY');
+    releaseFirst();await first;
+    assert.equal(await f.controller.enroll(new AbortController().signal),false);
+    assert.equal(enrollments,0);
+    releaseSecond();await second;
+    assert.equal(await f.controller.enroll(new AbortController().signal),true);
+    assert.equal(enrollments,1);
+  }finally{releaseFirst();releaseSecond();await Promise.allSettled([first,second]);}
+});
+
+test('pre-aborted enrollment never calls provider and enrollment failure leaves STOP intact',async()=>{
+  let enrollments=0;
+  const f=fixture({binding,enroll:async()=>{
+    ++enrollments;throw new Error('synthetic enrollment failure');
+  }});
+  await f.controller.revoke();
+  const cancelled=new AbortController();cancelled.abort();
+  assert.equal(await f.controller.enroll(cancelled.signal),false);
+  assert.equal(enrollments,0);
+  await assert.rejects(f.controller.enroll(new AbortController().signal),/synthetic enrollment failure/);
+  assert.equal(enrollments,1);
+  assert.equal((await f.controller.status('full')).state,'REVOKED_LOCALLY');
+  await assert.rejects(f.controller.enroll(new AbortController().signal),/synthetic enrollment failure/);
+  assert.equal(enrollments,2,'failed enrollment must release the prompt slot');
+  assert.equal(f.calls(),0);
+});
