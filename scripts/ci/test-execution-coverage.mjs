@@ -124,6 +124,7 @@ export function reconcileLaneCoverage(entries,inventory,target,policies,receipts
     'REVIEWED_WINDOWS_CROSS_OWNER_SOURCE_FIXTURES_ONLY',
     'REVIEWED_WINDOWS_CORE_NEGATIVE_SOURCE_FIXTURES_ONLY',
     'REVIEWED_WINDOWS_DISPOSABLE_INSTALLER_FIXTURES_ONLY',
+      'REVIEWED_WINDOWS_SIGNED_RUNTIME_INSTALLER_ACL_FIXTURES_ONLY',
   ]);
   for(const policy of policies){
     if(!policy||!cleanId(policy.id)||expected.has(policy.id)||!scopes.has(policy.scope)||
@@ -137,6 +138,7 @@ export function reconcileLaneCoverage(entries,inventory,target,policies,receipts
       'REVIEWED_WINDOWS_CROSS_OWNER_SOURCE_FIXTURES_ONLY',
       'REVIEWED_WINDOWS_CORE_NEGATIVE_SOURCE_FIXTURES_ONLY',
       'REVIEWED_WINDOWS_DISPOSABLE_INSTALLER_FIXTURES_ONLY',
+      'REVIEWED_WINDOWS_SIGNED_RUNTIME_INSTALLER_ACL_FIXTURES_ONLY',
     ].includes(policy.scope))!==(policy.schemaVersion===2))deny('UNION_POLICY_SCHEMA');
     const files=new Map();
     for(const f of policy.files){

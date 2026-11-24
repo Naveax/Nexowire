@@ -229,7 +229,7 @@ test('union rejects policy drift, unapproved substitutions and forged complete f
 });
 
 test('cross-owner, CORE negative and disposable installer scopes require schema v2 and exact target',()=>{
-  for(const scope of ["REVIEWED_WINDOWS_CROSS_OWNER_SOURCE_FIXTURES_ONLY","REVIEWED_WINDOWS_CORE_NEGATIVE_SOURCE_FIXTURES_ONLY","REVIEWED_WINDOWS_DISPOSABLE_INSTALLER_FIXTURES_ONLY"]){
+  for(const scope of ["REVIEWED_WINDOWS_CROSS_OWNER_SOURCE_FIXTURES_ONLY","REVIEWED_WINDOWS_CORE_NEGATIVE_SOURCE_FIXTURES_ONLY","REVIEWED_WINDOWS_DISPOSABLE_INSTALLER_FIXTURES_ONLY","REVIEWED_WINDOWS_SIGNED_RUNTIME_INSTALLER_ACL_FIXTURES_ONLY"]){
     const p=policy('new-lane',[pin(0)],{scope,schemaVersion:2});
     const r=combine([p],[laneReceipt(p)]);
     assert.equal(r.requiredLaneAcceptance,'PASS');
