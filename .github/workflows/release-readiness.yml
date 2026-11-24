@@ -195,7 +195,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'AI08_WINDOWS_HUB_BOOT_FIXTURE_GATE_FAILED' }
 
   package:
-    needs: ai08-coverage-reconciliation
+    needs: [ai08-coverage-reconciliation, ai08-windows-hub-boot-fixtures]
     strategy:
       fail-fast: false
       matrix:
