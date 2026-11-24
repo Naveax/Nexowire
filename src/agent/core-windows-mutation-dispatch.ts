@@ -6,6 +6,7 @@
  */
 import {AsyncLocalStorage} from 'node:async_hooks';
 import {createHash} from 'node:crypto';
+import {types as utilTypes} from 'node:util';
 import {BrokerExternalDispatchFence,type BrokerDispatchRequest}
   from './broker-external-dispatch-fence.js';
 import {privilegeRequirement} from '../security/privilege.js';
@@ -44,7 +45,10 @@ function canonical(value:unknown,ancestors=new Set<object>()):string {
   if(typeof value==='number'&&Number.isFinite(value))
     return JSON.stringify(value);
   if(typeof value!=='object')deny('CORE_DISPATCH_INPUT_NOT_CANONICAL');
-  if(ancestors.has(value))deny('CORE_DISPATCH_INPUT_NOT_CANONICAL');
+  // A Proxy can execute caller code from getPrototypeOf/ownKeys/descriptor
+  // traps even with no getters. Refuse it before inspecting any metadata.
+  if(utilTypes.isProxy(value)||ancestors.has(value))
+    deny('CORE_DISPATCH_INPUT_NOT_CANONICAL');
   const proto=Object.getPrototypeOf(value);
   if(!Array.isArray(value)&&proto!==Object.prototype&&proto!==null)
     deny('CORE_DISPATCH_INPUT_NOT_CANONICAL');
