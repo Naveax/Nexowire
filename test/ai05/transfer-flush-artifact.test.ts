@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
-import {readFileSync,writeFileSync,mkdtempSync,rmSync} from 'node:fs';
+import {readFileSync,writeFileSync,mkdtempSync,rmSync,realpathSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -38,7 +38,9 @@ test('AI-05 signed artifact verification requires exact hash before Authenticode
 test('AI-05 native signed artifact gate rejects wrong hash and unsigned bytes without modification',{
   skip:process.platform!=='win32',
 },()=>{
-  const root=mkdtempSync(path.join(os.tmpdir(),'nw-ai05-signature-'));
+  // Hosted TEMP may use an 8.3 alias (runner~1). Supply the real path;
+  // the production gate must continue to reject noncanonical aliases.
+  const root=mkdtempSync(path.join(realpathSync.native(os.tmpdir()),'nw-ai05-signature-'));
   try{
     const artifact=path.join(root,'windows-transfer-volume-flush.exe');
     const bytes=Buffer.from('synthetic unsigned invalid executable');
@@ -106,7 +108,8 @@ test('hosted Windows compiles reviewed C# helper without signing or executing it
   assert.equal(result.error,undefined);assert.equal(result.status,0,result.stderr+result.stdout);
   const receipt=JSON.parse(result.stdout.trim()) as {artifactPath:string;sha256:string;status:string;sourceGitBlob:string;installed:boolean;executed:boolean;productionEligible:boolean};
   const folder=path.dirname(receipt.artifactPath);
-  assert.equal(path.dirname(folder).toLowerCase(),path.resolve(os.tmpdir()).toLowerCase());
+  assert.equal(path.dirname(folder).toLowerCase(),realpathSync.native(os.tmpdir()).toLowerCase());
+  assert.equal(realpathSync.native(folder).toLowerCase(),folder.toLowerCase());
   assert.match(path.basename(folder),/^Nexowire-TransferFlush-Build-[0-9a-f]{32}$/);
   assert.equal(path.basename(receipt.artifactPath),'windows-transfer-volume-flush.exe');
   try{
