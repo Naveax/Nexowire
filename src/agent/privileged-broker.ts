@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage } from 'node:http';
+import {assertWindowsPrivilegedRuntimeTrusted,assertNoPrivilegedNodeStartupFlags} from '../security/windows-privileged-runtime-trust.js';
 import { executeLocallyEnrolledBrokerEffect } from './core-windows-mutation-dispatch.js';
 import { createWindowsLocalOwnerBrokerAdmission, brokerRunEffectMode, type LocalOwnerBrokerAdmission } from './privileged-broker-local-owner.js';
 import { spawnSync } from 'node:child_process';
@@ -399,7 +400,16 @@ export async function startPrivilegedBroker(
 export async function runPrivilegedBroker(
   env: NodeJS.ProcessEnv = process.env,
   args: readonly string[] = process.argv.slice(4),
+  /** Only an independent, physically accepted protected composition root may inject this. */
+  trustedExternalAdmission?: BrokerExternalEffectAdmission,
 ): Promise<never> {
+  const effectMode=brokerRunEffectMode(args);
+  if(trustedExternalAdmission!==undefined){
+    if(effectMode!=='external')throw Error('BROKER_EFFECT_AUTHORITY_CONFLICT');
+    if(process.platform!=='win32'||!isWindowsProcessElevated())throw Error('BROKER_HIGH_TOKEN_REQUIRED');
+    assertNoPrivilegedNodeStartupFlags(process.execArgv);
+    assertWindowsPrivilegedRuntimeTrusted({executable:process.execPath,cliEntrypoint:process.argv[1]??'',env});
+  }
   let tokens = parseTokenList(
     env.NEXOWIRE_PRIVILEGED_BROKER_TOKEN,
     env.NEXOWIRE_PRIVILEGED_BROKER_TOKENS,
@@ -425,12 +435,12 @@ export async function runPrivilegedBroker(
     );
   }
 
-  const effectMode = brokerRunEffectMode(args);
   const localOwnerAdmission = effectMode === 'local-owner'
     ? await createWindowsLocalOwnerBrokerAdmission(env, tokens[0]!)
     : undefined;
   const handle = await startPrivilegedBroker({
     ...(localOwnerAdmission ? {localOwnerAdmission} : {}),
+    ...(trustedExternalAdmission ? {effectAdmission:trustedExternalAdmission} : {}),
     host:
       env.NEXOWIRE_PRIVILEGED_BROKER_HOST?.trim() ||
       '127.0.0.1',
