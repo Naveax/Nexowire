@@ -1,0 +1,58 @@
+name: AI-05 Protected Helper Native Acceptance
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/ai05-protected-helper-acceptance.yml'
+      - 'scripts/ci/ai05-protected-helper-fixture.ps1'
+      - 'scripts/ci/ai05-protected-helper-fixture.mjs'
+      - 'scripts/Build-Nexowire-TransferFlushArtifact.ps1'
+      - 'src/installer/protected-transfer-helper-lifecycle.ts'
+      - 'test/ai05/transfer-flush-artifact.test.ts'
+      - 'native/windows-transfer-volume-flush.cs'
+permissions:
+  contents: read
+jobs:
+  native-helper:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: windows-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - name: Exact source and native C# build/signature tests
+        shell: powershell
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          $ErrorActionPreference='Stop'
+          if ((git rev-parse HEAD) -cne $env:EXPECTED_HEAD) { throw 'AI05_HEAD_MISMATCH' }
+          if ((git hash-object src/installer/protected-transfer-helper-lifecycle.ts) -cne '8895cc4fd380dd40ac317b6671cbf2d6b750b3a0') { throw 'AI05_LIFECYCLE_BLOB_MISMATCH' }
+          if ((git hash-object native/windows-transfer-volume-flush.cs) -cne '7a62bf6c027544dfceb14f3ca939d7d76eb2ced9') { throw 'AI05_NATIVE_SOURCE_BLOB_MISMATCH' }
+          $tap=Join-Path $env:RUNNER_TEMP 'ai05-native-helper.tap'
+          & node --test --test-reporter=tap --import tsx --test-concurrency=1 test/ai05/transfer-flush-artifact.test.ts | Tee-Object -FilePath $tap
+          if ($LASTEXITCODE -ne 0) { throw 'AI05_NATIVE_TEST_FAILED' }
+          & node scripts/ci/assert-tap-summary.mjs $tap 4
+          if ($LASTEXITCODE -ne 0) { throw 'AI05_NATIVE_TAP_REJECTED' }
+      - name: Real Windows storage adapter, signed inert artifacts and SQLite preservation
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          & ./scripts/ci/ai05-protected-helper-fixture.ps1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ai05-native-helper-node-${{ matrix.node }}
+          path: ${{ runner.temp }}/ai05-native-helper.tap
+          if-no-files-found: warn
