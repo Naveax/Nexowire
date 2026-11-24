@@ -1,4 +1,5 @@
 import {createHash,randomBytes} from 'node:crypto';
+import {types as utilTypes} from 'node:util';
 
 /**
  * Broker #02 source contract ONLY. No physical or production provider is
@@ -104,25 +105,83 @@ function sameBinding(a:BrokerVerifiedEffectBinding,b:BrokerVerifiedEffectBinding
     a.protectedBrokerProofId===b.protectedBrokerProofId &&
     a.expiresAtMs===b.expiresAtMs;
 }
+/**
+ * Snapshot JSON using OWN DATA DESCRIPTORS, never getters, toJSON, or inherited
+ * properties. Only a plain object/array graph is admitted. A hostile payload
+ * must not run JavaScript merely because the Broker prepares its fingerprint.
+ *
+ * The resulting objects have null prototypes and are recursively immutable.
+ * Member insertion order is retained for the exact signed JSON byte contract.
+ */
+function snapshotPlainJson(value:unknown,depth=0,
+  ancestors=new Set<object>()):unknown {
+  if(depth>64)deny();
+  if(value===null||typeof value==='string'||typeof value==='boolean')return value;
+  if(typeof value==='number'){
+    if(!Number.isFinite(value))deny();
+    return value;
+  }
+  if(typeof value!=='object')deny();
+  // V8's native proxy discriminator does not invoke getPrototypeOf/ownKeys
+  // traps. Check BEFORE touching any original object metadata, recursively.
+  if(utilTypes.isProxy(value)||ancestors.has(value))deny();
+  const array=Array.isArray(value);
+  const proto=Object.getPrototypeOf(value);
+  if(array ? proto!==Array.prototype :
+    (proto!==Object.prototype&&proto!==null))deny();
+  const keys=Reflect.ownKeys(value);
+  if(keys.some(key=>typeof key!=='string'))deny();
+  ancestors.add(value);
+  try{
+    if(array){
+      const size=value.length;
+      if(!Number.isSafeInteger(size)||keys.length!==size+1)deny();
+      const result:unknown[]=[];
+      for(let i=0;i<size;i++){
+        const descriptor=Object.getOwnPropertyDescriptor(value,String(i));
+        if(!descriptor||!descriptor.enumerable||!('value' in descriptor))deny();
+        result.push(snapshotPlainJson(descriptor.value,depth+1,ancestors));
+      }
+      return Object.freeze(result);
+    }
+    const result=Object.create(null) as Record<string,unknown>;
+    for(const key of keys as string[]){
+      const descriptor=Object.getOwnPropertyDescriptor(value,key);
+      if(!descriptor||!descriptor.enumerable||!('value' in descriptor))deny();
+      Object.defineProperty(result,key,{
+        value:snapshotPlainJson(descriptor.value,depth+1,ancestors),
+        enumerable:true,configurable:false,writable:false,
+      });
+    }
+    return Object.freeze(result);
+  }finally{ancestors.delete(value)}
+}
+
 /** Freeze exact request bytes before the first await. No post-hash mutation. */
 function frozenEffectInput(capability:string,input:unknown):
   {readonly input:unknown;readonly inputSha256:string} {
   if(typeof capability!=='string'||capability.length<1||capability.length>128)deny();
-  let json: string | undefined;
-  try{json=JSON.stringify({capability,input})}catch{deny()}
+  let snapshot:unknown;
+  let json:string|undefined;
+  try{
+    snapshot=snapshotPlainJson(input);
+    json=JSON.stringify({capability,input:snapshot});
+  }catch{deny()}
   if(!json || Buffer.byteLength(json,'utf8')>4*1024*1024)deny();
-  let snapshot: {capability?:unknown;input?:unknown};
-  try{snapshot=JSON.parse(json) as typeof snapshot}catch{deny()}
-  if(snapshot.capability!==capability || !Object.hasOwn(snapshot,'input'))deny();
-  const freeze=(v:unknown,depth:number):void=>{
+  // Preserve the original native callback contract: plain JSON.parse object
+  // prototypes, never the caller's accessors or custom serialization code.
+  // Hashes are already fixed from the strict null-prototype serialization.
+  let parsed:{capability:string;input:unknown};
+  try{parsed=JSON.parse(json) as typeof parsed;}catch{deny()}
+  const deepFreeze=(value:unknown,depth=0):void=>{
     if(depth>64)deny();
-    if(v && typeof v==='object'){
-      for(const item of Object.values(v))freeze(item,depth+1);
-      Object.freeze(v);
+    if(value!==null&&typeof value==='object'){
+      for(const child of Object.values(value))deepFreeze(child,depth+1);
+      Object.freeze(value);
     }
   };
-  freeze(snapshot.input,0);
-  return {input:snapshot.input,
+  deepFreeze(parsed.input);
+  return {input:parsed.input,
     inputSha256:createHash('sha256').update(json).digest('hex')};
 }
 function receiptMatches(receipt:BrokerEffectReceipt|null,
@@ -139,35 +198,22 @@ function receiptMatches(receipt:BrokerEffectReceipt|null,
 }
 
 /**
- * Capture an untrusted transport receipt ONCE before any signature-verification
- * await. Copy via JSON round-trip to discard attacker-owned references,
- * prototypes, getters and nested object identities. Deep-freeze every object
- * (not just the top-level receipt) so a verifier cannot mutate its own input.
- *
- * The verifier must sign-check `signedPayloadUtf8`; it is derived from this
- * *same* snapshot and is a primitive string, immutable across awaits.
- * No field of the raw transport response is ever read again.
+ * Capture a remote receipt ONCE, using data descriptors only. A transport
+ * getter or custom toJSON is NOT executed before authentication. The frozen
+ * snapshot supplies BOTH the signature bytes and the consumed ticket.
  */
 function snapshotReceipt(raw:BrokerEffectReceipt|null):
   {readonly receipt:BrokerEffectReceipt;readonly signedPayloadUtf8:string} {
   if(!raw || typeof raw!=='object')deny();
-  let rawJson:string|undefined;
-  try{rawJson=JSON.stringify(raw)}catch{deny()}
-  if(!rawJson || Buffer.byteLength(rawJson,'utf8')>16*1024)deny();
   let parsed:unknown;
-  try{parsed=JSON.parse(rawJson)}catch{deny()}
+  let rawJson:string|undefined;
+  try{
+    parsed=snapshotPlainJson(raw);
+    rawJson=JSON.stringify(parsed);
+  }catch{deny()}
+  if(!rawJson || Buffer.byteLength(rawJson,'utf8')>16*1024)deny();
   if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))deny();
-  const deepFreeze=(value:unknown,depth:number):void=>{
-    if(depth>32)deny();
-    if(value && typeof value==='object'){
-      for(const child of Object.values(value))deepFreeze(child,depth+1);
-      Object.freeze(value);
-    }
-  };
-  deepFreeze(parsed,0);
   const receipt=parsed as BrokerEffectReceipt;
-  // The receipt interface is a payload plus an opaque proof. The exact bytes
-  // sent to the verifier are the same frozen fields later read by the gate.
   const {proof: _proof,...signedPayload}=receipt;
   let signedPayloadUtf8:string|undefined;
   try{signedPayloadUtf8=JSON.stringify(signedPayload)}catch{deny()}

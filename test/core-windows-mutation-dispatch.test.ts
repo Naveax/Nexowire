@@ -284,3 +284,25 @@ test('#03 frozen snapshot cannot be modified through approved callback reference
     accepted.brokerBody);
   assert.equal(CORE_EXECUTOR_DISPATCH_ENABLED,false);
 });
+
+test('#03 rejects root, nested and revoked Proxy before any caller trap',async()=>{
+  const {prepareCoreWindowsMutation}=await import(
+    '../src/agent/core-windows-mutation-dispatch.js');
+  let traps=0;
+  const trapHandler:ProxyHandler<object>={
+    getPrototypeOf(){traps++;throw Error('GET_PROTO_TRAP');},
+    ownKeys(){traps++;throw Error('OWN_KEYS_TRAP');},
+    getOwnPropertyDescriptor(){traps++;throw Error('DESCRIPTOR_TRAP');},
+    get(){traps++;throw Error('GET_TRAP');},
+  };
+  const proxy=new Proxy({value:1},trapHandler);
+  const proxyArray=new Proxy([{value:1}],trapHandler);
+  const revoked=Proxy.revocable({value:'revoked'},trapHandler);
+  revoked.revoke();
+  for(const raw of [proxy,{children:[{value:proxy}]},proxyArray,
+    {children:[proxyArray]},revoked.proxy]){
+    assert.throws(()=>prepareCoreWindowsMutation('windows.registry.set',raw),
+      matchCode('CORE_DISPATCH_INPUT_NOT_CANONICAL'));
+    assert.equal(traps,0,'Proxy metadata traps must never execute');
+  }
+});

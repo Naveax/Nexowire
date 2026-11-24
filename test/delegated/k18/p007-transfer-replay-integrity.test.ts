@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
+import {spawnSync} from 'node:child_process';
 import {promises as fs} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -195,3 +196,41 @@ test('Q-245 #588 in-flight chunk mutation with stable sender SHA cannot publish'
     );
     assert.equal(await store.get(scope,artifactPath),null);
   }));
+
+// The owner-controlled CI already explicitly selects this K18 file. Execute
+// the new synthetic suites as separate node --test invocations, not imports
+// or inventory-only evidence. The receipt runner verifies the checkout and
+// reviewed source/test/lockfile blobs before and after child execution.
+// No change to shared workflows or physical-device acceptance.
+test('AI-07 reviewed K18 direct child execution receipt (5 + 8 + 7 cases)',{timeout:420_000},t=>{
+  const env:NodeJS.ProcessEnv={...process.env,NODE_OPTIONS:''};
+  delete env.NODE_TEST_CONTEXT;
+  const head=spawnSync('git',['rev-parse','HEAD'],{encoding:'utf8',timeout:15000,env});
+  assert.ifError(head.error);
+  assert.equal(head.status,0,'Cannot resolve actual checked-out SHA');
+  const sourceCommitSha=head.stdout.trim();
+  assert.match(sourceCommitSha,/^[a-f0-9]{40}$/);
+  // PR workflows may check out a synthetic merge commit. Report the actual
+  // checkout SHA, never silently replace it with the PR head or event SHA.
+  const result=spawnSync(process.execPath,[
+    'test/delegated/k18/ai07-source-receipt.mjs',sourceCommitSha,
+  ],{encoding:'utf8',timeout:390_000,maxBuffer:8*1024*1024,env});
+  t.diagnostic('AI07_EXECUTION_RECEIPT '+(result.stdout||'').trim());
+  if(result.stderr)t.diagnostic(result.stderr);
+  assert.ifError(result.error);
+  assert.equal(result.signal,null);
+  assert.equal(result.status,0,'AI-07 direct suite execution was not accepted');
+  const receipt=JSON.parse(result.stdout);
+  assert.equal(receipt.sourceCommitSha,sourceCommitSha);
+  assert.equal(receipt.node,process.version);
+  assert.equal(receipt.classification,'SYNTHETIC_SOURCE_ONLY');
+  assert.equal(receipt.physicalAcceptance,'NOT_RUN');
+  assert.equal(receipt.status,'PASS');
+  assert.deepEqual(receipt.suites.map((suite:{path:string;status:string;counts:unknown})=>({
+    path:suite.path,status:suite.status,counts:suite.counts,
+  })),[
+    ['test/delegated/k18/ai07-cross-device-transfer-evidence.test.ts',5],
+    ['test/delegated/k18/ai07-offline-progress-boundary.test.ts',8],
+    ['test/delegated/k18/ai07-source-receipt.test.mjs',7],
+  ].map(([path,n])=>({path,status:'PASS',counts:{tests:n,pass:n,fail:0,cancelled:0,skipped:0,todo:0}})));
+});
