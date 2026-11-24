@@ -4,6 +4,7 @@ import {readFileSync,promises as fs} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
 import os from 'node:os';
 import path from 'node:path';
+import {SYSTEM_CUTOVER_MINIMUM_FREE_BYTES} from '../src/hub/system-cutover-disk-reserve.js';
 import {
   calculateProtectedMigrationDiskBudget,
   inspectProtectedMigrationDiskBudgetReadOnly,
@@ -13,9 +14,9 @@ import {
 const gib=1024n*1024n*1024n;
 const windows=process.platform==='win32';
 
-test('disk budget protects 4 GiB system/SQLite reserve plus two whole state copies',()=>{
+test('disk budget protects 4.1 GiB system/SQLite reserve plus two whole state copies',()=>{
   const source=700n*1024n*1024n;
-  const exact=4n*gib+source*2n;
+  const exact=SYSTEM_CUTOVER_MINIMUM_FREE_BYTES+source*2n;
   const ok=calculateProtectedMigrationDiskBudget(exact,source);
   assert.equal(ok.sufficient,true);
   assert.equal(ok.requiredBytes,exact.toString());
@@ -64,6 +65,17 @@ test('disk preflight includes every nested recovery backup byte and rejects hard
     /AI04_RECOVERY_BACKUP_FILE_UNTRUSTED/);
 });
 
+test('offline copy disk budget gates source and staged target mounted volumes',()=>{
+  const code=readFileSync(new URL('../scripts/ai04-offline-migration-integrity.ts',import.meta.url),'utf8');
+  const start=code.indexOf('export async function inspectProtectedMigrationDiskBudgetReadOnly(');
+  const end=code.indexOf('export function protectedStateAclTargets(',start);
+  assert.ok(start>=0&&end>start);
+  const section=code.slice(start,end);
+  assert.match(section,/assertSystemCutoverDiskReserve\(undefined,os\.homedir\(\),source\)/);
+  assert.match(section,/fs\.statfs\(path\.win32\.dirname\(SYSTEM_HUB_STATE_PATH\)/);
+  assert.doesNotMatch(section,/fs\.statfs\('C:/);
+});
+
 test('physical protected audit refuses insufficient disk before reading destination snapshots',()=>{
   const text=readFileSync(
     new URL('../scripts/ai04-offline-migration-integrity.ts',import.meta.url),'utf8');
@@ -97,6 +109,6 @@ test('Windows budget reads actual ProgramData volume without exposing state secr
   const budget=await inspectProtectedMigrationDiskBudgetReadOnly(src);
   assert.match(budget.availableBytes,/^\d+$/);
   assert.ok(BigInt(budget.availableBytes)>0n);
-  assert.ok(BigInt(budget.requiredBytes)>=4n*gib);
+  assert.ok(BigInt(budget.requiredBytes)>=SYSTEM_CUTOVER_MINIMUM_FREE_BYTES);
   assert.equal(budget.readyForSystemCutover,false);
 });

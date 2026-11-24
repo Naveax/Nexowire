@@ -28,7 +28,7 @@ test('read-only Boot status describes a legacy user task but still rejects forei
       "$bootArgs='-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"' + $env:NEXOWIRE_HUB_BOOT_LAUNCHER + '\"'",
       "$userArgs='-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"' + $env:NEXOWIRE_HUB_USER_LAUNCHER + '\"'",
       "$localUser=[Security.Principal.WindowsIdentity]::GetCurrent().Name",
-      "$validBootTask=[pscustomobject]@{TaskPath='\\';TaskName=$boot;Actions=@([pscustomobject]@{Execute=$exe;Arguments=$bootArgs});Principal=[pscustomobject]@{UserId='NT AUTHORITY\\SYSTEM';LogonType='ServiceAccount';RunLevel='Highest'}}",
+      "$validBootTask=[pscustomobject]@{TaskPath='\\';TaskName=$boot;Actions=@([pscustomobject]@{Execute=$exe;Arguments=$bootArgs;WorkingDirectory=''});Triggers=@([pscustomobject]@{CimClass=[pscustomobject]@{CimClassName='MSFT_TaskBootTrigger'};Enabled=$true});Principal=[pscustomobject]@{UserId='NT AUTHORITY\\SYSTEM';LogonType='ServiceAccount';RunLevel='Highest'}}",
       "$bootTask=$null",
       "$userTask=[pscustomobject]@{TaskPath='\\';TaskName=$user;Description='Nexowire first-party Hub';Actions=@([pscustomobject]@{Execute=$exe;Arguments=$userArgs});Principal=[pscustomobject]@{UserId=$localUser;LogonType='Interactive';RunLevel='Limited'}}",
       item.label==='no Boot or user task'?'$userTask=$null':item.change,

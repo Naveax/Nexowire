@@ -30,6 +30,7 @@ export type SystemCutoverStep =
   'preflight'|'arm-recovery'|'quiesce-legacy'|'copy-protected-state'|
   'issue-receipt'|'install-system-hub'|'verify-system-hub'|'commit';
 export class SystemCutoverFailed extends Error {
+  readonly outcomeUnknown:boolean;
   constructor(
     readonly failedStep:SystemCutoverStep,
     readonly rollbackFailed:boolean,
@@ -37,9 +38,12 @@ export class SystemCutoverFailed extends Error {
     readonly rollbackAttempted=true,
   ){
     super('SYSTEM_HUB_CUTOVER_FAILED_'+failedStep.toUpperCase().replaceAll('-','_')+
-      (!rollbackAttempted?'_RECOVERY_UNVERIFIED':
-        rollbackFailed?'_ROLLBACK_FAILED':'_ROLLED_BACK'));
+      (!rollbackAttempted
+        ?failedStep==='commit'?'_COMMIT_OUTCOME_UNKNOWN':'_RECOVERY_UNVERIFIED'
+        :rollbackFailed?'_ROLLBACK_FAILED':'_ROLLED_BACK'));
     this.name='SystemCutoverFailed';
+    // Commit can be durable despite an exception; do not treat it as a failed recovery arm.
+    this.outcomeUnknown=failedStep==='commit'&&!rollbackAttempted;
   }
 }
 export async function runRecoverableSystemHubCutover(
@@ -64,6 +68,14 @@ export async function runRecoverableSystemHubCutover(
     step='verify-system-hub'; await ops.verifySystemHub();
     step='commit'; await ops.commit();
   }catch(error){
+    // Commit can durably advance the recovery journal before throwing (for
+    // example, an interrupted fsync/rename/readback). Its outcome is UNKNOWN.
+    // An automatic rollback would risk replaying the legacy writer after
+    // SYSTEM has accepted new operations. Preserve the recovery task and
+    // require operator reconciliation instead.
+    if(step==='commit'){
+      throw new SystemCutoverFailed(step,false,error,false);
+    }
     try{await ops.rollback()}catch(rollbackError){
       throw new SystemCutoverFailed(step,true,new AggregateError(
         [error,rollbackError],'SYSTEM_HUB_CUTOVER_AND_ROLLBACK_FAILED'));

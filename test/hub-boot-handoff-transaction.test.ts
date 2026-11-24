@@ -57,3 +57,18 @@ test('uninstall validates saved restoration state and requires port release befo
   assert.match(uninstall,/userTaskPreviousState: z\.enum\(\['Running','Ready','Disabled','NotInstalled'\]\)/);
   assert.match(uninstall,/expectedLegacyState -eq 'Running'/);
 });
+
+test('SYSTEM task must be independently read back before disabling the original user Hub',()=>{
+  const registration=install.indexOf('Register-ScheduledTask -TaskName $boot');
+  const readback=install.indexOf("'$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath",registration);
+  const reReadUser=install.indexOf("'$userTask=Get-ScheduledTask -TaskName $user -TaskPath",readback);
+  const identity=install.indexOf('hubBootRegisteredTaskIdentityGuard',reReadUser);
+  const marker=install.indexOf('hubBootRollbackTaskOwnershipGuard',identity);
+  const stateRace=install.indexOf('HUB_USER_TASK_STATE_RACE',marker);
+  const stopUser=install.indexOf('Stop-ScheduledTask -TaskName $user',registration);
+  const startBoot=install.indexOf('Start-ScheduledTask -TaskName $boot',stopUser);
+  assert.ok(registration>=0 && registration<readback && readback<reReadUser &&
+    reReadUser<identity && identity<marker && marker<stateRace &&
+    stateRace<stopUser && stopUser<startBoot,
+    'Re-read BOTH task identities and user task state before any user-Hub handoff');
+});

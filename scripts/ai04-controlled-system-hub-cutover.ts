@@ -4,7 +4,7 @@
  * Never delete/overwrite the original user state, its launcher or secret.
  */
 import {spawnSync} from 'node:child_process';
-import {randomUUID} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import {constants as fsConstants,promises as fs} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -35,20 +35,47 @@ const PARENT='C:\\ProgramData\\Nexowire';
 const ROOT=path.win32.join(PARENT,'hub-cutover-recovery');
 const JOURNAL=path.win32.join(ROOT,'journal.json');
 const RECOVERY=path.win32.join(ROOT,'rollback.ps1');
+const CUTOVER_LOCK=path.win32.join(ROOT,'cutover.lock');
 const TASK='Nexowire Hub Cutover Recovery';
 const POWERSHELL='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
 const LAUNCHER=path.win32.join(os.homedir(),'.nexowire','hub-service','launch.ps1');
 const SYSTEM_LAUNCHER='C:\\ProgramData\\Nexowire\\hub-boot\\launch.ps1';
 
+const RECOVERABLE_JOURNAL_PHASES=[
+  'ARMED','QUIESCING','QUIESCED','COPIED','RECEIPT_ISSUED',
+  'SYSTEM_INSTALLING','SYSTEM_STARTED','HEALTHY','AWAITING_PHYSICAL_ACCEPTANCE',
+] as const;
+type RecoverableJournalPhase=typeof RECOVERABLE_JOURNAL_PHASES[number];
+type JournalPhase='NEW'|RecoverableJournalPhase|'COMPLETE'|'ROLLED_BACK';
 interface Journal {
   version:1;
   host:string;
-  phase:string;
+  phase:JournalPhase;
   marker:string;
   port:number;
   originalUserPrincipal:string;
   sourceRoot:string;
+  launcherPath:string;
+  launcherSha256:string;
   createdAt:string;
+}
+/** Match PowerShell Get-FileHash on the original bytes; reject lossy UTF-8 decoding. */
+export function decodeCutoverLauncherProof(bytes:Buffer):{raw:string;digest:string}{
+  const raw=bytes.toString('utf8');
+  if(!Buffer.from(raw,'utf8').equals(bytes))
+    throw new Error('AI04_LEGACY_LAUNCHER_ENCODING_UNTRUSTED');
+  return {raw,digest:createHash('sha256').update(bytes).digest('hex')};
+}
+/** Re-read persisted launcher identity at each crossing of the old writer boundary. */
+async function assertLegacyLauncherBoundToJournal(journal:Journal):Promise<void>{
+  const {raw,digest}=decodeCutoverLauncherProof(await fs.readFile(LAUNCHER));
+  const env=parsePersistedHubLauncherEnvironment(raw);
+  const source=assertCanonicalHubStateSourcePath(env.NEXOWIRE_STATE_DIR);
+  const port=Number(env.NEXOWIRE_HTTP_PORT??'43110');
+  if(journal.launcherPath!==LAUNCHER||source!==journal.sourceRoot||
+     port!==journal.port||digest!==journal.launcherSha256){
+    throw new Error('AI04_LEGACY_LAUNCHER_CHANGED_DURING_CUTOVER');
+  }
 }
 function psLiteral(value:string):string{return "'"+value.replaceAll("'","''")+"'";}
 /**
@@ -101,12 +128,17 @@ export function systemHubRecoveryTaskAbsencePreflightScript():string{
     "'OK'",
   ].join('\r\n');
 }
-function runPS(code:string):string{
+const TASK_READBACK_TIMEOUT_MS=45_000;
+// Match the independent recovery task's existing five-minute execution budget.
+// The recovery script may spend 45s probing SYSTEM health, 20s waiting for
+// shutdown, and 30s verifying legacy health, excluding filesystem hashing.
+export const SYSTEM_HUB_ROLLBACK_TIMEOUT_MS=5*60_000;
+function runPS(code:string,timeoutMs=TASK_READBACK_TIMEOUT_MS):string{
   const r=spawnSync(POWERSHELL,[
     '-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-EncodedCommand',
     Buffer.from(code,'utf16le').toString('base64')],
     {cwd:'C:\\Windows\\System32',windowsHide:true,shell:false,
-      env:protectedWindowsAclEnvironment(),encoding:'utf8',timeout:45000,maxBuffer:256*1024});
+      env:protectedWindowsAclEnvironment(),encoding:'utf8',timeout:timeoutMs,maxBuffer:256*1024});
   if(r.status!==0||r.error)throw new Error('AI04_ELEVATED_TASK_OPERATION_FAILED');
   return (r.stdout??'').trim();
 }
@@ -143,7 +175,7 @@ async function privateWrite(file:string,data:string):Promise<void>{
   try{await handle.writeFile(data,'utf8');await handle.sync()}finally{await handle.close()}
   privateFileAcl(file);
 }
-async function advance(journal:Journal,phase:string):Promise<void>{
+async function advance(journal:Journal,phase:RecoverableJournalPhase):Promise<void>{
   journal.phase=phase;
   const temp=path.win32.join(ROOT,'journal-'+randomUUID()+'.tmp');
   await privateWrite(temp,JSON.stringify(journal,null,2)+'\n');
@@ -191,13 +223,48 @@ export const SYSTEM_HUB_RECOVERY_FINAL_ABSENCE_PS=[
   "}",
   "if(-not $notFound){throw 'AI04_RECOVERY_BOOT_STILL_REGISTERED_OR_HIDDEN'}",
 ].join('\r\n');
+export const SYSTEM_HUB_RECOVERY_LAUNCHER_PROOF_PS=[
+  "$launcher=[string]$journal.launcherPath",
+  "$launcherSha=[string]$journal.launcherSha256",
+  "if(-not [IO.Path]::IsPathRooted($launcher) -or $launcherSha -cnotmatch '^[0-9a-f]{64}$'){throw 'AI04_RECOVERY_LAUNCHER_JOURNAL_UNTRUSTED'}",
+  "$savedLauncher=Join-Path $root 'original-user-launcher.ps1'",
+  "if(-not (Test-Path -LiteralPath $launcher -PathType Leaf) -or -not (Test-Path -LiteralPath $savedLauncher -PathType Leaf)){throw 'AI04_RECOVERY_LEGACY_LAUNCHER_MISSING'}",
+  "$onDiskHash=(Get-FileHash -LiteralPath $launcher -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()",
+  "$savedHash=(Get-FileHash -LiteralPath $savedLauncher -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()",
+  "if($onDiskHash -cne $launcherSha -or $savedHash -cne $launcherSha){throw 'AI04_RECOVERY_LEGACY_LAUNCHER_CHANGED'}",
+].join('\r\n');
+/** Re-read trusted task identity before ANY automatic SYSTEM resume. */
+export const SYSTEM_HUB_RECOVERY_RESUME_TASK_PS=[
+  "$resumeTask=Get-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\\' -ErrorAction Stop",
+  "if([string]$resumeTask.TaskName -cne 'Nexowire Hub Boot' -or [string]$resumeTask.TaskPath -cne '\\' -or [string]$resumeTask.Principal.UserId -notin @('SYSTEM','S-1-5-18') -or [string]$resumeTask.Description -cne [string]$journal.marker){throw 'AI04_RECOVERY_RESUME_TASK_CHANGED'}",
+  "$resumeActions=@($resumeTask.Actions)",
+  "if($resumeActions.Count -ne 1 -or [string]$resumeActions[0].Execute -cne 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe' -or [string]$resumeActions[0].Arguments -cne $expected){throw 'AI04_RECOVERY_RESUME_ACTION_CHANGED'}",
+].join('\r\n');
 export const SYSTEM_HUB_RECOVERY_PS=[
   "$ErrorActionPreference='Stop'",
   "$root='C:\\ProgramData\\Nexowire\\hub-cutover-recovery'",
+  // The Node cutover holds this protected file open for write. Win32 rejects
+  // a FileShare.None open while such a handle exists; a second recovery is
+  // also excluded. Process exit releases the OS handle, not the evidence file.
+  "$lockPath=Join-Path $root 'cutover.lock'",
+  "try{",
+  "  $lockInfo=Get-Item -LiteralPath $lockPath -Force -ErrorAction Stop",
+  "  if($lockInfo.PSIsContainer -or $lockInfo.Length -ne 0 -or (($lockInfo.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)){throw 'AI04_RECOVERY_LOCK_UNTRUSTED'}",
+  "  $recoveryLock=[IO.File]::Open($lockPath,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)",
+  "}catch{throw 'AI04_RECOVERY_LOCK_UNAVAILABLE'}",
+  "try{",
   "$journalPath=Join-Path $root 'journal.json'",
   "$journal=Get-Content -LiteralPath $journalPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop",
   "if($journal.version -ne 1 -or [string]$journal.host -cne $env:COMPUTERNAME){throw 'AI04_RECOVERY_JOURNAL_FOREIGN'}",
+  // Reject all noncanonical phase spellings before the terminal-state exit.
+  // Keep the established AI-07 terminal-phase contract without accepting
+  // case-insensitive aliases of COMPLETE or ROLLED_BACK.
+  "if([string]$journal.phase -cnotin @("+[...RECOVERABLE_JOURNAL_PHASES,'COMPLETE','ROLLED_BACK'].map(psLiteral).join(',')+")){throw 'AI04_RECOVERY_UNKNOWN_PHASE'}",
   "if($journal.phase -in @('COMPLETE','ROLLED_BACK')){exit 0}",
+  // ARMED is published before the first legacy mutation attempt. A later
+  // owner stop must not be undone by the independent recovery timer.
+  "if([string]$journal.phase -ceq 'ARMED'){throw 'AI04_RECOVERY_QUIESCE_NOT_ATTEMPTED'}",
+  SYSTEM_HUB_RECOVERY_LAUNCHER_PROOF_PS,
   "$port=[int]$journal.port",
   "if($port -lt 1 -or $port -gt 65535){throw 'AI04_RECOVERY_PORT_UNTRUSTED'}",
   SYSTEM_HUB_RECOVERY_BOOT_VISIBILITY_PS,
@@ -273,18 +340,37 @@ export const SYSTEM_HUB_RECOVERY_PS=[
   // Restore availability using only the already owner-verified task.
   "  try{& $validateState}catch{",
   "    $divergence=$_",
-  "    try{Start-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\\' -ErrorAction Stop}catch{throw 'AI04_RECOVERY_SYSTEM_RESUME_FAILED'}",
+  "    try{",
+  SYSTEM_HUB_RECOVERY_RESUME_TASK_PS,
+  "      Start-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\\' -ErrorAction Stop",
+  "    }catch{throw 'AI04_RECOVERY_SYSTEM_RESUME_FAILED'}",
   "    throw $divergence",
   "  }",
   "  $current=Get-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\\' -ErrorAction Stop",
   "  if([string]$current.Description -cne [string]$journal.marker -or [string]$current.Principal.UserId -notin @('SYSTEM','S-1-5-18')){throw 'AI04_RECOVERY_BOOT_REPLACED'}",
+  // A replaced task action must never be unregistered as though it were the original.
+  SYSTEM_HUB_RECOVERY_RESUME_TASK_PS,
+  "  try{",
+  SYSTEM_HUB_RECOVERY_LAUNCHER_PROOF_PS,
+  "  }catch{",
+  "    $launcherDrift=$_",
+  "    try{",
+  SYSTEM_HUB_RECOVERY_RESUME_TASK_PS,
+  "      Start-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\\' -ErrorAction Stop",
+  "    }catch{throw 'AI04_RECOVERY_SYSTEM_RESUME_FAILED'}",
+  "    throw $launcherDrift",
+  "  }",
   "  Unregister-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\\' -Confirm:$false",
+  // No stale legacy fallback even if a detached writer mutates after unregister.
+  "  & $validateState",
   "}",
 
 
 
 
   SYSTEM_HUB_RECOVERY_FINAL_ABSENCE_PS,
+  SYSTEM_HUB_RECOVERY_LAUNCHER_PROOF_PS,
+  "& $validateState",
   "$user=Get-ScheduledTask -TaskName 'Nexowire Hub' -TaskPath '\\' -ErrorAction Stop",
   "if([string]$user.Principal.UserId -cne [string]$journal.originalUserPrincipal){throw 'AI04_RECOVERY_LEGACY_TASK_REPLACED'}",
   "$portOwner=@(Get-NetTCPConnection -State Listen -ErrorAction Stop | Where-Object LocalPort -eq $port)",
@@ -306,8 +392,42 @@ export const SYSTEM_HUB_RECOVERY_PS=[
   "$temp=Join-Path $root ('recovery-'+[guid]::NewGuid().ToString()+'.tmp')",
   "$journal | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $temp -Encoding UTF8 -ErrorAction Stop",
   "Move-Item -LiteralPath $temp -Destination $journalPath -Force -ErrorAction Stop",
+  "}finally{$recoveryLock.Dispose()}",
 ].join('\r\n');
 
+/** Non-mutating recovery admission; distinguish inaccessible from absent files. */
+export async function assertRecoveryArtifactPresent(file:string):Promise<void>{
+  let stat;
+  try{stat=await fs.lstat(file)}catch(error){
+    if((error as NodeJS.ErrnoException).code==='ENOENT')
+      throw new Error('AI04_ROLLBACK_ARTIFACT_MISSING',{cause:error});
+    throw error;
+  }
+  if(!stat.isFile()||stat.isSymbolicLink()||stat.nlink!==1)
+    throw new Error('AI04_ROLLBACK_ARTIFACT_UNTRUSTED');
+}
+/** Read back PowerShell 5.1 UTF-8 (with BOM) or Node UTF-8 journal bytes.
+ * A terminal phase from a different transaction is not recovery evidence.
+ */
+export function assertDurableRollbackConfirmation(
+  bytes:Buffer,expected:Pick<Journal,'version'|'host'|'marker'|'sourceRoot'|'launcherPath'|'launcherSha256'|'port'|'originalUserPrincipal'|'createdAt'>,
+):void{
+  let restored:unknown;
+  try{
+    const decoded=new TextDecoder('utf-8',{fatal:true}).decode(bytes);
+    restored=JSON.parse(decoded);
+  }catch(error){
+    throw new Error('AI04_ROLLBACK_DURABLE_CONFIRMATION_MISSING',{cause:error});
+  }
+  if(!restored||typeof restored!=='object'||Array.isArray(restored))
+    throw new Error('AI04_ROLLBACK_DURABLE_CONFIRMATION_MISSING');
+  const record=restored as Record<string,unknown>;
+  if(record.phase!=='ROLLED_BACK'||([
+    'version','host','marker','sourceRoot','launcherPath','launcherSha256',
+    'port','originalUserPrincipal','createdAt',
+  ] as const).some(key=>record[key]!==expected[key]))
+    throw new Error('AI04_ROLLBACK_DURABLE_CONFIRMATION_MISSING');
+}
 function validateRecoveredScript():void{
   trustedAncestors();
   verifyWindowsPrivateAcl(ROOT);
@@ -316,7 +436,7 @@ function validateRecoveredScript():void{
 }
 function runRollbackScript():void{
   validateRecoveredScript();
-  runPS('& '+psLiteral(RECOVERY));
+  runPS('& '+psLiteral(RECOVERY),SYSTEM_HUB_ROLLBACK_TIMEOUT_MS);
 }
 export async function controlledSystemHubCutover(
   trustedCli:string,
@@ -325,8 +445,27 @@ export async function controlledSystemHubCutover(
   const marker='Nexowire pre-logon Hub install '+randomUUID();
   const journal:Journal={
     version:1,host:os.hostname(),phase:'NEW',marker,port:0,
-    sourceRoot:'',originalUserPrincipal:'',createdAt:new Date().toISOString(),
+    sourceRoot:'',launcherPath:LAUNCHER,launcherSha256:'',
+    originalUserPrincipal:'',createdAt:new Date().toISOString(),
   };
+  let cutoverLock:Awaited<ReturnType<typeof fs.open>>|undefined;
+  const releaseCutoverLock=async():Promise<void>=>{
+    if(!cutoverLock)return;
+    await cutoverLock.close();
+    cutoverLock=undefined;
+  };
+  const assertCutoverLockHeld=async():Promise<void>=>{
+    if(!cutoverLock)throw new Error('AI04_CUTOVER_LOCK_UNVERIFIED');
+    const open=await cutoverLock.stat({bigint:true});
+    const named=await fs.lstat(CUTOVER_LOCK,{bigint:true});
+    if(!open.isFile()||!named.isFile()||named.isSymbolicLink()||
+       open.nlink!==1n||named.nlink!==1n||open.size!==0n||named.size!==0n||
+       open.dev!==named.dev||open.ino!==named.ino)
+      throw new Error('AI04_CUTOVER_LOCK_UNVERIFIED');
+  };
+  let cutoverFailed=false;
+  let cutoverFailure:unknown;
+  try{
   return await runRecoverableSystemHubCutover({
     async preflight(){
       // No recovery artifacts or user Hub changes when the state volume is full.
@@ -343,8 +482,10 @@ export async function controlledSystemHubCutover(
       const boot=await hubBootLifecycleStatus();
       if(boot.installed||boot.state!=='not-installed')
         throw new Error('AI04_EXISTING_OR_HIDDEN_SYSTEM_BOOT_TASK_DENIED');
-      const env=parsePersistedHubLauncherEnvironment(await fs.readFile(LAUNCHER,'utf8'));
+      const {raw:persistedLauncher,digest:launcherDigest}=decodeCutoverLauncherProof(await fs.readFile(LAUNCHER));
+      const env=parsePersistedHubLauncherEnvironment(persistedLauncher);
       journal.sourceRoot=assertCanonicalHubStateSourcePath(env.NEXOWIRE_STATE_DIR);
+      journal.launcherSha256=launcherDigest;
       // The actual source may be a mount point independent of the user profile.
       // Confirm it before registering any recovery artifact or stopping the Hub.
       await assertSystemCutoverDiskReserve(undefined,os.homedir(),journal.sourceRoot);
@@ -368,8 +509,15 @@ export async function controlledSystemHubCutover(
       setProtectedOwner(ROOT);
       hardenWindowsProgramDataAcl(ROOT);
       verifyWindowsPrivateAcl(ROOT);
-      await fs.copyFile(LAUNCHER,path.win32.join(ROOT,'original-user-launcher.ps1'),fsConstants.COPYFILE_EXCL);
-      privateFileAcl(path.win32.join(ROOT,'original-user-launcher.ps1'));
+      // Create and harden the lock before publishing any recovery task.
+      await privateWrite(CUTOVER_LOCK,'');
+      cutoverLock=await fs.open(CUTOVER_LOCK,'r+');
+      await assertCutoverLockHeld();
+      const backupLauncher=path.win32.join(ROOT,'original-user-launcher.ps1');
+      await fs.copyFile(LAUNCHER,backupLauncher,fsConstants.COPYFILE_EXCL);
+      privateFileAcl(backupLauncher);
+      if(createHash('sha256').update(await fs.readFile(backupLauncher)).digest('hex')!==journal.launcherSha256)
+        throw new Error('AI04_RECOVERY_LAUNCHER_BACKUP_MISMATCH');
       const xml=runPS("$ErrorActionPreference='Stop';Export-ScheduledTask -TaskName 'Nexowire Hub' -TaskPath '\\' -ErrorAction Stop");
       if(!xml.startsWith('<?xml')&&!xml.startsWith('<Task'))throw new Error('AI04_RECOVERY_TASK_XML_UNVERIFIED');
       await privateWrite(path.win32.join(ROOT,'original-user-task.xml'),xml+'\n');
@@ -385,7 +533,7 @@ export async function controlledSystemHubCutover(
         "$startup=New-ScheduledTaskTrigger -AtStartup",
         "$timeout=New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(15) -RepetitionInterval (New-TimeSpan -Minutes 15) -RepetitionDuration (New-TimeSpan -Days 365)",
         "$principal=New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest",
-        "$settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 5)",
+        "$settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Seconds "+(SYSTEM_HUB_ROLLBACK_TIMEOUT_MS/1000)+")",
         "Register-ScheduledTask -TaskName "+psLiteral(TASK)+" -TaskPath '\\' -Action $action -Trigger @($startup,$timeout) -Principal $principal -Settings $settings -ErrorAction Stop|Out-Null",
         ].join('\n'));
       const taskCheck=runPS(systemHubRecoveryTaskReadbackScript());
@@ -399,12 +547,16 @@ export async function controlledSystemHubCutover(
         throw new Error('AI04_RECOVERY_TASK_CHANGED_BEFORE_QUIESCE');
       verifyWindowsPrivateAcl(RECOVERY);
       verifyWindowsPrivateAcl(JOURNAL);
+      verifyWindowsPrivateAcl(CUTOVER_LOCK);
+      await assertCutoverLockHeld();
+      await assertLegacyLauncherBoundToJournal(journal);
       // Other processes can consume space while the recovery task is armed.
       // Recheck the authoritative source path as well as the protected target
       // immediately before disabling the existing user Hub.
       await assertSystemCutoverDiskReserve(undefined,os.homedir(),journal.sourceRoot);
     },
     async quiesceLegacy(){
+      await assertCutoverLockHeld();
       await advance(journal,'QUIESCING');
       runPS([
         "$ErrorActionPreference='Stop'",
@@ -428,16 +580,23 @@ export async function controlledSystemHubCutover(
       await advance(journal,'QUIESCED');
     },
     async copyProtectedState(){
+      await assertCutoverLockHeld();
       trustedAncestors();
+      await assertLegacyLauncherBoundToJournal(journal);
       await prepareProtectedOfflineSystemHubStateCopy(LAUNCHER,true);
+      await assertLegacyLauncherBoundToJournal(journal);
       await advance(journal,'COPIED');
     },
     async issueReceipt(){
+      await assertCutoverLockHeld();
       assertInteractiveHubTaskDisabledReadOnly();
+      await assertLegacyLauncherBoundToJournal(journal);
       await issueOfflineSystemStateCutoverReceipt(LAUNCHER,true);
+      await assertLegacyLauncherBoundToJournal(journal);
       await advance(journal,'RECEIPT_ISSUED');
     },
     async installSystemHub(){
+      await assertCutoverLockHeld();
       await advance(journal,'SYSTEM_INSTALLING');
       await installHubBootLifecycle({
         execPath:process.execPath,execArgv:[],
@@ -446,6 +605,7 @@ export async function controlledSystemHubCutover(
       await advance(journal,'SYSTEM_STARTED');
     },
     async verifySystemHub(){
+      await assertCutoverLockHeld();
       const status=await hubBootLifecycleStatus();
       if(!status.installed||status.state!=='running'||!status.pid)
         throw new Error('AI04_SYSTEM_HUB_NOT_RUNNING');
@@ -463,6 +623,7 @@ export async function controlledSystemHubCutover(
       await advance(journal,'HEALTHY');
     },
     async commit(){
+      await assertCutoverLockHeld();
       // A healthy SYSTEM PID and HTTP 200 are NOT sufficient for physical
       // acceptance. Never disarm recovery on this incomplete evidence.
       const disposition=postHealthSystemHubDisposition();
@@ -473,18 +634,29 @@ export async function controlledSystemHubCutover(
       // independent DPAPI, SQLite, CORE, Broker and reboot acceptance.
     },
     async rollback(){
-      try{await fs.lstat(RECOVERY)}catch{
-        // The preflight never touched the legacy Hub before recovery creation.
-        return;
-      }
+      // The orchestrator only requests rollback after recovery was armed and
+      // quiescence was attempted. Missing evidence is a failed rollback, never
+      // proof that the original writer is restored.
+      await assertRecoveryArtifactPresent(RECOVERY);
+      await assertCutoverLockHeld();
+      // Transfer execution to the PowerShell exclusive handle. If the
+      // scheduled recovery wins the race, the manual attempt fails closed.
+      await releaseCutoverLock();
       runRollbackScript();
       // PowerShell may exit successfully for a previously COMPLETE cutover.
       // Do not report a rollback unless the durable journal confirms one.
-      const restored=JSON.parse(await fs.readFile(JOURNAL,'utf8')) as {phase?:unknown};
-      if(restored.phase!=='ROLLED_BACK')
-        throw new Error('AI04_ROLLBACK_DURABLE_CONFIRMATION_MISSING');
+      assertDurableRollbackConfirmation(await fs.readFile(JOURNAL),journal);
     },
   });
+  }catch(error){
+    cutoverFailed=true;cutoverFailure=error;throw error;
+  }finally{
+    try{await releaseCutoverLock()}
+    catch(error){
+      if(cutoverFailed)throw new AggregateError([cutoverFailure,error],'AI04_CUTOVER_AND_LOCK_RELEASE_FAILED');
+      throw new Error('AI04_CUTOVER_LOCK_RELEASE_UNVERIFIED',{cause:error});
+    }
+  }
 }
 if(process.argv[1]&&pathToFileURL(path.resolve(process.argv[1])).href===import.meta.url){
   ensureElevated();

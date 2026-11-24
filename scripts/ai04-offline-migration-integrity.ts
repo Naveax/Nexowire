@@ -5,6 +5,9 @@
  */
 import {promises as fs} from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
+import {assertSystemCutoverDiskReserve,SYSTEM_CUTOVER_MINIMUM_FREE_BYTES}
+  from '../src/hub/system-cutover-disk-reserve.js';
 import {pathToFileURL} from 'node:url';
 import {
   verifyWindowsPrivateAcl,
@@ -29,14 +32,14 @@ function canonicalWindowsRoot(root:string):string{
   return path.win32.normalize(root);
 }
 
-const MIGRATION_DISK_RESERVE_BYTES=4n*1024n*1024n*1024n;
+const MIGRATION_DISK_RESERVE_BYTES=SYSTEM_CUTOVER_MINIMUM_FREE_BYTES;
 
 /** A conservative pre-copy estimate, not proof the volume will remain stable. */
 export function calculateProtectedMigrationDiskBudget(
   freeBytes:bigint,sourceStateBytes:bigint,
 ):{availableBytes:string;requiredBytes:string;sufficient:boolean;readyForSystemCutover:false}{
   if(freeBytes<0n||sourceStateBytes<0n)throw new Error('AI04_DISK_BUDGET_INPUT_INVALID');
-  // Keep a 4 GiB OS/SQLite reserve and room for two full state trees (copy +
+  // Keep the 4.1 GiB OS/SQLite floor and room for two state trees (copy +
   // rollback/staging). The eventual migrator must independently recheck space.
   const required=MIGRATION_DISK_RESERVE_BYTES+2n*sourceStateBytes;
   return {availableBytes:freeBytes.toString(),requiredBytes:required.toString(),
@@ -98,9 +101,11 @@ export async function inspectProtectedMigrationDiskBudgetReadOnly(sourceRoot:str
   if(!Number.isSafeInteger(inventory.regularFileBytes)||inventory.regularFileBytes<0)
     throw new Error('AI04_STATE_SIZE_UNVERIFIED');
   const backupBytes=await recoveryBackupBytesReadOnly(source);
-  // SYSTEM destination is fixed on C:. Never use source's OneDrive volume as
-  // a proxy for destination capacity; inspect Windows ProgramData directly.
-  const stats=await fs.statfs('C:\\ProgramData',{bigint:true});
+  // An elevated home, legacy source and protected staging root can reside
+  // on independent volumes; each must meet the operational headroom floor.
+  await assertSystemCutoverDiskReserve(undefined,os.homedir(),source);
+  // The stage may not exist, so probe the protected parent mount in use.
+  const stats=await fs.statfs(path.win32.dirname(SYSTEM_HUB_STATE_PATH),{bigint:true});
   return calculateProtectedMigrationDiskBudget(
     stats.bavail*stats.bsize,BigInt(inventory.regularFileBytes)+backupBytes,
   );
