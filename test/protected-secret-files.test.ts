@@ -44,7 +44,10 @@ test(
         ),
       (error: unknown) =>
         error instanceof WindowsDpapiError &&
-        error.code === 'WINDOWS_DPAPI_FAILED',
+        error.code === 'WINDOWS_DPAPI_FAILED' &&
+        error.diagnostic?.operation === 'unprotect' &&
+        error.diagnostic.stage === 'crypto-rejected' &&
+        error.diagnostic.failure === 'crypto-rejected',
     );
   },
 );
