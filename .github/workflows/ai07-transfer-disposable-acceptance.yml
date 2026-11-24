@@ -1,0 +1,95 @@
+name: AI-07 Disposable Transfer Acceptance
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/ai07-transfer-disposable-acceptance.yml'
+      - 'src/agent/*transfer*.ts'
+      - 'src/security/*transfer*.ts'
+      - 'src/mcp/*transfer*.ts'
+      - 'sql/large-transfer-authority.sql'
+      - 'sql/core-broker-dispatch-authority.sql'
+      - 'test/mcp/ai07-*.test.ts'
+      - 'scripts/ci/assert-tap-summary.mjs'
+      - 'package-lock.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai07-transfer-acceptance-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  postgres-transfer:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: nexowire_dispatch_ci
+          POSTGRES_PASSWORD: ci-only-not-a-production-credential
+          POSTGRES_DB: nexowire_dispatch_ci
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U nexowire_dispatch_ci -d nexowire_dispatch_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - name: Real disposable PostgreSQL transaction tests (not physical authority)
+        shell: bash
+        env:
+          NEXOWIRE_PG_DISPATCH_INTEGRATION: '1'
+          NEXOWIRE_PG_DISPATCH_TEST_PORT: ${{ job.services.postgres.ports[5432] }}
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          node --test --test-reporter=tap --import tsx test/mcp/ai07-postgres-transfer-authority.test.ts | tee "$RUNNER_TEMP/ai07-pg.tap"
+          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/ai07-pg.tap" 2
+
+  windows-ntfs-transfer:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: windows-2022
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - name: Disposable NTFS source fixture (unsigned helper, not production signing acceptance)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $tap = Join-Path $env:RUNNER_TEMP 'ai07-ntfs.tap'
+          node --test --test-reporter=tap --import tsx test/mcp/ai07-windows-protected-publisher.test.ts | Tee-Object -FilePath $tap
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/ci/assert-tap-summary.mjs $tap 3
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

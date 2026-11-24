@@ -5,7 +5,7 @@ import {promises as fs} from 'node:fs';
 import path from 'node:path';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
-import {createWindowsProtectedTransferPublisher} from '../../src/agent/windows-protected-transfer-publisher.js';
+import {createWindowsProtectedTransferPublisher,canonicalProtectedTransferPath} from '../../src/agent/windows-protected-transfer-publisher.js';
 import {ProtectedTransferReceiptStore} from '../../src/agent/protected-transfer-receipt-store.js';
 import {NativeTransferPublisher,verifyNativeTransferReceipt,type NativeTransferAdmission} from '../../src/agent/native-transfer-publisher.js';
 import {hardenWindowsProgramDataAcl,verifyWindowsPrivateAcl,protectedWindowsAclEnvironment} from '../../src/security/windows-programdata-acl.js';
@@ -14,6 +14,14 @@ const run=promisify(execFile);
 const hosted=process.platform==='win32'&&process.env.GITHUB_ACTIONS==='true'&&process.env.RUNNER_ENVIRONMENT==='github-hosted';
 test('missing protected Windows runtime cannot create a publisher or elevate',async()=>{
   await assert.rejects(createWindowsProtectedTransferPublisher({} as Parameters<typeof createWindowsProtectedTransferPublisher>[0]),/PROTECTED_BOOTSTRAP_REQUIRED/);
+});
+test('protected target path rejects reserved devices, invalid characters and noncanonical roots',()=>{
+  const root='C:\\ProgramData\\Nexowire\\target\\';
+  assert.equal(canonicalProtectedTransferPath(root+'artifact.bin'),root+'artifact.bin');
+  for(const name of ['CON','CONIN$','CONOUT$.txt','COM¹.log','LPT²','COM9','NUL.txt','bad?name','bad*name','bad<name','bad>name','bad|name','bad"name','bad:name','trailing.','trailing ','..\\escape.bin','sub/escape.bin','bad\x01name']){
+    assert.throws(()=>canonicalProtectedTransferPath(root+name),/WINDOWS_TRANSFER_PATH_DENIED/,JSON.stringify(name));
+  }
+  for(const name of ['D:\\ProgramData\\file','C:\\Users\\file','\\\\server\\share\\file','C:\\ProgramData\\target\\','C:relative'])assert.throws(()=>canonicalProtectedTransferPath(name),/WINDOWS_TRANSFER_PATH_DENIED/);
 });
 test('Windows hosted NTFS fixture: actual volume flush, private roots, no-overwrite publication and original signed receipt reopen',
   {timeout:180000,skip:hosted?false:'Requires disposable elevated GitHub-hosted Windows runner; no live-host volume flush'},async t=>{
