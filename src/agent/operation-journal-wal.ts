@@ -1,5 +1,6 @@
 import {promises as fs} from 'node:fs';
 import {endianness} from 'node:os';
+import {setTimeout as delay} from 'node:timers/promises';
 
 /**
  * Conservative, streaming validation of SQLite WAL frames before connecting
@@ -16,6 +17,17 @@ export class AgentJournalWalError extends Error {
   constructor(message:string){
     super(message);
     this.name='AgentJournalWalError';
+  }
+}
+
+// A volatile ordinary WAL-index timestamp can change as SQLite releases an
+// mmap reader even while the same file and durable WAL remain in place.
+// This is not a positive corruption finding, nor proof of a live owner.
+export class AgentJournalWalUnstableError extends Error {
+  readonly code='AGENT_JOURNAL_WAL_UNSTABLE';
+  constructor(){
+    super('SQLite WAL-index snapshot remained unstable; mutation dispatch denied.');
+    this.name='AgentJournalWalUnstableError';
   }
 }
 
@@ -52,13 +64,22 @@ async function readExactly(handle:fs.FileHandle,buf:Buffer,length:number,at:numb
 // These checks do not replace native-singleton ownership or an atomic SQLite
 // open/verify handoff in the journal owner.
 type FileSnapshot={dev:number;ino:number;size:number;mtimeMs:number;ctimeMs:number};
-async function assertStablePath(file:string,opened:FileSnapshot):Promise<void>{
+function assertSnapshotMetadata(current:FileSnapshot,opened:FileSnapshot,
+  retryIndexTimestamp:boolean):void{
+  // Identity and size changes are not the narrow retryable condition.
+  if(current.dev!==opened.dev||current.ino!==opened.ino||
+     current.size!==opened.size)fail();
+  if(current.mtimeMs!==opened.mtimeMs||current.ctimeMs!==opened.ctimeMs){
+    if(retryIndexTimestamp)throw new AgentJournalWalUnstableError();
+    fail();
+  }
+}
+async function assertStablePath(file:string,opened:FileSnapshot,
+  retryIndexTimestamp=false):Promise<void>{
   let current;
   try{current=await fs.lstat(file)}catch{fail();}
-  if(!current.isFile()||current.isSymbolicLink()||
-     current.dev!==opened.dev||current.ino!==opened.ino||
-     current.size!==opened.size||current.mtimeMs!==opened.mtimeMs||
-     current.ctimeMs!==opened.ctimeMs)fail();
+  if(!current.isFile()||current.isSymbolicLink())fail();
+  assertSnapshotMetadata(current,opened,retryIndexTimestamp);
 }
 
 
@@ -81,9 +102,10 @@ async function readIndexSnapshot(dbFile:string,strictShape:boolean):Promise<Inde
   }
   try{
     const opened=await handle.stat();
-    if(!opened.isFile()||opened.dev!==prior.dev||opened.ino!==prior.ino||
-       opened.size!==prior.size||opened.mtimeMs!==prior.mtimeMs||
-       opened.ctimeMs!==prior.ctimeMs)fail();
+    if(!opened.isFile())fail();
+    // Only ordinary, already fully checksummed WALs allow a fresh scan
+    // after SHM timestamp drift. Frameless/reuse checks stay strict.
+    assertSnapshotMetadata(opened,prior,!strictShape);
     if(opened.size<32768||opened.size%32768!==0){
       if(strictShape)fail();
       return undefined;
@@ -91,9 +113,8 @@ async function readIndexSnapshot(dbFile:string,strictShape:boolean):Promise<Inde
     const bytes=Buffer.alloc(136);
     await readExactly(handle,bytes,bytes.length,0);
     const after=await handle.stat();
-    if(after.size!==opened.size||after.mtimeMs!==opened.mtimeMs||
-       after.ctimeMs!==opened.ctimeMs)fail();
-    await assertStablePath(file,opened);
+    assertSnapshotMetadata(after,opened,!strictShape);
+    await assertStablePath(file,opened,!strictShape);
     return {bytes,dev:opened.dev,ino:opened.ino,size:opened.size,
       mtimeMs:opened.mtimeMs,ctimeMs:opened.ctimeMs};
   }finally{await handle.close();}
@@ -235,6 +256,22 @@ async function readReuseIndex(dbFile:string,walHeader:Buffer,pageSize:number,
  * prior-generation allocation tail needs a matching stable WAL-index boundary.
  */
 export async function verifyAgentJournalWal(dbFile:string):Promise<void>{
+  // Never open SQLite, trust an unstable index, or infer IN_USE from a
+  // filesystem race. Discard the entire failed scan and reopen/revalidate
+  // both files from byte zero, at most twice. Only the journal's existing
+  // OS incarnation + transaction checks can decide ownership.
+  const backoff=[10,25] as const;
+  for(let attempt=0;;attempt++){
+    try{await verifyAgentJournalWalOnce(dbFile);return;}
+    catch(error){
+      const wait=backoff[attempt];
+      if(!(error instanceof AgentJournalWalUnstableError)||wait===undefined)throw error;
+      await delay(wait);
+    }
+  }
+}
+
+async function verifyAgentJournalWalOnce(dbFile:string):Promise<void>{
   const walFile=dbFile+'-wal';
   let prior;
   try{prior=await fs.lstat(walFile)}catch(e){
