@@ -10,7 +10,7 @@ import {SYSTEM_HUB_RECOVERY_PS} from '../scripts/ai04-controlled-system-hub-cuto
 const psQuote=(value:string):string=>"'"+value.replaceAll("'","''")+"'";
 const powershell='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
 
-function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-write'|'tampered-launcher'|'late-launcher-swap'|'boot-action-swapped'|'boot-action-swapped-no-write'|'late-write-after-unregister',phase:'SYSTEM_STARTED'|'AWAITING_PHYSICAL_ACCEPTANCE'|'UNRECOGNIZED'='SYSTEM_STARTED'):void{
+function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-write'|'tampered-launcher'|'late-launcher-swap'|'boot-action-swapped'|'boot-action-swapped-no-write'|'late-write-after-unregister',phase:'SYSTEM_STARTED'|'AWAITING_PHYSICAL_ACCEPTANCE'|'UNRECOGNIZED'|'complete'|'rolled_back'='SYSTEM_STARTED'):void{
   const temp=mkdtempSync(path.join(os.tmpdir(),'ai04-fi-'));
   try{
     const source=path.join(temp,'legacy');
@@ -84,7 +84,7 @@ function executeIsolatedRecoveryFailureInjection(mode:'pre-stop'|'late-shutdown-
         ' -or $script:resumeCount -ne '+(['late-shutdown-write','late-launcher-swap'].includes(mode)?'1':'0')+
         ' -or $script:removeCount -ne '+(mode==='late-write-after-unregister'?'1':'0')+'){'+
         'throw ("AI04_UNEXPECTED_MUTATIONS: stop="+$script:stopCount+" resume="+$script:resumeCount+" remove="+$script:removeCount+" reason="+$failure)}',
-      'if($failure -notmatch "'+(phase==='UNRECOGNIZED'
+      'if($failure -notmatch "'+(['UNRECOGNIZED','complete','rolled_back'].includes(phase)
         ?'AI04_RECOVERY_UNKNOWN_PHASE'
         :mode==='boot-action-swapped'
           ?'AI04_RECOVERY_SYSTEM_RESUME_FAILED'
@@ -154,4 +154,10 @@ test('replaced SYSTEM task action after stop prevents task removal even when sta
 test('late SYSTEM write after unregister refuses to start stale user Hub',
   {skip:process.platform!=='win32'},()=>{
     executeIsolatedRecoveryFailureInjection('late-write-after-unregister');
+  });
+
+test('noncanonical terminal journal phases never silently report recovery success',
+  {skip:process.platform!=='win32'},()=>{
+    executeIsolatedRecoveryFailureInjection('pre-stop','complete');
+    executeIsolatedRecoveryFailureInjection('pre-stop','rolled_back');
   });

@@ -40,10 +40,16 @@ const POWERSHELL='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe
 const LAUNCHER=path.win32.join(os.homedir(),'.nexowire','hub-service','launch.ps1');
 const SYSTEM_LAUNCHER='C:\\ProgramData\\Nexowire\\hub-boot\\launch.ps1';
 
+const RECOVERABLE_JOURNAL_PHASES=[
+  'ARMED','QUIESCING','QUIESCED','COPIED','RECEIPT_ISSUED',
+  'SYSTEM_INSTALLING','SYSTEM_STARTED','HEALTHY','AWAITING_PHYSICAL_ACCEPTANCE',
+] as const;
+type RecoverableJournalPhase=typeof RECOVERABLE_JOURNAL_PHASES[number];
+type JournalPhase='NEW'|RecoverableJournalPhase|'COMPLETE'|'ROLLED_BACK';
 interface Journal {
   version:1;
   host:string;
-  phase:string;
+  phase:JournalPhase;
   marker:string;
   port:number;
   originalUserPrincipal:string;
@@ -52,13 +58,19 @@ interface Journal {
   launcherSha256:string;
   createdAt:string;
 }
+/** Match PowerShell Get-FileHash on the original bytes; reject lossy UTF-8 decoding. */
+export function decodeCutoverLauncherProof(bytes:Buffer):{raw:string;digest:string}{
+  const raw=bytes.toString('utf8');
+  if(!Buffer.from(raw,'utf8').equals(bytes))
+    throw new Error('AI04_LEGACY_LAUNCHER_ENCODING_UNTRUSTED');
+  return {raw,digest:createHash('sha256').update(bytes).digest('hex')};
+}
 /** Re-read persisted launcher identity at each crossing of the old writer boundary. */
 async function assertLegacyLauncherBoundToJournal(journal:Journal):Promise<void>{
-  const raw=await fs.readFile(LAUNCHER,'utf8');
+  const {raw,digest}=decodeCutoverLauncherProof(await fs.readFile(LAUNCHER));
   const env=parsePersistedHubLauncherEnvironment(raw);
   const source=assertCanonicalHubStateSourcePath(env.NEXOWIRE_STATE_DIR);
   const port=Number(env.NEXOWIRE_HTTP_PORT??'43110');
-  const digest=createHash('sha256').update(raw,'utf8').digest('hex');
   if(journal.launcherPath!==LAUNCHER||source!==journal.sourceRoot||
      port!==journal.port||digest!==journal.launcherSha256){
     throw new Error('AI04_LEGACY_LAUNCHER_CHANGED_DURING_CUTOVER');
@@ -157,7 +169,7 @@ async function privateWrite(file:string,data:string):Promise<void>{
   try{await handle.writeFile(data,'utf8');await handle.sync()}finally{await handle.close()}
   privateFileAcl(file);
 }
-async function advance(journal:Journal,phase:string):Promise<void>{
+async function advance(journal:Journal,phase:RecoverableJournalPhase):Promise<void>{
   journal.phase=phase;
   const temp=path.win32.join(ROOT,'journal-'+randomUUID()+'.tmp');
   await privateWrite(temp,JSON.stringify(journal,null,2)+'\n');
@@ -228,8 +240,8 @@ export const SYSTEM_HUB_RECOVERY_PS=[
   "$journalPath=Join-Path $root 'journal.json'",
   "$journal=Get-Content -LiteralPath $journalPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop",
   "if($journal.version -ne 1 -or [string]$journal.host -cne $env:COMPUTERNAME){throw 'AI04_RECOVERY_JOURNAL_FOREIGN'}",
-  "if($journal.phase -in @('COMPLETE','ROLLED_BACK')){exit 0}",
-  "if([string]$journal.phase -cnotin @('ARMED','QUIESCING','QUIESCED','COPIED','RECEIPT_ISSUED','SYSTEM_INSTALLING','SYSTEM_STARTED','HEALTHY','AWAITING_PHYSICAL_ACCEPTANCE')){throw 'AI04_RECOVERY_UNKNOWN_PHASE'}",
+  "if([string]$journal.phase -cin @('COMPLETE','ROLLED_BACK')){exit 0}",
+  "if([string]$journal.phase -cnotin @("+RECOVERABLE_JOURNAL_PHASES.map(psLiteral).join(',')+")){throw 'AI04_RECOVERY_UNKNOWN_PHASE'}",
   SYSTEM_HUB_RECOVERY_LAUNCHER_PROOF_PS,
   "$port=[int]$journal.port",
   "if($port -lt 1 -or $port -gt 65535){throw 'AI04_RECOVERY_PORT_UNTRUSTED'}",
@@ -407,10 +419,10 @@ export async function controlledSystemHubCutover(
       const boot=await hubBootLifecycleStatus();
       if(boot.installed||boot.state!=='not-installed')
         throw new Error('AI04_EXISTING_OR_HIDDEN_SYSTEM_BOOT_TASK_DENIED');
-      const persistedLauncher=await fs.readFile(LAUNCHER,'utf8');
+      const {raw:persistedLauncher,digest:launcherDigest}=decodeCutoverLauncherProof(await fs.readFile(LAUNCHER));
       const env=parsePersistedHubLauncherEnvironment(persistedLauncher);
       journal.sourceRoot=assertCanonicalHubStateSourcePath(env.NEXOWIRE_STATE_DIR);
-      journal.launcherSha256=createHash('sha256').update(persistedLauncher,'utf8').digest('hex');
+      journal.launcherSha256=launcherDigest;
       // The actual source may be a mount point independent of the user profile.
       // Confirm it before registering any recovery artifact or stopping the Hub.
       await assertSystemCutoverDiskReserve(undefined,os.homedir(),journal.sourceRoot);
@@ -437,7 +449,7 @@ export async function controlledSystemHubCutover(
       const backupLauncher=path.win32.join(ROOT,'original-user-launcher.ps1');
       await fs.copyFile(LAUNCHER,backupLauncher,fsConstants.COPYFILE_EXCL);
       privateFileAcl(backupLauncher);
-      if(createHash('sha256').update(await fs.readFile(backupLauncher,'utf8'),'utf8').digest('hex')!==journal.launcherSha256)
+      if(createHash('sha256').update(await fs.readFile(backupLauncher)).digest('hex')!==journal.launcherSha256)
         throw new Error('AI04_RECOVERY_LAUNCHER_BACKUP_MISMATCH');
       const xml=runPS("$ErrorActionPreference='Stop';Export-ScheduledTask -TaskName 'Nexowire Hub' -TaskPath '\\' -ErrorAction Stop");
       if(!xml.startsWith('<?xml')&&!xml.startsWith('<Task'))throw new Error('AI04_RECOVERY_TASK_XML_UNVERIFIED');

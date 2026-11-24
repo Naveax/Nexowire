@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {promises as fs} from 'node:fs';
+import {createHash} from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -9,6 +10,7 @@ import {
   SYSTEM_HUB_RECOVERY_LAUNCHER_PROOF_PS,
   SYSTEM_HUB_RECOVERY_RESUME_TASK_PS,
   assertRecoveryArtifactPresent,
+  decodeCutoverLauncherProof,
 } from '../../scripts/ai04-controlled-system-hub-cutover.js';
 
 test('rollback only recognizes explicit durable journal phases',()=>{
@@ -20,6 +22,7 @@ test('rollback only recognizes explicit durable journal phases',()=>{
   for(const phase of allowed)assert.ok(SYSTEM_HUB_RECOVERY_PS.includes("'"+phase+"'"));
   assert.match(SYSTEM_HUB_RECOVERY_PS,/AI04_RECOVERY_UNKNOWN_PHASE/);
   assert.ok(!SYSTEM_HUB_RECOVERY_PS.includes("'UNKNOWN'"));
+  assert.ok(SYSTEM_HUB_RECOVERY_PS.includes("[string]$journal.phase -cin @('COMPLETE','ROLLED_BACK')"));
 });
 
 test('launcher proof hashes current and independently backed-up launcher',()=>{
@@ -86,4 +89,15 @@ test('missing or nonregular rollback artifact is an error, not recovery success'
   const alias=path.join(root,'alias.ps1');
   await fs.link(file,alias);
   await assert.rejects(()=>assertRecoveryArtifactPresent(file),/AI04_ROLLBACK_ARTIFACT_UNTRUSTED/);
+});
+
+test('launcher proof hashes exact bytes including BOM, Unicode and CRLF',()=>{
+  const bytes=Buffer.from('\uFEFF# fixture Çığ\r\n','utf8');
+  const proof=decodeCutoverLauncherProof(bytes);
+  assert.equal(proof.raw,bytes.toString('utf8'));
+  assert.equal(proof.digest,createHash('sha256').update(bytes).digest('hex'));
+  const lossy=Buffer.from([0x23,0x80,0xff]);
+  assert.throws(()=>decodeCutoverLauncherProof(lossy),/AI04_LEGACY_LAUNCHER_ENCODING_UNTRUSTED/);
+  assert.notEqual(decodeCutoverLauncherProof(Buffer.from('# fixture\n')).digest,
+    decodeCutoverLauncherProof(Buffer.from('# fixture\r\n')).digest);
 });

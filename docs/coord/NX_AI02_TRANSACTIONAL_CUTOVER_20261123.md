@@ -26,7 +26,8 @@
 | Commit journal write/fsync/readback is UNKNOWN | **No automatic rollback**; preserve independent task and both state trees | New orchestrator fault-injection regression; source test |
 | Rollback interrupted | Report rollback failure; retain evidence, do not claim restored | Existing orchestrator regression; real Windows NOT_RUN |
 | Recovery script missing, inaccessible, directory or multiply linked | Fail rollback explicitly; never report recovery without artifact and durable journal evidence | Cross-platform disposable-file regression; physical NOT_RUN |
-| Recovery journal unknown phase | Reject before task change and do not infer `COMPLETE` | New discovered source test + isolated Windows fixture; physical NOT_RUN |
+| Recovery journal unknown or incorrectly cased terminal phase | Reject before task change and do not infer `COMPLETE` | Discovered source test + isolated Windows fixture; physical NOT_RUN |
+| Lossy launcher UTF-8 or byte drift | Reject lossy decode; hash exact original bytes to agree with PowerShell Get-FileHash | Cross-platform byte proof regression; physical NOT_RUN |
 | Launcher SHA or source/port changes at quiesce/copy/receipt | Reject; retain journal and original launcher backup | Discovered source-contract test; physical NOT_RUN |
 | Launcher replaced after SYSTEM stop | Recheck before unregister; attempt resume of exact trusted SYSTEM task | Isolated Windows failure injection + discovered source contract; OS result NOT_RUN unless separately executed |
 | Detached SYSTEM writer commits after task unregister | Recheck both durable trees immediately after unregister and again before legacy startup; refuse stale fallback | Disposable PowerShell failure injection + source contract; hosted Windows execution NOT_RUN unless independently evidenced |
