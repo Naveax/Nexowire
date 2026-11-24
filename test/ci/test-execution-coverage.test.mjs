@@ -4,10 +4,12 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {readTestInventory} from '../../scripts/ci/test-inventory.mjs';
 import {reconcileCoverage} from '../../scripts/ci/test-execution-coverage.mjs';
+import {APPROVED_ROOT_TEST_FILES} from '../../scripts/ci/portable-root-execution-receipt.mjs';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const {entries,report}=readTestInventory(root);
-const subset=entries.slice(0,3);
+const subset=APPROVED_ROOT_TEST_FILES.slice(0,3).map(file=>entries.find(e=>e.path===file));
+assert.ok(subset.every(Boolean),'reviewed test files must exist in immutable inventory');
 const receipt=()=>({
   schemaVersion:1, sourceCommitSha:report.commitSha,
   sourceManifestSha256:report.manifestSha256,
@@ -58,4 +60,81 @@ test('rejects source inventory inconsistencies',()=>{
   assert.throws(()=>reconcileCoverage([...entries,entries[0]],
     {...report,trackedTsTestFiles:entries.length+1},r),
     /TEST_COVERAGE_INVALID_INVENTORY/);
+});
+
+test('rejects any unreviewed tracked file masquerading as an approved portable root test',()=>{
+  const unapproved=entries.find(e=>!APPROVED_ROOT_TEST_FILES.includes(e.path));
+  assert.ok(unapproved,'fixture requires an unreviewed tracked test');
+  const r=receipt();
+  r.files[0]={...r.files[0],path:unapproved.path,gitBlobSha:unapproved.blob};
+  assert.throws(()=>reconcileCoverage(entries,report,r),
+    /TEST_COVERAGE_UNAPPROVED_ROOT_FILE/);
+});
+test('rejects a forged full-inventory PASS claim under the portable-root receipt scope',()=>{
+  const forged=receipt();
+  forged.files=entries.map(e=>({
+    path:e.path,gitBlobSha:e.blob,tests:1,pass:1,
+    fail:0,skipped:0,todo:0,cancelled:0,result:'PASS',
+  }));
+  forged.executedFileCount=entries.length;
+  forged.testsPassed=entries.length;
+  assert.throws(()=>reconcileCoverage(entries,report,forged),
+    /TEST_COVERAGE_UNAPPROVED_ROOT_FILE/);
+});
+test('reviewed-only receipt cannot claim full test inventory execution',()=>{
+  const approved=APPROVED_ROOT_TEST_FILES.map(file=>entries.find(e=>e.path===file));
+  assert.ok(approved.every(Boolean));
+  const r=receipt();
+  r.files=approved.map(e=>({
+    path:e.path,gitBlobSha:e.blob,tests:1,pass:1,
+    fail:0,skipped:0,todo:0,cancelled:0,result:'PASS',
+  }));
+  r.executedFileCount=approved.length;
+  r.testsPassed=approved.length;
+  const coverage=reconcileCoverage(entries,report,r);
+  assert.equal(coverage.executedFileCount,APPROVED_ROOT_TEST_FILES.length);
+  assert.equal(coverage.notRunFileCount,entries.length-APPROVED_ROOT_TEST_FILES.length);
+  assert.equal(coverage.comprehensiveCoverage,false);
+});
+
+test('recomputes the complete Git manifest, not only receipt-selected blobs',()=>{
+  const untouched=entries.find(e=>!APPROVED_ROOT_TEST_FILES.includes(e.path));
+  assert.ok(untouched);
+  const changed=entries.map(e=>e.path===untouched.path?
+    {...e,blob:'f'.repeat(40)}:e);
+  assert.throws(()=>reconcileCoverage(changed,report,receipt()),
+    /TEST_COVERAGE_INVENTORY_MANIFEST_MISMATCH/);
+  const renamed=entries.map(e=>e.path===untouched.path?
+    {...e,path:'test/forged-unreviewed-coverage.test.ts'}:e);
+  assert.throws(()=>reconcileCoverage(renamed,report,receipt()),
+    /TEST_COVERAGE_INVENTORY_MANIFEST_MISMATCH/);
+});
+
+test('rejects reordered inventory and fabricated path-depth statistics',()=>{
+  const reversed=[...entries].reverse();
+  assert.throws(()=>reconcileCoverage(reversed,report,receipt()),
+    /TEST_COVERAGE_INVENTORY_MANIFEST_MISMATCH/);
+  const fakedDepth={...report,byDepth:{...report.byDepth,root:report.byDepth.root+1}};
+  assert.throws(()=>reconcileCoverage(entries,fakedDepth,receipt()),
+    /TEST_COVERAGE_INVENTORY_MANIFEST_MISMATCH/);
+});
+
+test('emits exhaustive file states without laundering NOT_RUN into PASS',()=>{
+  const coverage=reconcileCoverage(entries,report,receipt());
+  assert.deepEqual(coverage.statusCounts,{
+    PASS:subset.length,FAIL:0,SKIP:0,NOT_RUN:entries.length-subset.length,
+  });
+  assert.equal(coverage.fileStates.length,entries.length);
+  assert.equal(coverage.fileStates.filter(e=>e.result==='PASS').length,subset.length);
+  assert.equal(coverage.fileStates.filter(e=>e.result==='NOT_RUN').length,
+    entries.length-subset.length);
+  const byPath=new Map(coverage.fileStates.map(e=>[e.path,e]));
+  assert.equal(byPath.size,entries.length);
+  for(const entry of entries){
+    const reported=byPath.get(entry.path);
+    assert.equal(reported.gitBlobSha,entry.blob);
+    assert.equal(reported.result,subset.some(e=>e.path===entry.path)?'PASS':'NOT_RUN');
+  }
+  assert.equal(coverage.statusSemantics,'RECEIPT_ONLY_NO_GLOBAL_CI_INFERENCE');
+  assert.equal(coverage.comprehensiveCoverage,false);
 });
