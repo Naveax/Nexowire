@@ -38,7 +38,7 @@ jobs:
         run: |
           $ErrorActionPreference='Stop'
           if ((git rev-parse HEAD) -cne $env:EXPECTED_HEAD) { throw 'AI05_HEAD_MISMATCH' }
-          if ((git hash-object src/installer/protected-transfer-helper-lifecycle.ts) -cne '8895cc4fd380dd40ac317b6671cbf2d6b750b3a0') { throw 'AI05_LIFECYCLE_BLOB_MISMATCH' }
+          if ((git hash-object src/installer/protected-transfer-helper-lifecycle.ts) -cne '84f9cce7ee56744308e81b8f838d87f54fb8eba7') { throw 'AI05_LIFECYCLE_BLOB_MISMATCH' }
           if ((git hash-object native/windows-transfer-volume-flush.cs) -cne '7a62bf6c027544dfceb14f3ca939d7d76eb2ced9') { throw 'AI05_NATIVE_SOURCE_BLOB_MISMATCH' }
           $tap=Join-Path $env:RUNNER_TEMP 'ai05-native-helper.tap'
           & node --test --test-reporter=tap --import tsx --test-concurrency=1 test/ai05/transfer-flush-artifact.test.ts | Tee-Object -FilePath $tap
