@@ -240,8 +240,11 @@ export const SYSTEM_HUB_RECOVERY_PS=[
   "$journalPath=Join-Path $root 'journal.json'",
   "$journal=Get-Content -LiteralPath $journalPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop",
   "if($journal.version -ne 1 -or [string]$journal.host -cne $env:COMPUTERNAME){throw 'AI04_RECOVERY_JOURNAL_FOREIGN'}",
-  "if([string]$journal.phase -cin @('COMPLETE','ROLLED_BACK')){exit 0}",
-  "if([string]$journal.phase -cnotin @("+RECOVERABLE_JOURNAL_PHASES.map(psLiteral).join(',')+")){throw 'AI04_RECOVERY_UNKNOWN_PHASE'}",
+  // Reject all noncanonical phase spellings before the terminal-state exit.
+  // Keep the established AI-07 terminal-phase contract without accepting
+  // case-insensitive aliases of COMPLETE or ROLLED_BACK.
+  "if([string]$journal.phase -cnotin @("+[...RECOVERABLE_JOURNAL_PHASES,'COMPLETE','ROLLED_BACK'].map(psLiteral).join(',')+")){throw 'AI04_RECOVERY_UNKNOWN_PHASE'}",
+  "if($journal.phase -in @('COMPLETE','ROLLED_BACK')){exit 0}",
   SYSTEM_HUB_RECOVERY_LAUNCHER_PROOF_PS,
   "$port=[int]$journal.port",
   "if($port -lt 1 -or $port -gt 65535){throw 'AI04_RECOVERY_PORT_UNTRUSTED'}",

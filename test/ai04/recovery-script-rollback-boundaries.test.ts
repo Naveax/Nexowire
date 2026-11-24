@@ -22,7 +22,16 @@ test('rollback only recognizes explicit durable journal phases',()=>{
   for(const phase of allowed)assert.ok(SYSTEM_HUB_RECOVERY_PS.includes("'"+phase+"'"));
   assert.match(SYSTEM_HUB_RECOVERY_PS,/AI04_RECOVERY_UNKNOWN_PHASE/);
   assert.ok(!SYSTEM_HUB_RECOVERY_PS.includes("'UNKNOWN'"));
-  assert.ok(SYSTEM_HUB_RECOVERY_PS.includes("[string]$journal.phase -cin @('COMPLETE','ROLLED_BACK')"));
+  const canonicalGuard=SYSTEM_HUB_RECOVERY_PS.split(/\r?\n/).find(line=>
+    line.includes('AI04_RECOVERY_UNKNOWN_PHASE'));
+  assert.ok(canonicalGuard);
+  assert.ok(canonicalGuard.includes('[string]$journal.phase -cnotin'));
+  for(const phase of [...allowed,'COMPLETE','ROLLED_BACK'])
+    assert.ok(canonicalGuard.includes("'"+phase+"'"));
+  const terminalExit="if($journal.phase -in @('COMPLETE','ROLLED_BACK')){exit 0}";
+  assert.ok(SYSTEM_HUB_RECOVERY_PS.includes(terminalExit));
+  assert.ok(SYSTEM_HUB_RECOVERY_PS.indexOf(canonicalGuard)<
+    SYSTEM_HUB_RECOVERY_PS.indexOf(terminalExit));
 });
 
 test('launcher proof hashes current and independently backed-up launcher',()=>{
