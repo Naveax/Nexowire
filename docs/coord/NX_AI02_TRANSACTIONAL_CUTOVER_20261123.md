@@ -39,7 +39,7 @@
 | Source changes during copy | Reject, preserve partial stage without auto-delete | Existing protected offline-copy test; physical NOT_RUN |
 | WAL checkpoint / committed WAL drift | Receipt/main+WAL digest must change or SQLite integrity must reject; do not checkpoint active DB | Existing receipt and integrity tests; crash-injection VM NOT_RUN |
 | Dual writer, port ownership change, PID reuse | Deny or hold as UNKNOWN until independent OS owner/re-incarnation evidence | Code review; full Windows negative harness NOT_RUN |
-| SQLITE_FULL / SQLITE_READONLY after staging | No deletion/VACUUM/checkpoint on production DB; preserve both trees and journal | Windows filesystem fault injection NOT_RUN |
+| SQLITE_FULL / SQLITE_READONLY after staging | No deletion/VACUUM/checkpoint on production DB; preserve both trees and journal | Native SQLite engine errors (13/8) in disposable DBs with simulated orchestration: local Node 22.16.0 4/4 PASS, exact tested source blob `40f8d9b85078df26445d937e4a7fc7d0a10dfc57`; Windows filesystem/real cutover NOT_RUN |
 | Crash after copy / recovery after reboot | Read journal phase and all durable hashes, deny replay or stale restore | Disposable Windows VM / reboot NOT_RUN |
 | Post-boot SYSTEM data differs from legacy snapshot | **Do not restore old snapshot**; keep SYSTEM task/evidence for explicit reconciliation | Existing guarded recovery script tests; physical NOT_RUN |
 
@@ -63,3 +63,5 @@ Record exact SHA, Windows build and Node version, source-root canonical path as 
 **Physical acceptance: NOT_RUN.** **Production state and tasks: UNCHANGED by AI-02.**
 
 **Hosted negative-fixture isolation:** scheduler operations are intercepted by local PowerShell functions; unexpected task identities, COM/CIM access, legacy task enablement and HTTP calls fail the fixture. This lane is intended only for disposable CI runners, not the Work-PC. Actual PowerShell results remain NOT_RUN until the CI owner records exact-head evidence.
+
+Native error evidence: `test/ai04/transactional-native-sqlite-errors.test.ts` exercises both real SQLite error codes with normal and interrupted mocked rollback. Both disposable databases retain exact SHA-256, `quick_check=ok`, original row count and value. Local test used orchestrator blob `9be7267951f70c5840ebee7979e449193563661f`, transpiled without diagnostics; 4 tests, 4 pass, zero skip. This is not a physical Windows rollback or real disk exhaustion claim.
