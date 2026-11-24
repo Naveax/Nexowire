@@ -1,0 +1,5 @@
+# AI-05 deployment callback lease hardening
+
+Exact #1293 base bb7cb7d40b64b8b7179e0357baf4751d9761fffc. Separate source follow-up; native acceptance #1306 and AI-07 #1304 consume the prior exact lifecycle blob, not this unreviewed change. No source ref or provenance rewrite.
+
+A non-entering authority could previously return its own success value, or an early-returning provider could leave a pending callback that later issues a selection commit. The local scope guard now returns only the confirmed callback result; a callback resuming after lease release cannot initiate commit after staging/verification; a release during in-flight commit is UNKNOWN with no retry. Adds three explicit synthetic fault fixtures. This is defense-in-depth, not an independent deployment authority or proof of atomicity. The real authority must retain authenticated exclusive quiescence through the callback, serialize durable selection revisions and replay/STOP/revoke, and prevent startup lease acquisition until the outcome is safe. AI-07/AI-08 review and new exact SHA acceptance required. No production signing, physical operations, or active native fixture changes.

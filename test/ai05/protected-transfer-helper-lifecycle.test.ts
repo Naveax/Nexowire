@@ -117,3 +117,54 @@ test('publisher bootstrap denies detached, missing and changed selection',async(
     async readSelection(){return {revision:String(++reads),pin:a};},
   },f.store),/SELECTION_CHANGED/);
 });
+
+test('non-entering authority cannot manufacture a successful deployment receipt',async()=>{
+  const f=fixture();
+  const authority:TransferHelperDeploymentAuthority={...f.authority,
+    async withExclusiveQuiescedDeployment<T>(){return {selection:{revision:'fake',pin:a}} as T;},
+  };
+  await assert.rejects(runTransferHelperLifecycle(request('clean-install',f.selected,a,'offline-a'),authority,f.store),/ADMISSION_UNCONFIRMED/);
+  assert.equal(f.calls.length,0);
+});
+test('a released deployment callback cannot commit after pending staging resolves',async()=>{
+  const f=fixture();
+  let release!:()=>void,started!:()=>void;
+  const pending=new Promise<void>(resolve=>{release=resolve;});
+  const enteredStage=new Promise<void>(resolve=>{started=resolve;});
+  const store:TransferHelperArtifactStore={...f.store,
+    async stage(){started();await pending;},
+  };
+  let deferred:Promise<unknown>|undefined;
+  const authority:TransferHelperDeploymentAuthority={...f.authority,
+    async withExclusiveQuiescedDeployment<T>(_request:Readonly<HelperRequest>,effect:()=>Promise<T>){
+      deferred=effect();
+      // Install the rejection handler before releasing the broken lease.
+      void deferred.catch(()=>{});
+      await enteredStage;
+      return undefined as T;
+    },
+  };
+  await assert.rejects(runTransferHelperLifecycle(request('clean-install',f.selected,a,'offline-a'),authority,store),/ADMISSION_UNCONFIRMED/);
+  release();
+  assert.ok(deferred);
+  await assert.rejects(deferred,/DEPLOYMENT_LEASE_RELEASED/);
+  assert.equal(f.calls.includes('commit'),false);
+});
+test('authority returning while commit is in flight is UNKNOWN, never retried',async()=>{
+  const f=fixture();
+  let release!:()=>void,started!:()=>void;
+  const pending=new Promise<void>(resolve=>{release=resolve;});
+  const enteredCommit=new Promise<void>(resolve=>{started=resolve;});
+  let deferred:Promise<unknown>|undefined;
+  const authority:TransferHelperDeploymentAuthority={...f.authority,
+    async commitSelection(req){started();await pending;return f.authority.commitSelection(req);},
+    async withExclusiveQuiescedDeployment<T>(_request:Readonly<HelperRequest>,effect:()=>Promise<T>){
+      deferred=effect();void deferred.catch(()=>{});
+      await enteredCommit;return undefined as T;
+    },
+  };
+  await assert.rejects(runTransferHelperLifecycle(request('clean-install',f.selected,a,'offline-a'),authority,f.store),/COMMIT_UNKNOWN/);
+  release();assert.ok(deferred);
+  await assert.rejects(deferred,/COMMIT_UNKNOWN/);
+  assert.equal(f.calls.filter(x=>x==='commit').length,1);
+});

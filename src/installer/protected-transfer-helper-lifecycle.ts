@@ -82,31 +82,53 @@ function validate(input:HelperRequest):Readonly<HelperRequest>{
  * user files, secrets, SQLite, receipts or ambiguous staging artifacts. */
 export async function runTransferHelperLifecycle(input:HelperRequest,authority:TransferHelperDeploymentAuthority,store:TransferHelperArtifactStore){
   const req=validate(input);
-  let entered=false;
-  return authority.withExclusiveQuiescedDeployment(req,async()=>{
-    if(entered)return deny('TRANSFER_HELPER_ADMISSION_REENTERED');
-    entered=true;
-    const current=selection(await authority.readSelection());
-    if(current.revision!==req.expected.revision||!samePin(current.pin,req.expected.pin))return deny('TRANSFER_HELPER_STALE_SELECTION');
-    // A broken selected artifact must not prevent a quiesced, explicitly
-    // authorized detach or rollback to an independently verified prior binary.
-    // Upgrade still requires a verified working predecessor.
-    if(current.pin&&req.operation==='upgrade')await store.verifyInstalled(current.pin);
-    if(req.desired){
-      if(req.sourcePath!==undefined)await store.stage(req.sourcePath,req.desired,req.operation==='clean-install');
-      await store.verifyInstalled(req.desired);
-    }
-    // Once dispatch starts, exceptions or UNKNOWN never cause another commit,
-    // rollback, deletion or a fabricated success receipt.
-    let outcome:HelperCommit;
-    try{outcome=await authority.commitSelection(req);}catch{return deny('TRANSFER_HELPER_COMMIT_UNKNOWN');}
-    if(outcome==='REJECTED')return deny('TRANSFER_HELPER_COMMIT_REJECTED');
-    if(outcome!=='COMMITTED')return deny('TRANSFER_HELPER_COMMIT_UNKNOWN');
-    let after:HelperSelection;
-    try{after=selection(await authority.readSelection());}catch{return deny('TRANSFER_HELPER_COMMIT_READBACK_UNKNOWN');}
-    if(after.revision===current.revision||!samePin(after.pin,req.desired))return deny('TRANSFER_HELPER_COMMIT_READBACK_UNKNOWN');
-    return Object.freeze({operation:req.operation,selection:after,previous:current,binariesRetained:true,userDataMutationRequested:false});
-  });
+  let active=true,entered=false,dispatched=false,completed=false;
+  let result:Readonly<{operation:HelperOperation;selection:HelperSelection;previous:HelperSelection;binariesRetained:true;userDataMutationRequested:false}>|undefined;
+  const assertScope=()=>{
+    if(!active)return deny(dispatched?'TRANSFER_HELPER_COMMIT_UNKNOWN':'TRANSFER_HELPER_DEPLOYMENT_LEASE_RELEASED');
+  };
+  try{
+    await authority.withExclusiveQuiescedDeployment(req,async()=>{
+      assertScope();
+      if(entered)return deny('TRANSFER_HELPER_ADMISSION_REENTERED');
+      entered=true;
+      const current=selection(await authority.readSelection());
+      assertScope();
+      if(current.revision!==req.expected.revision||!samePin(current.pin,req.expected.pin))return deny('TRANSFER_HELPER_STALE_SELECTION');
+      if(current.pin&&req.operation==='upgrade'){
+        await store.verifyInstalled(current.pin);
+        assertScope();
+      }
+      if(req.desired){
+        if(req.sourcePath!==undefined){
+          await store.stage(req.sourcePath,req.desired,req.operation==='clean-install');
+          assertScope();
+        }
+        await store.verifyInstalled(req.desired);
+        assertScope();
+      }
+      // A premature return from a faulty authority cannot initiate a later
+      // commit after an awaited staging/verification step has completed.
+      assertScope();
+      dispatched=true;
+      let outcome:HelperCommit;
+      try{outcome=await authority.commitSelection(req);}catch{return deny('TRANSFER_HELPER_COMMIT_UNKNOWN');}
+      assertScope();
+      if(outcome==='REJECTED')return deny('TRANSFER_HELPER_COMMIT_REJECTED');
+      if(outcome!=='COMMITTED')return deny('TRANSFER_HELPER_COMMIT_UNKNOWN');
+      let after:HelperSelection;
+      try{after=selection(await authority.readSelection());}catch{return deny('TRANSFER_HELPER_COMMIT_READBACK_UNKNOWN');}
+      assertScope();
+      if(after.revision===current.revision||!samePin(after.pin,req.desired))return deny('TRANSFER_HELPER_COMMIT_READBACK_UNKNOWN');
+      result=Object.freeze({operation:req.operation,selection:after,previous:current,binariesRetained:true,userDataMutationRequested:false});
+      completed=true;
+      return result;
+    });
+    // Never return a result manufactured by the authority instead of the
+    // actual callback. Once commit was dispatched, loss of scope is UNKNOWN.
+    if(!entered||!completed||!result)return deny(dispatched?'TRANSFER_HELPER_COMMIT_UNKNOWN':'TRANSFER_HELPER_ADMISSION_UNCONFIRMED');
+    return result;
+  }finally{active=false;}
 }
 
 const run=promisify(execFile);
