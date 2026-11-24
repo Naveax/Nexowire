@@ -14,14 +14,14 @@ const run=promisify(execFile),uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 const sha=/^[a-f0-9]{64}$/;
 const deny=(code:string):never=>{throw Error(code);};
 const PURPOSE='native-transfer-ed25519-signer-v1';
-function canonicalProtectedPath(input:string):string{
-  if(process.platform!=='win32'||typeof input!=='string'||!/^C:\\ProgramData\\/i.test(input)||
+export function canonicalProtectedTransferPath(input:string):string{
+  if(typeof input!=='string'||!/^C:\\ProgramData\\/i.test(input)||
      input!==path.win32.resolve(input)||input.includes('/')||input.slice(2).includes(':')||
-     input.split('\\').slice(1).some(s=>!s||/[. ]$/.test(s)||/^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i.test(s)))return deny('WINDOWS_TRANSFER_PATH_DENIED');
+     input.split('\\').slice(1).some(s=>!s||/[. ]$/.test(s)||/[\x00-\x1f<>:"/|?*]/.test(s)||/^(?:CON|PRN|AUX|NUL|CONIN\$|CONOUT\$|COM[1-9¹²³]|LPT[1-9¹²³])(?:\.|$)/i.test(s)))return deny('WINDOWS_TRANSFER_PATH_DENIED');
   return input;
 }
 async function protectedExisting(input:string,kind:'file'|'directory'){
-  const target=canonicalProtectedPath(input);
+  const target=canonicalProtectedTransferPath(input);
   if((await fs.realpath(target)).toLowerCase()!==target.toLowerCase())deny('WINDOWS_TRANSFER_REPARSE_DENIED');
   const s=await fs.lstat(target,{bigint:true});
   if(kind==='file'&&(!s.isFile()||s.nlink!==1n)||kind==='directory'&&!s.isDirectory())deny('WINDOWS_TRANSFER_PATH_DENIED');
@@ -84,8 +84,9 @@ export async function createWindowsProtectedTransferPublisher(config:Readonly<Wi
   };
   const receipts=new ProtectedTransferReceiptStore(receiptRoot,pub,flush);
   const paths=async(b:Readonly<LargeTransferBinding>)=>{
-    if(b.targetDeviceId!==c.deviceId||!uuid.test(b.id)||canonicalProtectedPath(b.targetPath)!==b.targetPath||canonicalProtectedPath(b.stagePath)!==b.stagePath||
+    if(b.targetDeviceId!==c.deviceId||!uuid.test(b.id)||canonicalProtectedTransferPath(b.targetPath)!==b.targetPath||canonicalProtectedTransferPath(b.stagePath)!==b.stagePath||
       path.win32.dirname(b.targetPath)!==targetRoot||path.win32.dirname(b.stagePath)!==targetRoot||b.stagePath!==b.targetPath+'.nexowire-upload-'+b.id+'.part')deny('WINDOWS_TRANSFER_PATH_DENIED');
+    await protectedExisting(targetRoot,'directory');
     // The authority holds protected namespace exclusion here. Reject existing
     // aliases and hardlinks; absent names may only be created exclusively.
     for(const file of [b.stagePath,b.targetPath]){try{await fs.lstat(file);}catch(e){if((e as NodeJS.ErrnoException).code==='ENOENT')continue;throw e;}await protectedExisting(file,'file');}
