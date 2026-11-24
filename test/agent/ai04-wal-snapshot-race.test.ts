@@ -74,10 +74,16 @@ async function fixture(t:TestContext){
 // dev/ino/size and prove that a real timestamp changed. The first SHM lstat
 // opens the snapshot; the second is the pathname readback. For ordinary WAL
 // each full retry repeats both calls. No injection on WAL checks.
-function injectDrift(t:TestContext,file:string,limit:number,onDrift?:()=>Promise<void>){
+function injectDrift(t:TestContext,file:string,limit:number,beforeRetry?:()=>Promise<void>){
   const real=fs.lstat.bind(fs);
-  let reads=0,changes=0;
+  let reads=0,changes=0,pending=false;
   const mock=t.mock.method(fs,'lstat',async(target:string)=>{
+    // Mutate fixtures between attempts, after the first scan's handles
+    // have closed, to avoid a platform-specific file sharing assumption.
+    if(target===file+'-wal'&&pending){
+      pending=false;
+      await beforeRetry?.();
+    }
     if(target===file+'-shm'){
       reads++;
       if(reads%2===0&&changes<limit){
@@ -89,7 +95,7 @@ function injectDrift(t:TestContext,file:string,limit:number,onDrift?:()=>Promise
         assert.equal(after.size,before.size);
         assert.notEqual(after.mtimeMs,before.mtimeMs);
         changes++;
-        await onDrift?.();
+        pending=true;
         return after;
       }
     }
@@ -147,7 +153,7 @@ test('AI-04 snapshot race: new checksum damage between attempts must fail the fr
   try{await assert.rejects(verifyAgentJournalWal(file),{code:'AGENT_JOURNAL_WAL_CORRUPT'});}
   finally{drift.restore();}
   assert.equal(drift.changes(),1);
-  assert.equal(drift.reads(),2,'second scan must reject WAL checksum before reading SHM');
+  assert.equal(drift.reads(),2,'second attempt must reject changed WAL before reading SHM');
   await unchanged(file,f.hot,damaged);
 });
 
@@ -237,3 +243,89 @@ test('AI-04 snapshot race: actual child owner remains IN_USE after fresh scan, d
     await assert.rejects(contender.begin(id,'e'.repeat(64),'files.write'),
       {code:'AGENT_JOURNAL_REQUEST_MISMATCH'});
   });
+
+
+test('AI-04 snapshot race: both sidecars disappearing after observed commit cannot become clean startup',async t=>{
+  const f=await fixture(t);
+  const file=await f.copy('both-missing',f.hot);
+  const drift=injectDrift(t,file,1,async()=>{
+    await fs.unlink(file+'-wal');
+    await fs.unlink(file+'-shm');
+  });
+  try{await assert.rejects(verifyAgentJournalWal(file),{code:'AGENT_JOURNAL_WAL_CORRUPT'});}
+  finally{drift.restore();}
+  assert.equal(drift.changes(),1);
+  assert.deepEqual(await fs.readFile(file),f.hot.main);
+  await assert.rejects(fs.access(file+'-wal'),{code:'ENOENT'});
+  await assert.rejects(fs.access(file+'-shm'),{code:'ENOENT'});
+});
+
+test('AI-04 snapshot race: disappearance of retained SHM cannot erase a contradictory commit',async t=>{
+  const f=await fixture(t);
+  const file=await f.copy('shm-missing',f.hot,f.prefix.wal);
+  const drift=injectDrift(t,file,1,()=>fs.unlink(file+'-shm'));
+  try{await assert.rejects(verifyAgentJournalWal(file),{code:'AGENT_JOURNAL_WAL_CORRUPT'});}
+  finally{drift.restore();}
+  assert.equal(drift.changes(),1);
+  assert.deepEqual(await fs.readFile(file),f.hot.main);
+  assert.deepEqual(await fs.readFile(file+'-wal'),f.prefix.wal);
+  await assert.rejects(fs.access(file+'-shm'),{code:'ENOENT'});
+});
+
+test('AI-04 snapshot race: same-inode replacement of commit headers cannot erase evidence',async t=>{
+  const f=await fixture(t);
+  const file=await f.copy('changed-headers',f.hot,f.prefix.wal);
+  const changed=Buffer.from(f.hot.shm);
+  f.prefix.shm.copy(changed,0,0,96);
+  assert.notDeepEqual(changed.subarray(0,96),f.hot.shm.subarray(0,96));
+  const drift=injectDrift(t,file,1,async()=>{
+    const before=await fs.stat(file+'-shm');
+    const handle=await fs.open(file+'-shm','r+');
+    try{await handle.write(changed,0,96,0);}finally{await handle.close();}
+    const after=await fs.stat(file+'-shm');
+    assert.equal(after.dev,before.dev);
+    assert.equal(after.ino,before.ino);
+    assert.equal(after.size,before.size);
+  });
+  try{await assert.rejects(verifyAgentJournalWal(file),{code:'AGENT_JOURNAL_WAL_CORRUPT'});}
+  finally{drift.restore();}
+  assert.equal(drift.changes(),1);
+  assert.deepEqual(await fs.readFile(file),f.hot.main);
+  assert.deepEqual(await fs.readFile(file+'-wal'),f.prefix.wal);
+  assert.deepEqual(await fs.readFile(file+'-shm'),changed);
+});
+
+test('AI-04 snapshot race: same-size replacement SHM file cannot inherit earlier snapshot',async t=>{
+  const f=await fixture(t);
+  const file=await f.copy('replacement',f.hot);
+  const drift=injectDrift(t,file,1,async()=>{
+    const before=await fs.stat(file+'-shm');
+    await fs.rename(file+'-shm',file+'-shm-old');
+    await fs.writeFile(file+'-shm',f.hot.shm);
+    const after=await fs.stat(file+'-shm');
+    assert.notEqual(after.ino,before.ino);
+    assert.equal(after.size,before.size);
+  });
+  try{await assert.rejects(verifyAgentJournalWal(file),{code:'AGENT_JOURNAL_WAL_CORRUPT'});}
+  finally{drift.restore();}
+  assert.equal(drift.changes(),1);
+  await unchanged(file,f.hot);
+});
+
+test('AI-04 snapshot race: volatile read-mark change with same commit headers permits stable retry',async t=>{
+  const f=await fixture(t);
+  const file=await f.copy('reader-mark',f.hot);
+  const changed=Buffer.from(f.hot.shm);
+  changed[100]!^=1;
+  const drift=injectDrift(t,file,1,async()=>{
+    const handle=await fs.open(file+'-shm','r+');
+    try{await handle.write(changed,100,4,100);}finally{await handle.close();}
+  });
+  try{await verifyAgentJournalWal(file);}
+  finally{drift.restore();}
+  assert.equal(drift.reads(),4);
+  assert.deepEqual(await fs.readFile(file),f.hot.main);
+  assert.deepEqual(await fs.readFile(file+'-wal'),f.hot.wal);
+  assert.deepEqual(await fs.readFile(file+'-shm'),changed);
+  assert.deepEqual(changed.subarray(0,96),f.hot.shm.subarray(0,96));
+});
