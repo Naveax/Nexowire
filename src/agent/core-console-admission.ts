@@ -219,7 +219,11 @@ export class CoreConsoleAdmission {
       if(approved===true&&!combined.aborted&&this.pendingRevocations===0){
         if(!this.provider.binding)throw failure('CORE_ENROLLMENT_BINDING_REQUIRED');
         this.binding=Object.freeze({...this.provider.binding});
-        this.abort=new AbortController();this.stopped=false;
+        // Idempotent enrollment while ACTIVE must not orphan the abort
+        // signal already held by admitted/in-flight requests. Only a fresh
+        // local approval after STOP opens a new cancellation lifetime.
+        if(this.abort.signal.aborted)this.abort=new AbortController();
+        this.stopped=false;
         return true;
       }
       return false;

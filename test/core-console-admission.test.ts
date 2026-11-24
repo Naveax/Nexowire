@@ -368,3 +368,42 @@ test('pre-aborted enrollment never calls provider and enrollment failure leaves 
   assert.equal(enrollments,2,'failed enrollment must release the prompt slot');
   assert.equal(f.calls(),0);
 });
+
+test('repeated successful enrollment cannot orphan pending effect cancellation on STOP',async()=>{
+  let entered!:()=>void,release!:()=>void;
+  const started=new Promise<void>(resolve=>{entered=resolve;});
+  const gate=new Promise<void>(resolve=>{release=resolve;});
+  let effectSignal:AbortSignal|undefined,effects=0,approvals=0;
+  const f=fixture({
+    binding,
+    enroll:async()=>{approvals++;return true;},
+    execute:async(request,signal)=>{
+      effects++;
+      effectSignal=signal;entered();
+      await gate;
+      return {requestId:request.requestId,fingerprint:request.fingerprint,
+        outcome:'succeeded'};
+    },
+  });
+  const pending=f.controller.execute('windows.pointer.click',{},randomUUID(),'full');
+  const rejected=assert.rejects(pending,code('CORE_CONSOLE_MUTATION_STATE_UNKNOWN'));
+  try{
+    await started;
+    assert.equal(effectSignal?.aborted,false);
+    for(let i=0;i<3;i++){
+      assert.equal(await f.controller.enroll(new AbortController().signal),true);
+    }
+    assert.equal(approvals,3);
+    assert.equal(effectSignal?.aborted,false);
+    await f.controller.revoke();
+    assert.equal(effectSignal?.aborted,true,
+      'STOP must cancel requests from before an idempotent enrollment');
+    await rejected;
+    assert.equal(effects,1);
+    assert.equal((await f.controller.status('full')).state,'REVOKED_LOCALLY');
+    // A later explicit local approval may start a new lifetime, never
+    // clear or reuse the old request's permanently aborted signal.
+    assert.equal(await f.controller.enroll(new AbortController().signal),true);
+    assert.equal(effectSignal?.aborted,true);
+  }finally{release();await rejected;}
+});
