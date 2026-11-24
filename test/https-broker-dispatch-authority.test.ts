@@ -285,7 +285,7 @@ test('dispatch HTTPS ACKs must be exact and bounded, including credential delay'
     if(mode==='release204'){res.writeHead(204);res.end();return;}
     if(mode==='partial'){res.writeHead(206,{'content-type':'application/json'});res.end(JSON.stringify(receipt));return;}
     if(mode==='wrongtype'){res.writeHead(200,{'content-type':'text/plain'});res.end(JSON.stringify(receipt));return;}
-    if(mode==='duplicate'){res.writeHead(200,{'content-type':['application/json','text/plain']});res.end(JSON.stringify(receipt));return;}
+    if(mode==='duplicate'){res.writeHead(200,['content-type','application/json','content-type','text/plain']);res.end(JSON.stringify(receipt));return;}
     res.writeHead(200,{'content-type':'application/json'});
     if(mode==='oversize'){res.end('x'.repeat(8193));return;}
     if(mode==='stall'){res.write('{"payload":');return;}
