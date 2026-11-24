@@ -26,3 +26,10 @@ The Windows ACL probe is read-only and environment-dependent: if the hosted runn
 New child Node 22/24 hosted execution is PENDING until its own CI logs are checked. Do not inherit parent results. Full 654-file execution, SYSTEM boot before login, production DPAPI transfer, actual task mutation/rollback, SQLite and stable publication remain unproven. No production Work-PC use, no main merge/tag/release, no duplicate dispatch. Coordinator must reevaluate current base and combined candidate before promotion.
 
 Rollback: revert only the three changed AI-08 files.
+
+
+## Exact first-child failure and bounded retry correction
+
+Child 90fb99b2e3d5a40c45c9bf63254ba9f4131ad8ec, Release Readiness 45378688284: Windows jobs 138391685596 (Node22) and 138391686020 (Node24) failed. Both logs show complete TAP success for protected state (3), ancestor ACL (5), and uninstall absence (2), followed by three DPAPI shell-trust tests passing. The final real DPAPI round-trip test produced no complete TAP footer before the 90-second outer fixture timeout. Package and publication were blocked.
+
+This does not establish whether an underlying DPAPI call would have succeeded or failed. The existing production implementation already bounds each PowerShell call at 180000 ms, and the fixture has seven sequential calls. Give only this fixture a 1320000 ms outer budget (7 x 180000 + 60000), with a 40-minute finite job ceiling to accommodate the remaining bounded fixtures and setup. All other fixture deadlines stay 90000 ms. Record sanitized child error code, exit code, signal and elapsed/budget values on failure, and elapsed/budget on successful receipts. Zero-SKIP and complete TAP acceptance remain unchanged. No production DPAPI implementation or reviewed fixture bytes modified. The new exact child SHA needs independent CI; no retry of an unchanged SHA or weakening of a test to conceal the failure.
