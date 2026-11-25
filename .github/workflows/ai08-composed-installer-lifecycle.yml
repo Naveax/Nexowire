@@ -1,0 +1,59 @@
+name: AI-08 Composed Installer Lifecycle Acceptance
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/ai08-composed-installer-lifecycle.yml'
+      - 'scripts/ci/ai05-protected-helper-fixture.ps1'
+      - 'scripts/ci/ai05-protected-helper-fixture.mjs'
+      - 'scripts/Build-Nexowire-TransferFlushArtifact.ps1'
+      - 'src/installer/protected-transfer-helper-lifecycle.ts'
+      - 'test/ai05/transfer-flush-artifact.test.ts'
+      - 'test/ai05/protected-transfer-helper-lifecycle.test.ts'
+      - 'src/agent/protected-transfer-startup.ts'
+      - 'scripts/ci/ai08-composed-installer-receipt.mjs'
+      - 'native/windows-transfer-volume-flush.cs'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  native-helper:
+    name: lifecycle-windows-${{ matrix.node }}
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: windows-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - name: Bind exact job ID
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NX_JOB_NAME: lifecycle-windows-${{ matrix.node }}
+        run: |
+          set -euo pipefail
+          id=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" --jq '.jobs[] | [.name,.id] | @tsv' | awk -F '\t' -v name="$NX_JOB_NAME" '$1==name {print $2}')
+          [[ "$id" =~ ^[0-9]+$ ]]
+          echo "NX_JOB_ID=$id" >> "$GITHUB_ENV"
+      - name: Execute strict lifecycle and native signed artifact fixtures
+        run: node scripts/ci/ai08-composed-installer-receipt.mjs
+        env:
+          NX_EXPECTED_NODE: "${{ matrix.node }}"
+          NEXOWIRE_EXPECTED_COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ai08-composed-lifecycle-node-${{ matrix.node }}-${{ github.event.pull_request.head.sha }}
+          path: ai08-installer-receipts/
+          if-no-files-found: error

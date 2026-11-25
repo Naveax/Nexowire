@@ -35,6 +35,8 @@ export interface NativeCoreConsentChallenge {
   version:1;challengeId:string;ownerAccountId:string;deviceId:string;
   installationId:string;enrollmentId:string;ownerEpoch:number;
   grantGeneration:number;revokeEpoch:number;
+  /** Exact enrollment signing key, selected before the native human ceremony. */
+  issuerSpkiSha256?:string;
 }
 export interface NativeCoreConsentAuthority {
   /** Protected native OS UI + atomic one-use decision. Never Agent/Hub or JS MessageBox.
@@ -475,16 +477,19 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
       if(!fresh.coreEnabled||fresh.accessMode!=='full'||!fresh.deviceOnline||
         !fresh.bridgeVerified||fresh.ownerAccountId!==state.ownerAccountId||
         fresh.deviceId!==state.deviceId)throw new Error('CORE_REVOKED_DURING_ENROLLMENT');
+      const key=generateKeyPairSync('ed25519');const der=key.publicKey.export({type:'spki',format:'der'});
+      const issuerSpkiSha256=createHash('sha256').update(der).digest('hex');
       const challenge:NativeCoreConsentChallenge={version:1,challengeId:randomUUID(),
         ownerAccountId:fresh.ownerAccountId,deviceId:fresh.deviceId,
         installationId:this.profile.installationId,enrollmentId:randomUUID(),
-        ownerEpoch:fresh.ownerEpoch,grantGeneration:fresh.grantGeneration,revokeEpoch:fresh.revokeEpoch};
+        ownerEpoch:fresh.ownerEpoch,grantGeneration:fresh.grantGeneration,revokeEpoch:fresh.revokeEpoch,
+        issuerSpkiSha256};
       const proof=await this.options.nativeConsent.approveAndConsume(challenge,signal);
       if(!proof||signal.aborted)return false;
       const parsed=NativeProofSchema.safeParse(proof);
       const now=Date.now();
       if(!parsed.success||!Object.keys(proof).every(k=>NATIVE_KEYS.includes(k))||
-        !Object.entries(challenge).every(([k,v])=>
+        !Object.entries(challenge).filter(([k])=>k!=='issuerSpkiSha256').every(([k,v])=>
           proof[k as keyof NativeCoreConsentProof]===v)||
         proof.approvedAtMs>now+5000||proof.approvedAtMs<now-120000)
         throw new Error('CORE_NATIVE_CONSENT_BINDING_INVALID');
@@ -495,13 +500,12 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
         latest.enrollmentId!==fresh.enrollmentId||latest.publicKeySpki!==fresh.publicKeySpki)
         throw new Error('CORE_CHANGED_DURING_LOCAL_CONSENT');
       if(!this.options.native)await executeCoreConsoleNative('probe',{},'',signal);
-      const key=generateKeyPairSync('ed25519');const der=key.publicKey.export({type:'spki',format:'der'});
       const enrollment={version:1 as const,scope:'physical-console' as const,
         ownerAccountId:challenge.ownerAccountId,deviceId:challenge.deviceId,
         installationId:challenge.installationId,enrollmentId:challenge.enrollmentId,
         ownerEpoch:challenge.ownerEpoch,grantGeneration:challenge.grantGeneration,
         revokeEpoch:challenge.revokeEpoch,approvedLocallyAtMs:proof.approvedAtMs,
-        issuerSpkiSha256:createHash('sha256').update(der).digest('hex')};
+        issuerSpkiSha256};
       const profile:Profile={...this.profile,
         privateKey:key.privateKey.export({type:'pkcs8',format:'der'}).toString('base64'),
         pendingRevoke:false,nativeConsent:proof,

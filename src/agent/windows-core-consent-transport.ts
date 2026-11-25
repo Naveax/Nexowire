@@ -23,10 +23,12 @@ export class ProtectedWindowsCoreConsentClient implements NativeCoreConsentAutho
     signal:AbortSignal):Promise<NativeCoreConsentProof|null>{
     const original=snapshotCoreNativeWireRequest({version:1,operation:'approve-and-consume',
       nonce:randomUUID(),expected:challenge}).expected as NativeCoreConsentChallenge;
+    if(original.issuerSpkiSha256!==undefined&&!/^[a-f0-9]{64}$/.test(original.issuerSpkiSha256))
+      throw new Error('CORE_NATIVE_APPROVAL_ISSUER_INVALID');
     const response=await this.call('approve-and-consume',original,signal);
     const proof=CoreNativeProofSchema.parse(response.proof);
     if((Object.keys(original) as Array<keyof NativeCoreConsentChallenge>)
-      .some(k=>proof[k]!==original[k])||
+      .some(k=>k!=='issuerSpkiSha256'&&proof[k]!==original[k])||
       proof.approvedAtMs>Date.now()+2000||proof.approvedAtMs<Date.now()-120000)
       throw new Error('CORE_NATIVE_APPROVAL_SCOPE_MISMATCH');
     return proof;

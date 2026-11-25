@@ -9,7 +9,9 @@ const rp=z.string().min(3).max(253).regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.
 export const CoreWebAuthnIntentSchema=CoreNativeProofSchema.omit({
   receiptId:true,approvedAtMs:true,consumed:true,
 }).extend({rpId:rp,credentialId:b64.max(1366),nonce:z.string().regex(/^[a-f0-9]{64}$/),
-  issuedAtMs:positive,expiresAtMs:positive});
+  issuedAtMs:positive,expiresAtMs:positive,
+  // Legacy diagnostic assertions may omit the issuer; enrollment handoff must not.
+  issuerSpkiSha256:z.string().regex(/^[a-f0-9]{64}$/).optional()});
 export type CoreWebAuthnIntent=z.infer<typeof CoreWebAuthnIntentSchema>;
 const assertionSchema=z.strictObject({version:z.literal(1),kind:z.literal('core_webauthn_assertion_v1'),
   credentialId:b64.max(1366),clientDataJSON:b64.max(8192),authenticatorData:b64.max(1024),

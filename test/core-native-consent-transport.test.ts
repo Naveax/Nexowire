@@ -313,3 +313,14 @@ test('native request snapshot is detached, deeply immutable, bounded and rejects
   assert.throws(()=>snapshotCoreNativeWireRequest({...value,expected:cycle}),
     /CORE_NATIVE_WIRE_NESTING_LIMIT/);
 });
+
+test('native ceremony request binds the enrollment issuer hash into signed response context',async()=>{
+  const c=challenge(),p=proofFor(c),issuer='a'.repeat(64);
+  let seen:unknown;
+  const client=local(http(r=>{seen=r.expected;return signed(r,p)}));
+  assert.deepEqual(await client.approveAndConsume({...c,issuerSpkiSha256:issuer},new AbortController().signal),p);
+  assert.deepEqual(seen,{...c,issuerSpkiSha256:issuer});
+  const altered=local(http(r=>signed({...r,expected:{...c,issuerSpkiSha256:'b'.repeat(64)}},p)));
+  await assert.rejects(altered.approveAndConsume({...c,issuerSpkiSha256:issuer},new AbortController().signal),
+    /CORE_NATIVE_RESPONSE_STALE_OR_UNBOUND/);
+});

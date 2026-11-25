@@ -466,6 +466,7 @@ export async function runNativeAgent(
   trustedNativeMutationProvider?: TrustedNativeMutationProvider,
   trustedCoreConsentProvider?: NativeCoreConsentAuthority,
   trustedNativeTransferPublisher?: NativeTransferPublisher,
+  trustedNativeTransferDeviceId?: string,
 ): Promise<never> {
   const preloginBootstrap=getWindowsPreloginAgentMode(env);
   if(preloginBootstrap){
@@ -486,6 +487,8 @@ export async function runNativeAgent(
       throw new Error('PRELOGIN_AGENT_MACHINE_DPAPI_REQUIRED');
   }
   const identity = await loadOrCreateAgentIdentity(env);
+  if(trustedNativeTransferDeviceId!==undefined && identity.id!==trustedNativeTransferDeviceId)
+    throw Error('NATIVE_TRANSFER_ENROLLED_DEVICE_MISMATCH');
   const instanceId = randomUUID();
   const hubEndpoints = parseHubEndpoints(env);
   const token = agentTokenFromEnv(env);

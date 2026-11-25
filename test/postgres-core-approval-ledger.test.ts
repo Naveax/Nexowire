@@ -73,7 +73,8 @@ async function fixture(){
     readProtectedNativeBinding:async()=>native?{binding:{...native},observedAtMs:Date.now(),
       protectedNativeWitness:true,issuerSpkiSha256:protectedIssuer??undefined}:null};
   const create=(overrides:Partial<typeof config>={})=>new PostgresCoreApprovalLedger({...config,...overrides});
-  const issue=()=>create().issueChallenge({...binding,credentialId,rpId,challengeId:randomUUID()});
+  const issue=(issuerSpkiSha256?:string)=>create().issueChallenge({...binding,credentialId,rpId,challengeId:randomUUID(),
+    ...(issuerSpkiSha256===undefined?{}:{issuerSpkiSha256})});
   return {authorityId,binding,keys,credentialId,rpId,admin,runtime,config,create,issue,
     setNative:(v:CoreApprovalBinding|null)=>{native=v},setTrusted:(v:boolean)=>{trusted=v},
     setIssuer:(v:string|null)=>{protectedIssuer=v},
@@ -282,7 +283,7 @@ test('real PostgreSQL approval: key rewrite, history erase/reopen and counter ro
 // Software EC/native witnesses here are explicit fixtures. Real PostgreSQL
 // verifies durable one-use semantics, not a physical Windows approval ceremony.
 async function approved(f:Awaited<ReturnType<typeof fixture>>):Promise<CoreNativeProof>{
-  const {intent}=await f.issue(),r=await f.create().consumeAssertion(assertion(intent,f.keys.privateKey,0),intent);
+  const {intent}=await f.issue('a'.repeat(64)),r=await f.create().consumeAssertion(assertion(intent,f.keys.privateKey,0),intent);
   return {...f.binding,challengeId:intent.challengeId,receiptId:r.receiptId,
     approvedAtMs:r.consumedAtMs,consumed:true};
 }
@@ -505,7 +506,7 @@ test('real PostgreSQL restart: native approval tombstone and counter survive act
   const filename=path.join(process.env.RUNNER_TEMP??os.tmpdir(),'nexowire-approval-restart-fixture.json');
   if(phase==='seed'){
     const f=await fixture();try{
-      const {intent}=await f.issue(),raw=assertion(intent,f.keys.privateKey,0);
+      const {intent}=await f.issue('a'.repeat(64)),raw=assertion(intent,f.keys.privateKey,0);
       const receipt=await f.create().consumeAssertion(raw,intent);
       const proof:CoreNativeProof={...f.binding,challengeId:intent.challengeId,receiptId:receipt.receiptId,
         approvedAtMs:receipt.consumedAtMs,consumed:true};
@@ -535,4 +536,23 @@ test('real PostgreSQL restart: native approval tombstone and counter survive act
     assert.deepEqual(await ledger.readEnrollmentProof(saved.receipt.receiptId,saved.binding),saved.proof);
     await assert.rejects(ledger.consumeForEnrollment(saved.proof,'a'.repeat(64)),/CORE_APPROVAL_ENROLLMENT_REPLAY/);
   }finally{await runtime.end();await rm(filename,{force:true})}
+});
+
+test('real PostgreSQL enrollment: unbound legacy approval and issuer substitution never authorize enrollment',integration,async()=>{
+  const f=await fixture();try{
+    const {intent:legacy}=await f.issue();
+    const receipt=await f.create().consumeAssertion(assertion(legacy,f.keys.privateKey,0),legacy);
+    const proof:CoreNativeProof={...f.binding,challengeId:legacy.challengeId,receiptId:receipt.receiptId,
+      approvedAtMs:receipt.consumedAtMs,consumed:true};
+    await assert.rejects(f.create().consumeForEnrollment(proof,'a'.repeat(64)),
+      /CORE_APPROVAL_ENROLLMENT_ISSUER_NOT_IN_APPROVED_INTENT/);
+    const bound=await approved(f);
+    f.setIssuer('b'.repeat(64));
+    await assert.rejects(f.create().consumeForEnrollment(bound,'b'.repeat(64)),
+      /CORE_APPROVAL_ENROLLMENT_ISSUER_NOT_IN_APPROVED_INTENT/);
+    assert.equal((await f.admin.query('SELECT COUNT(*) AS n FROM core_approval.enrollment_consumptions WHERE receipt_id IN ($1,$2)',
+      [proof.receiptId,bound.receiptId])).rows[0].n,'0');
+    f.setIssuer('a'.repeat(64));
+    assert.deepEqual(await f.create().consumeForEnrollment(bound,'a'.repeat(64)),bound);
+  }finally{await f.close()}
 });
