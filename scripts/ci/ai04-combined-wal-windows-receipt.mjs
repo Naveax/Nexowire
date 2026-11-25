@@ -9,15 +9,16 @@ const tests={
  'test/agent/ai04-wal-snapshot-race.test.ts':['227dc73023421e702bc4ae653e07d89de3c4f487',12],
  'test/agent/ai04-external-journal-owner.test.ts':['9d2daca025c666ab7be8b250481519f0bd1bffae',3],
  'test/agent/ai04-frameless-wal.test.ts':['235150296f55d11c4dfff3155b3783f667f41195',14],
- 'test/native-agent-startup-diagnostic.test.ts':['4a9095dad4232313df8504071a1de1f557668a8c',10]
+ 'test/native-agent-startup-diagnostic.test.ts':['4a9095dad4232313df8504071a1de1f557668a8c',10],
+ 'test/agent/ai04-wal-index-convergence.test.ts':['24bc621403a26d97683a5ef322f35b035a889292',7]
 };
 const dependencies={
  'src/agent/operation-journal.ts':'598882cf2a47c764a4e4d8b111228f60460fad1f',
- 'src/agent/operation-journal-wal.ts':'1847ca93aaa0cca8b00b1fa3dc32e4af697d317c',
+ 'src/agent/operation-journal-wal.ts':'d5c84054b6b40a3d4b6774bfc80e0f58721b88b2',
  'src/agent/journal-owner-process.ts':'cabe4f51203c7c93b94640f5c3e0b19f516b7e5a',
  'src/agent/operation-journal-authority.ts':'b98e8a6f12ce740bfe7ddea3d6aa2561edde2575',
  'src/agent/native-agent-startup-diagnostic.ts':'7c5e4c3fda397617d412da67ede50896a7ebebb9',
- 'src/security/windows-dpapi.ts':'e306e8ee650bac4906197546cd5f9b645ae9e247',
+ 'src/security/windows-dpapi.ts':'d54fc512eeecf4fe53bea2f726f0cb77b39a9f1c',
  'src/version.ts':'06178e7a933de31b9e820e18a8c5f5efeb889ca2',
  'scripts/ci/assert-tap-summary.mjs':'38786c04295e41d9cdb7d511821a8d1064026fc1',
  'scripts/ci/test-inventory.mjs':'1e9ea6fa7697094c082c0a864fad7afa751b99f6'
