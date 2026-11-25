@@ -280,7 +280,7 @@ function coreReadbackMessage(device, operation) {
   const stop = ' Fiziksel STOP için cihazdaki Nexowire CORE → KAPAT seçeneğini kullan; yerel iptal ve işlem durması burada doğrulanmadı.';
   if (operation?.inFlight) return 'CORE isteği işleniyor; yeni istek gönderme.' + stop;
   if (operation) return 'CORE isteğinin sonucu belirsiz veya readback bekleniyor. Durumu yenile; aynı isteği yineleme.' + stop;
-  if (core?.enabled === false) return 'CORE hesap tercihi kapalı. Bu, yerel STOP veya yürüyen işlemlerin durduğunun kanıtı değildir.' + stop;
+  if (core?.enabled === false) return 'Sunucu CORE hesap tercihini kapalı bildiriyor. Bu, yerel STOP veya yürüyen işlemlerin durduğunun kanıtı değildir.' + stop;
   if (core?.enabled !== true) return 'CORE tercih durumu doğrulanamadı.' + stop;
   if (physical?.localEnrolled === true)
     return 'Yerel CORE kaydı bildirildi; güncel fiziksel erişim doğrulanamadı.' + stop;
@@ -585,6 +585,7 @@ function render(snapshot) {
         '  <small class="core-copy" role="status" aria-live="polite"></small>',
         '  <button type="button" class="secondary core-toggle">CORE aç</button>',
         '  <button type="button" class="secondary core-enrollment-retry" hidden>Yerel CORE kaydını yeniden iste</button>',
+        '  <button type="button" class="secondary core-readback">CORE durumunu yenile (salt okunur)</button>',
         '  <div class="core-confirm-panel" hidden>',
         '   <small>CORE süresiz bir tercih kaydıdır. Yönetici yetkisi için ayrıca Broker, Windows UAC ve işlem denetimi gerekir. Hesap tercihini kapatmak yerel STOP onayı değildir.</small>',
         '   <label>Onaylamak için CORE UNLIMITED yaz<input class="core-phrase" maxlength="32" autocomplete="off" placeholder="CORE UNLIMITED"></label>',
@@ -766,6 +767,14 @@ function render(snapshot) {
       const coreOperation=coreOperations.get(device.id);
       coreRetry.hidden=!(coreEnrollmentEligible(device) && coreActionDevice(device.id) && coreOperationAllows(device.id,'consent'));
       coreRetry.disabled=coreRetry.hidden;
+      const coreReadback=row.querySelector('.core-readback');
+      coreReadback.disabled=coreOperation?.inFlight===true;
+      coreReadback.addEventListener('click',async()=>{
+        if(coreOperations.get(device.id)?.inFlight)return;
+        await load();
+        const refreshed=[...document.querySelectorAll('.device')].filter(card=>card.dataset.deviceId===device.id);
+        if(refreshed.length===1)refreshed[0].querySelector('.core-readback')?.focus({preventScroll:true});
+      });
       coreButton.disabled=!coreActionDevice(device.id) || (core.enabled === true
         ? !coreOperationAllows(device.id,'disable') : core.enabled !== false || !coreOperationAllows(device.id,'enable'));
       row.querySelector('.core-approve').disabled=!coreActionDevice(device.id) || !coreOperationAllows(device.id,'enable');
