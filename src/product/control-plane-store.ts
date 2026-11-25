@@ -247,6 +247,11 @@ export interface ControlPlaneStore {
   getRemoteDeviceAuthorization(
     deviceId: string, credentialHash: string, ownerAccountId: string,
   ): Promise<number | null>;
+  /** Owner-scoped status readback only; never used as a mutation grant.
+   * Optional on older stores, where dashboard must report UNKNOWN. */
+  readRemoteAuthorizationStatus?(deviceId:string,ownerAccountId:string):Promise<{
+    authorizationEpoch:number;state:'ACTIVE'|'REVOKED';observedAtMs:number
+  }|null>;
   /** Atomic, persistent revocation. */
   revokeRemoteDeviceAuthorization(deviceId: string, ownerAccountId: string): Promise<boolean>;
   /** Trusted owner-account lifecycle hook; never accept caller-provided ownership. */
