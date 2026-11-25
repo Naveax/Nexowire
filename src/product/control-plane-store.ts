@@ -1,4 +1,5 @@
 import type { PairingRecord } from './pairing.js';
+import type {D1DashboardMutationStore} from './dashboard-mutation-store.js';
 import type {
   BillingMode,
   CustomPlanInput,
@@ -206,6 +207,8 @@ export interface PrepaidRefundResult {
 }
 
 export interface ControlPlaneStore {
+  /** Only the durable backend supplies this. No in-memory browser mutation fallback. */
+  readonly dashboardMutations?:Pick<D1DashboardMutationStore,'revision'|'read'|'createPairing'|'applyCore'>;
   getQuotaSubject(
     id: string,
   ): Promise<ProductQuotaSubjectRecord | null>;

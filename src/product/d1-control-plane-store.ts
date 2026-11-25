@@ -23,6 +23,7 @@ import type {
   UsageAtomicChargeResult,
 } from './control-plane-store.js';
 import type { PairingRecord } from './pairing.js';
+import {D1DashboardMutationStore} from './dashboard-mutation-store.js';
 import { isValidBridgeQueuedCommand, isCanonicalBridgeTimestamp } from './bridge-command-ledger.js';
 import type { CustomPlanInput, ProductPlanId } from './plans.js';
 
@@ -245,7 +246,8 @@ function usageFromRow(row: DbUsageRow): ProductUsagePeriodRecord {
 }
 
 export class D1ControlPlaneStore implements ControlPlaneStore {
-  constructor(private readonly db: D1DatabaseLike) {}
+  readonly dashboardMutations:D1DashboardMutationStore;
+  constructor(private readonly db: D1DatabaseLike) {this.dashboardMutations=new D1DashboardMutationStore(db);}
 
   async getQuotaSubject(
     id: string,

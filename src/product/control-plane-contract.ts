@@ -23,6 +23,8 @@ export interface ProductDeviceSummary {
   physicalConsole?: {localEnrolled:boolean;active:boolean;observedAtMs:number|null;
     enrollmentRequested?:boolean;deviceReady?:boolean};
   coreRevocation?:CoreRevocationDashboardReadback;
+  /** D1 preference/enrollment CAS revision, not a native authorization epoch. */
+  coreMutationRevision?:number|null;
   bridgePreference: { desiredMode: 'auto' | 'on' | 'off'; applied: false; updatedAt: string | null };
   agentVersion: string | null;
   privilegeMode: 'direct' | 'broker' | null;
