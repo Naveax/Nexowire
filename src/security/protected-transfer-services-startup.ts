@@ -1,7 +1,7 @@
 import {isIP} from 'node:net';
 import {createPostgresProtectedTransferService} from './protected-transfer-service.js';
 import {createRollbackGuardedHelperSelectionService} from './protected-helper-rollback-guard.js';
-import {composeHelperSelectionRevokeDrain} from './protected-helper-revoke-drain.js';
+import {assertHelperStartupScope,composeHelperSelectionRevokeDrain} from './protected-helper-revoke-drain.js';
 import {createProtectedPostgresDispatchPool} from '../agent/protected-postgres-dispatch-pool.js';
 import {startProtectedBrokerDispatchService,type ProtectedBrokerDispatchServiceOptions} from '../agent/protected-broker-dispatch-service.js';
 import type {LargeTransferScope} from '../mcp/durable-large-transfer.js';
@@ -22,7 +22,7 @@ export interface ProtectedTransferServicesStartup {
   /** Independent permanent drain of the target Publisher/runtime and helper
    * lifecycle effects, scoped to the actual revoke. Never a socket ACK or
    * empty DB result. Must not call a selection READ while CORE holds its lock. */
-  verifyTransferRuntimeDrain:(request:RevokeRequest)=>Promise<boolean>;
+  verifyTransferRuntimeDrain:(request:RevokeRequest,signal?:AbortSignal)=>Promise<boolean>;
 }
 const sameDatabase=(a:Database,b:Database)=>a.host===b.host&&a.port===b.port&&a.database===b.database&&a.caPem===b.caPem;
 const endpoint=(host:string,port:number)=>typeof host==='string'&&isIP(host)!==0&&Number.isInteger(port)&&port>0&&port<=65535;
@@ -69,11 +69,13 @@ export async function startProtectedTransferAndCoreServices(config:ProtectedTran
     await service.backend.assertGrant(startupScope);
     helper=createRollbackGuardedHelperSelectionService(selection);
     helperReadPool=createProtectedPostgresDispatchPool(selection.database);
+    await assertHelperStartupScope(helperReadPool.pool,scope);
+    const verifyCoreDrain:(request:RevokeRequest,signal?:AbortSignal)=>Promise<boolean>=core.verifyNativeDrain;
     const helperDrain=composeHelperSelectionRevokeDrain({pool:helperReadPool.pool,scope,nativeEvidence:selection.nativeEvidence,
-      verifyExistingNativeDrain:async request=>await core.verifyNativeDrain(request)===true&&await config.verifyTransferRuntimeDrain(request)===true});
+      verifyExistingNativeDrain:async (request,signal)=>!signal?.aborted&&await verifyCoreDrain(request,signal)===true&&!signal?.aborted&&await config.verifyTransferRuntimeDrain(request,signal)===true&&!signal?.aborted});
     coreService=await startProtectedBrokerDispatchService({...core,
-      verifyNativeDrain:request=>service.composeDrain(async bound=>
-        bound.ownerId===request.ownerId&&bound.deviceId===request.deviceId&&await helperDrain(request)===true)(request),
+      verifyNativeDrain:(request:RevokeRequest,signal?:AbortSignal)=>service.composeDrain(async bound=>
+        !signal?.aborted&&bound.ownerId===request.ownerId&&bound.deviceId===request.deviceId&&await helperDrain(request,signal)===true&&!signal?.aborted)(request),
     });
     if(await transfer.server.verifyIndependentProvenance()!==true)throw Error('TRANSFER_AUTHORITY_PROVENANCE_UNVERIFIED');
     const transferAddress=await listen(service.server,transferHost,transferPort);
