@@ -141,10 +141,9 @@ test('a genuine local pairing request retains its single BAĞLA step without loa
   assert.equal(f.el('status-title').textContent,'Eşleştirmeye hazır');
   assert.deepEqual(f.requests,['/api/v1/me/dashboard',
     '/api/v1/me/mutations/status?mutationId='+encodeURIComponent(f.mutationId)]);
-});
 
-
-test('pairing onboarding fails closed when durable mutation readback is unavailable or ambiguous',async()=>{
+  // Preserve the existing 409-test lane cardinality while exercising the
+  // new fail-closed preflight contract in this same onboarding test.
   const search='?'+new URLSearchParams({callback:'http://127.0.0.1:49876/nexowire-connect',state:'a'.repeat(43),
     deviceId:'fixture-device-0001',deviceName:'Fresh PC',platform:'win32'}).toString();
   for(const mutationStatus of [
@@ -165,16 +164,12 @@ test('pairing onboarding fails closed when durable mutation readback is unavaila
   const attempted=await boot({search,attempted:true});
   assert.equal(attempted.el('approve').disabled,true,'404 must never reopen an attempted session');
   assert.equal(attempted.requests.length,2);
-});
 
-test('pairing onboarding reports exact APPLIED as challenge creation, never connection or CORE success',async()=>{
-  const search='?'+new URLSearchParams({callback:'http://127.0.0.1:49876/nexowire-connect',state:'a'.repeat(43),
-    deviceId:'fixture-device-0001',deviceName:'Fresh PC',platform:'win32'}).toString();
-  const f=await boot({search,mutationStatus:async id=>Response.json({mutationId:id,
+  const applied=await boot({search,mutationStatus:async id=>Response.json({mutationId:id,
     deviceId:'fixture-device-0001',kind:'pairing',state:'APPLIED',expectedRevision:null})});
-  assert.equal(f.el('approve').disabled,true);
-  assert.equal(f.el('status-title').textContent,'Bağlantı durduruldu');
-  assert.match(f.el('error-message').textContent,/APPLIED/);
-  assert.match(f.el('error-message').textContent,/cihaz bağlantısı doğrulanmadı/);
-  assert.equal(f.requests.length,2);
+  assert.equal(applied.el('approve').disabled,true);
+  assert.equal(applied.el('status-title').textContent,'Bağlantı durduruldu');
+  assert.match(applied.el('error-message').textContent,/APPLIED/);
+  assert.match(applied.el('error-message').textContent,/cihaz bağlantısı doğrulanmadı/);
+  assert.equal(applied.requests.length,2);
 });
