@@ -20,8 +20,8 @@ test('cutover validates target task plan before editing a launcher or stopping t
   assert.match(script,/MACHINE_UPDATE_BROKER_LAUNCHER_MISSING/);
   const check=script.indexOf('  Assert-CutoverPlan');
   const patch=script.indexOf('  if($hasBoot){Patch-Launcher $BootLauncher}');
-  assert.match(script,/if\(\$hasBroker\)\{Patch-Launcher \$BrokerLauncher\}/);
-  const stop=script.indexOf('  if($hasBoot){Stop-ScheduledTask');
+  assert.match(script,/if\(\$hasBroker\)\{Patch-Launcher \$BrokerLauncher;/);
+  const stop=script.indexOf('Stop-ScheduledTask -TaskName $BootTask',check);
   assert.ok(check>=0&&stop>check&&patch>stop);
   assert.match(script,/if\(-not\(Test-Path -LiteralPath \$file -PathType Leaf\)\)\{throw/);
   assert.match(script,/Write-Status 'rolled_back'/);
