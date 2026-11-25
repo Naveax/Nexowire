@@ -9,6 +9,7 @@ const tests={
  'test/ai05/transfer-flush-artifact.test.ts':['904bfd0fd2ca88f0d27471ba54ba9444a64e3823',4]
 };
 const pins={
+ '.gitattributes':'c039ea0d6cdd0a0551d278dc728c257973164c5b',
  'src/installer/protected-transfer-helper-lifecycle.ts':'84f9cce7ee56744308e81b8f838d87f54fb8eba7',
  'src/agent/protected-transfer-startup.ts':'0d9077b2e1608c9a5bbf8e7faff31c7c7d739e01',
  'src/security/windows-programdata-acl.ts':'55d5814efd87f66e3ff553b415c42f37e23fce12',
@@ -27,9 +28,22 @@ if(process.platform!=='win32'||process.env.GITHUB_ACTIONS!=='true'||process.env.
  !/^\d+$/.test(process.env.GITHUB_RUN_ID??''))throw Error('HOSTED_EXACT_WINDOWS_REQUIRED');
 const {report,entries}=readTestInventory(process.cwd());
 if(report.commitSha!==process.env.NEXOWIRE_EXPECTED_COMMIT_SHA||git('rev-parse','HEAD')!==report.commitSha)throw Error('HEAD_MISMATCH');
+const crlfFiles=new Set(['scripts/Build-Nexowire-TransferFlushArtifact.ps1','scripts/ci/ai05-protected-helper-fixture.ps1']);
 function check(){for(const [f,b] of Object.entries(pins)){
  const st=lstatSync(f);
- if(!st.isFile()||st.isSymbolicLink()||git('rev-parse','HEAD:'+f)!==b||hash(readFileSync(f))!==b)throw Error('PIN_MISMATCH:'+f);
+ if(!st.isFile()||st.isSymbolicLink()||git('rev-parse','HEAD:'+f)!==b)throw Error('PIN_MISMATCH:'+f);
+ const actual=readFileSync(f);
+ if(crlfFiles.has(f)){
+  // The exact pinned .gitattributes mandates CRLF for PowerShell. Compare
+  // raw checkout bytes to the sole allowed materialization of the pinned
+  // LF Git blob, rather than silently normalizing untrusted working bytes.
+  if(hash(readFileSync('.gitattributes'))!==pins['.gitattributes']||
+     git('check-attr','eol','--',f)!==f+': eol: crlf')throw Error('EOL_POLICY_MISMATCH:'+f);
+  const canonical=execFileSync('git',['cat-file','blob',b],{maxBuffer:8*1024*1024});
+  const text=canonical.toString('utf8');
+  if(hash(canonical)!==b||!Buffer.from(text,'utf8').equals(canonical)||text.includes('\r')||
+     !actual.equals(Buffer.from(text.replaceAll('\n','\r\n'),'utf8')))throw Error('CRLF_CHECKOUT_MISMATCH:'+f);
+ }else if(hash(actual)!==b)throw Error('PIN_MISMATCH:'+f);
 }}
 check();
 for(const [f,[b]] of Object.entries(tests))if(!entries.some(e=>e.path===f&&e.blob===b))throw Error('INVENTORY_MISMATCH:'+f);
