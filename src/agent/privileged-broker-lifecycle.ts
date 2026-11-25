@@ -10,6 +10,7 @@ import { PrivilegedBrokerModeDeniedError } from './privileged-broker-denial.js';
 import { NEXOWIRE_VERSION } from '../version.js';
 import { hardenWindowsProgramDataAcl, verifyWindowsPrivateAcl } from '../security/windows-programdata-acl.js';
 import {inspectPrivilegedStackSourceChainReadOnly} from '../security/privileged-stack-source-audit.js';
+import {MACHINE_STARTUP_ADMISSION_PS,assertMachineStartupStateReadOnly} from '../security/windows-machine-startup-admission.js';
 import {
   assertNoPrivilegedNodeStartupFlags,
   assertWindowsPrivilegedRuntimeTrusted,
@@ -289,6 +290,7 @@ export function buildPrivilegedBrokerLauncher(
 
   const lines = [
     "$ErrorActionPreference='Stop'",
+    MACHINE_STARTUP_ADMISSION_PS,
     // The scheduled Highest task inherits the Windows account's environment,
     // not the installer process's sanitized task-registration environment.
     // Remove preload/import hooks before launching the privileged Node host.
@@ -462,6 +464,8 @@ export async function installPrivilegedBrokerTask(
   // substitute that root before the Highest Scheduled Task is registered.
   // Do not persist the DPAPI secret until the existing parent passes ACL.
   verifyWindowsPrivateAcl(path.win32.dirname(directory));
+  // Do not replace a canonical launcher while recovery is unresolved.
+  assertMachineStartupStateReadOnly();
   const launcher = launcherPath(options);
   const name = taskName(options);
   // Preflight an existing root task BEFORE touching secrets or overwriting
