@@ -569,6 +569,21 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
       ? epoch as number : null;
   }
 
+  async readRemoteAuthorizationStatus(deviceId:string,ownerAccountId:string):Promise<{
+    authorizationEpoch:number;state:'ACTIVE'|'REVOKED';observedAtMs:number
+  }|null>{
+    const row=await this.db.prepare(`SELECT a.authorization_epoch AS epoch,a.active AS active,
+      CAST(strftime('%s','now') AS INTEGER)*1000 AS observed_at_ms
+      FROM device_remote_authorization a JOIN devices d ON d.id=a.device_id
+      JOIN accounts owner ON owner.id=d.owner_account_id
+      WHERE a.device_id=? AND a.owner_account_id=? AND d.owner_account_id=?`)
+      .bind(deviceId,ownerAccountId,ownerAccountId)
+      .first<{epoch:number;active:number;observed_at_ms:number}>();
+    if(!row||!Number.isSafeInteger(row.epoch)||row.epoch<1||
+      (row.active!==0&&row.active!==1)||!Number.isSafeInteger(row.observed_at_ms)||row.observed_at_ms<1)return null;
+    return {authorizationEpoch:row.epoch,state:row.active===1?'ACTIVE':'REVOKED',observedAtMs:row.observed_at_ms};
+  }
+
   async revokeRemoteDeviceAuthorization(deviceId: string, ownerAccountId: string): Promise<boolean> {
     const result = await this.db.prepare(
       `UPDATE device_remote_authorization
