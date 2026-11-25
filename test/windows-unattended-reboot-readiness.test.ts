@@ -26,7 +26,7 @@ test('installed user-logon Hub and interactive Agent cannot certify pre-login re
 
 test('SYSTEM Hub alone is not enough while Native Agent still needs an interactive logon',()=>{
   const result=assessWindowsUnattendedRebootReadiness({
-    systemHubInstalled:true,systemHubTaskState:'ready',systemHubStartupEnabled:true,
+    systemHubInstalled:true,systemHubTaskState:'ready',systemHubStartupEnabled:true,legacyHubTaskState:'disabled',
     agent:userAgent,
     autoAdminLogon:false,
   });
@@ -39,12 +39,12 @@ test('SYSTEM Hub alone is not enough while Native Agent still needs an interacti
 
 test('unverified startup task and missing agent are individually blocked',()=>{
   const missing=assessWindowsUnattendedRebootReadiness({
-    systemHubInstalled:true,systemHubTaskState:'ready',systemHubStartupEnabled:true,agent:{installed:false,systemIdentity:false,bootTrigger:false,interactiveOnly:false},
+    systemHubInstalled:true,systemHubTaskState:'ready',systemHubStartupEnabled:true,legacyHubTaskState:'disabled',agent:{installed:false,systemIdentity:false,bootTrigger:false,interactiveOnly:false},
     autoAdminLogon:false,
   });
   assert.ok(missing.blockers.includes('NATIVE_AGENT_NOT_INSTALLED'));
   const untrusted=assessWindowsUnattendedRebootReadiness({
-    systemHubInstalled:true,systemHubTaskState:'ready',systemHubStartupEnabled:true,
+    systemHubInstalled:true,systemHubTaskState:'ready',systemHubStartupEnabled:true,legacyHubTaskState:'disabled',
     agent:{installed:true,systemIdentity:false,bootTrigger:true,interactiveOnly:false},
     autoAdminLogon:false,
   });
@@ -53,7 +53,7 @@ test('unverified startup task and missing agent are individually blocked',()=>{
 
 test('even a SYSTEM startup Agent requires physical pre-login reconnect proof',()=>{
   const result=assessWindowsUnattendedRebootReadiness({
-    systemHubInstalled:true,systemHubTaskState:'ready',systemHubStartupEnabled:true,agent:systemAgent,autoAdminLogon:false,
+    systemHubInstalled:true,systemHubTaskState:'ready',systemHubStartupEnabled:true,legacyHubTaskState:'disabled',agent:systemAgent,autoAdminLogon:false,
   });
   assert.equal(result.startupTopologyReady,true);
   assert.equal(result.remoteRebootAccepted,false);
