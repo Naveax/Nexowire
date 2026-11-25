@@ -6,7 +6,7 @@ import path from 'node:path';
 import ts from 'typescript';
 import {spawnSync} from 'node:child_process';
 import {
-  assessWindowsUnattendedRebootReadiness,
+  assessWindowsUnattendedRebootReadiness,assertHubBootActivationReadback,
   hubBootStartupSettingsProbe,hubBootStagedActivationGuard,
   hubBootUserTaskVisibilityProbe,hubBootUserTaskAbsenceGuard,
   hubBootTaskVisibilityProbe,hubBootInstallTaskAbsenceGuard,
@@ -138,7 +138,7 @@ test('Windows legacy visibility gate permits only observed task or verified COM 
 
 test('reboot topology needs explicit enabled-state evidence and never implies remote acceptance',()=>{
   const valid={
-    systemHubInstalled:true,systemHubTaskState:'ready',systemHubStartupEnabled:true,
+    systemHubInstalled:true,systemHubTaskState:'ready',systemHubStartupEnabled:true,legacyHubTaskState:'disabled',
     agent:{installed:true,systemIdentity:true,bootTrigger:true,interactiveOnly:false,taskEnabled:true},
     autoAdminLogon:false,
   };
@@ -148,6 +148,9 @@ test('reboot topology needs explicit enabled-state evidence and never implies re
     {...valid,systemHubTaskState:undefined},
     {...valid,systemHubStartupEnabled:false},
     {...valid,systemHubStartupEnabled:undefined},
+    {...valid,legacyHubTaskState:'running'},
+    {...valid,legacyHubTaskState:'access-denied'},
+    {...valid,legacyHubTaskState:undefined},
     {...valid,agent:{...valid.agent,taskEnabled:false}},
     {...valid,agent:{...valid.agent,taskEnabled:undefined}},
     {...valid,agent:{...valid.agent,bootTrigger:false}},
@@ -234,4 +237,30 @@ test('exact generated handoff and rollback scripts parse in PowerShell and fit t
     ].join('\n')));
     assert.equal(result.count,0,label+': '+JSON.stringify(result.messages));
   }
+});
+
+
+test('install success requires final owned listener, enabled Boot and quiesced legacy readback',()=>{
+  const valid={installed:true,taskPresence:'present' as const,state:'running',
+    startupEnabled:true,userTaskState:'disabled',pid:4321};
+  assert.doesNotThrow(()=>assertHubBootActivationReadback(valid,4321));
+  assert.doesNotThrow(()=>assertHubBootActivationReadback({...valid,userTaskState:'not-installed'},4321));
+  for(const invalid of [
+    {...valid,installed:false},
+    {...valid,taskPresence:'unverified' as const},
+    {...valid,state:'ready'},
+    {...valid,startupEnabled:false},
+    {...valid,pid:null},
+    {...valid,pid:4322},
+    {...valid,userTaskState:'running'},
+    {...valid,userTaskState:'ready'},
+    {...valid,userTaskState:'access-denied'},
+    {...valid,userTaskState:'visibility-unverified'},
+  ])assert.throws(()=>assertHubBootActivationReadback(invalid,4321),/HUB_BOOT_FINAL_ACTIVATION_UNVERIFIED/);
+  const health=install.indexOf('const healthyPid=await waitForBootHub');
+  const readback=install.indexOf('const finalStatus=await hubBootLifecycleStatus',health);
+  const verify=install.indexOf('assertHubBootActivationReadback(finalStatus,healthyPid)',readback);
+  const owner=install.indexOf('assertWindowsLocalTcpListenerOwnedByPid(port,healthyPid)',verify);
+  const returned=install.indexOf('return finalStatus',owner);
+  assert.ok(health>=0&&health<readback&&readback<verify&&verify<owner&&owner<returned);
 });
