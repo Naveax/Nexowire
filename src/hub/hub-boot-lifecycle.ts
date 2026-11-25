@@ -125,6 +125,7 @@ const BootStatusSchema = z.object({
   // Presence is not equivalent to trusted ownership or installation.
   // An ACL-hidden task may report installed=false but is NOT absent.
   taskPresence: z.enum(['present','absent','unverified']),
+  startupEnabled: z.boolean(),
   state: z.string(),
   taskName: z.string(),
   userTaskState: z.string(),
@@ -690,6 +691,51 @@ if($null -eq $bootTask){
  * An installer must prove absence, not merely fail to see a protected task.
  * Status calls may display 'access-denied'; all mutation paths fail closed.
  */
+/**
+ * A legacy task hidden by ACL is not proof that no legacy writer exists.
+ * Reuse the same HRESULT-aware COM lookup for the independently named task.
+ */
+export const hubBootUserTaskVisibilityProbe=hubBootTaskVisibilityProbe
+  .replaceAll('$bootTask','$userTask')
+  .replaceAll('$bootVisibility','$userVisibility')
+  .replaceAll('GetTask($boot)','GetTask($user)');
+
+export const hubBootUserTaskAbsenceGuard=String.raw`
+if($null -eq $userTask -and $userVisibility -cne 'not-installed'){
+  throw 'HUB_USER_TASK_VISIBILITY_UNVERIFIED'
+}
+`;
+
+/**
+ * Read-only settings proof. Explicit booleans are required: missing fields
+ * are not equivalent to false restrictions or to an enabled task.
+ */
+export const hubBootStartupSettingsProbe=String.raw`
+$bootStartupSettingsSafe=$false
+$bootStartupEnabled=$false
+if($null -ne $bootTask){
+  $settingsProof=$bootTask.Settings
+  $bootStartupSettingsSafe=($null -ne $settingsProof) -and
+    ($settingsProof.Enabled -is [bool]) -and
+    ($settingsProof.DisallowStartIfOnBatteries -is [bool]) -and
+    (-not $settingsProof.DisallowStartIfOnBatteries) -and
+    ($settingsProof.StopIfGoingOnBatteries -is [bool]) -and
+    (-not $settingsProof.StopIfGoingOnBatteries) -and
+    ($settingsProof.RunOnlyIfIdle -is [bool]) -and
+    (-not $settingsProof.RunOnlyIfIdle)
+  $bootStartupEnabled=$bootStartupSettingsSafe -and
+    $settingsProof.Enabled -and ([string]$bootTask.State -cin @('Ready','Running'))
+}
+`;
+
+/** No executable SYSTEM task may exist before the old writer is quiesced. */
+export const hubBootStagedActivationGuard=String.raw`
+if(-not $bootStartupSettingsSafe -or $bootTask.Settings.Enabled -ne $false -or
+    [string]$bootTask.State -cne 'Disabled'){
+  throw 'HUB_BOOT_STAGED_ACTIVATION_UNVERIFIED'
+}
+`;
+
 export const hubBootInstallTaskAbsenceGuard=String.raw`
 if($null -eq $bootTask -and $bootVisibility -cne 'not-installed'){
   throw 'HUB_BOOT_EXISTING_TASK_VISIBILITY_UNVERIFIED'
@@ -723,6 +769,7 @@ export async function hubBootLifecycleStatus(
   assertCanonicalHubBootTaskNames(options);
   const result = await runPowerShellJson<{
     installed: boolean;
+    startupEnabled: boolean;
     state: string;
     userTaskState: string;
   }>(
@@ -738,15 +785,18 @@ export async function hubBootLifecycleStatus(
       // Report the mismatch instead of making boot-status unusable; keep the
       // strict identity gate unchanged for boot-install and boot-uninstall.
       hubBootStatusIdentityInspection,
+      hubBootUserTaskVisibilityProbe,
+      hubBootStartupSettingsProbe,
       '$bootState=if($bootTask){([string]$bootTask.State).ToLowerInvariant()}else{$bootVisibility}',
-      "$userState=if($userTaskIdentityError){'identity-mismatch'}elseif($userTask){([string]$userTask.State).ToLowerInvariant()}else{'not-installed'}",
-      '[pscustomobject]@{installed=($null-ne$bootTask);state=$bootState;userTaskState=$userState}|ConvertTo-Json -Compress',
+      "$userState=if($userTaskIdentityError){'identity-mismatch'}elseif($userTask){([string]$userTask.State).ToLowerInvariant()}else{$userVisibility}",
+      '[pscustomobject]@{installed=($null-ne$bootTask);startupEnabled=$bootStartupEnabled;state=$bootState;userTaskState=$userState}|ConvertTo-Json -Compress',
     ].join('\n'),
     taskEnv(options),
   );
   const pid = await readPid(p.pid);
   return BootStatusSchema.parse({
     installed: result.installed,
+    startupEnabled: result.startupEnabled,
     taskPresence: classifyHubBootTaskPresence(result.installed,result.state),
     state: result.state,
     taskName: bootTaskName(options),
@@ -821,6 +871,8 @@ export async function installHubBootLifecycle(
     "$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue",
     hubBootTaskVisibilityProbe,
     "$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue",
+    hubBootUserTaskVisibilityProbe,
+    hubBootUserTaskAbsenceGuard,
     hubBootRegisteredTaskIdentityGuard,
     hubBootInstallTaskAbsenceGuard,
     // Upgrading a preexisting SYSTEM Boot task requires a separately
@@ -974,10 +1026,12 @@ export async function installHubBootLifecycle(
         "$action=New-ScheduledTaskAction -Execute 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe' -Argument $argument",
         '$trigger=New-ScheduledTaskTrigger -AtStartup',
         "$principal=New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest",
-        '$settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -MultipleInstances IgnoreNew',
+        '$settings=New-ScheduledTaskSettingsSet -Disable -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -MultipleInstances IgnoreNew',
         "$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue",
         hubBootTaskVisibilityProbe,
         "$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue",
+        hubBootUserTaskVisibilityProbe,
+        hubBootUserTaskAbsenceGuard,
         hubBootRegisteredTaskIdentityGuard,
         hubBootInstallTaskAbsenceGuard,
         "if($null -ne $bootTask){throw 'HUB_BOOT_EXISTING_TASK_INSTALL_DENIED'}",
@@ -990,8 +1044,15 @@ export async function installHubBootLifecycle(
         // rejected before stopping the old Hub or launching privileged code.
         '$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction Stop',
         '$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
+        hubBootUserTaskVisibilityProbe,
+        hubBootUserTaskAbsenceGuard,
         hubBootRegisteredTaskIdentityGuard,
         hubBootRollbackTaskOwnershipGuard,
+        hubBootStartupSettingsProbe,
+        // An unexpectedly enabled task might already have run. Treat that
+        // as an uncertain SYSTEM activation rather than a pre-start failure.
+        "try {",hubBootStagedActivationGuard,
+        "} catch { $systemStartAttempted=$true; throw }",
         // The user's task can be replaced or change state between the
         // pre-registration preflight and this post-registration readback.
         // Never stop a different or newly Running task on stale evidence.
@@ -1010,7 +1071,32 @@ export async function installHubBootLifecycle(
         '  Start-Sleep -Milliseconds 250',
         '} while((Get-Date) -lt $deadline)',
         "if($listeners.Count -gt 0){throw 'HUB_LEGACY_PORT_STILL_OWNED'}",
+        // Recheck ownership and disabled staging after the legacy port drain.
+        // Activation begins at Enable, not at the subsequent explicit Start:
+        // StartWhenAvailable may dispatch the task as soon as it is enabled.
+        '$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction Stop',
+        '$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
+        hubBootUserTaskVisibilityProbe,
+        hubBootUserTaskAbsenceGuard,
+        hubBootRegisteredTaskIdentityGuard,
+        hubBootRollbackTaskOwnershipGuard,
+        hubBootStartupSettingsProbe,
+        "try {",hubBootStagedActivationGuard,
+        "} catch { $systemStartAttempted=$true; throw }",
+        "$quiescedLegacyState=if($userTask){[string]$userTask.State}else{'NotInstalled'}",
+        "if(($expectedLegacyState -eq 'NotInstalled' -and $quiescedLegacyState -cne 'NotInstalled') -or ($expectedLegacyState -ne 'NotInstalled' -and $quiescedLegacyState -cne 'Disabled')){throw 'HUB_USER_TASK_STATE_RACE'}",
         "$systemStartAttempted=$true",
+        'Enable-ScheduledTask -TaskName $boot -TaskPath \\ | Out-Null',
+        '$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction Stop',
+        '$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
+        hubBootUserTaskVisibilityProbe,
+        hubBootUserTaskAbsenceGuard,
+        hubBootRegisteredTaskIdentityGuard,
+        hubBootRollbackTaskOwnershipGuard,
+        hubBootStartupSettingsProbe,
+        "if(-not $bootStartupEnabled){throw 'HUB_BOOT_ACTIVATION_UNVERIFIED'}",
+        "$quiescedLegacyState=if($userTask){[string]$userTask.State}else{'NotInstalled'}",
+        "if(($expectedLegacyState -eq 'NotInstalled' -and $quiescedLegacyState -cne 'NotInstalled') -or ($expectedLegacyState -ne 'NotInstalled' -and $quiescedLegacyState -cne 'Disabled')){throw 'HUB_USER_TASK_STATE_RACE'}",
         'Start-ScheduledTask -TaskName $boot -TaskPath \\',
         "[pscustomobject]@{ok=$true;legacyMutationAttempted=$legacyMutationAttempted;systemStartAttempted=$systemStartAttempted}|ConvertTo-Json -Compress",
         "} catch {",
@@ -1051,10 +1137,16 @@ export async function installHubBootLifecycle(
             "$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue",
             hubBootTaskVisibilityProbe,
             "$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue",
+            hubBootUserTaskVisibilityProbe,
+            hubBootUserTaskAbsenceGuard,
             hubBootRegisteredTaskIdentityGuard,
             hubBootInstallTaskAbsenceGuard,
             hubBootRollbackTaskOwnershipGuard,
             'if($bootTask){',
+            hubBootStartupSettingsProbe,
+            // Even a pre-Enable receipt is insufficient if an external actor
+            // has activated/replaced the staged task. Preserve for recovery.
+            hubBootStagedActivationGuard,
             '  Stop-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue',
             '  Unregister-ScheduledTask -TaskName $boot -TaskPath \\ -Confirm:$false',
             '  if($userTask -and $restoreLegacyState){',
@@ -1090,6 +1182,14 @@ export async function installHubBootLifecycle(
   }
 }
 
+/**
+ * Direct uninstall previously stopped the protected writer, unregistered its
+ * task, restored the legacy writer and deleted the launcher without proving
+ * the two durable state trees were still equivalent. That bypassed controlled
+ * recovery and could re-expose stale idempotency records after SYSTEM writes.
+ * Keep the public entrypoint, but require the independently verified cutover
+ * recovery workflow. Do not implement a second rollback or cleanup authority.
+ */
 export async function uninstallHubBootLifecycle(
   options: HubBootLifecycleOptions = {},
 ): Promise<{
@@ -1097,87 +1197,8 @@ export async function uninstallHubBootLifecycle(
   taskName: string;
   userHubRestored: boolean;
 }> {
-  assertElevated();
   assertCanonicalHubBootTaskNames(options);
-  const p = pathsFor(options);
-  // The managed root can be replaced through a writable/junction parent.
-  // Fail closed before any SYSTEM task removal or user Hub restoration.
-  const parent=path.win32.dirname(p.root);
-  assertProtectedHubBootRoot(p.root);
-  verifyHubBootSharedAncestorTrust();
-  verifyWindowsPrivateAcl(parent);
-  await assertHubBootRootSafeToRemove(p.root);
-  verifyWindowsPrivateAcl(p.root);
-  // Preserve the pre-install user task state. Uninstall must not start a Hub
-  // that was deliberately stopped or disabled before the SYSTEM migration.
-  const installedManifest = z.object({
-    userTaskPreviousState: z.enum(['Running','Ready','Disabled','NotInstalled']),
-    port: z.number().int().min(1).max(65535),
-  }).parse(JSON.parse(await fs.readFile(p.manifest,'utf8')));
-  const result = await runPowerShellJson<{
-    removed: boolean;
-    userHubRestored: boolean;
-  }>(
-    [
-      "$ErrorActionPreference='Stop'",
-      '$boot=$env:NEXOWIRE_HUB_BOOT_TASK_NAME',
-      '$user=$env:NEXOWIRE_HUB_TASK_NAME',
-      '$expectedLegacyState='+psLiteral(installedManifest.userTaskPreviousState),
-      '$port='+String(installedManifest.port),
-      "$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue",
-      hubBootTaskVisibilityProbe,
-      "$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue",
-      hubBootRegisteredTaskIdentityGuard,
-      hubBootInstallTaskAbsenceGuard,
-      '$removed=$false',
-      'if($bootTask){',
-      '  Stop-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue',
-      '  $deadline=(Get-Date).AddSeconds(15)',
-      '  do {',
-      '    $listeners=@(Get-NetTCPConnection -State Listen -ErrorAction Stop | Where-Object { $_.LocalPort -eq $port })',
-      '    if($listeners.Count -eq 0){break}',
-      '    Start-Sleep -Milliseconds 250',
-      '  } while((Get-Date) -lt $deadline)',
-      "  if($listeners.Count -gt 0){throw 'HUB_BOOT_PORT_STILL_OWNED'}",
-      '  Unregister-ScheduledTask -TaskName $boot -TaskPath \\ -Confirm:$false',
-      '  $removed=$true',
-      '}',
-      '$restored=$false',
-      '$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
-      "if($userTask -and $expectedLegacyState -ne 'Disabled' -and $expectedLegacyState -ne 'NotInstalled'){",
-      '  Enable-ScheduledTask -TaskName $user -TaskPath \\ | Out-Null',
-      "  if($expectedLegacyState -eq 'Running'){Start-ScheduledTask -TaskName $user -TaskPath \\}",
-      '  $restored=$true',
-      '}',
-      '[pscustomobject]@{removed=$removed;userHubRestored=$restored}|ConvertTo-Json -Compress',
-    ].join('\n'),
-    taskEnv(options),
-  );
-  // A task recreated during uninstall may still depend on this launcher.
-  // Independently prove absence again before deleting the protected root.
-  await runPowerShellJson<{ok:true}>([
-    "$ErrorActionPreference='Stop'",
-    '$boot=$env:NEXOWIRE_HUB_BOOT_TASK_NAME',
-    "$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue",
-    hubBootTaskVisibilityProbe,
-    "if($null -ne $bootTask){throw 'HUB_BOOT_TASK_REAPPEARED_BEFORE_REMOVAL'}",
-    hubBootInstallTaskAbsenceGuard,
-    '[pscustomobject]@{ok=$true}|ConvertTo-Json -Compress',
-  ].join('\n'),taskEnv(options));
-  // Another process may have changed the parent or managed root while
-  // Task Scheduler was operating. Recheck before recursive deletion.
-  verifyHubBootSharedAncestorTrust();
-  verifyWindowsPrivateAcl(parent);
-  await assertHubBootRootSafeToRemove(p.root);
-  await fs.rm(p.root, {
-    recursive: true,
-    force: true,
-  });
-  return {
-    removed: result.removed,
-    taskName: bootTaskName(options),
-    userHubRestored: result.userHubRestored,
-  };
+  throw new Error('HUB_BOOT_UNINSTALL_COORDINATED_RECOVERY_REQUIRED');
 }
 
 export interface WindowsRebootAgentTaskEvidence {
@@ -1185,11 +1206,14 @@ export interface WindowsRebootAgentTaskEvidence {
   systemIdentity: boolean;
   bootTrigger: boolean;
   interactiveOnly: boolean;
+  /** Explicit scheduler enabled-state readback; absent is unverified. */
+  taskEnabled?: boolean;
 }
 
 export interface WindowsUnattendedRebootEvidence {
   systemHubInstalled: boolean;
   systemHubTaskState?: string;
+  systemHubStartupEnabled?: boolean;
   agent: WindowsRebootAgentTaskEvidence;
   autoAdminLogon: boolean;
 }
@@ -1197,9 +1221,11 @@ export interface WindowsUnattendedRebootEvidence {
 export type WindowsRebootBlocker =
   | 'SYSTEM_HUB_BOOT_NOT_INSTALLED'
   | 'SYSTEM_HUB_BOOT_VISIBILITY_UNVERIFIED'
+  | 'SYSTEM_HUB_BOOT_STARTUP_UNVERIFIED'
   | 'NATIVE_AGENT_NOT_INSTALLED'
   | 'NATIVE_AGENT_LOGON_ONLY'
   | 'NATIVE_AGENT_PRELOGIN_IDENTITY_UNVERIFIED'
+  | 'NATIVE_AGENT_STARTUP_DISABLED_OR_UNVERIFIED'
   | 'PRELOGIN_REMOTE_RECOVERY_NOT_VERIFIED';
 
 /**
@@ -1219,6 +1245,9 @@ export function assessWindowsUnattendedRebootReadiness(
     blockers.push(evidence.systemHubTaskState && evidence.systemHubTaskState!=='not-installed'
       ? 'SYSTEM_HUB_BOOT_VISIBILITY_UNVERIFIED'
       : 'SYSTEM_HUB_BOOT_NOT_INSTALLED');
+  } else if(evidence.systemHubStartupEnabled!==true ||
+      !['ready','running'].includes(evidence.systemHubTaskState??'')){
+    blockers.push('SYSTEM_HUB_BOOT_STARTUP_UNVERIFIED');
   }
   if(!evidence.agent.installed) {
     blockers.push('NATIVE_AGENT_NOT_INSTALLED');
@@ -1226,6 +1255,8 @@ export function assessWindowsUnattendedRebootReadiness(
     blockers.push('NATIVE_AGENT_LOGON_ONLY');
   } else if(!evidence.agent.systemIdentity) {
     blockers.push('NATIVE_AGENT_PRELOGIN_IDENTITY_UNVERIFIED');
+  } else if(evidence.agent.taskEnabled!==true){
+    blockers.push('NATIVE_AGENT_STARTUP_DISABLED_OR_UNVERIFIED');
   }
   const startupTopologyReady=blockers.length===0;
   // Physical pre-login/off-network reconnect, credential availability and
@@ -1253,20 +1284,23 @@ export async function inspectWindowsUnattendedRebootReadiness(
     "$systemIdentity=$false",
     "$bootTrigger=$false",
     "$interactiveOnly=$false",
+    "$taskEnabled=$false",
     "if($agentPresent){",
     "  $account=([string]$task.Principal.UserId).ToUpperInvariant()",
     "  $logon=[string]$task.Principal.LogonType",
     "  $systemIdentity=(($account -eq 'S-1-5-18' -or $account -eq 'SYSTEM' -or $account -eq 'NT AUTHORITY\\SYSTEM') -and $logon -eq 'ServiceAccount')",
-    "  $bootTrigger=@($task.Triggers | Where-Object { $_.CimClass.CimClassName -eq 'MSFT_TaskBootTrigger' }).Count -gt 0",
+    "  $bootTrigger=@($task.Triggers | Where-Object { $_.CimClass.CimClassName -ceq 'MSFT_TaskBootTrigger' -and ($_.Enabled -is [bool]) -and $_.Enabled }).Count -gt 0",
+    "  $taskEnabled=(@($task).Count -eq 1 -and [string]$task.TaskPath -ceq '\\' -and [string]$task.TaskName -ceq 'Nexowire Native Agent' -and ($task.Settings.Enabled -is [bool]) -and $task.Settings.Enabled -and [string]$task.State -cin @('Ready','Running'))",
     "  $interactiveOnly=($logon -eq 'Interactive')",
     "}",
     "$winlogon=Get-ItemProperty -LiteralPath 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon' -ErrorAction Stop",
     "$auto=([string]$winlogon.AutoAdminLogon -eq '1')",
-    "[pscustomobject]@{agent=[pscustomobject]@{installed=$agentPresent;systemIdentity=$systemIdentity;bootTrigger=$bootTrigger;interactiveOnly=$interactiveOnly};autoAdminLogon=$auto}|ConvertTo-Json -Depth 4 -Compress",
+    "[pscustomobject]@{agent=[pscustomobject]@{installed=$agentPresent;systemIdentity=$systemIdentity;bootTrigger=$bootTrigger;interactiveOnly=$interactiveOnly;taskEnabled=$taskEnabled};autoAdminLogon=$auto}|ConvertTo-Json -Depth 4 -Compress",
   ].join('\n'),taskEnv(options));
   return assessWindowsUnattendedRebootReadiness({
     systemHubInstalled:boot.installed,
     systemHubTaskState:boot.state,
+    systemHubStartupEnabled:boot.startupEnabled,
     agent:probe.agent,
     autoAdminLogon:probe.autoAdminLogon,
   });
