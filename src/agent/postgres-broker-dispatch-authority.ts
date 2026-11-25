@@ -1,13 +1,14 @@
 import {createPrivateKey,randomUUID,sign,type KeyObject} from 'node:crypto';
 import * as z from 'zod';
 import type {BrokerDispatchRequest,DispatchClaim,DispatchReleaseRequest,
-  DispatchRevokeRequest,ExternalBrokerDispatchAuthority,ProtectedBrokerEvidence}
+  DispatchRevokeRequest,ExternalBrokerDispatchAuthority,ProtectedBrokerEvidence,AuthenticatedDispatchCredential}
   from './broker-external-dispatch-fence.js';
 import {WitnessAuthorityError,type IndependentProvenanceCheck}
   from './postgres-monotonic-witness.js';
 
 const uuid=z.string().uuid(),positive=z.number().int().positive().safe();
 const nonceSchema=z.string().regex(/^[a-f0-9]{64}$/);
+const credentialSchema=z.strictObject({credentialSha256:nonceSchema,certificateSha256:nonceSchema});
 const scope=z.strictObject({ownerId:uuid,deviceId:uuid,deviceEpoch:uuid,sessionEpoch:uuid,
   ownerEpoch:positive,expectedGeneration:positive,requiredPrivilege:z.enum(['CORE','ROOT'])});
 const operation=z.strictObject({requestId:uuid,fingerprint:z.string().regex(/^[a-f0-9]{64}$/),
@@ -56,6 +57,7 @@ export class PostgresBrokerDispatchAuthority implements ExternalBrokerDispatchAu
   private readonly signingKey:KeyObject;
   private readonly permitMs:number;
   private readonly drainMs:number;
+  private readonly requireCredentialFence:boolean;
   private readonly pool:DispatchStorePool;
   private readonly provenance:IndependentProvenanceCheck;
   private readonly observe:(request:BrokerDispatchRequest)=>Promise<ProtectedBrokerEvidence|undefined>;
@@ -67,11 +69,12 @@ export class PostgresBrokerDispatchAuthority implements ExternalBrokerDispatchAu
     verifyOwnerRevocation:(request:DispatchRevokeRequest)=>Promise<boolean>;
     /** Zero pending DB claims alone is not proof that kernel processes drained. */
     verifyNativeDrain:(request:DispatchRevokeRequest)=>Promise<boolean>;
-    permitMs?:number;drainTimeoutMs?:number}){
+    permitMs?:number;drainTimeoutMs?:number;requireCredentialFence?:boolean}){
     this.authorityId=uuid.parse(config.authorityId);
     this.signingKey=createPrivateKey(config.privateKeyPem);
     if(this.signingKey.asymmetricKeyType!=='ed25519')fail('DISPATCH_STORE_SIGNER_INVALID');
     this.permitMs=config.permitMs??2000;this.drainMs=config.drainTimeoutMs??2000;
+    this.requireCredentialFence=config.requireCredentialFence===true;
     if(!Number.isSafeInteger(this.permitMs)||this.permitMs<10||this.permitMs>5000||
       !Number.isSafeInteger(this.drainMs)||this.drainMs<0||this.drainMs>5000||
       typeof config.verifyProvenance!=='function'||typeof config.readProtectedBroker!=='function'||
@@ -104,6 +107,7 @@ export class PostgresBrokerDispatchAuthority implements ExternalBrokerDispatchAu
     let began=false,committing=false,destroy=false;
     try{
       await db.query('BEGIN');began=true;
+      if(this.requireCredentialFence)await db.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
       await db.query("SET LOCAL synchronous_commit='on'");
       await db.query("SET LOCAL statement_timeout='5000ms'");
       await db.query("SET LOCAL lock_timeout='3000ms'");
@@ -159,6 +163,37 @@ export class PostgresBrokerDispatchAuthority implements ExternalBrokerDispatchAu
       fail('DISPATCH_STORE_PRIVILEGE_EXPIRED');
     return row;
   }
+  private credential(input:AuthenticatedDispatchCredential|undefined){
+    if(!this.requireCredentialFence&&input===undefined)return undefined;
+    const parsed=credentialSchema.safeParse(input);
+    if(!parsed.success)return fail('DISPATCH_STORE_AUTHENTICATED_CREDENTIAL_REQUIRED');
+    return Object.freeze(parsed.data);
+  }
+  private async lockCredential(tx:Transaction,op:BrokerDispatchRequest,broker:ProtectedBrokerEvidence,
+    credential:AuthenticatedDispatchCredential|undefined,existing:boolean):Promise<void>{
+    if(!credential)return;
+    // The operator-owned function takes FOR SHARE on the precise credential
+    // row. PostgreSQL keeps that lock until COMMIT/ROLLBACK, conflicting with
+    // UPDATE/DELETE (including credential revoke). No runtime UPDATE grant
+    // on credential rows is needed. The function must be explicitly installed.
+    const role=(await tx.db.query("SELECT NOT (has_any_column_privilege(current_user,'core_dispatch.broker_credentials','INSERT,UPDATE,REFERENCES') OR "+
+      "has_table_privilege(current_user,'core_dispatch.broker_credentials','DELETE,TRUNCATE,TRIGGER') OR "+
+      "has_any_column_privilege(current_user,'core_dispatch.claim_credentials','UPDATE,REFERENCES') OR "+
+      "has_table_privilege(current_user,'core_dispatch.claim_credentials','DELETE,TRUNCATE,TRIGGER')) AS restricted")).rows[0];
+    if(role?.restricted!==true)fail('DISPATCH_STORE_CREDENTIAL_ROLE_OVERPRIVILEGED');
+    const s=op.scope;
+    const locked=await tx.db.query('SELECT core_dispatch.lock_active_broker_credential($1,$2,$3,$4,$5,$6,$7,$8) AS active',
+      [this.authorityId,credential.credentialSha256,credential.certificateSha256,
+        broker.brokerId,s.ownerId,s.deviceId,s.deviceEpoch,s.sessionEpoch]);
+    if(locked.rows.length!==1||locked.rows[0]?.active!==true)
+      fail('DISPATCH_STORE_CREDENTIAL_REVOKED_OR_STALE');
+    if(existing){
+      const row=(await tx.db.query('SELECT credential_sha256,certificate_sha256 FROM core_dispatch.claim_credentials '+
+        'WHERE authority_id=$1 AND request_id=$2',[this.authorityId,op.requestId])).rows[0];
+      if(row?.credential_sha256!==credential.credentialSha256||row.certificate_sha256!==credential.certificateSha256)
+        fail('DISPATCH_STORE_CREDENTIAL_RESERVATION_MISMATCH');
+    }
+  }
   private signed(value:Record<string,unknown>):DispatchClaim{
     const bytes=Buffer.from(JSON.stringify(value),'utf8');
     return {payload:bytes.toString('base64url'),signature:sign(null,bytes,this.signingKey).toString('base64url')};
@@ -179,7 +214,9 @@ export class PostgresBrokerDispatchAuthority implements ExternalBrokerDispatchAu
     if(expires<=time)fail('DISPATCH_STORE_PRIVILEGE_EXPIRED');
     return expires;
   }
-  async beginIfCurrent(value:BrokerDispatchRequest,evidence:ProtectedBrokerEvidence,nonce:string):Promise<DispatchClaim>{
+  async beginIfCurrent(value:BrokerDispatchRequest,evidence:ProtectedBrokerEvidence,nonce:string,
+    authenticatedCredential?:AuthenticatedDispatchCredential):Promise<DispatchClaim>{
+    const credential=this.credential(authenticatedCredential);
     const op=frozenRequest(value),broker=Object.freeze(brokerSchema.parse(evidence));nonceSchema.parse(nonce);
     await this.trusted();await this.currentBroker(op,broker);
     return this.transaction(async tx=>{
@@ -189,6 +226,7 @@ export class PostgresBrokerDispatchAuthority implements ExternalBrokerDispatchAu
       if(previous)fail('DISPATCH_STORE_REQUEST_REPLAY');
       await this.trusted();await this.currentBroker(op,broker);
       const grant=await this.grant(tx,op,broker);
+      await this.lockCredential(tx,op,broker,credential,false);
       const time=await tx.now(),expires=this.expiry(op,grant,time),dispatchId=randomUUID();
       const sequence=(await tx.db.query('UPDATE core_dispatch.authorities SET sequence=sequence+1 '+
         'WHERE authority_id=$1 RETURNING sequence',[this.authorityId])).rows[0];
@@ -198,11 +236,15 @@ export class PostgresBrokerDispatchAuthority implements ExternalBrokerDispatchAu
         'reserve_expires_ms,begin_nonce,state) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10,\'RESERVED\')',
         [op.requestId,this.authorityId,op.scope.deviceId,dispatchId,broker.brokerId,JSON.stringify(op),
           sequence?.sequence,time,expires,nonce]);
+      if(credential)await tx.db.query('INSERT INTO core_dispatch.claim_credentials '+
+        '(authority_id,request_id,credential_sha256,certificate_sha256) VALUES($1,$2,$3,$4)',
+        [this.authorityId,op.requestId,credential.credentialSha256,credential.certificateSha256]);
       return this.permit('broker_dispatch_permit_v1',op,broker,dispatchId,nonce,time,expires);
     });
   }
   async commitIfCurrent(value:BrokerDispatchRequest,evidence:ProtectedBrokerEvidence,
-    dispatchId:string,nonce:string):Promise<DispatchClaim>{
+    dispatchId:string,nonce:string,authenticatedCredential?:AuthenticatedDispatchCredential):Promise<DispatchClaim>{
+    const credential=this.credential(authenticatedCredential);
     const op=frozenRequest(value),broker=Object.freeze(brokerSchema.parse(evidence));
     uuid.parse(dispatchId);nonceSchema.parse(nonce);
     await this.trusted();await this.currentBroker(op,broker);
@@ -215,6 +257,7 @@ export class PostgresBrokerDispatchAuthority implements ExternalBrokerDispatchAu
         fail('DISPATCH_STORE_COMMIT_REPLAY_OR_SCOPE');
       await this.trusted();await this.currentBroker(op,broker);
       const grant=await this.grant(tx,op,broker);
+      await this.lockCredential(tx,op,broker,credential,true);
       const time=await tx.now();
       const expires=this.expiry(op,grant,time);
       if(integer(claim?.reserve_expires_ms,1)<=time)fail('DISPATCH_STORE_RESERVATION_EXPIRED');

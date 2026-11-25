@@ -371,3 +371,86 @@ test('real PostgreSQL restart: historical UUID remains terminal after an actual 
     assert.equal(row.state,'RELEASED');
   }finally{await f.close();}
 });
+
+
+test('real PostgreSQL: protected credential fence serializes revoke and admission, preserves reservation identity',integration,async()=>{
+  const f=await fixture({permitMs:5000});
+  try{
+    await f.pool.query(await readFile(new URL('../sql/core-broker-dispatch-credentials.sql',import.meta.url),'utf8'));
+    await f.pool.query(await readFile(new URL('../sql/core-broker-dispatch-credential-fence.sql',import.meta.url),'utf8'));
+    await f.pool.query('GRANT SELECT, INSERT ON core_dispatch.claim_credentials TO nexowire_dispatch_runtime; '+
+      'GRANT EXECUTE ON FUNCTION core_dispatch.lock_active_broker_credential(uuid,text,text,uuid,uuid,uuid,uuid,uuid) TO nexowire_dispatch_runtime;');
+    const make=async(credentialSha256:string,certificateSha256:string)=>{
+      const identity={credentialSha256,certificateSha256};
+      await f.pool.query('INSERT INTO core_dispatch.broker_credentials '+
+        '(authority_id,credential_sha256,certificate_sha256,broker_id,owner_id,device_id,installation_id,device_epoch,session_epoch,state,not_before_ms,expires_at_ms) '+
+        "VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'ACTIVE',$10,$11)",
+        [f.ids.authorityId,credentialSha256,certificateSha256,f.ids.brokerId,f.ids.ownerId,
+          f.ids.deviceId,randomUUID(),f.ids.deviceEpoch,f.ids.sessionEpoch,Date.now()-1000,Date.now()+60000]);
+      return identity;
+    };
+    const first=await make('1'.repeat(64),'2'.repeat(64));
+    const replacement=await make('3'.repeat(64),'4'.repeat(64));
+    const authority=f.create({requireCredentialFence:true});
+    const revoke=(digest:string)=>f.pool.query("UPDATE core_dispatch.broker_credentials SET state='REVOKED' WHERE authority_id=$1 AND credential_sha256=$2",
+      [f.ids.authorityId,digest]);
+    await assert.rejects(authority.beginIfCurrent(f.request(),f.broker,nonce()),
+      denied('DISPATCH_STORE_AUTHENTICATED_CREDENTIAL_REQUIRED'));
+    await assert.rejects(authority.beginIfCurrent(f.request(),f.broker,nonce(),{...first,certificateSha256:'9'.repeat(64)}),
+      denied('DISPATCH_STORE_CREDENTIAL_REVOKED_OR_STALE'));
+    const req=f.request();
+    const reserved=decoded(await authority.beginIfCurrent(req,f.broker,nonce(),first));
+    const dispatchId=String(reserved.dispatchId);
+    await assert.rejects(authority.commitIfCurrent(req,f.broker,dispatchId,nonce(),replacement),
+      denied('DISPATCH_STORE_CREDENTIAL_RESERVATION_MISMATCH'));
+    // Revocation owns the row lock first. COMMIT admission must wait and then
+    // observe REVOKED, not authorize from the older HTTP credential snapshot.
+    const operator=await f.pool.connect();
+    try{
+      await operator.query('BEGIN');
+      await operator.query("UPDATE core_dispatch.broker_credentials SET state='REVOKED' WHERE authority_id=$1 AND credential_sha256=$2",
+        [f.ids.authorityId,first.credentialSha256]);
+      const outcome=authority.commitIfCurrent(req,f.broker,dispatchId,'b'.repeat(64),first);
+      const checked=assert.rejects(outcome,denied('DISPATCH_STORE_CREDENTIAL_REVOKED_OR_STALE'));
+      await new Promise(r=>setTimeout(r,50));
+      await operator.query('COMMIT');
+      await checked;
+    }finally{await operator.query('ROLLBACK').catch(()=>{});operator.release();}
+    assert.equal((await f.pool.query('SELECT state FROM core_dispatch.claims WHERE request_id=$1',[req.requestId])).rows[0].state,'RESERVED');
+    await assert.rejects(authority.beginIfCurrent(f.request(),f.broker,nonce(),first),
+      denied('DISPATCH_STORE_CREDENTIAL_REVOKED_OR_STALE'));
+    // Admission owns the row lock first. Pause inside the actual transaction
+    // after the SECURITY DEFINER lock succeeds; a concurrent revoke must wait.
+    let announce!:()=>void,unblock!:()=>void;
+    const locked=new Promise<void>(r=>{announce=r});
+    const proceed=new Promise<void>(r=>{unblock=r});
+    const pool:DispatchStorePool={async connect(){const client=await f.servicePool.connect();return{
+      async query(sql,values=[]){
+        const result=await client.query(sql,values);
+        if(sql.startsWith('SELECT core_dispatch.lock_active_broker_credential')&&result.rows[0]?.active===true){
+          announce();await proceed;
+        }
+        return {rows:result.rows as Record<string,unknown>[]};
+      },release(destroy=false){client.release(destroy)}
+    };}};
+    const second=f.request();
+    const inFlight=f.create({requireCredentialFence:true,pool}).beginIfCurrent(second,f.broker,nonce(),replacement);
+    // Ensure early transaction failure cannot leave the fixture waiting forever.
+    await Promise.race([locked,inFlight.then(()=>{throw Error('lock hook not reached')})]);
+    let revoked=false;
+    const pendingRevoke=revoke(replacement.credentialSha256).then(()=>{revoked=true});
+    try{
+      await new Promise(r=>setTimeout(r,75));
+      assert.equal(revoked,false);
+    }finally{unblock();}
+    const claim=decoded(await inFlight);
+    await pendingRevoke;
+    assert.equal(claim.kind,'broker_dispatch_permit_v1');
+    await assert.rejects(authority.commitIfCurrent(second,f.broker,String(claim.dispatchId),nonce(),replacement),
+      denied('DISPATCH_STORE_CREDENTIAL_REVOKED_OR_STALE'));
+    const stored=(await f.pool.query('SELECT credential_sha256,certificate_sha256 FROM core_dispatch.claim_credentials WHERE request_id=$1',
+      [second.requestId])).rows[0];
+    assert.equal(stored.credential_sha256,replacement.credentialSha256);
+    assert.equal(stored.certificate_sha256,replacement.certificateSha256);
+  }finally{await f.close();}
+});
