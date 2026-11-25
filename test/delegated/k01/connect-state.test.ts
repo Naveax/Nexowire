@@ -126,6 +126,7 @@ async function boot(options: {
       if (path === '/api/v1/me/dashboard') {
         return options.dashboard?.() ?? Response.json({ user: 'fixture' });
       }
+      if(path.startsWith('/api/v1/me/mutations/status?'))return Response.json({error:'MUTATION_NOT_FOUND'},{status:404});
       if (path === '/api/v1/pairing') {
         return options.pairing?.() ?? Response.json({ pairingId: 'fixture-pair', token: 'fixture-token' });
       }
