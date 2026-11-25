@@ -288,8 +288,28 @@ function pairingFenceAvailable() {
   return typeof navigator.locks?.request==='function'&&typeof crypto?.subtle?.digest==='function';
 }
 
-function blockPairingReplay() {
-  showError('Bu eşleştirme oturumunun sonucu belirsiz veya tarayıcı işlem koruması doğrulanamadı. Önce yerel uygulamadaki sonucu kontrol et; aynı oturumu tekrar gönderme.',false);
+async function pairingMutationStatus(mutationId) {
+  try {
+    const response=await fetch('/api/v1/me/mutations/status?mutationId='+encodeURIComponent(mutationId),{
+      credentials:'include',headers:{Accept:'application/json'},cache:'no-store',signal:AbortSignal.timeout(8000)});
+    if(response.redirected===true)return 'UNKNOWN';
+    if(response.status===404)return 'NOT_FOUND';
+    if(response.status!==200)return 'UNKNOWN';
+    const result=await response.json();
+    if(result?.mutationId!==mutationId||result.deviceId!==deviceId||
+       result.kind!=='pairing'||result.expectedRevision!==null||
+       !['APPLIED','DENIED','PENDING'].includes(result.state))return 'UNKNOWN';
+    return result.state;
+  }catch{return 'UNKNOWN'}
+}
+function pairingReceiptCopy(result) {
+  if(result==='APPLIED')return ' Sunucu D1 işlem kaydı: APPLIED. Yalnız eşleştirme isteği oluşturuldu; cihaz bağlantısı doğrulanmadı.';
+  if(result==='DENIED')return ' Sunucu D1 işlem kaydı: DENIED. İstek kabul edilmedi.';
+  if(result==='PENDING')return ' Sunucu D1 işlem kaydı: PENDING. Sonuç belirsiz.';
+  return '';
+}
+function blockPairingReplay(result='UNKNOWN') {
+  showError('Bu eşleştirme oturumunun sonucu belirsiz veya tarayıcı işlem koruması doğrulanamadı. Önce yerel uygulamadaki sonucu kontrol et; aynı oturumu tekrar gönderme.'+pairingReceiptCopy(result),false);
   $('status-title').textContent='Bağlantı durduruldu';
   $('status-text').textContent='Hata açıklamasını kontrol et.';
 }
@@ -314,6 +334,7 @@ async function loadAccount() {
   const response = await fetch('/api/v1/me/dashboard', {
     credentials: 'include',
     headers: { accept: 'application/json' },
+    cache:'no-store',
     signal: AbortSignal.timeout(8000),
   });
 
@@ -342,7 +363,11 @@ async function loadAccount() {
   try {
     if(!pairingFenceAvailable())throw Error('Pairing guard unavailable');
     mutationId=await pairingMutationIdentity(state);
-    if(localStorage.getItem(pairingFenceKey(mutationId))!==null){blockPairingReplay();return}
+    const attempted=localStorage.getItem(pairingFenceKey(mutationId))!==null;
+    const result=await pairingMutationStatus(mutationId);
+    // A missing record is not permission to retry an attempted local session.
+    // A new explicitly opened session can proceed to server atomic admission.
+    if(attempted||result!=='NOT_FOUND'){blockPairingReplay(result);return}
   }catch{
     blockPairingReplay();return;
   }
@@ -381,7 +406,7 @@ async function loadAccount() {
         localStorage.setItem(key,'attempted');
         return localStorage.getItem(key)==='attempted';
       });
-      if(!claimed){pairingOutcomeUncertain=true;blockPairingReplay();return}
+      if(!claimed){pairingOutcomeUncertain=true;blockPairingReplay(await pairingMutationStatus(mutationId));return}
       // Even a success response is not proof that the local callback consumed
       // the challenge. Never clear the marker or replay a token on reload.
       pairingOutcomeUncertain = true;
@@ -399,6 +424,10 @@ async function loadAccount() {
 
       if (!pairing.ok) {
         const body = await pairing.json().catch(() => ({}));
+        if (pairing.status === 409 && typeof body?.error === 'string' && body.error.startsWith('DASHBOARD_MUTATION_')) {
+          visibleError='Sunucu eşleştirme işleminin tekrarını veya çakışmasını reddetti. Yerel uygulamadaki sonucu kontrol et.';
+          throw new Error('Bağlantı hazırlanamadı.');
+        }
         if (pairing.status === 401) {
           retryable = false;
           visibleError = 'Oturumun sona erdi. GitHub ile yeniden giriş yapıp bağlantıyı dene.';
@@ -447,7 +476,8 @@ async function loadAccount() {
         'Bağlantı hazırlanamadı.', 'Bağlantı cevabı geçersiz.',
         'Bu hesap için cihaz limiti dolu.', 'Bu cihaz bu hesaba bağlanamadı.',
       ]);
-      showError(visibleError || (known.has(rawMessage) ? rawMessage : 'Beklenmeyen bağlantı hatası. Bağlantı sonucu belirsiz. Önce yerel uygulamadaki sonucu kontrol et; tekrar istek gönderme.'), retryable);
+      const receipt=pairingOutcomeUncertain?await pairingMutationStatus(mutationId):'UNKNOWN';
+      showError((visibleError || (known.has(rawMessage) ? rawMessage : 'Beklenmeyen bağlantı hatası. Bağlantı sonucu belirsiz. Önce yerel uygulamadaki sonucu kontrol et; tekrar istek gönderme.'))+pairingReceiptCopy(receipt), retryable);
       $('status-title').textContent = retryable ? 'Tekrar deneyebilirsin' : 'Bağlantı durduruldu';
       $('status-text').textContent =
         retryable ? 'Ayarları değiştirmen gerekmez.' : 'Hata açıklamasını kontrol et.';
