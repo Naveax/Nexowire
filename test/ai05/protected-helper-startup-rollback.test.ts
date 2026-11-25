@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID,sign} from 'node:crypto';
 import {bindHelperRollbackGuard} from '../../src/security/protected-helper-rollback-guard.js';
+import {startProtectedTransferAndCoreServices} from '../../src/security/protected-transfer-services-startup.js';
 import type {HelperAuthorityEvidenceRequest} from '../../src/security/postgres-helper-selection-authority.js';
 import type {HelperEvidenceChallenge} from '../../src/security/signed-helper-selection-evidence.js';
 import {runSelectionBoundHelperDeployment} from '../../src/installer/protected-helper-entrypoints.js';
@@ -47,4 +48,20 @@ test('deployment rejects wrong role or scoped identity before transport',async()
   const config={selection:tls,deviceId:scope.deviceId,ownerId:scope.ownerId,authorityId:scope.authorityId,async assertInstalledRuntime(){throw Error('unexpected');}};
   for(const bad of [{...config,selection:{...tls,role:'runtime' as const}},{...config,deviceId:randomUUID()},{...config,ownerId:randomUUID()},{...config,authorityId:randomUUID()}])
     await assert.rejects(runSelectionBoundHelperDeployment(bad,request),/DEPLOYMENT_SCOPE_MISMATCH/);
+});
+
+test('canonical three-listener startup refuses missing or self-issued rollback guard before opening any service',async()=>{
+  const database={host:'127.0.0.1',port:5432,database:'must-not-connect',caPem:'fixture'};
+  const config={
+    core:{authorityId:scope.authorityId,database,port:8441,async verifyNativeDrain(){throw Error('unexpected drain');}},
+    transfer:{database,authority:{authorityId:scope.authorityId},server:{authorityId:scope.authorityId,async verifyIndependentProvenance(){throw Error('unexpected provenance');}}},
+    selection:{database,authority:{scope,async verifyProvenance(){throw Error('unexpected provenance');}},nativeEvidence:native},
+    startupScope:{ownerId:scope.ownerId,targetDeviceId:scope.deviceId},
+    transferHost:'127.0.0.1',transferPort:8442,selectionHost:'127.0.0.1',selectionPort:8443,
+    async verifyTransferRuntimeDrain(){throw Error('unexpected drain');},
+  };
+  type Config=Parameters<typeof startProtectedTransferAndCoreServices>[0];
+  await assert.rejects(startProtectedTransferAndCoreServices(config as unknown as Config),/TRANSFER_CORE_SHARED_AUTHORITY_STARTUP_REQUIRED/);
+  const selfIssued={observerPublicKeyPem:pem(key),approved,async requestProof(){throw Error('unexpected proof');}};
+  await assert.rejects(startProtectedTransferAndCoreServices({...config,rollbackGuard:selfIssued} as unknown as Config),/HELPER_ROLLBACK_GUARD_CONFIG_INVALID/);
 });
