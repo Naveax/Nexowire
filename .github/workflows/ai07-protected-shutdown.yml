@@ -1,0 +1,48 @@
+name: AI-07 Protected Shutdown Acceptance
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/ai07-protected-shutdown.yml'
+      - 'src/agent/native-agent.ts'
+      - 'src/agent/protected-runtime-drain.ts'
+      - 'src/agent/protected-transfer-startup.ts'
+      - 'src/installer/protected-helper-entrypoints.ts'
+      - 'src/security/protected-helper-revoke-drain.ts'
+      - 'src/security/protected-helper-rollback-guard.ts'
+      - 'src/security/protected-helper-services-startup.ts'
+      - 'src/security/protected-transfer-services-startup.ts'
+      - 'test/mcp/ai07-protected-shutdown.test.ts'
+      - 'test/fixtures/ai07-protected-shutdown-child.ts'
+      - 'test/ai05/protected-helper-startup-rollback.test.ts'
+permissions:
+  contents: read
+jobs:
+  shutdown:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-2022]
+        node: [22, 24]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Exact startup, release fence and actual isolated Agent shutdown
+        shell: bash
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          node --test --test-reporter=tap --import tsx --test-concurrency=1 test/mcp/ai07-protected-shutdown.test.ts test/ai05/protected-helper-startup-rollback.test.ts | tee "$RUNNER_TEMP/ai07-shutdown.tap"
+          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/ai07-shutdown.tap" 8
