@@ -104,6 +104,7 @@ function createApp() {
     Option: class extends FakeElement {
       constructor(text, value) { super(); this.textContent = text; this.value = value; }
     },
+    AbortSignal,
     fetch: (...args) => fetchResult(...args),
     localStorage: { getItem: () => null, setItem: () => {} },
     window: { location: { pathname: '/' } },
