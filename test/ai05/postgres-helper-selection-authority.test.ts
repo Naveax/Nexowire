@@ -1,8 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {randomUUID,generateKeyPairSync,sign} from 'node:crypto';
+import {randomUUID,generateKeyPairSync,sign,createHash} from 'node:crypto';
 import {createSignedHelperSelectionEvidenceVerifier,helperEvidenceRequiredFacts} from '../../src/security/signed-helper-selection-evidence.js';
-import {readFile} from 'node:fs/promises';
+import {readFile,writeFile,mkdtemp,rm} from 'node:fs/promises';
+import {DatabaseSync} from 'node:sqlite';
+import os from 'node:os';
+import path from 'node:path';
+import {bindHelperRollbackGuard} from '../../src/security/protected-helper-rollback-guard.js';
 import {Pool} from 'pg';
 import {createBoundHelperRuntimeAuthority} from '../../src/installer/protected-helper-entrypoints.js';
 import {withVerifiedTransferHelper,assertSelectedTransferHelper} from '../../src/agent/protected-transfer-startup.js';
@@ -36,8 +40,22 @@ test('durable independent helper selection excludes runtime/deployment, preserve
   let allowRelease=true,allowCommit=true;
   // Explicit synthetic independent observer signs the real challenge.
   // The verifier is production code; these generated keys are fixture-only.
-  const observer=generateKeyPairSync('ed25519');
-  const verifyEvidence=createSignedHelperSelectionEvidenceVerifier({
+  const observer=generateKeyPairSync('ed25519'),rollbackObserver=generateKeyPairSync('ed25519');
+  const dataRoot=await mkdtemp(path.join(os.tmpdir(),'nx-ai05-rollback-state-'));
+  const sqlite=new DatabaseSync(path.join(dataRoot,'state.sqlite'));
+  t.after(async()=>{sqlite.close();await rm(dataRoot,{recursive:true,force:true});});
+  sqlite.exec("PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; CREATE TABLE owner(id INTEGER PRIMARY KEY,value TEXT); INSERT INTO owner VALUES(1,'fixture-owner');");
+  const identity=Buffer.from('synthetic protected identity bytes'),receipt=Buffer.from('{"status":"COMPLETE"}');
+  await writeFile(path.join(dataRoot,'identity.bin'),identity);
+  await writeFile(path.join(dataRoot,'receipt.json'),receipt);
+  const stateFiles=['state.sqlite','state.sqlite-wal','state.sqlite-shm','identity.bin','receipt.json'];
+  const readDigest=async()=>{
+    const manifest=await Promise.all(stateFiles.map(async name=>[name,createHash('sha256').update(await readFile(path.join(dataRoot,name))).digest('hex')]));
+    return createHash('sha256').update(JSON.stringify(manifest)).digest('hex');
+  };
+  const approvedStateSha256=await readDigest();
+  const rollbackPhases:string[]=[];
+  const verifyEvidence=createSignedHelperSelectionEvidenceVerifier(bindHelperRollbackGuard({
     observerPublicKeyPem:observer.publicKey.export({type:'spki',format:'pem'}).toString(),
     async requestProof(challenge,v){
       assert.deepEqual(v.scope,scope);
@@ -46,7 +64,20 @@ test('durable independent helper selection excludes runtime/deployment, preserve
       const payload=JSON.stringify({...challenge,accepted,facts:helperEvidenceRequiredFacts(v.phase),observedAt,expiresAt:observedAt+3000});
       return {payload,proof:sign(null,Buffer.from(payload,'utf8'),observer.privateKey).toString('base64url')};
     },
-  });
+  },{
+    observerPublicKeyPem:rollbackObserver.publicKey.export({type:'spki',format:'pem'}).toString(),
+    async requestProof(challenge,v){
+      // Test-only independent signer, observes real disposable SQLite/WAL/SHM
+      // and identity/receipt bytes. Never asserts production native drain.
+      rollbackPhases.push(v.phase);
+      const currentStateSha256=await readDigest();
+      const unknownOperations=JSON.parse(await readFile(path.join(dataRoot,'receipt.json'),'utf8')).status==='UNKNOWN';
+      const observedAt=Date.now();
+      const payload=JSON.stringify({domain:'nexowire.helper-rollback-guard.v1',nonce:challenge.nonce,requestSha256:challenge.requestSha256,phase:challenge.phase,
+        approvedStateSha256,currentStateSha256,writerFenced:true,unknownOperations,recoveryPending:false,priorHelperCompatible:true,observedAt,expiresAt:observedAt+3000});
+      return {payload,proof:sign(null,Buffer.from(payload,'utf8'),rollbackObserver.privateKey).toString('base64url')};
+    },
+  }));
   function backend(){
     const pool=new Pool({...common,user:'helper_fixture_runtime'});pools.push(pool);
     return new PostgresHelperSelectionAuthority({pool:pool as unknown as DispatchStorePool,scope,verifyEvidence,
@@ -120,7 +151,31 @@ test('durable independent helper selection excludes runtime/deployment, preserve
   for(const result of races)if(result.status==='fulfilled')await second.release(result.value.id);
   const up=await runTransferHelperLifecycle(req('upgrade',current,b,'inert fixture B'),provider,store);current=up.selection;
   assert.deepEqual(current.pin,b);
+  // UNKNOWN receipt blocks initial rollback admission, before a durable slot
+  // is created. A subsequent divergent file blocks the actual PG CAS.
+  const deniedAdmission=req('rollback',current,a);
+  await writeFile(path.join(dataRoot,'receipt.json'),'{"status":"UNKNOWN"}');
+  await assert.rejects(deploymentClient.beginDeployment(deniedAdmission),/TRANSPORT_UNKNOWN/);
+  assert.equal((await admin.query('SELECT count(*)::int AS n FROM helper_selection.leases WHERE request_id=$1',[deniedAdmission.requestId])).rows[0].n,0);
+  await writeFile(path.join(dataRoot,'receipt.json'),receipt);
+  assert.equal(await readDigest(),approvedStateSha256);
+  const deniedCommit=req('rollback',current,a),guardedLease=await deploymentClient.beginDeployment(deniedCommit);
+  await writeFile(path.join(dataRoot,'identity.bin'),'synthetic divergent fixture bytes');
+  await assert.rejects(deploymentClient.commit(guardedLease.id,deniedCommit),/TRANSPORT_UNKNOWN/);
+  assert.deepEqual(await second.read(guardedLease.id),current);
+  assert.equal((await admin.query('SELECT state,committed_revision FROM helper_selection.leases WHERE id=$1',[guardedLease.id])).rows[0].state,'ACTIVE');
+  await assert.rejects(second.beginRuntime(randomUUID()),/LEASE_OCCUPIED/);
+  await second.release(guardedLease.id);
+  await assert.rejects(first.beginDeployment(deniedCommit),/REQUEST_REPLAY/);
+  // Reconstruct only disposable fixture data for the positive case, never
+  // an application rollback or a production recovery operation.
+  await writeFile(path.join(dataRoot,'identity.bin'),identity);
+  assert.equal(await readDigest(),approvedStateSha256);
   const rollback=await runTransferHelperLifecycle(req('rollback',current,a),provider,store);current=rollback.selection;
+  assert.equal(await readDigest(),approvedStateSha256);
+  assert.equal(sqlite.prepare('PRAGMA quick_check').get()?.quick_check,'ok');
+  assert.equal(sqlite.prepare('SELECT value FROM owner WHERE id=1').get()?.value,'fixture-owner');
+  assert.deepEqual(rollbackPhases,['BEGIN_DEPLOYMENT','BEGIN_DEPLOYMENT','COMMIT','BEGIN_DEPLOYMENT','COMMIT']);
   assert.deepEqual(current.pin,a);assert.equal(stored.size,2);
 
   // COMMIT actually persists in the independent PostgreSQL database, then
@@ -173,7 +228,7 @@ test('durable independent helper selection excludes runtime/deployment, preserve
   await assert.rejects(second.release(pending.id),/GRANT_FENCED/);
   assert.equal((await admin.query('SELECT state FROM helper_selection.leases WHERE id=$1',[pending.id])).rows[0].state,'ACTIVE');
   assert.equal((await admin.query("SELECT count(*)::int AS n FROM helper_selection.leases WHERE state<>'RELEASED'")).rows[0].n,1);
-  t.diagnostic('Real PostgreSQL + pinned mTLS selection lifecycle; cross-pool exclusion, exact roles, wrong TLS pin/credential/scope/signer denial, replay, rollback/detach and revoke fence verified; external evidence and file store are fixture-only');
+  t.diagnostic('Real PostgreSQL + pinned mTLS startup lease and rollback selection; independent signed guard denies UNKNOWN and divergent disposable SQLite state before CAS, positive rollback preserves SHA-256 and quick_check; native evidence/store remain fixture-only');
 });
 test('provider retains lease on callback failure and refuses nested local acquisition',async()=>{
   const id=randomUUID(),revision=randomUUID();let releases=0,begins=0;
