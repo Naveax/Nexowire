@@ -91,6 +91,22 @@ export class PostgresBrokerDispatchAuthority implements ExternalBrokerDispatchAu
     if(typeof config.verifyNativeDrain!=='function')fail('DISPATCH_STORE_CONFIG_INVALID');
     this.verifyDrain=config.verifyNativeDrain;
   }
+  /** Startup preflight, before opening a protected listener. Does not
+   * authorize a request, create a policy or manufacture native evidence. */
+  async assertNativeCompletionPolicy(capabilities:readonly string[]):Promise<void>{
+    if(!this.requireNativeCompletion||!this.completion||!capabilities.length||
+      capabilities.length>128||new Set(capabilities).size!==capabilities.length)
+      return fail('DISPATCH_STORE_NATIVE_COMPLETION_POLICY_REQUIRED');
+    const reader=this.completion;
+    await this.trusted();
+    await this.transaction(async tx=>{
+      for(const capability of capabilities){
+        if(!await reader.checkPolicy(tx.db,this.authorityId,capability))
+          return fail('DISPATCH_STORE_NATIVE_COMPLETION_POLICY_REQUIRED');
+      }
+      await this.trusted();
+    });
+  }
   private async trusted():Promise<void>{
     let p;
     try{p=await this.provenance()}catch{return fail('DISPATCH_STORE_PROVENANCE_UNAVAILABLE')}
