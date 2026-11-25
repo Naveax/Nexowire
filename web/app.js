@@ -235,9 +235,11 @@ async function setDeviceRootMode(deviceId, enabled, row) {
   }
 }
 
+function validCoreRevision(value){return Number.isSafeInteger(value)&&value>=1;}
+
 function coreEnrollmentEligible(device) {
   const physical = device?.physicalConsole;
-  return device?.platform === 'win32' && device.online === true &&
+  return validCoreRevision(device?.coreMutationRevision) && device?.platform === 'win32' && device.online === true &&
     device.accessMode === 'full' && device.privilegeMode === 'broker' &&
     device.adminBridgeReady === true && ['auto','on'].includes(device.bridgePreference?.desiredMode) &&
     device.persistentMaintenance?.enabled === true &&
@@ -256,6 +258,7 @@ function coreActionDevice(deviceId) {
 // Web Locks serializes check/write/POST; localStorage survives reload or tab loss.
 // Never fall back to an in-memory-only mutation when these facilities are unavailable.
 const CORE_FENCE_PREFIX = 'nexowire-core-uncertain-v1:';
+const coreMutationReceipts=new Map();
 function coreFenceKey(accountId,deviceId) {
   return CORE_FENCE_PREFIX + JSON.stringify([accountId,deviceId]);
 }
@@ -271,11 +274,12 @@ function readCoreFence(accountId,deviceId) {
     const value=JSON.parse(raw);
     if(value?.accountId!==accountId||value.deviceId!==deviceId||
        !['enable','consent','disable'].includes(value.kind)||
-       typeof value.id!=='string'||!value.id||typeof value.acknowledged!=='boolean'||
+       typeof value.id!=='string'||!(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/).test(value.id)||
+       !validCoreRevision(value.expectedRevision)||typeof value.acknowledged!=='boolean'||
        !['in-flight','settled'].includes(value.phase))
       throw Error('Invalid local uncertainty marker');
     return {key,raw,operation:{kind:value.kind,id:value.id,accountId,deviceId,
-      acknowledged:value.acknowledged,inFlight:false}};
+      expectedRevision:value.expectedRevision,acknowledged:value.acknowledged,inFlight:false}};
   } catch {
     return {key,raw:null,operation:{kind:'blocked',inFlight:false,
       feedback:'Tarayıcı işlem koruması doğrulanamadı.'}};
@@ -284,7 +288,7 @@ function readCoreFence(accountId,deviceId) {
 function storeCoreFence(key,operation) {
   // No response bodies, tokens, approval proofs or OS/session IDs in storage.
   const raw=JSON.stringify({id:operation.id,accountId:operation.accountId,
-    deviceId:operation.deviceId,kind:operation.kind,acknowledged:operation.acknowledged,
+    deviceId:operation.deviceId,kind:operation.kind,expectedRevision:operation.expectedRevision,acknowledged:operation.acknowledged,
     phase:operation.inFlight?'in-flight':'settled'});
   localStorage.setItem(key,raw);
   if(localStorage.getItem(key)!==raw)throw Error('Local uncertainty marker not retained');
@@ -311,11 +315,24 @@ function coreOperationFor(deviceId) {
 }
 function coreOperationAllows(deviceId, kind) {
   const previous = coreOperationFor(deviceId);
-  // A deliberate OFF is a separate safety action, never an automatic retry of
-  // consent/enable. A blocked/corrupt marker does not authorize any POST.
-  return !previous || (!previous.inFlight && ['enable','consent'].includes(previous.kind) && kind === 'disable');
+  // Do not overwrite the only durable identity of an unresolved operation.
+  // A new explicit OFF may follow a terminal receipt; local STOP remains available.
+  return !previous;
 }
 
+async function readCoreMutationStatus(operation) {
+  const id='core-v1:'+operation.id;
+  try{
+    const response=await fetch('/api/v1/me/mutations/status?mutationId='+encodeURIComponent(id),{
+      credentials:'include',headers:{Accept:'application/json'},cache:'no-store',signal:AbortSignal.timeout(8000)});
+    if(response.status!==200||response.redirected===true)return null;
+    const result=await response.json();
+    if(result?.mutationId!==id||result.deviceId!==operation.deviceId||
+       result.kind!=='core-'+operation.kind||result.expectedRevision!==operation.expectedRevision||
+       !['APPLIED','DENIED','PENDING'].includes(result.state))return null;
+    return result.state;
+  }catch{return null}
+}
 async function reconcileCoreReadback(snapshot, captured) {
   if(!coreLockAvailable()||typeof snapshot?.accountId!=='string'||!snapshot.accountId.trim())return;
   const devices=Array.isArray(snapshot.devices)?snapshot.devices:[];
@@ -325,28 +342,32 @@ async function reconcileCoreReadback(snapshot, captured) {
     const expected=captured.get(key);
     if(typeof expected!=='string')continue;
     try {
-      await navigator.locks.request(key,{mode:'exclusive',ifAvailable:true},lock=>{
+      await navigator.locks.request(key,{mode:'exclusive',ifAvailable:true},async lock=>{
         if(!lock)return; // Another tab is executing, so its marker is not terminal.
         const current=readCoreFence(snapshot.accountId,device.id);
         const operation=current.operation;
         if(current.raw!==expected||!operation||operation.kind==='blocked')return;
-        const core=device.persistentMaintenance;
-        const physical=device.physicalConsole;
-        const recorded=physical?.enrollmentRequested===true||physical?.localEnrolled===true;
-        const confirmed=operation.kind==='disable'?core?.enabled===false:
-          core?.enabled===true&&(recorded||(operation.kind==='enable'&&operation.acknowledged));
-        // This only reconciles the observed preference/request. It never proves
-        // a native effect, STOP/drain or durable backend mutation identity.
-        if(confirmed){
-          localStorage.removeItem(key);
-          if(coreOperations.get(device.id)?.id===operation.id)coreOperations.delete(device.id);
-        }
+        const state=await readCoreMutationStatus(operation);
+        // 404, PENDING, malformed or unreachable status never clears a marker.
+        // Even an identical preference/consent dashboard value is not a receipt.
+        if(!['APPLIED','DENIED'].includes(state)||
+           readCoreFence(snapshot.accountId,device.id).raw!==expected)return;
+        // A terminal ledger receipt alone does not prove that the earlier GET
+        // reflects the mutation. Keep the fence until a newer dashboard view.
+        if(state==='APPLIED'&&(!validCoreRevision(device.coreMutationRevision)||
+           device.coreMutationRevision<=operation.expectedRevision))return;
+        localStorage.removeItem(key);
+        if(coreOperations.get(device.id)?.id===operation.id)coreOperations.delete(device.id);
+        // Informational only; the current dashboard remains the preference view.
+        coreMutationReceipts.set(key,{state,revision:device.coreMutationRevision});
+
       });
     } catch { /* leave uncertainty intact when the lock/storage is unavailable */ }
   }
 }
 
 function coreKindEligible(device,kind) {
+  if(!validCoreRevision(device?.coreMutationRevision))return false;
   if(kind==='consent')return coreEnrollmentEligible(device);
   if(kind==='disable')return device?.persistentMaintenance?.enabled===true;
   return kind==='enable'&&device?.persistentMaintenance?.enabled===false&&
@@ -379,7 +400,10 @@ function coreRemoteReadback(device,snapshot,now=Date.now()) {
 }
 
 function renderCoreReadbackCopy(element,device,snapshot,operation) {
-  const base=coreReadbackMessage(device,operation);
+  const receipt=coreMutationReceipts.get(coreFenceKey(snapshot.accountId,device.id));
+  const receiptText=!operation&&receipt?.revision===device.coreMutationRevision
+    ? (receipt.state==='APPLIED'?' D1 işlem kaydı: APPLIED (yalnız veritabanı yazımı).':' D1 işlem kaydı: DENIED (işlem kabul edilmedi).') : '';
+  const base=coreReadbackMessage(device,operation)+receiptText;
   const remote=coreRemoteReadback(device,snapshot);
   const message=base+remote.text;
   element.textContent=message;
@@ -415,6 +439,7 @@ async function performCoreAction(deviceId, kind, row) {
   const device = coreActionDevice(deviceId);
   if (!device || !coreKindEligible(device,kind)) return;
   const accountId=currentSnapshot.accountId;
+  const expectedRevision=device.coreMutationRevision;
   const enabled = kind === 'enable';
   const input = row.querySelector('.core-phrase');
   const status = row.querySelector('.core-copy');
@@ -437,11 +462,13 @@ async function performCoreAction(deviceId, kind, row) {
       const fresh=await response.json();
       const matches=Array.isArray(fresh?.devices)?fresh.devices.filter(d=>d?.id===deviceId):[];
       if(fresh?.accountId!==accountId||currentSnapshot?.accountId!==accountId||
-         matches.length!==1||!coreKindEligible(matches[0],kind)){refresh=true;return}
+         matches.length!==1||matches[0].coreMutationRevision!==expectedRevision||
+         !coreKindEligible(matches[0],kind)){refresh=true;return}
       // The marker must be persisted and read back before crossing the POST
       // boundary. A tab/browser crash leaves an unresolved marker on disk.
-      const operation={kind,accountId,deviceId,id:crypto.randomUUID(),inFlight:true,acknowledged:false,feedback:''};
+      const operation={kind,accountId,deviceId,id:crypto.randomUUID(),expectedRevision,inFlight:true,acknowledged:false,feedback:''};
       storeCoreFence(key,operation);
+      coreMutationReceipts.delete(key);
       coreOperations.set(deviceId,operation);
       for(const selector of ['.core-toggle','.core-approve','.core-enrollment-retry'])
         row.querySelector(selector).disabled=true;
@@ -458,13 +485,13 @@ async function performCoreAction(deviceId, kind, row) {
         const response = await fetch(consent ? '/api/v1/me/devices/core-enrollment-request' :
           '/api/v1/me/devices/core-preference', {
             method:'POST',credentials:'include',headers,signal:AbortSignal.timeout(15000),
-            body:JSON.stringify({deviceId,...(consent ? {} : {enabled,
+            body:JSON.stringify({deviceId,expectedRevision,...(consent ? {} : {enabled,
               ...(enabled ? {confirmation:'CORE UNLIMITED'} : {})})}),
           });
         if (response.ok) {
           const result = await response.json();
           // The backend ACK is only a preference/request receipt, never local consent.
-          operation.acknowledged = result?.deviceId === deviceId && (consent
+          operation.acknowledged = result?.mutationId === 'core-v1:'+operation.id && result?.deviceId === deviceId && (consent
             ? result.enrollmentRequested === true && result.active === false
             : result.persistentMaintenance?.enabled === enabled &&
               result.persistentMaintenance?.active === false);
@@ -472,6 +499,9 @@ async function performCoreAction(deviceId, kind, row) {
         } else {
           const body=await response.json().catch(()=>null);
           const errors={
+            DASHBOARD_MUTATION_ALREADY_APPLIED:'Aynı işlem kaydı mevcut; sonucu salt okunur doğrula.',
+            DASHBOARD_MUTATION_REVISION_OR_STATE_CONFLICT:'Sunucu işlem revision veya durum çakışması bildirdi.',
+            DASHBOARD_MUTATION_OUTCOME_UNKNOWN:'Sunucu işlem sonucunu doğrulayamıyor.',
             CORE_AUTHORITY_UNAVAILABLE:'CORE onay servisi kullanılamıyor.',
             CORE_NATIVE_CONSENT_PROVIDER_UNAVAILABLE:'Bağımsız yerel onay sağlayıcısı kullanılamıyor.',
             CORE_ALREADY_ENROLLED:'Sunucu yerel CORE kaydının mevcut olduğunu bildiriyor.',
@@ -935,9 +965,9 @@ function render(snapshot) {
         const refreshed=[...document.querySelectorAll('.device')].filter(card=>card.dataset.deviceId===device.id);
         if(refreshed.length===1)refreshed[0].querySelector('.core-readback')?.focus({preventScroll:true});
       });
-      coreButton.disabled=!coreActionDevice(device.id) || (core.enabled === true
+      coreButton.disabled=!coreActionDevice(device.id) || !validCoreRevision(device.coreMutationRevision) || (core.enabled === true
         ? !coreOperationAllows(device.id,'disable') : core.enabled !== false || !coreOperationAllows(device.id,'enable'));
-      row.querySelector('.core-approve').disabled=!coreActionDevice(device.id) || !coreOperationAllows(device.id,'enable');
+      row.querySelector('.core-approve').disabled=!coreActionDevice(device.id) || !coreKindEligible(device,'enable') || !coreOperationAllows(device.id,'enable');
       const physicalFresh=physicalCoreStatusVerifierInstalled&&
         physical?.localEnrolled===true&&physical.active===true&&
         Number.isFinite(physical.observedAtMs)&&Date.now()-physical.observedAtMs>=0&&
