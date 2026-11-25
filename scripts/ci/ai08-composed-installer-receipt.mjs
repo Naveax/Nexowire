@@ -20,7 +20,7 @@ const pins={
  'scripts/Build-Nexowire-TransferFlushArtifact.ps1':'bece860ec43b79eeb7542f01b0cd531f024f50a5',
  'scripts/ci/ai05-protected-helper-fixture.mjs':'b501bb91a8b7fca1ba8a6cb050715a1187813a5c',
  'scripts/ci/ai05-protected-helper-fixture.ps1':'cbad1e0433724f37422b0ae83285e9947c5cf7c7',
- 'scripts/ci/ai05-test-signed-native-helper.ps1':'08acbe3eb90ea4a274dc30cc1e58b88f4070e749',
+ 'scripts/ci/ai05-test-signed-native-helper.ps1':'7362223ac095b9860862917862cf7c5869b541d0',
  'scripts/ai02-signed-sqlite-rollback-review.ts':'0be381cafd8c99fbb99e1bb082752b0f0a563bbe',
  'scripts/ai05-signed-sqlite-helper-review.ts':'e3e86f3225bec8699490a7e435024d3f778ced96',
  'src/security/protected-helper-rollback-guard.ts':'6bef386ac025cb543a8381c6ba59787b427d3967',
@@ -85,11 +85,21 @@ if(receipt.files.every(f=>f.status==='PASS')){
 }
 if(receipt.signedStorageFixture==='PASS'){
  check();
- const child=spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',['-NoProfile','-NonInteractive','-File','scripts/ci/ai05-test-signed-native-helper.ps1'],{encoding:'utf8',timeout:600000,maxBuffer:8*1024*1024,windowsHide:true});
+ const phaseLog=path.resolve(dir,'test-signed-native.phases.log');
+ writeFileSync(phaseLog,'',{flag:'wx'});
+ const started=performance.now();
+ const child=spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',['-NoLogo','-NoProfile','-NonInteractive','-File','scripts/ci/ai05-test-signed-native-helper.ps1'],{encoding:'utf8',timeout:600000,maxBuffer:8*1024*1024,windowsHide:true,env:{...process.env,AI05_NATIVE_PHASE_LOG:phaseLog}});
+ const phases=readFileSync(phaseLog,'utf8');
+ const stderr=child.stderr??'';
+ writeFileSync(path.join(dir,'test-signed-native.stderr.log'),stderr);
+ receipt.testSignedNativeProcess={status:child.status,signal:child.signal,errorCode:child.error?.code??null,elapsedMs:Math.round(performance.now()-started),stderrSha256:sha(stderr),phaseLogSha256:sha(phases),lastPhase:phases.trim().split(/\r?\n/).at(-1)??null};
+ console.log(JSON.stringify({scope:'HOSTED_WINDOWS_NATIVE_PROCESS_DIAGNOSTIC',...receipt.testSignedNativeProcess}));
+ process.stdout.write(phases);
  const log=child.stdout??'';writeFileSync(path.join(dir,'test-signed-native.log'),log);process.stdout.write(log);if(child.stderr)process.stderr.write(child.stderr);
  receipt.testSignedNativeFixture='FAIL';receipt.testSignedNativeLogSha256=sha(log);
  try{
-  if(child.error||child.signal||child.status!==0)throw Error('TEST_SIGNED_NATIVE_PROCESS_FAILED');
+  if(child.error||child.signal||child.status!==0)throw Error('TEST_SIGNED_NATIVE_PROCESS_FAILED:'+(child.error?.code??child.signal??child.status));
+  if(!/ COMPLETE\r?\n$/.test(phases))throw Error('TEST_SIGNED_NATIVE_PHASE_INCOMPLETE');
   const find=scope=>{const rows=log.split(/\r?\n/).filter(l=>l.startsWith('{"scope":"'+scope+'"'));if(rows.length!==1)throw Error('TEST_SIGNED_NATIVE_RECEIPT_MISSING_OR_DUPLICATE');return JSON.parse(rows[0]);};
   const f=find('HOSTED_WINDOWS_TEST_SIGNED_NEXOWIRE_HELPER_FIXTURE'),cleanup=find('HOSTED_WINDOWS_TEST_SIGNING_CLEANUP');
   if(f.node!==process.versions.node||f.operations!==4||f.wrongSignerDenied!==true||f.aclVerified!==true||

@@ -3,6 +3,14 @@ import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {renderMachineCutoverScript} from '../src/update/machine-update.js';
 
+// Test child only: preserve Windows profile/TEMP, not a production launcher.
+// Filter case-insensitive duplicates before overriding known inbox paths.
+function fixtureEnvironment():NodeJS.ProcessEnv{
+  const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>!/^(PATH|PSMODULEPATH|SYSTEMROOT|WINDIR)$/i.test(k)));
+  return {...env,SystemRoot:'C:\\Windows',windir:'C:\\Windows',PATH:'C:\\Windows\\System32;C:\\Windows',
+    PSModulePath:'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules'};
+}
+
 const script=renderMachineCutoverScript({
   version:'1.0.5',
   buildId:'1.0.5-012345abcdef',
@@ -60,6 +68,9 @@ for(const scenario of cases){
   test(scenario.name,{skip:process.platform!=='win32'},()=>{
     const source=[
       "$ErrorActionPreference='Stop'",
+      '[Console]::Error.WriteLine("AI05_PS_STARTED")',
+      "Import-Module -Name 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules\\Microsoft.PowerShell.Utility\\Microsoft.PowerShell.Utility.psd1' -ErrorAction Stop",
+      '[Console]::Error.WriteLine("AI05_PS_UTILITY_LOADED")',
       "$BootLauncher='C:\\ProgramData\\Nexowire\\hub-boot\\launch.ps1'",
       "$BrokerLauncher='C:\\ProgramData\\Nexowire\\privileged-broker\\launch.ps1'",
       "$BootTask='Nexowire Hub Boot'",
@@ -87,20 +98,24 @@ for(const scenario of cases){
       'function Write-Status {param([string]$state,[string]$message)',
       '  [pscustomobject]@{state=$state;message=$message;stops=$script:stops;starts=$script:starts;patches=$script:patches;restores=$script:restores}|ConvertTo-Json -Compress',
       '}',
+      '[Console]::Error.WriteLine("AI05_PS_CUTOVER_FIXTURE_ENTERED")',
       actualTail,
     ].join('\r\n');
+    const started=performance.now();
     const child=spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
       ['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',
         Buffer.from(source,'utf16le').toString('base64')],{
         cwd:'C:\\Windows\\System32',
-        env:{
-          SystemRoot:'C:\\Windows',windir:'C:\\Windows',
-          PATH:'C:\\Windows\\System32;C:\\Windows',
-          PSModulePath:'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules',
-        },
+        // PowerShell 5.1 needs the real profile/temp environment, just as
+        // the passing rollback-integrity fixture does. Restrict PATH and modules.
+        env:fixtureEnvironment(),
         encoding:'utf8',timeout:10_000,maxBuffer:128*1024,windowsHide:true,
       });
-    assert.equal(child.status,scenario.expectedExit,child.stderr);
+    const diagnostic=JSON.stringify({error:(child.error as NodeJS.ErrnoException|undefined)?.code??null,signal:child.signal,status:child.status,elapsedMs:Math.round(performance.now()-started),stdout:child.stdout,stderr:child.stderr});
+    assert.equal(child.error,undefined,diagnostic);
+    assert.equal(child.signal,null,diagnostic);
+    assert.equal(child.status,scenario.expectedExit,diagnostic);
+    assert.match(child.stderr,/AI05_PS_CUTOVER_FIXTURE_ENTERED/);
     const records=child.stdout.trim().split(/\r?\n/).filter(Boolean);
     assert.equal(records.length,1,child.stdout);
     const result=JSON.parse(records[0] ?? '') as {
