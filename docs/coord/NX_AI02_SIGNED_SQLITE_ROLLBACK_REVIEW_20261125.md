@@ -1,0 +1,11 @@
+# AI-02 signed SQLite-only rollback source review
+
+Base integration: `06e4215dff5cb7607f25d4cf669683099ed9855f`. #1243 was merged; do not repeat or overwrite it. The historical preservation gate `gate://signed-sqlite-only-runtime-rollback-guard` remains MISSING.
+
+The existing signed payload verifier proves manifest/file identity against an external anchor, not SQLite-only semantics. The existing AI-06 preflight checks a caller-supplied reader enum, not authenticated runtime capability. The current machine updater's catch path restores old launchers and starts them without a mandatory composed signed SQLite-only proof.
+
+This isolated follow-up adds a **read-only review component**, not a deployed authorization mechanism: an independently reviewed exact manifest/source/sequence and SQLite schema-1 reader pin must match the signed candidate and already accepted external anchor. The anchor is not rewound or advanced. The optional offline Windows comparison binds two distinct offline copies through the existing complete durable state fingerprint and schema check, then rereads both after candidate verification. Main DB and durable WAL bytes and row counts are checked; SHM metadata is checked for file safety by the existing inventory but not required byte-identical (SQLite may refresh it on a read-only connection). Never restore the preserved evidence tree over the current ledger.
+
+The fixture keys and anchor are synthetic; no independent production publisher, authenticated production anchor, real SQLite-only runtime approval or real quiescence proof is created. The fixtures never launch the candidate or modify scheduled tasks. ProductionRollbackAuthorized stays false even on successful inspection. No physical or release gate is closed.
+
+AI-05 owns actual updater/installer admission and held artifact identity; AI-08 must independently review and execute exact-source fixtures; AI-09 exclusively owns approved physical cutover/reboot/rollback. Require signed approved runtime capability and authenticated anchor, current offline state/SQLite-WAL continuity, protected ACL, verified writer exclusion and a real updater denial on missing/invalid proof BEFORE any fallback restart. Do not relax the manifest verifier's anti-rollback anchor, reclassify MISSING, or use fixture proof as deployment authority. Source handoff only.

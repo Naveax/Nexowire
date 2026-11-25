@@ -4,6 +4,12 @@ on:
     paths:
       - '.github/workflows/ai08-composed-installer-lifecycle.yml'
       - 'scripts/ci/ai05-protected-helper-fixture.ps1'
+      - 'scripts/ci/ai05-test-signed-native-helper.ps1'
+      - 'test/ai04/signed-sqlite-rollback-review.test.ts'
+      - 'test/ai05/signed-sqlite-helper-review.test.ts'
+      - 'scripts/ai02-signed-sqlite-rollback-review.ts'
+      - 'scripts/ai05-signed-sqlite-helper-review.ts'
+      - 'src/security/protected-helper-rollback-guard.ts'
       - 'scripts/ci/ai05-protected-helper-fixture.mjs'
       - 'scripts/Build-Nexowire-TransferFlushArtifact.ps1'
       - 'src/installer/protected-transfer-helper-lifecycle.ts'
@@ -20,7 +26,7 @@ jobs:
     name: lifecycle-windows-${{ matrix.node }}
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: windows-latest
-    timeout-minutes: 35
+    timeout-minutes: 50
     strategy:
       fail-fast: false
       matrix:

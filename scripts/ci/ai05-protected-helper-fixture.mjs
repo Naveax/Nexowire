@@ -42,13 +42,28 @@ async function observePin(file){
 // Observed fixture pins are NOT authorized Nexowire release pins. Neither
 // Windows compiler executable is ever launched from the helper namespace.
 const framework='C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319';
-const originalA=path.join(framework,'csc.exe'),originalB=path.join(framework,'vbc.exe');
+const supplied=process.argv.slice(2);
+assert([0,2].includes(supplied.length));
+const testSignedNative=supplied.length===2;
+const [originalA,originalB]=testSignedNative?supplied:[path.join(framework,'csc.exe'),path.join(framework,'vbc.exe')];
+if(testSignedNative){
+  for(const file of [originalA,originalB]){
+    assert.equal((await fs.realpath(file)).toLowerCase(),file.toLowerCase());
+    assert.match(path.basename(path.dirname(file)),/^Nexowire-TransferFlush-Build-[0-9a-f]{32}$/);
+    assert.equal(path.dirname(path.dirname(file)).toLowerCase(),(await fs.realpath(os.tmpdir())).toLowerCase());
+    const bytes=await fs.readFile(file);
+    assert.equal(bytes.readUInt16LE(0),0x5a4d);
+    const pe=bytes.readUInt32LE(0x3c);
+    assert.equal(bytes.readUInt32LE(pe),0x4550);assert.equal(bytes.readUInt16LE(pe+4),0x8664);
+  }
+}
 for(const file of [originalA,originalB]){
   const st=await fs.lstat(file);
   console.log(JSON.stringify({scope:'OS_FIXTURE_SOURCE_DIAGNOSTIC',name:path.basename(file),nlink:st.nlink,size:st.size,isFile:st.isFile(),canonical:(await fs.realpath(file)).toLowerCase()===file.toLowerCase()}));
 }
 const a=await observePin(originalA),b=await observePin(originalB);
 assert.notEqual(a.sha256,b.sha256);
+if(testSignedNative)assert.notEqual(a.signerSha256,b.signerSha256);
 const codeRoot=path.dirname(fileURLToPath(import.meta.url));
 const runtimeFiles=['node.exe','package.json','fixture.mjs','dist/src/installer/protected-transfer-helper-lifecycle.js','dist/src/security/windows-programdata-acl.js','dist/src/security/windows-privileged-runtime-trust.js'];
 const witness=new Map(await Promise.all(runtimeFiles.map(async p=>[p,await digest(path.join(codeRoot,p))])));
@@ -130,7 +145,7 @@ try{
     await fs.unlink(file);
   }
   await fs.rmdir(TRANSFER_HELPER_ROOT);
-  console.log(JSON.stringify({scope:'HOSTED_WINDOWS_INERT_SIGNED_ARTIFACT_FIXTURE',node:process.versions.node,operations:4,wrongSignerDenied:true,aclVerified:true,sqliteWalShmAndSentinelsPreserved:true,sqliteQuickCheck:'ok',syntheticSelectionAuthority:true,nexowireHelperSigned:false,helperExecuted:false,productionAcceptance:false}));
+  console.log(JSON.stringify({scope:testSignedNative?'HOSTED_WINDOWS_TEST_SIGNED_NEXOWIRE_HELPER_FIXTURE':'HOSTED_WINDOWS_INERT_SIGNED_ARTIFACT_FIXTURE',node:process.versions.node,operations:4,wrongSignerDenied:true,aclVerified:true,sqliteWalShmAndSentinelsPreserved:true,sqliteQuickCheck:'ok',syntheticSelectionAuthority:true,nexowireHelperSigned:testSignedNative,fixtureSignature:testSignedNative,productionSigner:false,helperExecuted:false,productionAcceptance:false}));
 }finally{
   db.close();
   await fs.rm(data,{recursive:true,force:true,maxRetries:5,retryDelay:100});

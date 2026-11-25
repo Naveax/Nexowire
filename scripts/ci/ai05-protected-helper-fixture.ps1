@@ -1,8 +1,15 @@
+param([string[]]$FixtureSources=@())
 # CI-only fixture. No production credentials, runtime registration or helper execution.
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 if($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_ENVIRONMENT -cne 'github-hosted' -or $env:RUNNER_OS -cne 'Windows'){
   throw 'AI05_DISPOSABLE_HOST_REQUIRED'
+}
+if($FixtureSources.Count -ne 0 -and $FixtureSources.Count -ne 2){throw 'AI05_FIXTURE_SOURCE_COUNT_INVALID'}
+$modules='C:\Windows\System32\WindowsPowerShell\v1.0\Modules'
+$env:PSModulePath=$modules
+foreach($name in @('Microsoft.PowerShell.Security','Microsoft.PowerShell.Utility','Microsoft.PowerShell.Management')){
+  Import-Module -Name (Join-Path $modules ($name+'\'+$name+'.psd1')) -ErrorAction Stop
 }
 $fixed='C:\ProgramData\Nexowire-TransferRuntime'
 if(Test-Path -LiteralPath $fixed){throw 'AI05_FIXTURE_FIXED_ROOT_ALREADY_EXISTS'}
@@ -44,7 +51,7 @@ try{
   # here; the actual lifecycle implementation must create and verify it.
   & 'C:\Windows\System32\icacls.exe' $runtime /setowner '*S-1-5-32-544' /T
   if($LASTEXITCODE -ne 0){throw 'AI05_FIXTURE_OWNER_FAILED'}
-  & $node $entry
+  & $node $entry @FixtureSources
   if($LASTEXITCODE -ne 0){throw 'AI05_PROTECTED_LIFECYCLE_FIXTURE_FAILED'}
 }finally{
   # No recursive deletion of the fixed helper root. The fixture removes only
