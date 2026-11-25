@@ -1,4 +1,7 @@
-import {createHash} from 'node:crypto';
+import {createHash,randomBytes} from 'node:crypto';
+import * as z from 'zod';
+import {CoreApprovalBindingSchema,PostgresCoreApprovalLedger,type CoreApprovalNativeReadback,type CoreApprovalBinding} from './postgres-core-approval-ledger.js';
+import {CoreWebAuthnIntentSchema} from './core-webauthn-approval.js';
 import {execFile,spawn} from 'node:child_process';
 import {promises as fs} from 'node:fs';
 import path from 'node:path';
@@ -85,7 +88,7 @@ export function windowsOwnerLauncherArguments(input:Ceremony,pins:WindowsOwnerLa
     deny('CEREMONY_SCOPE_INVALID');
   return Object.freeze(['--ceremony',...a.slice(1),c.helperSha256,c.helperSignerSha256]);
 }
-async function launch(c:Readonly<WindowsOwnerLauncherPins>,args:readonly string[],signal:AbortSignal):Promise<unknown>{
+async function launch(c:Readonly<WindowsOwnerLauncherPins>,args:readonly string[],signal:AbortSignal,timeoutMs=100000):Promise<unknown>{
   signal.throwIfAborted();
   // Direct launch under the protected SYSTEM service. The native launcher
   // independently checks session zero, actual owner token, artifact handle,
@@ -98,7 +101,7 @@ async function launch(c:Readonly<WindowsOwnerLauncherPins>,args:readonly string[
     const cleanup=()=>{clearTimeout(timer);signal.removeEventListener('abort',abort);};
     const fail=()=>{if(!settled){settled=true;reject(Error('CORE_OWNER_LAUNCHER_OUTCOME_UNKNOWN'));}};
     const abort=()=>{invalid=true;if(!finished){try{child.kill();}catch{/* Keep outcome unknown. */}}};
-    timer=setTimeout(abort,100000);
+    timer=setTimeout(abort,timeoutMs);
     signal.addEventListener('abort',abort,{once:true});
     if(signal.aborted)abort();
     child.stdout.on('data',(b:Buffer)=>{bytes+=b.length;if(bytes>8192)abort();else if(!invalid)chunks.push(b);});
@@ -120,7 +123,7 @@ async function launch(c:Readonly<WindowsOwnerLauncherPins>,args:readonly string[
  * entire trusted runtime; release provisioning and physical acceptance remain
  * explicit prerequisites. All native failure paths deny, never retry. */
 export async function createWindowsProtectedOwnerAssertionLauncher(pins:WindowsOwnerLauncherPins):
-  Promise<ProtectedOwnerAssertionLauncher>{
+  Promise<ProtectedOwnerAssertionLauncher & {observeOwner(signal:AbortSignal):Promise<NativeOwnerObservation>}>{
   if(process.platform!=='win32')deny('WINDOWS_REQUIRED');
   const c=validateWindowsOwnerLauncherPins(pins);
   assertNoPrivilegedNodeStartupFlags(process.execArgv);
@@ -131,6 +134,17 @@ export async function createWindowsProtectedOwnerAssertionLauncher(pins:WindowsO
   await exactFile(helper,c.helperSha256);await signature(helper,c.helperSignerSha256);
   let busy=false,unknown=false;
   return Object.freeze({
+    async observeOwner(signal:AbortSignal){
+      if(unknown||busy) return deny('PRIOR_OUTCOME_UNKNOWN_OR_BUSY');
+      const nonce=randomBytes(32).toString('hex'),started=process.hrtime.bigint();
+      signal.throwIfAborted();
+      await exactFile(c.launcherPath,c.launcherSha256);
+      const raw=await launch(c,['--observe-owner',nonce],signal,1200);
+      await exactFile(c.launcherPath,c.launcherSha256);
+      signal.throwIfAborted();
+      if(process.hrtime.bigint()-started>=1800000000n)deny('READBACK_STALE');
+      return parseNativeOwnerObservation(raw,nonce);
+    },
     async runBoundAssertion(input:Ceremony,signal:AbortSignal){
       if(unknown)deny('PRIOR_OUTCOME_UNKNOWN');
       if(busy)deny('BUSY');
@@ -153,12 +167,57 @@ export async function createWindowsProtectedOwnerAssertionLauncher(pins:WindowsO
     }
   });
 }
+const observationSchema=z.strictObject({version:z.literal(1),kind:z.literal('core_owner_wts_observation_v1'),
+  nonce:z.string().regex(/^[a-f0-9]{64}$/),windowsUserSid:z.string().max(184).regex(/^S-1-[0-9]+(?:-[0-9]+)+$/),
+  windowsSessionId:z.number().int().min(1).max(0xfffffffe),
+  windowsLogonLuid:z.string().regex(/^[a-f0-9]{16}$/).refine(s=>!/^0+$/.test(s)),
+  humanApproval:z.literal(false),coreAuthority:z.literal(false)});
+export type NativeOwnerObservation=Readonly<z.infer<typeof observationSchema>>;
+/** Parses only the observation from the held, protected child. By itself this
+ * parser provides NO origin authentication or approval. */
+export function parseNativeOwnerObservation(raw:unknown,nonce:string):NativeOwnerObservation{
+  const value=observationSchema.parse(raw);
+  if(value.nonce!==nonce)deny('READBACK_NONCE_MISMATCH');
+  return Object.freeze(value);
+}
+const provisionedSchema=z.strictObject({binding:CoreApprovalBindingSchema,
+  issuerSpkiSha256:z.string().regex(/^[a-f0-9]{64}$/),
+  rpId:CoreWebAuthnIntentSchema.shape.rpId,credentialId:CoreWebAuthnIntentSchema.shape.credentialId});
+function sameBinding(a:CoreApprovalBinding,b:CoreApprovalBinding){
+  return (Object.keys(a) as Array<keyof CoreApprovalBinding>).every(k=>a[k]===b[k]);
+}
+export function matchNativeOwnerObservation(observation:NativeOwnerObservation,binding:CoreApprovalBinding){
+  return observation.windowsUserSid===binding.windowsUserSid&&
+    observation.windowsSessionId===binding.windowsSessionId&&observation.windowsLogonLuid===binding.windowsLogonLuid;
+}
 /** Explicit startup composition, not the Agent or off-host verifier process.
  * No default service registration; current owner directory and ledger remain
  * independently provisioned. The Windows helper's raw assertion is verified
  * by the PostgreSQL ledger before a proof can be returned. */
 export async function createWindowsProtectedOwnerIssuer(config:
-  Omit<Parameters<typeof createProtectedOwnerConsentAuthority>[0],'launcher'> & {pins:WindowsOwnerLauncherPins}){
+  {pins:WindowsOwnerLauncherPins;
+    ledger:Omit<ConstructorParameters<typeof PostgresCoreApprovalLedger>[0],'readProtectedNativeBinding'>;
+    /** Independent provisioned directory: owner, current grant/logon epoch,
+     * credential and enrolled issuer pin. Never supplied by Agent JSON. */
+    readProvisionedOwner:(signal:AbortSignal)=>Promise<unknown>}){
   const launcher=await createWindowsProtectedOwnerAssertionLauncher(config.pins);
-  return createProtectedOwnerConsentAuthority({ledger:config.ledger,readCurrentOwner:config.readCurrentOwner,launcher});
+  const readProvisioned=config.readProvisionedOwner;
+  const current=async(signal:AbortSignal)=>{
+    signal.throwIfAborted();
+    const provisioned=provisionedSchema.parse(await readProvisioned(signal));
+    const observed=await launcher.observeOwner(signal);
+    signal.throwIfAborted();
+    if(!matchNativeOwnerObservation(observed,provisioned.binding))deny('OWNER_READBACK_MISMATCH');
+    return Object.freeze({...provisioned,binding:Object.freeze(provisioned.binding)});
+  };
+  const ledger=new PostgresCoreApprovalLedger({...config.ledger,
+    async readProtectedNativeBinding(expected,signal):Promise<CoreApprovalNativeReadback|null>{
+      try{
+        const provisioned=await current(signal);
+        if(!sameBinding(provisioned.binding,expected))return null;
+        return Object.freeze({binding:provisioned.binding,observedAtMs:Date.now(),
+          protectedNativeWitness:true as const,issuerSpkiSha256:provisioned.issuerSpkiSha256});
+      }catch{return null;}
+    }});
+  return createProtectedOwnerConsentAuthority({ledger,readCurrentOwner:current,launcher});
 }
