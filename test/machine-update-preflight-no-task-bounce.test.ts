@@ -47,7 +47,7 @@ test('cutover boundary precedes first stop; legacy rollback never restarts tasks
 
 type Scenario ={
   name:string;
-  failPhase:'plan'|'secondPatch'|'health'|'none'|'disable'|'readback'|'identity'|'existing'|'alreadyDisabled'|'enable';
+  failPhase:'plan'|'secondPatch'|'health'|'none'|'disable'|'readback'|'identity'|'existing'|'alreadyDisabled'|'enable'|'stateReadback';
   restoreFails?:boolean;
   expectedStatus:'rolled_back'|'rollback_failed'|'succeeded';
   restoredListenerFails?:boolean;
@@ -73,8 +73,9 @@ const cases:Scenario[]=[
    failPhase:'health',restoredListenerFails:true,expectedStatus:'rollback_failed',expectedStops:4,expectedStarts:1,expectedRestores:0,expectedExit:2},
   {name:'successful cutover starts both planned tasks and claims success',
    failPhase:'none',expectedStatus:'succeeded',expectedStops:2,expectedStarts:2,expectedRestores:0,expectedExit:0,expectedEnabled:2,expectedPatches:2,expectedFence:false},
-  {name:'disable denial never patches or enables a launcher and retains recovery marker',failPhase:'disable',expectedStatus:'rollback_failed',expectedStops:2,expectedStarts:0,expectedRestores:0,expectedExit:2,expectedEnabled:1,expectedPatches:0,expectedFence:true,expectedMessage:/BROKER_ACTIVATION_FENCE_UNVERIFIED/},
-  {name:'false disabled readback never patches a launcher',failPhase:'readback',expectedStatus:'rollback_failed',expectedStops:2,expectedStarts:0,expectedRestores:0,expectedExit:2,expectedEnabled:1,expectedPatches:0,expectedFence:true,expectedMessage:/BROKER_ACTIVATION_FENCE_UNVERIFIED/},
+  {name:'disable denial never patches or enables a launcher and retains recovery marker',failPhase:'disable',expectedStatus:'rollback_failed',expectedStops:1,expectedStarts:0,expectedRestores:0,expectedExit:2,expectedEnabled:1,expectedPatches:0,expectedFence:true,expectedMessage:/BROKER_ACTIVATION_FENCE_UNVERIFIED/},
+  {name:'false disabled readback never patches a launcher',failPhase:'readback',expectedStatus:'rollback_failed',expectedStops:1,expectedStarts:0,expectedRestores:0,expectedExit:2,expectedEnabled:1,expectedPatches:0,expectedFence:true,expectedMessage:/BROKER_ACTIVATION_FENCE_UNVERIFIED/},
+  {name:'disabled bit without Disabled scheduler state refuses all launcher mutation',failPhase:'stateReadback',expectedStatus:'rollback_failed',expectedStops:4,expectedStarts:0,expectedRestores:0,expectedExit:2,expectedEnabled:0,expectedPatches:0,expectedFence:true,expectedMessage:/BROKER_ACTIVATION_FENCE_UNVERIFIED/},
   {name:'existing durable fence refuses even a new forward update',failPhase:'existing',expectedStatus:'rollback_failed',expectedStops:0,expectedStarts:0,expectedRestores:0,expectedExit:2,expectedEnabled:2,expectedPatches:0,expectedFence:true,expectedMessage:/SIGNED_SQLITE_ROLLBACK_AUTHORITY_REQUIRED/},
   {name:'previously disabled task cannot be reactivated by ordinary update',failPhase:'alreadyDisabled',expectedStatus:'rollback_failed',expectedStops:0,expectedStarts:0,expectedRestores:0,expectedExit:2,expectedEnabled:1,expectedPatches:0,expectedFence:false,expectedMessage:/SIGNED_SQLITE_ROLLBACK_AUTHORITY_REQUIRED/},
   {name:'changed task owner is not stopped or activated',failPhase:'identity',expectedStatus:'rollback_failed',expectedStops:1,expectedStarts:0,expectedRestores:0,expectedExit:2,expectedEnabled:1,expectedPatches:0,expectedFence:true,expectedMessage:/ACTIVATION_IDENTITY_CHANGED/},
@@ -125,6 +126,7 @@ for(const scenario of cases){
       " if($TaskName -eq $BrokerTask -and $failPhase -eq 'disable'){throw 'DENIED_DISABLE'}",
       " if($TaskName -eq $BrokerTask -and $failPhase -eq 'readback'){return}",
       " $tasks[$TaskName].Settings.Enabled=$false;$tasks[$TaskName].State='Disabled'",
+      " if($TaskName -eq $BrokerTask -and $failPhase -eq 'stateReadback'){$tasks[$TaskName].State='Ready'}",
       " if($TaskName -eq $BootTask -and $failPhase -eq 'identity'){$tasks[$BrokerTask].Principal.UserId='replacement-owner'}",
       '}',
       'function Enable-ScheduledTask {param([string]$TaskName,[string]$TaskPath,[string]$ErrorAction)',
@@ -132,7 +134,7 @@ for(const scenario of cases){
       " if($failPhase -eq 'enable'){throw 'DENIED_ENABLE'}",
       " $tasks[$TaskName].Settings.Enabled=$true;$tasks[$TaskName].State='Ready'",
       '}',
-      'function Stop-ScheduledTask {param([string]$TaskName,[string]$TaskPath,[string]$ErrorAction) if($TaskPath -cne "\\"){throw "FOREIGN_PATH"};$script:stops++}',
+      'function Stop-ScheduledTask {param([string]$TaskName,[string]$TaskPath,[string]$ErrorAction) if($TaskPath -cne "\\" -or $tasks[$TaskName].Settings.Enabled){throw "UNSAFE_STOP"};$script:stops++}',
       'function Start-ScheduledTask {param([string]$TaskName,[string]$TaskPath,[string]$ErrorAction) if($TaskPath -cne "\\" -or -not $tasks[$TaskName].Settings.Enabled -or $script:patches -ne 2){throw "UNSAFE_START"};$script:starts++}',
       fenceFunctions,
       // File hash/readback is exercised separately with actual files; the
