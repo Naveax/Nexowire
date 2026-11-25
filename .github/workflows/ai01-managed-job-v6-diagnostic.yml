@@ -13,7 +13,7 @@ permissions:
   contents: read
 jobs:
   isolated-windows-job:
-    if: github.head_ref == 'agent/nx-01-managed-job-v6-compat-20261125' && github.event.pull_request.head.repo.full_name == github.repository
+    if: (github.head_ref == 'agent/nx-01-managed-job-v6-compat-20261125' || github.head_ref == 'agent/nx-01-managed-job-v6-stop-race-20261125') && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: windows-latest
     timeout-minutes: 35
     strategy:

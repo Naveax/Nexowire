@@ -54,7 +54,8 @@ test('canonical native guardian uses exact Job HANDLE cleanup and does not issue
   const cleanup=native.slice(native.indexOf('static BOOL terminate_and_observe_empty('),native.indexOf('static BOOL publish_managed_terminal('));
   assert.match(cleanup,/TerminateJobObject\(job,reason\)/);
   assert.match(cleanup,/QueryInformationJobObject\(job,JobObjectBasicAccountingInformation/);
-  assert.match(cleanup,/a\.ActiveProcesses==0/);
+  assert.match(cleanup,/a\.ActiveProcesses==0 && rootWait==WAIT_OBJECT_0/);
+  assert.match(cleanup,/WaitForSingleObject\(root,0\)/);
   assert.match(cleanup,/GetTickCount64\(\)-start<5000/);
   assert.match(native,/PROC_THREAD_ATTRIBUTE_HANDLE_LIST/);
   assert.match(native,/PROC_THREAD_ATTRIBUTE_JOB_LIST/);
@@ -64,6 +65,8 @@ test('canonical native guardian uses exact Job HANDLE cleanup and does not issue
   const resume=native.indexOf('ResumeThread(pi.hThread)',heldTerminal);
   const publish=native.indexOf('publish_managed_terminal(terminalFile',resume);
   assert.ok(heldTerminal>=0&&heldTerminal<resume&&resume<publish);
+  const preResumeStop=native.indexOf('empty=terminate_and_observe_empty(job,pi.hProcess,ownerLost?78:125)',heldTerminal);
+  assert.ok(preResumeStop>heldTerminal&&preResumeStop<resume,'admitted early STOP must drain without resuming');
   assert.match(native,/FILE_ATTRIBUTE_NORMAL\|FILE_FLAG_OPEN_REPARSE_POINT/);
   assert.match(native,/childSession!=session/);
   assert.match(native,/WinLocalSystemSid/);
@@ -137,6 +140,29 @@ test('Windows cooperative stop observes empty Job without killing guardian by PI
   }
 });
 
+
+test('Windows immediate STOP after admission observes the exact empty Job', {
+  skip:nativeWindowsOnly,timeout:45000,
+},async()=>{
+  // No readiness delay: STOP may arrive before the guardian's first resume.
+  // A real admitted long-running root must either be stopped while suspended
+  // or stopped after resume, never be reported UNKNOWN merely for this race.
+  for(let attempt=0;attempt<3;attempt++){
+    const launch=await launchWindowsJob(process.execPath,['-e','setInterval(()=>{},1000)'],{
+      guardOnParentExit:true,runtimeTimeoutMs:15000,
+      onOutput:()=>{},
+    });
+    try{
+      assert.equal(await requestWindowsJobStop(launch),'requested');
+      assert.deepEqual(await awaitTerminal(launch),{
+        state:'local_job_empty',reason:'stopped',rootExitCode:125,
+      });
+      assert.equal(launch.child.exitCode,125);
+    }finally{
+      if(!launch.closed())await requestWindowsJobStop(launch);
+    }
+  }
+});
 
 test('NWJOB3 historical receipts cannot authorize new scheduled Agent activation or task registration',async()=>{
   assert.throws(()=>assertScheduledAgentJobMigrationAdmission(),/NATIVE_AGENT_TASK_JOB_PROTOCOL_MIGRATION_REQUIRED/);
