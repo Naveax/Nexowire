@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {generateKeyPairSync,randomUUID,verify} from 'node:crypto';
+import {createHash,generateKeyPairSync,randomUUID,sign,verify} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {mkdtemp,rm,writeFile} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
@@ -369,5 +369,185 @@ test('real PostgreSQL restart: historical UUID remains terminal after an actual 
     const row=(await f.pool.query('SELECT state FROM core_dispatch.claims WHERE request_id=$1',
       [previous.request.requestId])).rows[0];
     assert.equal(row.state,'RELEASED');
+  }finally{await f.close();}
+});
+
+
+test('real PostgreSQL: protected credential fence serializes revoke and admission, preserves reservation identity',integration,async()=>{
+  const f=await fixture({permitMs:5000});
+  try{
+    await f.pool.query(await readFile(new URL('../sql/core-broker-dispatch-credentials.sql',import.meta.url),'utf8'));
+    await f.pool.query(await readFile(new URL('../sql/core-broker-dispatch-credential-fence.sql',import.meta.url),'utf8'));
+    await f.pool.query('GRANT SELECT, INSERT ON core_dispatch.claim_credentials TO nexowire_dispatch_runtime; '+
+      'GRANT EXECUTE ON FUNCTION core_dispatch.lock_active_broker_credential(uuid,text,text,uuid,uuid,uuid,uuid,uuid) TO nexowire_dispatch_runtime;');
+    const make=async(credentialSha256:string,certificateSha256:string)=>{
+      const identity={credentialSha256,certificateSha256};
+      await f.pool.query('INSERT INTO core_dispatch.broker_credentials '+
+        '(authority_id,credential_sha256,certificate_sha256,broker_id,owner_id,device_id,installation_id,device_epoch,session_epoch,state,not_before_ms,expires_at_ms) '+
+        "VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'ACTIVE',$10,$11)",
+        [f.ids.authorityId,credentialSha256,certificateSha256,f.ids.brokerId,f.ids.ownerId,
+          f.ids.deviceId,randomUUID(),f.ids.deviceEpoch,f.ids.sessionEpoch,Date.now()-1000,Date.now()+60000]);
+      return identity;
+    };
+    const first=await make('1'.repeat(64),'2'.repeat(64));
+    const replacement=await make('3'.repeat(64),'4'.repeat(64));
+    const authority=f.create({requireCredentialFence:true});
+    const revoke=(digest:string)=>f.pool.query("UPDATE core_dispatch.broker_credentials SET state='REVOKED' WHERE authority_id=$1 AND credential_sha256=$2",
+      [f.ids.authorityId,digest]);
+    await assert.rejects(authority.beginIfCurrent(f.request(),f.broker,nonce()),
+      denied('DISPATCH_STORE_AUTHENTICATED_CREDENTIAL_REQUIRED'));
+    await assert.rejects(authority.beginIfCurrent(f.request(),f.broker,nonce(),{...first,certificateSha256:'9'.repeat(64)}),
+      denied('DISPATCH_STORE_CREDENTIAL_REVOKED_OR_STALE'));
+    const req=f.request();
+    const reserved=decoded(await authority.beginIfCurrent(req,f.broker,nonce(),first));
+    const dispatchId=String(reserved.dispatchId);
+    await assert.rejects(authority.commitIfCurrent(req,f.broker,dispatchId,nonce(),replacement),
+      denied('DISPATCH_STORE_CREDENTIAL_RESERVATION_MISMATCH'));
+    // Revocation owns the row lock first. COMMIT admission must wait and then
+    // observe REVOKED, not authorize from the older HTTP credential snapshot.
+    const operator=await f.pool.connect();
+    try{
+      await operator.query('BEGIN');
+      await operator.query("UPDATE core_dispatch.broker_credentials SET state='REVOKED' WHERE authority_id=$1 AND credential_sha256=$2",
+        [f.ids.authorityId,first.credentialSha256]);
+      const outcome=authority.commitIfCurrent(req,f.broker,dispatchId,'b'.repeat(64),first);
+      const checked=assert.rejects(outcome,denied('DISPATCH_STORE_CREDENTIAL_REVOKED_OR_STALE'));
+      await new Promise(r=>setTimeout(r,50));
+      await operator.query('COMMIT');
+      await checked;
+    }finally{await operator.query('ROLLBACK').catch(()=>{});operator.release();}
+    assert.equal((await f.pool.query('SELECT state FROM core_dispatch.claims WHERE request_id=$1',[req.requestId])).rows[0].state,'RESERVED');
+    await assert.rejects(authority.beginIfCurrent(f.request(),f.broker,nonce(),first),
+      denied('DISPATCH_STORE_CREDENTIAL_REVOKED_OR_STALE'));
+    // Admission owns the row lock first. Pause inside the actual transaction
+    // after the SECURITY DEFINER lock succeeds; a concurrent revoke must wait.
+    let announce!:()=>void,unblock!:()=>void;
+    const locked=new Promise<void>(r=>{announce=r});
+    const proceed=new Promise<void>(r=>{unblock=r});
+    const pool:DispatchStorePool={async connect(){const client=await f.servicePool.connect();return{
+      async query(sql,values=[]){
+        const result=await client.query(sql,values);
+        if(sql.startsWith('SELECT core_dispatch.lock_active_broker_credential')&&result.rows[0]?.active===true){
+          announce();await proceed;
+        }
+        return {rows:result.rows as Record<string,unknown>[]};
+      },release(destroy=false){client.release(destroy)}
+    };}};
+    const second=f.request();
+    const inFlight=f.create({requireCredentialFence:true,pool}).beginIfCurrent(second,f.broker,nonce(),replacement);
+    // Ensure early transaction failure cannot leave the fixture waiting forever.
+    await Promise.race([locked,inFlight.then(()=>{throw Error('lock hook not reached')})]);
+    let revoked=false;
+    const pendingRevoke=revoke(replacement.credentialSha256).then(()=>{revoked=true});
+    try{
+      await new Promise(r=>setTimeout(r,75));
+      assert.equal(revoked,false);
+    }finally{unblock();}
+    const claim=decoded(await inFlight);
+    await pendingRevoke;
+    assert.equal(claim.kind,'broker_dispatch_permit_v1');
+    await assert.rejects(authority.commitIfCurrent(second,f.broker,String(claim.dispatchId),nonce(),replacement),
+      denied('DISPATCH_STORE_CREDENTIAL_REVOKED_OR_STALE'));
+    const stored=(await f.pool.query('SELECT credential_sha256,certificate_sha256 FROM core_dispatch.claim_credentials WHERE request_id=$1',
+      [second.requestId])).rows[0];
+    assert.equal(stored.credential_sha256,replacement.credentialSha256);
+    assert.equal(stored.certificate_sha256,replacement.certificateSha256);
+  }finally{await f.close();}
+});
+
+test('real PostgreSQL native completion: committed release requires independent terminal evidence; revoke reconciles without caller release',integration,async()=>{
+  const f=await fixture({permitMs:5000});
+  try{
+    const observer=generateKeyPairSync('ed25519');
+    await f.pool.query(await readFile(new URL('../sql/core-broker-native-completion.sql',import.meta.url),'utf8'));
+    await f.pool.query('GRANT SELECT ON core_dispatch.native_completion_policy,core_dispatch.native_effect_completions TO nexowire_dispatch_runtime');
+    const pin=createHash('sha256').update(observer.publicKey.export({type:'spki',format:'der'})).digest('hex');
+    await f.pool.query('INSERT INTO core_dispatch.native_completion_policy VALUES($1,$2)',[f.ids.authorityId,pin]);
+    const authority=f.create({requireNativeCompletion:true,nativeCompletion:{
+      observerPublicKeyPem:observer.publicKey.export({type:'spki',format:'pem'}).toString(),
+      evidenceByCapability:{'windows.service.control':'NATIVE_OPERATION_TERMINAL'}}});
+    const reserve=async()=>{
+      const request=f.request(),commitNonce='b'.repeat(64);
+      const p=decoded(await authority.beginIfCurrent(request,f.broker,nonce()));
+      const dispatchId=String(p.dispatchId);
+      await authority.commitIfCurrent(request,f.broker,dispatchId,commitNonce);
+      return {request,dispatchId,brokerId:f.ids.brokerId,commitNonce};
+    };
+    const append=async(c:Awaited<ReturnType<typeof reserve>>)=>{
+      // Explicit software-key fixture only. Tests durable DB ordering and
+      // signature binding, not a real OS operation or native signer.
+      const value={version:1,kind:'core_native_effect_completion_v1',authorityId:f.ids.authorityId,
+        dispatchId:c.dispatchId,brokerId:c.brokerId,commitNonce:c.commitNonce,request:c.request,
+        outcome:'TERMINAL_DRAINED',evidenceKind:'NATIVE_OPERATION_TERMINAL',
+        evidenceSha256:'d'.repeat(64),completedAtMs:Date.now()};
+      const bytes=Buffer.from(JSON.stringify(value));
+      await f.pool.query('INSERT INTO core_dispatch.native_effect_completions VALUES($1,$2,$3,$4,$5,$6)',
+        [c.request.requestId,f.ids.authorityId,c.dispatchId,c.commitNonce,bytes.toString('base64url'),
+          sign(null,bytes,observer.privateKey).toString('base64url')]);
+    };
+    const first=await reserve();
+    const release={request:first.request,dispatchId:first.dispatchId,brokerId:first.brokerId};
+    await assert.rejects(authority.release(release),denied('DISPATCH_STORE_NATIVE_COMPLETION_REQUIRED'));
+    await assert.rejects(f.servicePool.query("UPDATE core_dispatch.claims SET state='RELEASED' WHERE request_id=$1",
+      [first.request.requestId]),/DISPATCH_NATIVE_COMPLETION_REQUIRED/);
+    await assert.rejects(f.servicePool.query('INSERT INTO core_dispatch.native_completion_policy VALUES($1,$2)',
+      [randomUUID(),pin]),/permission denied/i);
+    await append(first);
+    await authority.release(release);
+    const second=await reserve();
+    await append(second);
+    const revoked=decoded(await authority.revokeAndDrain(f.revoke(),'c'.repeat(64)));
+    assert.equal(revoked.drained,true);
+    const stored=await f.pool.query('SELECT state FROM core_dispatch.claims WHERE request_id IN ($1,$2)',
+      [first.request.requestId,second.request.requestId]);
+    assert.equal(stored.rows.length,2);assert.ok(stored.rows.every(x=>x.state==='RELEASED'));
+    await assert.rejects(f.pool.query('DELETE FROM core_dispatch.native_effect_completions WHERE request_id=$1',
+      [first.request.requestId]),/DISPATCH_NATIVE_COMPLETION_HISTORY_IMMUTABLE/);
+  }finally{await f.close();}
+});
+
+test('real PostgreSQL native drain deadline: stalled observer never yields revoked receipt',integration,async()=>{
+  const f=await fixture({drainTimeoutMs:1500});
+  try{
+    let entered=false,aborted=false;
+    const authority=f.create({verifyNativeDrain:async(_request,signal)=>{
+      entered=true;
+      return new Promise<boolean>(resolve=>{
+        signal?.addEventListener('abort',()=>{aborted=true;resolve(true)},{once:true});
+      });
+    }});
+    await assert.rejects(authority.revokeAndDrain(f.revoke(),nonce()),denied('DISPATCH_STORE_DRAIN_UNKNOWN'));
+    assert.equal(entered,true);assert.equal(aborted,true);
+    const row=(await f.pool.query('SELECT state,core_enabled,generation FROM core_dispatch.grants WHERE authority_id=$1 AND device_id=$2',
+      [f.ids.authorityId,f.ids.deviceId])).rows[0];
+    assert.equal(row?.state,'REVOKING');assert.equal(row?.core_enabled,false);assert.equal(Number(row?.generation),8);
+    await assert.rejects(authority.beginIfCurrent(f.request(),f.broker,nonce()),denied('DISPATCH_STORE_GRANT_REVOKED'));
+  }finally{await f.close();}
+});
+
+test('real PostgreSQL protected revoke recovery: late independent drain cannot reopen or advance a durable fence twice',integration,async()=>{
+  const f=await fixture({drainTimeoutMs:0});
+  try{
+    const observer=generateKeyPairSync('ed25519');
+    const config={requireNativeCompletion:true,nativeCompletion:{
+      observerPublicKeyPem:observer.publicKey.export({type:'spki',format:'pem'}).toString(),
+      evidenceByCapability:{'windows.service.control':'NATIVE_OPERATION_TERMINAL' as const}}};
+    const authority=f.create(config);
+    const request=f.revoke();
+    // Recovery cannot initiate a new revocation.
+    await assert.rejects(authority.reconcileRevoking(request,nonce()),denied('DISPATCH_STORE_REVOKE_STALE'));
+    await assert.rejects(authority.revokeAndDrain(request,nonce()),denied('DISPATCH_STORE_DRAIN_UNKNOWN'));
+    const recovered=f.create({...config,drainTimeoutMs:1000});
+    const unapproved=f.create({...config,drainTimeoutMs:1000,verifyOwnerRevocation:async()=>false});
+    await assert.rejects(unapproved.reconcileRevoking(request,nonce()),denied('DISPATCH_STORE_OWNER_APPROVAL_REQUIRED'));
+    await assert.rejects(recovered.reconcileRevoking({...request,sessionEpoch:randomUUID()},nonce()),denied('DISPATCH_STORE_REVOKE_STALE'));
+    await assert.rejects(recovered.revokeAndDrain(request,nonce()),denied('DISPATCH_STORE_REVOKE_STALE'));
+    const ack=decoded(await recovered.reconcileRevoking(request,'d'.repeat(64)));
+    assert.equal(ack.generation,8);assert.equal(ack.previousGeneration,7);assert.equal(ack.drained,true);
+    const row=(await f.pool.query('SELECT state,generation,core_enabled FROM core_dispatch.grants WHERE authority_id=$1 AND device_id=$2',
+      [f.ids.authorityId,f.ids.deviceId])).rows[0];
+    assert.equal(row?.state,'REVOKED');assert.equal(Number(row?.generation),8);assert.equal(row?.core_enabled,false);
+    await assert.rejects(recovered.reconcileRevoking(request,nonce()),denied('DISPATCH_STORE_REVOKE_STALE'));
+    await assert.rejects(recovered.beginIfCurrent(f.request(),f.broker,nonce()),denied('DISPATCH_STORE_GRANT_REVOKED'));
   }finally{await f.close();}
 });
