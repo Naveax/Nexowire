@@ -88,6 +88,8 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
   let dashboardMode=false;
   let coreEnabled=true;
   let enrollmentPending=false;
+  let releaseConsent!:()=>void;
+  const consentResponseGate=new Promise<void>(resolve=>{releaseConsent=resolve});
   const corePosts:{route:string;body:unknown;confirm:string|undefined}[]=[];
   const server=createServer((req,res)=>{
     const route=new URL(req.url??'/','http://127.0.0.1').pathname;
@@ -132,13 +134,14 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
       let raw='';
       req.setEncoding('utf8');
       req.on('data',(chunk:string)=>{raw+=chunk;if(raw.length>4096)req.destroy()});
-      req.on('end',()=>{
+      req.on('end',async()=>{
         let body:{deviceId?:string;enabled?:boolean};
         try{body=JSON.parse(raw)}catch{res.writeHead(400);res.end();return}
         const confirm=req.headers['x-nexowire-confirm'];
         corePosts.push({route,body,confirm:typeof confirm==='string'?confirm:undefined});
         if(body.deviceId!==deviceId){res.writeHead(400);res.end();return}
         if(route.endsWith('/core-enrollment-request')){
+          await consentResponseGate;
           res.writeHead(503,{'content-type':'application/json'});
           res.end(JSON.stringify({error:sentinel}));return;
         }
@@ -152,8 +155,11 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
   });
   const root=await mkdtemp(join(tmpdir(),'nw-ai06-chromium-'));
   let ws:WebSocket|undefined;
+  let secondWs:WebSocket|undefined;
   let child:ReturnType<typeof spawn>|undefined;
   t.after(async()=>{
+    releaseConsent();
+    if(secondWs){secondWs.terminate();secondWs=undefined}
     if(ws){ws.terminate();ws=undefined}
     if(child&&child.exitCode===null&&child.signalCode===null){
       child.kill('SIGTERM');
@@ -345,6 +351,26 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
   await nav(origin+'/index.html');
   const coreCopy=()=>evaluate<string>('document.querySelector(".core-copy")?.textContent??""');
   await until('dashboard CORE eligible',coreCopy,value=>value.includes('ilk yerel onay henüz yok'));
+  assert.equal(await evaluate<boolean>('isSecureContext&&typeof navigator.locks?.request==="function"'),true);
+  // Real second Chromium target in the same browser profile/origin, with a
+  // separately loaded JS module and intentionally stale eligible dashboard.
+  const secondTarget=await send<{targetId:string}>('Target.createTarget',{url:origin+'/index.html'});
+  const secondUrl=await until('second page CDP',async()=>{
+    const response=await fetch('http://127.0.0.1:'+port+'/json/list',{signal:AbortSignal.timeout(2000)});
+    const pages=await response.json() as Array<{id:string;webSocketDebuggerUrl?:string}>;
+    return pages.find(page=>page.id===secondTarget.targetId)?.webSocketDebuggerUrl??'';
+  },value=>value.startsWith('ws://127.0.0.1:'));
+  secondWs=new WebSocket(secondUrl);
+  await new Promise<void>((resolve,reject)=>{secondWs!.once('open',resolve);secondWs!.once('error',reject)});
+  const secondSend=cdp(secondWs);
+  const secondEvaluate=async<T>(expression:string):Promise<T>=>{
+    const response=await secondSend<{result:{value?:T};exceptionDetails?:unknown}>(
+      'Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});
+    assert.equal(response.exceptionDetails,undefined,'second tab evaluation failed');
+    return response.result.value as T;
+  };
+  const secondCopy=()=>secondEvaluate<string>('document.querySelector(".core-copy")?.textContent??""');
+  await until('second tab eligible',secondCopy,value=>value.includes('ilk yerel onay henüz yok'));
   const activate=async(selector:string)=>{
     await evaluate('document.querySelector('+JSON.stringify(selector)+').focus()');
     assert.equal(await evaluate<boolean>('document.activeElement.matches('+JSON.stringify(selector)+')'),true);
@@ -354,6 +380,14 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
   assert.equal(await evaluate<boolean>('document.querySelector(".core-enrollment-retry").hidden'),false);
   await activate('.core-enrollment-retry');
   await until('dashboard consent POST',async()=>corePosts.length,value=>value>=1);
+  // The first POST has crossed the HTTP boundary and its response is held.
+  // A separately loaded tab cannot submit an old eligible card.
+  const fenceCount=()=>evaluate<number>('Object.keys(localStorage).filter(k=>k.startsWith("nexowire-core-uncertain-v1:")).length');
+  assert.equal(await fenceCount(),1,'durable marker exists before POST ACK');
+  await secondEvaluate('document.querySelector(".core-enrollment-retry").dispatchEvent(new Event("click"))');
+  await delay(150);
+  assert.equal(corePosts.length,1,'cross-tab attempt must not create another POST');
+  releaseConsent();
   await until('dashboard uncertain readback',coreCopy,value=>value.includes('sonucu belirsiz'));
   assert.equal(corePosts.length,1);
   assert.deepEqual(corePosts[0],{route:'/api/v1/me/devices/core-enrollment-request',
@@ -361,6 +395,15 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
   assert.equal(await evaluate<boolean>('document.querySelector(".core-enrollment-retry").hidden'),true);
   assert.equal(await evaluate<boolean>('document.querySelector(".core-enrollment-retry").disabled'),true);
   assert.equal(await evaluate<boolean>('document.body.innerText.includes('+JSON.stringify(sentinel)+')'),false);
+  // Reload destroys the original module/Map; the same-origin marker survives.
+  await send('Page.reload',{ignoreCache:true});
+  await until('reload retains uncertain CORE',coreCopy,value=>value.includes('sonucu belirsiz'));
+  assert.equal(await fenceCount(),1);
+  assert.equal(await evaluate<boolean>('document.querySelector(".core-enrollment-retry").disabled'),true);
+  await evaluate('document.querySelector(".core-enrollment-retry").dispatchEvent(new Event("click"))');
+  await delay(100);
+  assert.equal(corePosts.length,1);
+  await activate('.core-shortcut');
   // Refreshing an unchanged dashboard is not proof of non-execution.
   await activate('.core-readback');
   await until('unchanged GET preserves uncertain state',coreCopy,value=>value.includes('sonucu belirsiz'));
@@ -372,11 +415,19 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
   assert.match(await coreCopy(),/teslimi.*doğrulanmadı/);
   assert.equal(await evaluate<boolean>('document.querySelector(".core-enrollment-retry").hidden'),true);
   assert.equal(await evaluate<boolean>('document.querySelector(".core-toggle").disabled'),false);
+  assert.equal(await fenceCount(),0,'matching recorded-request GET reconciles marker');
+  // Second tab still has the original card. Its locked fresh GET must deny the
+  // stale consent even after another tab reconciles the marker.
+  await secondEvaluate('document.querySelector(".core-enrollment-retry").dispatchEvent(new Event("click"))');
+  await until('stale second tab receives pending GET',secondCopy,value=>value.includes('sunucuda kayıtlı'));
+  assert.equal(corePosts.length,1);
+  secondWs.terminate();secondWs=undefined;
+  await send('Target.closeTarget',{targetId:secondTarget.targetId});
   await activate('.core-toggle');
   await until('dashboard preference OFF readback',coreCopy,value=>value.includes('hesap tercihini kapalı bildiriyor'));
   assert.equal(corePosts.length,2);
   assert.deepEqual(corePosts[1],{route:'/api/v1/me/devices/core-preference',body:{deviceId,enabled:false},confirm:undefined});
   assert.match(await coreCopy(),/yerel STOP.*kanıtı değildir/);
   assert.equal(await evaluate<string>('document.querySelector(".core-shortcut").textContent'),'CORE');
-  t.diagnostic('Dashboard real Chromium: one consent POST, one explicit OFF POST, read-only reconciliation, no native STOP assertion');
+  t.diagnostic('Dashboard real Chromium: cross-tab and reload no replay, stale-card preflight GET, one consent POST, one explicit OFF POST, no native STOP assertion');
 });
