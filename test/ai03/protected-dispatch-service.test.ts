@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createHash,randomUUID} from 'node:crypto';
+import {createHash,generateKeyPairSync,randomUUID} from 'node:crypto';
 import {createScopedDispatchBrokerResolver,ProtectedDispatchWorkGate,startProtectedBrokerDispatchService,type ProtectedDispatchCredentialRecord,type ProtectedBrokerDispatchServiceOptions}
   from '../../src/agent/protected-broker-dispatch-service.js';
 
@@ -80,4 +80,22 @@ test('protected dispatch startup rejects missing completion policy before any li
     verifyOwnerRevocation:async()=>assert.fail('unexpected approval call'),
     verifyNativeDrain:async()=>assert.fail('unexpected drain call')} as unknown as ProtectedBrokerDispatchServiceOptions;
   await assert.rejects(startProtectedBrokerDispatchService(c),/DISPATCH_SERVICE_CONFIGURATION_REQUIRED/);
+});
+
+test('protected startup denies shared dispatch and native observer signing identity before opening database',async()=>{
+  const pair=generateKeyPairSync('ed25519');
+  const config={
+    host:'127.0.0.1',port:0,authorityId:randomUUID(),
+    privateKeyPem:pair.privateKey.export({format:'pem',type:'pkcs8'}).toString(),
+    nativeCompletion:{observerPublicKeyPem:pair.publicKey.export({format:'pem',type:'spki'}).toString(),
+      evidenceByCapability:{'fixture.process':'JOB_OBJECT_EMPTY'}},
+    tls:{},credentials:{lookup:async()=>assert.fail('unexpected credential lookup'),
+      verifyLiveBinding:async()=>assert.fail('unexpected binding read')},
+    verifyProvenance:async()=>assert.fail('unexpected DB provenance check'),
+    readProtectedBroker:async()=>assert.fail('unexpected Broker read'),
+    verifyOwnerRevocation:async()=>assert.fail('unexpected owner approval'),
+    verifyNativeDrain:async()=>assert.fail('unexpected drain'),
+    readNativeDrainProof:async()=>assert.fail('unexpected native observer'),
+  } as unknown as ProtectedBrokerDispatchServiceOptions;
+  await assert.rejects(startProtectedBrokerDispatchService(config),/DISPATCH_SERVICE_OBSERVER_KEY_NOT_INDEPENDENT/);
 });
