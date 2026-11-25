@@ -1,4 +1,5 @@
 import {runNativeAgent} from './native-agent.js';
+import {ProtectedRuntimeDrain} from './protected-runtime-drain.js';
 import type {TrustedNativeMutationProvider} from './native-atomic-effect-admission.js';
 import type {NativeCoreConsentAuthority} from './windows-core-console-provider.js';
 import {getWindowsPreloginAgentMode} from './windows-prelogin-bootstrap.js';
@@ -115,12 +116,15 @@ export interface ProtectedTransferNativeStartup {
   tls:ProtectedTransferAuthorityTlsConfig;
   nativeMutationProvider:TrustedNativeMutationProvider;
   coreConsentProvider?:NativeCoreConsentAuthority;
+  /** Trusted supervisor graceful-stop signal, NOT a revoke/lease proof. */
+  shutdownSignal?:AbortSignal;
   withProtectedEffect:Parameters<typeof createProtectedNativeTransferAdmission>[1];
 }
 /** Explicit trusted owner-runtime entrypoint. No helper pin from CLI/env,
  * no test adapter, no auto-provisioning and no prelogin enablement.
  * The deployment lease spans publisher creation and the Agent lifetime. */
-export async function runProtectedTransferNativeAgent(config:ProtectedTransferNativeStartup,env:NodeJS.ProcessEnv=process.env):Promise<never>{
+export async function runProtectedTransferNativeAgent(config:ProtectedTransferNativeStartup,env:NodeJS.ProcessEnv=process.env):Promise<void>{
+  if(config?.shutdownSignal?.aborted)throw Error('PROTECTED_RUNTIME_STOPPED');
   if(process.platform!=='win32'||getWindowsPreloginAgentMode(env)||env.NEXOWIRE_AGENT_REQUIRE_ATOMIC_EFFECT_ADMISSION!=='1'||
      !env.NEXOWIRE_AGENT_RESERVATION_CAS_URL?.trim()||!env.NEXOWIRE_AGENT_RESERVATION_CAS_TOKEN?.trim()||
      !env.NEXOWIRE_AGENT_RESERVATION_CAS_AUTHORITY_ID?.trim()||!env.NEXOWIRE_AGENT_RESERVATION_CAS_EPOCH?.trim()||
@@ -132,7 +136,20 @@ export async function runProtectedTransferNativeAgent(config:ProtectedTransferNa
     throw Error('PROTECTED_NATIVE_TRANSFER_STARTUP_REQUIRED');
   const store=createWindowsTransferHelperArtifactStore(config.publisher.assertInstalledRuntime);
   const client=new ProtectedTransferAuthorityClient(config.tls);
-  const admission=createProtectedNativeTransferAdmission(client,config.withProtectedEffect);
+  const runtimeDrain=new ProtectedRuntimeDrain();
+  const admission=createProtectedNativeTransferAdmission(client,async (b,l,p,claim,effect)=>{
+    let called=false,completed=false,active=true,invalid=false;
+    try{
+      await config.withProtectedEffect(b,l,p,claim,async()=>{
+        if(!active||called){invalid=true;runtimeDrain.markUnknown();throw Error('PROTECTED_RUNTIME_CALLBACK_INVALID');}
+        called=true;
+        await runtimeDrain.run(effect);
+        completed=true;
+      });
+      if(!called||!completed||invalid)throw Error('PROTECTED_RUNTIME_EFFECT_UNCONFIRMED');
+    }catch(error){runtimeDrain.markUnknown();throw error;}
+    finally{active=false;}
+  });
   const helperAuthority=createTransferRuntimeLeaseAuthority(new ProtectedHelperSelectionClient(config.helperSelection));
   return withVerifiedTransferHelper(helperAuthority,store,async (binding,scope)=>{
     const check=async()=>{
@@ -143,18 +160,28 @@ export async function runProtectedTransferNativeAgent(config:ProtectedTransferNa
     const runtime=await createWindowsProtectedTransferPublisher({...config.publisher,...binding,
       async assertInstalledRuntime(){await check();await config.publisher.assertInstalledRuntime();await check();},
       authority:{async admit(b,l,p,effect){
-        // No new claim/effect after lease release or selection drift.
-        await check();
-        await admission.admit(b,l,p,async()=>{
+        // Count the complete admission and the actual callback separately:
+        // a provider that detaches an in-flight callback cannot fake drain.
+        await runtimeDrain.run(async()=>{
           await check();
-          await effect();
-          // Lease loss during effect is UNKNOWN, never a completed settlement.
-          await check();
+          try{
+            await admission.admit(b,l,p,async()=>{
+              await check();
+              await effect();
+              await check();
+            });
+            await check();
+          }catch(error){runtimeDrain.markUnknown();throw error;}
         });
-        await check();
       }},
     });
     await check();
-    return runNativeAgent(env,config.nativeMutationProvider,config.coreConsentProvider,runtime.publisher,config.publisher.deviceId,scope.signal);
+    try{
+      await runNativeAgent(env,config.nativeMutationProvider,config.coreConsentProvider,runtime.publisher,config.publisher.deviceId,scope.signal,()=>runtimeDrain.seal(),config.shutdownSignal);
+      await runtimeDrain.wait();
+      // A local return never releases the lease itself. The exact mTLS
+      // selection provider asks the independent observer for RELEASE proof.
+      await scope.assertActive();
+    }finally{runtimeDrain.seal();}
   });
 }
