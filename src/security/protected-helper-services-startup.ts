@@ -38,13 +38,14 @@ async function bounded<T>(effect:()=>Promise<T>,ms:number){
  * A separate operator recovery procedure is needed to reconcile/re-pair. */
 export function composeHelperSelectionRevokeDrain(config:{
   pool:DispatchStorePool;scope:HelperAuthorityScope;nativeEvidence:SignedHelperEvidenceConfig;
-  verifyExistingNativeDrain:(request:DispatchRevokeRequest)=>Promise<boolean>;
+  verifyExistingNativeDrain:(request:DispatchRevokeRequest,signal?:AbortSignal)=>Promise<boolean>;
 }){
   const scope=Object.freeze(scopeSchema.parse(config.scope));
   const verify=createSignedHelperSelectionEvidenceVerifier(config.nativeEvidence);
   if(typeof config.pool?.connect!=='function'||typeof config.verifyExistingNativeDrain!=='function')throw Error('HELPER_DRAIN_CONFIG_INVALID');
   const pool=config.pool,existing=config.verifyExistingNativeDrain;
-  return async(req:DispatchRevokeRequest):Promise<boolean>=>{
+  return async(req:DispatchRevokeRequest,signal?:AbortSignal):Promise<boolean>=>{
+    if(signal?.aborted)return false;
     if(!uuid.safeParse(req?.deviceId).success||!uuid.safeParse(req?.ownerId).success||
        !uuid.safeParse(req?.deviceEpoch).success||!uuid.safeParse(req?.sessionEpoch).success||
        !Number.isSafeInteger(req.expectedGeneration)||req.expectedGeneration<1||req.expectedGeneration>=Number.MAX_SAFE_INTEGER)return false;
@@ -64,7 +65,7 @@ export function composeHelperSelectionRevokeDrain(config:{
       if(rows.length>1)return false;
       // Other devices without any helper enrollment still require the existing
       // native drain. Never treat a different managed scope as un-enrolled.
-      if(req.deviceId!==scope.deviceId)return rows.length===0&&await bounded(()=>existing(req),3500)===true;
+      if(req.deviceId!==scope.deviceId)return rows.length===0&&await bounded(()=>existing(req,signal),3500)===true&&!signal?.aborted;
       const row=rows[0];
       if(!row||!exactSelectionIdentity(row,scope)||req.ownerId!==scope.ownerId||req.deviceEpoch!==scope.deviceEpoch||
          req.sessionEpoch!==scope.sessionEpoch||req.expectedGeneration!==scope.generation||number(grant.owner_epoch)!==scope.ownerEpoch||
@@ -76,11 +77,11 @@ export function composeHelperSelectionRevokeDrain(config:{
         const active=lease(slots[0],current);
         const [helperDrained,coreDrained]=await Promise.all([
           verify(Object.freeze({phase:'RELEASE',scope,lease:active,selection:current})),
-          bounded(()=>existing(req),3500),
+          bounded(()=>existing(req,signal),3500),
         ]);
-        return helperDrained===true&&coreDrained===true;
+        return helperDrained===true&&coreDrained===true&&!signal?.aborted;
       }
-      return await bounded(()=>existing(req),3500)===true;
+      return await bounded(()=>existing(req,signal),3500)===true&&!signal?.aborted;
     }catch{destroy=true;return false;}
     finally{
       if(db){

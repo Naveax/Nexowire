@@ -18,6 +18,7 @@ import { detectWsl } from './wsl-detection.js';
 import { executeCapability, normalizeAgentError } from './executors.js';
 import { parseAllowedRoots, PathPolicy } from './path-policy.js';
 import { ProcessManager } from './process-manager.js';
+import { ProtectedRuntimeDrain } from './protected-runtime-drain.js';
 import { ProgressSupervisor } from './progress-supervisor.js';
 import { TaskGraphStore } from './task-graph-store.js';
 import { RunbookStore } from './runbook-store.js';
@@ -468,8 +469,11 @@ export async function runNativeAgent(
   trustedNativeTransferPublisher?: NativeTransferPublisher,
   trustedNativeTransferDeviceId?: string,
   trustedTransferLifetime?: AbortSignal,
-): Promise<never> {
+  trustedTransferStop?:()=>void,
+  trustedTransferShutdown?:AbortSignal,
+): Promise<void> {
   if(trustedTransferLifetime?.aborted)throw Error('TRANSFER_HELPER_RUNTIME_LEASE_RELEASED');
+  if(trustedTransferShutdown?.aborted)throw Error('PROTECTED_RUNTIME_STOPPED');
   const preloginBootstrap=getWindowsPreloginAgentMode(env);
   if(preloginBootstrap){
     // No user-writable code, owner DPAPI, identity creation, or journal I/O
@@ -550,6 +554,8 @@ export async function runNativeAgent(
   if(nativeTransferEnabled)advertisedCapabilities.push(...NATIVE_TRANSFER_CAPABILITIES);
 
   let stopped = false;
+  const protectedDrain=trustedTransferLifetime?new ProtectedRuntimeDrain():undefined;
+  let processDrain:Promise<void>|undefined;
   const shutdown = new AbortController();
   let currentSocket: WebSocket | undefined;
   const emitAgentEvent = (topic: string, data: unknown): void => {
@@ -632,17 +638,27 @@ export async function runNativeAgent(
   let consecutiveFailures = 0;
 
   const stop = (): void => {
-    coreConsole.close();
+    if(stopped)return;
     stopped = true;
+    protectedDrain?.seal();
+    trustedTransferStop?.();
     shutdown.abort();
+    coreConsole.close();
     clearInterval(progressWatchdogTimer);
-    currentSocket?.close(1001, 'Agent shutting down');
-    void processes.shutdown();
+    if(protectedDrain){
+      currentSocket?.terminate();
+      // Wait for accepted handlers before shutting down process state.
+    }else{
+      currentSocket?.close(1001, 'Agent shutting down');
+      processDrain??=processes.shutdown();
+      void processDrain.catch(()=>{});
+    }
   };
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
   trustedTransferLifetime?.addEventListener('abort',stop,{once:true});
-  if(trustedTransferLifetime?.aborted)stop();
+  trustedTransferShutdown?.addEventListener('abort',stop,{once:true});
+  if(trustedTransferLifetime?.aborted||trustedTransferShutdown?.aborted)stop();
 
   while (!stopped) {
     const hubUrl = hubEndpoints[endpointIndex]!;
@@ -658,6 +674,7 @@ export async function runNativeAgent(
       const requestLifetime = new AbortController();
       const fenceRequest=()=>requestLifetime.abort();
       trustedTransferLifetime?.addEventListener('abort',fenceRequest,{once:true});
+      if(protectedDrain)shutdown.signal.addEventListener('abort',fenceRequest,{once:true});
       if(trustedTransferLifetime?.aborted)fenceRequest();
       let heartbeatTimer: NodeJS.Timeout | undefined;
       let lastPongAt = Date.now();
@@ -667,6 +684,7 @@ export async function runNativeAgent(
         settled = true;
         requestLifetime.abort();
         trustedTransferLifetime?.removeEventListener('abort',fenceRequest);
+        shutdown.signal.removeEventListener('abort',fenceRequest);
         revokePhysicalConsoleGrant();
         if (heartbeatTimer) clearInterval(heartbeatTimer);
         resolve();
@@ -718,6 +736,8 @@ export async function runNativeAgent(
         if (!greeted) return;
 
         socket.on('message', async (raw) => {
+          if(stopped||trustedTransferLifetime?.aborted)return;
+          const handle=async()=>{
           if(stopped||trustedTransferLifetime?.aborted)return;
           // Seal the exact incoming bytes before any authorization await.
           const exactRequestFrame = raw.toString();
@@ -942,6 +962,10 @@ export async function runNativeAgent(
               socket.terminate();
             }
           }
+          };
+          if(protectedDrain){
+            try{await protectedDrain.run(handle);}catch{protectedDrain.markUnknown();}
+          }else await handle();
         });
       });
 
@@ -962,11 +986,9 @@ export async function runNativeAgent(
       ...(transportErrorCode ? {errorCode: transportErrorCode} : {}),
     });
     if (!retry.retryable) {
-      stopped = true;
-      shutdown.abort();
-      clearInterval(progressWatchdogTimer);
-      coreConsole.close();
-      try { await processes.shutdown(); }
+      stop();
+      if(protectedDrain)await protectedDrain.wait();
+      try { await (processDrain??=processes.shutdown()); }
       finally {
         operationJournal.close();
         await singletonLock?.close();
@@ -999,9 +1021,18 @@ export async function runNativeAgent(
   }
 
   trustedTransferLifetime?.removeEventListener('abort',stop);
-  if(trustedTransferLifetime?.aborted){
-    try{await processes.shutdown();}finally{operationJournal.close();await singletonLock?.close();}
-    throw Error('TRANSFER_HELPER_RUNTIME_LEASE_RELEASED');
+  trustedTransferShutdown?.removeEventListener('abort',stop);
+  process.removeListener('SIGINT',stop);
+  process.removeListener('SIGTERM',stop);
+  if(protectedDrain){
+    await protectedDrain.wait();
+    // These local closures are not an independent native drain receipt.
+    // The caller may request RELEASE only after this function returns.
+    await (processDrain??=processes.shutdown());
+    operationJournal.close();
+    await singletonLock?.close();
+    if(trustedTransferLifetime?.aborted)throw Error('TRANSFER_HELPER_RUNTIME_LEASE_RELEASED');
+    return;
   }
   process.exit(0);
 }

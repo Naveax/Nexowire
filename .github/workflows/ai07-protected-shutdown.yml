@@ -1,0 +1,98 @@
+name: AI-07 Protected Shutdown Acceptance
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/ai07-protected-shutdown.yml'
+      - 'src/agent/native-agent.ts'
+      - 'src/agent/protected-runtime-drain.ts'
+      - 'src/agent/protected-transfer-startup.ts'
+      - 'src/installer/protected-helper-entrypoints.ts'
+      - 'src/security/protected-helper-rollback-guard.ts'
+      - 'src/security/protected-helper-services-startup.ts'
+      - 'src/security/protected-transfer-services-startup.ts'
+      - 'test/mcp/ai07-protected-shutdown.test.ts'
+      - 'test/fixtures/ai07-protected-shutdown-child.ts'
+      - 'test/fixtures/ai07-protected-agent-stop.ts'
+      - 'test/mcp/ai07-postgres-shutdown-release.test.ts'
+      - 'src/security/protected-transfer-service.ts'
+      - 'src/agent/protected-broker-dispatch-service.ts'
+      - 'test/ai05/protected-helper-startup-rollback.test.ts'
+permissions:
+  contents: read
+jobs:
+  shutdown:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-2022]
+        node: [22, 24]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Exact startup, release fence and actual isolated Agent shutdown
+        shell: pwsh
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ((git rev-parse HEAD).Trim() -ne $env:EXPECTED_HEAD) { throw 'AI07_HEAD_MISMATCH' }
+          $tap = Join-Path $env:RUNNER_TEMP 'ai07-shutdown.tap'
+          node --test --test-reporter=tap --import tsx --test-concurrency=1 test/mcp/ai07-protected-shutdown.test.ts test/ai05/protected-helper-startup-rollback.test.ts test/ai03/protected-dispatch-service.test.ts test/ai03/protected-native-completion-reader.test.ts | Tee-Object -FilePath $tap
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/ci/assert-tap-summary.mjs $tap 15
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  postgres-release:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: nexowire_release_ci
+          POSTGRES_USER: nexowire_release_ci
+          POSTGRES_PASSWORD: fixture-only-not-production
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U nexowire_release_ci -d nexowire_release_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Same-process shutdown, real pinned mTLS RELEASE and durable claim fences
+        shell: bash
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          NEXOWIRE_AI07_RELEASE_FIXTURE: '1'
+          NEXOWIRE_AI07_RELEASE_PORT: ${{ job.services.postgres.ports[5432] }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          node --test --test-reporter=tap --import tsx --test-concurrency=1 test/mcp/ai07-postgres-shutdown-release.test.ts | tee "$RUNNER_TEMP/ai07-release.tap"
+          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/ai07-release.tap" 1

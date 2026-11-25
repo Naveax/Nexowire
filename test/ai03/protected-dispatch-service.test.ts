@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
-import {createScopedDispatchBrokerResolver,type ProtectedDispatchCredentialRecord}
+import {createScopedDispatchBrokerResolver,ProtectedDispatchWorkGate,startProtectedBrokerDispatchService,type ProtectedDispatchCredentialRecord,type ProtectedBrokerDispatchServiceOptions}
   from '../../src/agent/protected-broker-dispatch-service.js';
 
 const credential='a'.repeat(48),other='b'.repeat(48);
@@ -59,4 +59,25 @@ test('dispatch credential resolver snapshots identity before asynchronous native
     },
   });
   assert.equal((await resolver(credential,{certificateSha256:current.certificateSha256}))?.ownerId,owner);
+});
+
+test('shutdown fence tracks authority promises after HTTP close and never reopens after timeout',async()=>{
+  const gate=new ProtectedDispatchWorkGate(1);
+  let finish!:()=>void,entered=false;
+  const held=new Promise<void>(resolve=>{finish=resolve;});
+  const running=gate.run(async()=>{entered=true;await held;});
+  await Promise.resolve();assert.equal(entered,true);
+  await assert.rejects(gate.run(async()=>assert.fail('capacity bypass')),/ADMISSION_CLOSED/);
+  await assert.rejects(gate.drain(5),/SHUTDOWN_UNKNOWN/);
+  await assert.rejects(gate.run(async()=>assert.fail('shutdown bypass')),/ADMISSION_CLOSED/);
+  finish();await running;await gate.drain(100);
+  await assert.rejects(gate.run(async()=>assert.fail('reopen bypass')),/ADMISSION_CLOSED/);
+});
+test('protected dispatch startup rejects missing completion policy before any listener or DB connection',async()=>{
+  const c={host:'127.0.0.1',port:0,authorityId:randomUUID(),
+    verifyProvenance:async()=>assert.fail('unexpected provenance call'),
+    readProtectedBroker:async()=>assert.fail('unexpected Broker call'),
+    verifyOwnerRevocation:async()=>assert.fail('unexpected approval call'),
+    verifyNativeDrain:async()=>assert.fail('unexpected drain call')} as unknown as ProtectedBrokerDispatchServiceOptions;
+  await assert.rejects(startProtectedBrokerDispatchService(c),/DISPATCH_SERVICE_CONFIGURATION_REQUIRED/);
 });
