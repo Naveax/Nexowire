@@ -9,6 +9,7 @@
 #include <windows.h>
 #include <webauthn.h>
 #include <wtsapi32.h>
+#include <sddl.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <wchar.h>
@@ -107,16 +108,68 @@ static BOOL active_local_desktop(void) {
   if(input)CloseDesktop(input);
   return local&&normal;
 }
+/* Bound mode is invoked only by the independently protected owner-session
+ * launcher. Matching these arguments is a negative gate, not provenance.
+ * Check the actual primary token before and after the human ceremony. */
+static BOOL same_luid(LUID a,LUID b) {
+  return a.HighPart==b.HighPart&&a.LowPart==b.LowPart;
+}
+static BOOL parse_session(const wchar_t *s,DWORD *out) {
+  uint64_t n=0;size_t len=wcslen(s);
+  if(!len||len>10||s[0]==L'0')return FALSE;
+  for(size_t i=0;i<len;i++){
+    if(s[i]<L'0'||s[i]>L'9')return FALSE;
+    n=n*10+(uint64_t)(s[i]-L'0');
+  }
+  if(n==0||n>=0xffffffffULL)return FALSE;
+  *out=(DWORD)n;return TRUE;
+}
+static BOOL parse_luid(const wchar_t *s,LUID *out) {
+  BYTE raw[8]={0};size_t len=0;uint64_t n=0;
+  if(!from_hex(s,raw,8,8,&len))return FALSE;
+  for(size_t i=0;i<len;i++)n=(n<<8)|raw[i];
+  if(!n)return FALSE;
+  out->HighPart=(LONG)(DWORD)(n>>32);out->LowPart=(DWORD)n;return TRUE;
+}
+static BOOL owner_token(PSID expected,DWORD session,LUID logon,TOKEN_STATISTICS *stats) {
+  HANDLE token=NULL,threadToken=NULL;DWORD bytes=0,tokenSession=0,processSession=0;
+  union {TOKEN_USER align;BYTE bytes[sizeof(TOKEN_USER)+SECURITY_MAX_SID_SIZE];} user={0};
+  BOOL ok=FALSE;
+  /* An impersonating thread must not turn a foreign process into the owner. */
+  if(OpenThreadToken(GetCurrentThread(),TOKEN_QUERY,TRUE,&threadToken)){
+    CloseHandle(threadToken);return FALSE;
+  }
+  if(GetLastError()!=ERROR_NO_TOKEN)return FALSE;
+  if(!OpenProcessToken(GetCurrentProcess(),TOKEN_QUERY,&token))return FALSE;
+  if(GetTokenInformation(token,TokenStatistics,stats,sizeof(*stats),&bytes)&&
+    GetTokenInformation(token,TokenUser,user.bytes,sizeof(user.bytes),&bytes)&&
+    GetTokenInformation(token,TokenSessionId,&tokenSession,sizeof(tokenSession),&bytes)&&
+    ProcessIdToSessionId(GetCurrentProcessId(),&processSession)&&
+    stats->TokenType==TokenPrimary&&IsValidSid(((TOKEN_USER *)user.bytes)->User.Sid)&&
+    EqualSid(expected,((TOKEN_USER *)user.bytes)->User.Sid)&&
+    tokenSession==session&&processSession==session&&same_luid(stats->AuthenticationId,logon))
+      ok=TRUE;
+  CloseHandle(token);return ok;
+}
 int wmain(int argc,wchar_t **argv) {
   BOOL probe=argc==2&&wcscmp(argv[1],L"--probe")==0;
+  BOOL bound=argc==8&&wcscmp(argv[1],L"--assert-bound")==0;
+  DWORD ownerSession=0;LUID ownerLogon={0};PSID ownerSid=NULL;TOKEN_STATISTICS before={0},after={0};
   BYTE challenge[32]={0},credentialBytes[1024]={0};size_t challengeSize=0,credentialSize=0;
   char rpAscii[254]={0},challenge64[44]={0},client[1024]={0};
   if(!probe){
-    if(argc!=5||wcscmp(argv[1],L"--assert")||
+    if((!bound&&(argc!=5||wcscmp(argv[1],L"--assert")))||
       !valid_rp(argv[2],rpAscii,sizeof(rpAscii))||
       !from_hex(argv[3],challenge,32,32,&challengeSize)||
       !from_hex(argv[4],credentialBytes,1,1024,&credentialSize)||
       !base64url(challenge,challengeSize,challenge64,sizeof(challenge64)))return 64;
+  }
+  if(bound){
+    if(wcslen(argv[5])>184||!parse_session(argv[6],&ownerSession)||
+      !parse_luid(argv[7],&ownerLogon)||!ConvertStringSidToSidW(argv[5],&ownerSid))return 64;
+    BOOL matches=owner_token(ownerSid,ownerSession,ownerLogon,&before);
+    LocalFree(ownerSid);ownerSid=NULL;
+    if(!matches)return unavailable("OWNER_TOKEN_BINDING_MISMATCH",E_ACCESSDENIED);
   }
   HMODULE api=LoadLibraryExW(L"webauthn.dll",NULL,LOAD_LIBRARY_SEARCH_SYSTEM32);
   if(!api)return unavailable("WEBAUTHN_SYSTEM_API_UNAVAILABLE",HRESULT_FROM_WIN32(GetLastError()));
@@ -166,6 +219,17 @@ int wmain(int argc,wchar_t **argv) {
   ULONGLONG started=GetTickCount64();
   status=get(window,argv[2],&data,&options,&assertion);
   if(FAILED(status))goto cleanup;
+  if(bound){
+    BOOL matches=FALSE;
+    if(ConvertStringSidToSidW(argv[5],&ownerSid)){
+      matches=owner_token(ownerSid,ownerSession,ownerLogon,&after);
+      LocalFree(ownerSid);ownerSid=NULL;
+    }
+    if(!matches||!same_luid(before.TokenId,after.TokenId)||
+       !same_luid(before.ModifiedId,after.ModifiedId)){
+      status=E_ACCESSDENIED;goto cleanup;
+    }
+  }
   if(GetTickCount64()-started>90000||!active_local_desktop()||!assertion||
     assertion->cbAuthenticatorData!=37||!assertion->pbAuthenticatorData||
     assertion->pbAuthenticatorData[32]!=0x05||assertion->cbSignature<8||assertion->cbSignature>80||
