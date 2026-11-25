@@ -34,7 +34,7 @@ export function dashboardMutationIntent(input:{mutationId:string;ownerAccountId:
       'dashboard-mutation-v1',input.ownerAccountId,input.deviceId,input.kind,input.expectedRevision,...input.semanticPayload
     ]),'utf8').digest('hex')});
 }
-const ready="d.platform='win32' AND d.access_mode='full' AND d.online=1 AND d.privilege_mode='broker' AND d.admin_bridge_ready=1 AND COALESCE(b.desired_mode,'auto')<>'off'";
+const ready="d.platform='win32' AND d.access_mode='full' AND d.online=1 AND d.privilege_mode='broker' AND d.admin_bridge_ready=1 AND COALESCE(b.desired_mode,'auto')<>'off' AND EXISTS(SELECT 1 FROM device_remote_authorization ra WHERE ra.device_id=d.id AND ra.owner_account_id=d.owner_account_id AND ra.active=1)";
 const joins=`FROM devices d JOIN accounts a ON a.id=d.owner_account_id
  JOIN dashboard_core_revisions v ON v.device_id=d.id
  JOIN device_core_console_authority c ON c.device_id=d.id
