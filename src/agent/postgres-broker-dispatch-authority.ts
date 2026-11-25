@@ -340,6 +340,24 @@ export class PostgresBrokerDispatchAuthority implements ExternalBrokerDispatchAu
         'core_enabled=false,root_expires_ms=NULL WHERE authority_id=$1 AND device_id=$2',
         [this.authorityId,op.deviceId]);
     });
+    return this.finishRevoking(op,nonce);
+  }
+  /** Protected recovery-only entry. Not a wire route, not an effect admission,
+   * and not a retry of revoke/commit. A newly verified owner approval is
+   * required and the already durable fence must match its original scope.
+   * Never increment generation twice or clear a tombstone after UNKNOWN. */
+  async reconcileRevoking(value:DispatchRevokeRequest,nonce:string):Promise<DispatchClaim>{
+    const op=Object.freeze(revokeSchema.parse(value));nonceSchema.parse(nonce);
+    if(!this.requireNativeCompletion||!this.completion)
+      fail('DISPATCH_STORE_NATIVE_COMPLETION_POLICY_REQUIRED');
+    if(op.expectedGeneration>=Number.MAX_SAFE_INTEGER)fail('DISPATCH_STORE_GENERATION_EXHAUSTED');
+    await this.trusted();
+    let approved=false;
+    try{approved=await this.verifyRevoke(op)}catch{}
+    if(approved!==true)fail('DISPATCH_STORE_OWNER_APPROVAL_REQUIRED');
+    return this.finishRevoking(op,nonce);
+  }
+  private async finishRevoking(op:Readonly<DispatchRevokeRequest>,nonce:string):Promise<DispatchClaim>{
     const deadline=process.hrtime.bigint()+BigInt(this.drainMs)*1000000n;
     for(;;){
       await this.trusted();
@@ -347,7 +365,8 @@ export class PostgresBrokerDispatchAuthority implements ExternalBrokerDispatchAu
         const row=(await tx.db.query('SELECT * FROM core_dispatch.grants '+
           'WHERE authority_id=$1 AND device_id=$2 FOR UPDATE',[this.authorityId,op.deviceId])).rows[0];
         if(!row||row.state!=='REVOKING'||row.owner_id!==op.ownerId||row.device_epoch!==op.deviceEpoch||
-          row.session_epoch!==op.sessionEpoch||integer(row.generation,1)!==op.expectedGeneration+1)
+          row.session_epoch!==op.sessionEpoch||integer(row.generation,1)!==op.expectedGeneration+1||
+          row.core_enabled!==false||row.root_expires_ms!==null)
           fail('DISPATCH_STORE_REVOKE_STALE');
         // Native completion is independent of the original HTTP credential.
         // Reconcile only durable signed completion for exact committed claims.

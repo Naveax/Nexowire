@@ -524,3 +524,30 @@ test('real PostgreSQL native drain deadline: stalled observer never yields revok
     await assert.rejects(authority.beginIfCurrent(f.request(),f.broker,nonce()),denied('DISPATCH_STORE_GRANT_REVOKED'));
   }finally{await f.close();}
 });
+
+test('real PostgreSQL protected revoke recovery: late independent drain cannot reopen or advance a durable fence twice',integration,async()=>{
+  const f=await fixture({drainTimeoutMs:0});
+  try{
+    const observer=generateKeyPairSync('ed25519');
+    const config={requireNativeCompletion:true,nativeCompletion:{
+      observerPublicKeyPem:observer.publicKey.export({type:'spki',format:'pem'}).toString(),
+      evidenceByCapability:{'windows.service.control':'NATIVE_OPERATION_TERMINAL' as const}}};
+    const authority=f.create(config);
+    const request=f.revoke();
+    // Recovery cannot initiate a new revocation.
+    await assert.rejects(authority.reconcileRevoking(request,nonce()),denied('DISPATCH_STORE_REVOKE_STALE'));
+    await assert.rejects(authority.revokeAndDrain(request,nonce()),denied('DISPATCH_STORE_DRAIN_UNKNOWN'));
+    const recovered=f.create({...config,drainTimeoutMs:1000});
+    const unapproved=f.create({...config,drainTimeoutMs:1000,verifyOwnerRevocation:async()=>false});
+    await assert.rejects(unapproved.reconcileRevoking(request,nonce()),denied('DISPATCH_STORE_OWNER_APPROVAL_REQUIRED'));
+    await assert.rejects(recovered.reconcileRevoking({...request,sessionEpoch:randomUUID()},nonce()),denied('DISPATCH_STORE_REVOKE_STALE'));
+    await assert.rejects(recovered.revokeAndDrain(request,nonce()),denied('DISPATCH_STORE_REVOKE_STALE'));
+    const ack=decoded(await recovered.reconcileRevoking(request,'d'.repeat(64)));
+    assert.equal(ack.generation,8);assert.equal(ack.previousGeneration,7);assert.equal(ack.drained,true);
+    const row=(await f.pool.query('SELECT state,generation,core_enabled FROM core_dispatch.grants WHERE authority_id=$1 AND device_id=$2',
+      [f.ids.authorityId,f.ids.deviceId])).rows[0];
+    assert.equal(row?.state,'REVOKED');assert.equal(Number(row?.generation),8);assert.equal(row?.core_enabled,false);
+    await assert.rejects(recovered.reconcileRevoking(request,nonce()),denied('DISPATCH_STORE_REVOKE_STALE'));
+    await assert.rejects(recovered.beginIfCurrent(f.request(),f.broker,nonce()),denied('DISPATCH_STORE_GRANT_REVOKED'));
+  }finally{await f.close();}
+});
