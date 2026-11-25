@@ -54,6 +54,7 @@ async function simulate({ dashboardStatus = 200, pairingStatus = 403, pairingBod
     if (url === '/api/v1/me/dashboard') {
       return { ok: dashboardStatus === 200, status: dashboardStatus };
     }
+    if(url.startsWith('/api/v1/me/mutations/status?'))return {status:404,ok:false,json:async()=>({error:'MUTATION_NOT_FOUND'})};
     if (url === '/api/v1/pairing') {
       if (pairingError) throw pairingError;
       return { ok: pairingStatus >= 200 && pairingStatus < 300,
