@@ -7,6 +7,7 @@ import path from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
 import {coreRuntimeManifestBytes,coreRuntimeManifestSigningBytes,type CoreRuntimeManifest} from '../../src/security/core-runtime-package-manifest.js';
 import {readSqliteHelperRollbackReview} from '../../scripts/ai05-signed-sqlite-helper-review.js';
+import {captureLegacyHubStateSnapshotProof} from '../../scripts/ai04-state-snapshot-proof.js';
 import {bindHelperRollbackGuard} from '../../src/security/protected-helper-rollback-guard.js';
 import type {HelperAuthorityEvidenceRequest} from '../../src/security/postgres-helper-selection-authority.js';
 const sha=(b:Uint8Array)=>createHash('sha256').update(b).digest('hex');
@@ -34,12 +35,18 @@ test('Windows actual signed SQLite candidate review is bound to helper rollback 
   for(const name of ['audit.jsonl','credentials.json','devices.json','idempotency-records.json'])await fs.writeFile(path.join(current,name),'{}');
   const ledger=path.join(current,'idempotency-records.sqlite');
   const db=new DatabaseSync(ledger);
-  try{db.exec("CREATE TABLE idempotency_records(key TEXT PRIMARY KEY); INSERT INTO idempotency_records VALUES('known'); CREATE TABLE idempotency_meta(key TEXT PRIMARY KEY,value TEXT); INSERT INTO idempotency_meta VALUES('schema_version','1')");}finally{db.close();}
+  try{db.exec("CREATE TABLE idempotency_records(key TEXT PRIMARY KEY,status TEXT); INSERT INTO idempotency_records VALUES('known','succeeded'); CREATE TABLE idempotency_meta(key TEXT PRIMARY KEY,value TEXT); INSERT INTO idempotency_meta VALUES('schema_version','1')");}finally{db.close();}
   await fs.cp(current,preserved,{recursive:true});
-  const input={candidate,reviewedRuntime:runtime,currentOfflineRoot:current,preservedOfflineRoot:preserved,reviewedHelper:{path:'helper.exe',pin:helperPin}};
+  const baseline=await captureLegacyHubStateSnapshotProof(current);
+  const input={candidate,reviewedRuntime:runtime,currentOfflineRoot:current,preservedOfflineRoot:preserved,
+    approved:{treeSha256:baseline.treeSha256,sqliteRecords:baseline.sqliteRecords,runtimeManifestSha256:runtime.manifestSha256},
+    reviewedHelper:{path:'helper.exe',pin:helperPin}};
   const approvedReadback=await readSqliteHelperRollbackReview(input);
   assert.equal(approvedReadback.productionRollbackAuthorized,false);
   assert.equal(approvedReadback.sqliteRecords,1);
+  assert.equal(approvedReadback.succeeded,1);
+  assert.equal(approvedReadback.unknown,0);
+  assert.equal(approvedReadback.inProgress,0);
   await assert.rejects(readSqliteHelperRollbackReview({...input,reviewedHelper:{...input.reviewedHelper,pin:{...helperPin,sha256:'d'.repeat(64)}}}),/REVIEW_NOT_BOUND/);
   const approved={runtime,helperPin,approvedStateSha256:approvedReadback.treeSha256,sqliteTreeSha256:approvedReadback.treeSha256,sqliteRecords:1};
   const scope={authorityId:anchor.authorityId,deviceId:randomUUID(),ownerId:randomUUID(),deviceEpoch:randomUUID(),sessionEpoch:randomUUID(),ownerEpoch:1,generation:1,brokerId:randomUUID()};
@@ -50,7 +57,7 @@ test('Windows actual signed SQLite candidate review is bound to helper rollback 
     {observerPublicKeyPem:observer.publicKey.export({format:'pem',type:'spki'}).toString(),approved,async requestProof(c){
       const sqliteReview=await readSqliteHelperRollbackReview(input);
       const observedAt=Date.now();
-      const payload=JSON.stringify({domain:'nexowire.helper-rollback-guard.v1',nonce:c.nonce,requestSha256:c.requestSha256,phase:c.phase,
+      const payload=JSON.stringify({domain:'nexowire.helper-rollback-guard.v2',nonce:c.nonce,requestSha256:c.requestSha256,phase:c.phase,
         approvedStateSha256:approved.approvedStateSha256,currentStateSha256:sqliteReview.treeSha256,writerFenced:true,unknownOperations:false,recoveryPending:false,priorHelperCompatible:true,sqliteReview,observedAt,expiresAt:observedAt+1000});
       return {payload,proof:sign(null,Buffer.from(payload),observer.privateKey).toString('base64url')};
     }});
@@ -59,9 +66,20 @@ test('Windows actual signed SQLite candidate review is bound to helper rollback 
   assert.equal(await guarded.requestProof(challenge,observation),'fixture-only native reply');
   assert.equal(sha(await fs.readFile(ledger)),before);
   const writer=new DatabaseSync(ledger);
-  try{writer.exec("INSERT INTO idempotency_records VALUES('divergent')");}finally{writer.close();}
+  try{writer.exec("INSERT INTO idempotency_records VALUES('divergent','unknown')");}finally{writer.close();}
   const after=sha(await fs.readFile(ledger));
   await assert.rejects(guarded.requestProof({...challenge,nonce:'3'.repeat(64)},observation),/CURRENT_LEDGER_NOT_PRESERVED/);
   assert.equal(sha(await fs.readFile(ledger)),after);
   assert.equal(sha(await fs.readFile(path.join(preserved,'idempotency-records.sqlite'))),before);
+  // Even matching copies and a newly supplied baseline cannot authorize a
+  // ledger with UNKNOWN. Keep the original guard baseline unchanged.
+  const other=new DatabaseSync(path.join(preserved,'idempotency-records.sqlite'));
+  try{other.exec("INSERT INTO idempotency_records VALUES('divergent','unknown')");}finally{other.close();}
+  const changed=await captureLegacyHubStateSnapshotProof(current);
+  const currentHash=sha(await fs.readFile(ledger));
+  const preservedHash=sha(await fs.readFile(path.join(preserved,'idempotency-records.sqlite')));
+  await assert.rejects(readSqliteHelperRollbackReview({...input,approved:{...input.approved,
+    treeSha256:changed.treeSha256,sqliteRecords:changed.sqliteRecords}}),/UNRESOLVED_OPERATIONS/);
+  assert.equal(sha(await fs.readFile(ledger)),currentHash);
+  assert.equal(sha(await fs.readFile(path.join(preserved,'idempotency-records.sqlite'))),preservedHash);
 });

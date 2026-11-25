@@ -7,8 +7,9 @@ import {readTestInventory} from './test-inventory.mjs';
 const tests={
  'test/ai05/protected-transfer-helper-lifecycle.test.ts':['bf56b8102ad4f3642cb784072668a21d68066693',15],
  'test/ai05/transfer-flush-artifact.test.ts':['fe6591365f963c790ab99148807efde82231ed6b',4],
- 'test/ai04/signed-sqlite-rollback-review.test.ts':['9d2a97d813232c3bb541398b50a056aeed1810f1',5],
- 'test/ai05/signed-sqlite-helper-review.test.ts':['5c6eaf4cf8797b35d389b50f0909d435d7b66002',1]
+ 'test/ai04/signed-sqlite-rollback-review.test.ts':['5acefe71677fdeb5485dfd7565666b78f9dd1ace',7],
+ 'test/ai04/sqlite-rollback-offline-evidence.test.ts':['ad75339a553be86f5bbb957f03a3db86de14ef6c',4],
+ 'test/ai05/signed-sqlite-helper-review.test.ts':['7ac34e12c301b6294860d8ec790f6ee83de07e35',1]
 };
 const pins={
  '.gitattributes':'c039ea0d6cdd0a0551d278dc728c257973164c5b',
@@ -20,12 +21,15 @@ const pins={
  'scripts/Build-Nexowire-TransferFlushArtifact.ps1':'bece860ec43b79eeb7542f01b0cd531f024f50a5',
  'scripts/ci/ai05-protected-helper-fixture.mjs':'b501bb91a8b7fca1ba8a6cb050715a1187813a5c',
  'scripts/ci/ai05-protected-helper-fixture.ps1':'cbad1e0433724f37422b0ae83285e9947c5cf7c7',
- 'scripts/ci/ai05-test-signed-native-helper.ps1':'08acbe3eb90ea4a274dc30cc1e58b88f4070e749',
+ 'scripts/ci/ai05-test-signed-native-helper.ps1':'2b09947a256d50e3436c8e94388229986c6ecb12',
  'scripts/ai02-signed-sqlite-rollback-review.ts':'0be381cafd8c99fbb99e1bb082752b0f0a563bbe',
- 'scripts/ai05-signed-sqlite-helper-review.ts':'e3e86f3225bec8699490a7e435024d3f778ced96',
- 'src/security/protected-helper-rollback-guard.ts':'6bef386ac025cb543a8381c6ba59787b427d3967',
+ 'scripts/ai05-signed-sqlite-helper-review.ts':'bc74bfd70cdc6c92c88f992aa2c12775e1c527c1',
+ 'src/security/protected-helper-rollback-guard.ts':'bb298c736a74951807427595a0990b16def2061b',
  'src/security/core-runtime-package-manifest.ts':'5f432bfe8cfe2f83095c0b4ad1698a0da367e083',
  'scripts/ai04-state-snapshot-proof.ts':'20c9dd4f295fdcd2843bacc7028cbba099cb0e59',
+ 'scripts/ai02-offline-recovery-evidence.ts':'00cf90f03adce76fc469c07a54f4d1005c695318',
+ 'src/hub/sqlite-rollback-offline-evidence.ts':'0b1e39e22e8621a6eece4b32b92f2128b4f4b8e5',
+ 'scripts/ai04-controlled-system-hub-cutover.ts':'8bfc5fbf83e2f85e4a93748b61f8ffcac547035a',
  ...Object.fromEntries(Object.entries(tests).map(([f,[b]])=>[f,b]))
 };
 const git=(...a)=>execFileSync('git',a,{encoding:'utf8'}).trim();
@@ -85,11 +89,21 @@ if(receipt.files.every(f=>f.status==='PASS')){
 }
 if(receipt.signedStorageFixture==='PASS'){
  check();
- const child=spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',['-NoProfile','-NonInteractive','-File','scripts/ci/ai05-test-signed-native-helper.ps1'],{encoding:'utf8',timeout:600000,maxBuffer:8*1024*1024,windowsHide:true});
+ const phaseLog=path.resolve(dir,'test-signed-native.phases.log');
+ writeFileSync(phaseLog,'',{flag:'wx'});
+ const started=performance.now();
+ const child=spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',['-NoLogo','-NoProfile','-NonInteractive','-File','scripts/ci/ai05-test-signed-native-helper.ps1'],{encoding:'utf8',timeout:600000,maxBuffer:8*1024*1024,windowsHide:true,env:{...process.env,AI05_NATIVE_PHASE_LOG:phaseLog}});
+ const phases=readFileSync(phaseLog,'utf8');
+ const stderr=child.stderr??'';
+ writeFileSync(path.join(dir,'test-signed-native.stderr.log'),stderr);
+ receipt.testSignedNativeProcess={status:child.status,signal:child.signal,errorCode:child.error?.code??null,elapsedMs:Math.round(performance.now()-started),stderrSha256:sha(stderr),phaseLogSha256:sha(phases),lastPhase:phases.trim().split(/\r?\n/).at(-1)??null};
+ console.log(JSON.stringify({scope:'HOSTED_WINDOWS_NATIVE_PROCESS_DIAGNOSTIC',...receipt.testSignedNativeProcess}));
+ process.stdout.write(phases);
  const log=child.stdout??'';writeFileSync(path.join(dir,'test-signed-native.log'),log);process.stdout.write(log);if(child.stderr)process.stderr.write(child.stderr);
  receipt.testSignedNativeFixture='FAIL';receipt.testSignedNativeLogSha256=sha(log);
  try{
-  if(child.error||child.signal||child.status!==0)throw Error('TEST_SIGNED_NATIVE_PROCESS_FAILED');
+  if(child.error||child.signal||child.status!==0)throw Error('TEST_SIGNED_NATIVE_PROCESS_FAILED:'+(child.error?.code??child.signal??child.status));
+  if(!/ COMPLETE\r?\n$/.test(phases))throw Error('TEST_SIGNED_NATIVE_PHASE_INCOMPLETE');
   const find=scope=>{const rows=log.split(/\r?\n/).filter(l=>l.startsWith('{"scope":"'+scope+'"'));if(rows.length!==1)throw Error('TEST_SIGNED_NATIVE_RECEIPT_MISSING_OR_DUPLICATE');return JSON.parse(rows[0]);};
   const f=find('HOSTED_WINDOWS_TEST_SIGNED_NEXOWIRE_HELPER_FIXTURE'),cleanup=find('HOSTED_WINDOWS_TEST_SIGNING_CLEANUP');
   if(f.node!==process.versions.node||f.operations!==4||f.wrongSignerDenied!==true||f.aclVerified!==true||

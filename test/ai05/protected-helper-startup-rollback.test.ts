@@ -18,16 +18,16 @@ const challenge:HelperEvidenceChallenge={domain:'nexowire.helper-selection-nativ
 const native={observerPublicKeyPem:pem(key),async requestProof(){return 'native proof';}};
 const reviewed={manifestSha256:'5'.repeat(64),sourceCommit:'6'.repeat(40),releaseSequence:2,reader:'sqlite-only' as const,schemaVersion:1 as const};
 const approved={runtime:reviewed,helperPin:b,approvedStateSha256:'3'.repeat(64),sqliteTreeSha256:'7'.repeat(64),sqliteRecords:1};
-const sqliteReview={manifestSha256:reviewed.manifestSha256,sourceCommit:reviewed.sourceCommit,releaseSequence:2,schemaVersion:1,treeSha256:approved.sqliteTreeSha256,sqliteRecords:1,releaseAnchorAdvanced:false,productionRollbackAuthorized:false};
+const sqliteReview={manifestSha256:reviewed.manifestSha256,sourceCommit:reviewed.sourceCommit,releaseSequence:2,schemaVersion:1,treeSha256:approved.sqliteTreeSha256,sqliteRecords:1,succeeded:1,failed:0,unknown:0,inProgress:0,releaseAnchorAdvanced:false,productionRollbackAuthorized:false};
 function proof(c:HelperEvidenceChallenge,changes:Record<string,unknown>={},signer=other.privateKey){
-  const observedAt=Date.now(),payload=JSON.stringify({domain:'nexowire.helper-rollback-guard.v1',nonce:c.nonce,requestSha256:c.requestSha256,phase:c.phase,
+  const observedAt=Date.now(),payload=JSON.stringify({domain:'nexowire.helper-rollback-guard.v2',nonce:c.nonce,requestSha256:c.requestSha256,phase:c.phase,
     approvedStateSha256:'3'.repeat(64),currentStateSha256:'3'.repeat(64),writerFenced:true,unknownOperations:false,recoveryPending:false,priorHelperCompatible:true,sqliteReview,observedAt,expiresAt:observedAt+2000,...changes});
   return {payload,proof:sign(null,Buffer.from(payload),signer).toString('base64url')};
 }
 test('rollback guard requires separate signed equal-state proof at commit',async()=>{
   const guarded=bindHelperRollbackGuard(native,{observerPublicKeyPem:pem(other),approved,async requestProof(c){return proof(c);}});
   assert.equal(await guarded.requestProof(challenge,observation),'native proof');
-  for(const changes of [{currentStateSha256:'4'.repeat(64)},{unknownOperations:true},{recoveryPending:true},{writerFenced:false},{priorHelperCompatible:false},{sqliteReview:{...sqliteReview,releaseSequence:1}},{sqliteReview:{...sqliteReview,treeSha256:'8'.repeat(64)}},{sqliteReview:{...sqliteReview,productionRollbackAuthorized:true}},{nonce:'0'.repeat(64)},{requestSha256:'0'.repeat(64)},{phase:'READ'},{expiresAt:Date.now()-1000}]){
+  for(const changes of [{currentStateSha256:'4'.repeat(64)},{unknownOperations:true},{recoveryPending:true},{writerFenced:false},{priorHelperCompatible:false},{sqliteReview:{...sqliteReview,releaseSequence:1}},{sqliteReview:{...sqliteReview,treeSha256:'8'.repeat(64)}},{sqliteReview:{...sqliteReview,productionRollbackAuthorized:true}},{sqliteReview:{...sqliteReview,unknown:1}},{sqliteReview:{...sqliteReview,inProgress:1}},{sqliteReview:{...sqliteReview,succeeded:0}},{domain:'nexowire.helper-rollback-guard.v1'},{nonce:'0'.repeat(64)},{requestSha256:'0'.repeat(64)},{phase:'READ'},{expiresAt:Date.now()-1000}]){
     const denied=bindHelperRollbackGuard(native,{observerPublicKeyPem:pem(other),approved,async requestProof(c){return proof(c,changes);}});
     await assert.rejects(denied.requestProof(challenge,observation),/GUARD_DENIED/);
   }
