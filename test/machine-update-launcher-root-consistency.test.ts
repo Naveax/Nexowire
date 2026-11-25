@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,readFileSync,writeFileSync,existsSync,rmSync} from 'node:fs';
+import {mkdtempSync,readFileSync,writeFileSync,existsSync,rmSync,readdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
@@ -31,7 +31,7 @@ const broker=(root:string)=>[
   'exit $LASTEXITCODE',
 ].join('\r\n');
 
-function invoke(content:string){
+function invoke(content:string,lockDestination=false){
   const dir=mkdtempSync(path.join(tmpdir(),'nx-launcher-guard-'));
   const file=path.join(dir,'launch.ps1');
   const backup=file+'.update-rollback';
@@ -46,8 +46,10 @@ function invoke(content:string){
       '$previousRoots=@{}',
       '$file='+("'"+file.replaceAll("'","''")+"'"),
       fn,
+      ...(lockDestination?['$held=[IO.File]::Open($file,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)']:[]),
       "try { Patch-Launcher $file; [Console]::WriteLine('PASS') }",
       "catch { [Console]::WriteLine('BLOCK:'+([string]$_.Exception.Message)) }",
+      ...(lockDestination?['finally{$held.Dispose()}']:[]),
     ].join('\r\n');
     const proc=spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
       ['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',
@@ -62,7 +64,9 @@ function invoke(content:string){
       });
     assert.equal(proc.status,0,proc.stderr);
     return {status:proc.stdout.trim(),content:readFileSync(file,'utf8'),
-      backed:existsSync(backup),backup:existsSync(backup)?readFileSync(backup,'utf8'):''};
+      backed:existsSync(backup),backup:existsSync(backup)?readFileSync(backup,'utf8'):'',
+      candidates:readdirSync(dir).filter(name=>name.startsWith('launch.ps1.update-candidate-'))
+        .map(name=>readFileSync(path.join(dir,name),'utf8'))};
   }finally{rmSync(dir,{recursive:true,force:true});}
 }
 
@@ -73,6 +77,10 @@ test('launcher rendering requires a unique, fully linked versioned executable an
   assert.match(script,/MACHINE_UPDATE_LAUNCHER_TOO_LARGE/);
   assert.match(fn,/\$backupStream\.Flush\(\$true\)/);
   assert.match(fn,/\$launcherStream\.Flush\(\$true\)/);
+  assert.match(fn,/\[IO\.File\]::Replace\(\$candidate,\$file,\[NullString\]::Value,\$false\)/);
+  assert.match(fn,/\[IO\.FileMode\]::CreateNew/);
+  assert.match(fn,/\$replacementStream\.Flush\(\$true\)/);
+  assert.doesNotMatch(fn,/\.SetLength\(0\)/);
   assert.match(fn,/MACHINE_UPDATE_LAUNCHER_BACKUP_UNVERIFIED/);
   assert.match(fn,/MACHINE_UPDATE_LAUNCHER_READBACK_MISMATCH/);
   assert.doesNotMatch(script,/if\(\$text\.Contains\(\$NewRoot\)\)\{return\}/);
@@ -89,6 +97,7 @@ for(const [name,launcher] of [['Hub',hub(old)],['Broker',broker(old)]] as const)
     assert.ok(!x.content.includes(old+'\\runtime\\node.exe'));
     // Exact PS5.1 UTF8 BOM and replacement bytes, including original line endings.
     assert.equal(x.content,'\ufeff'+launcher.replaceAll(old,newer));
+    assert.deepEqual(x.candidates,[]);
   });
 }
 test('already upgraded verified runtime does not rewrite/backup launcher',{skip:process.platform!=='win32'},()=>{
@@ -126,4 +135,16 @@ test('oversized launcher is refused before backup or modification',{skip:process
   const x=invoke(hub(old)+'\r\n'+('#'.repeat(65537)));
   assert.equal(x.status,'BLOCK:MACHINE_UPDATE_LAUNCHER_TOO_LARGE');
   assert.equal(x.backed,false);
+});
+
+test('locked destination refuses replacement without truncating original or losing verified backup',{skip:process.platform!=='win32'},()=>{
+  const original=hub(old);
+  const x=invoke(original,true);
+  assert.match(x.status,/^BLOCK:/);
+  assert.equal(x.content,original);
+  assert.equal(x.backed,true);
+  assert.equal(x.backup,original);
+  // The held destination permits reads but denies delete/replace. Exact
+  // staged bytes establish that the test reached the replacement boundary.
+  assert.deepEqual(x.candidates,['\ufeff'+original.replaceAll(old,newer)]);
 });
