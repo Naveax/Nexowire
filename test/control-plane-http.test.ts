@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {dashboardMutationFixture} from './ai03/dashboard-mutation-d1-fixture.js';
 import assert from 'node:assert/strict';
 import { MemoryControlPlaneStore } from '../src/product/memory-control-plane-store.js';
 import {
@@ -76,8 +77,12 @@ test('admin endpoint rejects a normal user', async () => {
   assert.equal(response.status, 403);
 });
 
-test('pairing start plus public token consume returns one device credential', async () => {
-  const { handler } = await setup();
+test('pairing start plus public token consume returns one device credential', async t => {
+  const f=dashboardMutationFixture();t.after(()=>f.close());
+  await f.service.ensureAccount({id:'acct-1'});
+  const handler=createControlPlaneHttpHandler(f.service,{authenticate:async req=>{
+    const raw=req.headers.get('x-test-identity');return raw?JSON.parse(raw) as ControlPlaneIdentity:null;
+  }});
 
   const start = await handler(
     request(
@@ -85,8 +90,8 @@ test('pairing start plus public token consume returns one device credential', as
       { accountId: 'acct-1', role: 'user' },
       {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ deviceName: 'gaming-pc' }),
+        headers: { 'content-type': 'application/json','x-nexowire-mutation-id':'pairing-v1:'+'a'.repeat(64) },
+        body: JSON.stringify({ deviceName: 'gaming-pc',deviceId:'gaming-pc-fixture' }),
       },
     ),
   );
