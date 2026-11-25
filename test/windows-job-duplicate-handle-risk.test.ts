@@ -109,7 +109,7 @@ test('after Job attestation, equal-HIGH same-logon PROCESS_DUP_HANDLE opens are 
     const statusPath=/--status\s+(?:"([^"]+)"|([^\s]+))\s+--cwd/.exec(guard.CommandLine!);
     assert.ok(statusPath);
     const text=(await readFile(statusPath[1]??statusPath[2]!,'utf8')).trim();
-    const nw=/^NWJOB5 (\d+) (\d+) (\d+)$/.exec(text);
+    const nw=/^NWJOB6 (\d+) (\d+) (\d+) (\d+) (\d+)$/.exec(text);
     assert.ok(nw&&Number(nw[1])===started.pid);
     const root=exact(started.pid);
     assert.ok(root&&root.Name.toLowerCase()==='powershell.exe');
@@ -195,7 +195,17 @@ test('real UAC-linked medium attacker cannot duplicate HIGH guardian Job handle'
     t.diagnostic('SOURCE_FIXTURE_ONLY: kernel-token medium/high boundary observed; independently installed Broker, equal-HIGH attacker and full physical acceptance remain BLOCKED');
   } finally {
     // Only this just-created isolated test Job is stopped.
-    requestWindowsJobStop(launch);
-    if (launch.child.exitCode===null)launch.child.kill();
+    if(!launch.closed()){
+      const requested=await requestWindowsJobStop(launch);
+      assert.equal(requested,'requested');
+    }
+    let timeout:ReturnType<typeof setTimeout>|undefined;
+    try{
+      const result=await Promise.race([launch.completion,new Promise<never>((_,reject)=>{
+        timeout=setTimeout(()=>reject(Error('fixture native cleanup timeout')),10000);
+      })]);
+      assert.equal(result.state,'local_job_empty',
+        'cooperative cleanup must observe the actual Job empty');
+    }finally{if(timeout)clearTimeout(timeout);}
   }
 });
