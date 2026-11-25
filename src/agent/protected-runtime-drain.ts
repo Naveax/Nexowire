@@ -27,6 +27,7 @@ export class ProtectedRuntimeDrain {
         new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(Error('PROTECTED_RUNTIME_DRAIN_UNKNOWN')),timeoutMs);}),
       ]);
       if(this.pending.size||this.uncertain)throw Error('PROTECTED_RUNTIME_DRAIN_UNKNOWN');
-    }finally{if(timer)clearTimeout(timer);}
+    }catch(error){this.uncertain=true;throw error;}
+    finally{if(timer)clearTimeout(timer);}
   }
 }
