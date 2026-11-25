@@ -104,7 +104,9 @@ test('real Agent clean stop reaches signed mTLS RELEASE; denied observer and UNK
         const rows=(await admin.query('SELECT claim_id,state FROM transfer_authority.claims WHERE claim_id=$1',[claimId])).rows;
         assert.deepEqual(rows,[{claim_id:claimId,state:mode==='unknown'?'UNKNOWN':'ACTIVE'}]);
       }
-      t.diagnostic(mode+': real process return='+childReturned+'; RELEASE proof requests='+releaseProofs+'; durable lease='+leaseRows[0].state);
+      const durableLease=leaseRows[0];
+      assert(durableLease,'exact original durable lease row required');
+      t.diagnostic(mode+': real process return='+childReturned+'; RELEASE proof requests='+releaseProofs+'; durable lease='+durableLease.state);
     }finally{server.closeAllConnections();if(server.listening)await new Promise<void>((resolve,reject)=>server.close(e=>e?reject(e):resolve()));}
   }
   t.diagnostic('Real PostgreSQL and pinned mTLS; real isolated Agent process; synthetic independent native observer and inert helper artifact, not physical native drain');
