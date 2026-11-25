@@ -25,7 +25,7 @@ export interface ProtectedTransferServicesStartup {
   /** Independent permanent drain of the target Publisher/runtime and helper
    * lifecycle effects, scoped to the actual revoke. Never a socket ACK or
    * empty DB result. Must not call a selection READ while CORE holds its lock. */
-  verifyTransferRuntimeDrain:(request:RevokeRequest)=>Promise<boolean>;
+  verifyTransferRuntimeDrain:(request:RevokeRequest,signal?:AbortSignal)=>Promise<boolean>;
 }
 const sameDatabase=(a:Database,b:Database)=>a.host===b.host&&a.port===b.port&&a.database===b.database&&a.caPem===b.caPem;
 const endpoint=(host:string,port:number)=>typeof host==='string'&&isIP(host)!==0&&Number.isInteger(port)&&port>0&&port<=65535;
@@ -57,8 +57,9 @@ export async function startProtectedTransferAndCoreServices(config:ProtectedTran
     new Set([core.port,transferPort,selectionPort]).size!==3)
     throw Error('TRANSFER_CORE_SHARED_AUTHORITY_STARTUP_REQUIRED');
   // Bind before any DB pool or listener exists. No raw selection fallback.
-  const nativeEvidence=bindHelperRollbackGuard(selection.nativeEvidence,config.rollbackGuard);
+  const guardedEvidence=bindHelperRollbackGuard(selection.nativeEvidence,config.rollbackGuard);
   const service=createPostgresProtectedTransferService(transfer);
+  const nativeEvidence=service.bindSelectionEvidence(guardedEvidence);
   let readPool:ReturnType<typeof createProtectedPostgresDispatchPool>|undefined;
   let helper:ReturnType<typeof createPostgresHelperSelectionService>|undefined;
   let coreService:Awaited<ReturnType<typeof startProtectedBrokerDispatchService>>|undefined;
@@ -77,10 +78,11 @@ export async function startProtectedTransferAndCoreServices(config:ProtectedTran
     const helperDrain=composeHelperSelectionRevokeDrain({pool:readPool.pool,scope,nativeEvidence,
       verifyExistingNativeDrain:config.verifyTransferRuntimeDrain});
     helper=createPostgresHelperSelectionService({...selection,nativeEvidence});
+    const verifyCoreDrain:(request:RevokeRequest,signal?:AbortSignal)=>Promise<boolean>=core.verifyNativeDrain;
     coreService=await startProtectedBrokerDispatchService({...core,
-      verifyNativeDrain:request=>service.composeDrain(async bound=>
-        bound.ownerId===request.ownerId&&bound.deviceId===request.deviceId&&
-        await core.verifyNativeDrain(request)===true&&await helperDrain(request)===true)(request),
+      verifyNativeDrain:(request:RevokeRequest,signal?:AbortSignal)=>service.composeDrain(async bound=>
+        !signal?.aborted&&bound.ownerId===request.ownerId&&bound.deviceId===request.deviceId&&
+        await verifyCoreDrain(request,signal)===true&&!signal?.aborted&&await helperDrain(request,signal)===true&&!signal?.aborted)(request),
     });
     if(await transfer.server.verifyIndependentProvenance()!==true)throw Error('TRANSFER_AUTHORITY_PROVENANCE_UNVERIFIED');
     const transferAddress=await listen(service.server,transferHost,transferPort);
