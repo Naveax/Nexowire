@@ -20,6 +20,9 @@ const required = [
   'test/hub-boot-protected-state-gate.test.ts',
   'test/hub-boot-shared-ancestor-trust.test.ts',
   'test/hub-boot-uninstall-task-absence.test.ts',
+  'test/hub-boot-staged-activation.test.ts',
+  'test/hub-boot-hidden-task-visibility.test.ts',
+  'test/windows-unattended-reboot-readiness.test.ts',
   'test/windows-dpapi-shell-trust.test.ts',
   'scripts/ci/assert-tap-summary.mjs',
   'scripts/ci/test-inventory.mjs',
@@ -106,7 +109,7 @@ test('Windows Hub Boot source fixture lane is exact-head, bounded and mandatory 
   assert.doesNotMatch(lane,/continue-on-error:\s*true|self-hosted/);
 });
 
-test('both reviewed Windows boot profiles include the same four state, ACL, uninstall and DPAPI fixtures',()=>{
+test('legacy boot profiles retain shared guards and staged activation uses one exact independent profile',()=>{
   const lane=workflow.split('\n  ai08-windows-hub-boot-fixtures:\n')[1]?.split('\n  package:')[0];
   assert.ok(lane);
   const shared=lane.split('const sharedReviewed = {')[1]?.split('};')[0];
@@ -121,7 +124,29 @@ test('both reviewed Windows boot profiles include the same four state, ACL, unin
   assert.equal([...shared.matchAll(/'([^']+)':'([0-9a-f]{40})'/g)].length,4);
   assert.ok(lane.includes('const profileReviewed=hasStartup?startupReviewed:baselineReviewed;'));
   assert.ok(lane.includes('WINDOWS_FIXTURE_DUPLICATE_REVIEW_PATH'));
-  assert.ok(lane.includes('const reviewed={...profileReviewed,...sharedReviewed};'));
+  const staged=lane.split('const stagedReviewed = {')[1]?.split('};')[0];
+  assert.ok(staged,'complete staged activation profile required');
+  const stagedRows=[...staged.matchAll(/'([^']+)':'([0-9a-f]{40})'/g)];
+  const stagedPins=Object.fromEntries(stagedRows.map(m=>[m[1],m[2]]));
+  assert.equal(stagedRows.length,12);
+  assert.deepEqual(stagedPins,{
+    'test/hub-boot-status-legacy-user.test.ts':'800ca3e6bc6b892c26f102ec7f250754cc1372f3',
+    'test/hub-boot-task-shell-trust.test.ts':'ce31e6c39b63647c5bb11e579262690694829b12',
+    'test/hub-boot-root-boundary.test.ts':'b3d168159456820b5b7e8f8c3b06695732b537b4',
+    'test/hub-boot-handoff-transaction.test.ts':'0d9cccd65c58dffd19ce532dd978f22efb2e670d',
+    'test/hub-boot-startup-trigger-integrity.test.ts':'61062ecab51d2852c750cccd03fae79f7b45286a',
+    'test/hub-boot-protected-state-gate.test.ts':'40994c7a1178b20946b4432c7ff2716f5a074dd1',
+    'test/hub-boot-shared-ancestor-trust.test.ts':'7fb4ee2bc47fcc6543b70e0441bb795f7e8759b8',
+    'test/hub-boot-uninstall-task-absence.test.ts':'9612d67e0e3042d0c07aa9f8b054203496adbc35',
+    'test/windows-dpapi-shell-trust.test.ts':'638804ff36f66555d220bb0757ce189354703775',
+    'test/hub-boot-staged-activation.test.ts':'8fd5be6b05550dfe16d8d5f3c24c6a2a072f2933',
+    'test/hub-boot-hidden-task-visibility.test.ts':'29bdbe9b57f3889b4ff444c72d747e816545ed2c',
+    'test/windows-unattended-reboot-readiness.test.ts':'291b663e099f78bc6391a429b7aa53b1b278f217'
+  });
+  assert.ok(lane.includes("const hasStaged=tracked.has('test/hub-boot-staged-activation.test.ts');"));
+  assert.ok(lane.includes('const reviewed=hasStaged?stagedReviewed:{...profileReviewed,...sharedReviewed};'));
+  assert.ok(lane.includes('AI01_STAGED_ACTIVATION_C614956A'));
+  assert.ok(lane.includes('COORDINATED_RECOVERY_DENIAL_C614956A'));
   assert.ok(lane.includes('for(const [file,blob] of Object.entries(reviewed))check(file,blob);'));
   assert.ok(lane.includes('schemaVersion:1,reviewProfile,reviewExtension,sourceCommitSha:'));
   assert.ok(lane.includes("STATE_ACL_UNINSTALL_DPAPI_D2696376"));

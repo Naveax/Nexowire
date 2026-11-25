@@ -55,7 +55,8 @@ const runtimeDependencies=Object.freeze({
   'src/protocol/capabilities.ts':'f661b6e27794184bacf7dfbcf3f53e7fc5f5919d',
   'test/fixtures/agent-remote-cas-fixture.ts':'6d3e6e680543818d5c859409db291364be3ae1eb',
   'src/agent/windows-core-console-native.ts':'f3b7dddab82bc94075375866b12ee51e0ffb5909',
-  'src/hub/hub-boot-lifecycle.ts':'daa88893c1b447b41fcfd8d91f9e5b312552d80c',
+  // Reviewed #1327 staged activation and coordinated recovery denial; #1338 63/63 per Windows lane.
+  'src/hub/hub-boot-lifecycle.ts':'95c77c1e2c8b4e8c5e7ac36a1f58ea2c5a58d336',
   'src/security/windows-privileged-runtime-trust.ts':'2eb3029f9790cd7b94aa7bf87711a2296e3d3df3',
   'src/agent/core-windows-mutation-dispatch.ts':'e8e34f4b8ff420efce6f78a37b65c48edf3d650b',
 });
