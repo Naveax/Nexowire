@@ -46,16 +46,10 @@ test('failed staging removes only its own ACL-verified root and install rollback
   assert.match(install,/expectedLegacyState -eq 'Running'/);
 });
 
-test('uninstall validates saved restoration state and requires port release before removing SYSTEM task',()=>{
-  const read=uninstall.indexOf("fs.readFile(p.manifest,'utf8')");
-  const stop=uninstall.indexOf('Stop-ScheduledTask -TaskName $boot');
-  const poll=uninstall.indexOf('Get-NetTCPConnection -State Listen -ErrorAction Stop',stop);
-  const deny=uninstall.indexOf('HUB_BOOT_PORT_STILL_OWNED',poll);
-  const unregister=uninstall.indexOf('Unregister-ScheduledTask -TaskName $boot',deny);
-  const restore=uninstall.indexOf('if($userTask -and $expectedLegacyState',unregister);
-  assert.ok(read>=0 && read<stop && stop<poll && poll<deny && deny<unregister && unregister<restore);
-  assert.match(uninstall,/userTaskPreviousState: z\.enum\(\['Running','Ready','Disabled','NotInstalled'\]\)/);
-  assert.match(uninstall,/expectedLegacyState -eq 'Running'/);
+test('standalone uninstall cannot bypass the independent recovery and state reconciliation path',()=>{
+  assert.match(uninstall,/HUB_BOOT_UNINSTALL_COORDINATED_RECOVERY_REQUIRED/);
+  assert.match(uninstall,/assertCanonicalHubBootTaskNames\(options\)/);
+  assert.doesNotMatch(uninstall,/(?:Stop|Start|Enable|Disable|Register|Unregister)-ScheduledTask|fs\.(?:rm|unlink|writeFile)|runPowerShellJson/);
 });
 
 test('SYSTEM task must be independently read back before disabling the original user Hub',()=>{
