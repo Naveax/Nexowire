@@ -322,14 +322,18 @@ static BOOL cancellation_pending(const wchar_t *file){
   return GetLastError()!=ERROR_FILE_NOT_FOUND;
 }
 
-static BOOL terminate_and_observe_empty(HANDLE job,DWORD reason){
+static BOOL terminate_and_observe_empty(HANDLE job,HANDLE root,DWORD reason){
   if(!TerminateJobObject(job,reason))return FALSE;
   ULONGLONG start=GetTickCount64();
   do{
     JOBOBJECT_BASIC_ACCOUNTING_INFORMATION a={0};
     if(!QueryInformationJobObject(job,JobObjectBasicAccountingInformation,&a,sizeof(a),NULL))
       return FALSE;
-    if(a.ActiveProcesses==0)return TRUE;
+    // Job accounting and process-object signaling need not become visible
+    // together. Keep the same deadline and require both exact observations.
+    DWORD rootWait=WaitForSingleObject(root,0);
+    if(rootWait==WAIT_FAILED)return FALSE;
+    if(a.ActiveProcesses==0 && rootWait==WAIT_OBJECT_0)return TRUE;
     Sleep(25);
   }while(GetTickCount64()-start<5000);
   return FALSE;
@@ -476,7 +480,7 @@ int main(void){
   }
   DWORD childSession=0;
   if(managed && (!ProcessIdToSessionId(pi.dwProcessId,&childSession) || childSession!=session)){
-    (void)terminate_and_observe_empty(job,79);
+    (void)terminate_and_observe_empty(job,pi.hProcess,79);
     CloseHandle(pi.hThread);CloseHandle(pi.hProcess);CloseHandle(job);
     if(parent)CloseHandle(parent);
     return managed ? 512 : 79;
@@ -494,7 +498,7 @@ int main(void){
   if(managed){
     FILETIME gc,ge,gk,gu;
     if(!GetProcessTimes(GetCurrentProcess(),&gc,&ge,&gk,&gu)){
-      (void)terminate_and_observe_empty(job,79);
+      (void)terminate_and_observe_empty(job,pi.hProcess,79);
       CloseHandle(pi.hThread);CloseHandle(pi.hProcess);CloseHandle(job);
       if(parent)CloseHandle(parent);
       return 512;
@@ -505,7 +509,7 @@ int main(void){
   }else length=swprintf(message,128,L"NWJOB5 %lu %llu %llu\n",pi.dwProcessId,ticks,
     (unsigned long long)(uintptr_t)job);
   if(length<=0 || length>=128){
-    (void)terminate_and_observe_empty(job,74);
+    (void)terminate_and_observe_empty(job,pi.hProcess,74);
     CloseHandle(pi.hThread);CloseHandle(pi.hProcess);CloseHandle(job);
     if(parent)CloseHandle(parent);
     return managed ? 512 : 74;
@@ -537,10 +541,13 @@ int main(void){
   BOOL released=FALSE;
   for(int i=0;i<400;i++){
     if(parent && WaitForSingleObject(parent,0)!=WAIT_TIMEOUT)break;
-    if(managed && cancellation_pending(cancelPath))break;
     HANDLE gate=CreateFileW(releasePath,GENERIC_READ,FILE_SHARE_READ,NULL,
       OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
     if(gate!=INVALID_HANDLE_VALUE){CloseHandle(gate);released=TRUE;break;}
+    // An unreleased root still has no admission; cancellation never grants it.
+    // If release and STOP arrive together, finish the admitted cancellation
+    // below without resuming the root, using the reserved terminal HANDLE.
+    if(managed && cancellation_pending(cancelPath))break;
     Sleep(25);
   }
   if(!released){
@@ -572,35 +579,46 @@ int main(void){
        !GetFileInformationByHandle(terminalFile,&observed) ||
        (observed.dwFileAttributes&(FILE_ATTRIBUTE_REPARSE_POINT|FILE_ATTRIBUTE_DIRECTORY))){
       if(terminalFile!=INVALID_HANDLE_VALUE)CloseHandle(terminalFile);
-      (void)terminate_and_observe_empty(job,76);
+      (void)terminate_and_observe_empty(job,pi.hProcess,76);
       CloseHandle(pi.hThread);CloseHandle(pi.hProcess);CloseHandle(job);
       if(parent)CloseHandle(parent);
       return 512;
     }
   }
-  if((parent && WaitForSingleObject(parent,0)!=WAIT_TIMEOUT) ||
-     (managed && cancellation_pending(cancelPath)) || ResumeThread(pi.hThread)!=1){
+  DWORD reason=0; // 0 natural, 1 requested stop, 2 timeout, 3 owner loss
+  BOOL empty=FALSE;
+  BOOL ownerLost=parent && WaitForSingleObject(parent,0)!=WAIT_TIMEOUT;
+  if(managed && (ownerLost || cancellation_pending(cancelPath))){
+    // The release handshake succeeded, but STOP raced the first resume.
+    // Never run the suspended root just to obtain a terminal observation.
+    reason=ownerLost?3:1;
+    empty=terminate_and_observe_empty(job,pi.hProcess,ownerLost?78:125);
+  }else if(ownerLost || ResumeThread(pi.hThread)!=1){
     diagnostic(L"resume");
     if(terminalFile!=INVALID_HANDLE_VALUE)CloseHandle(terminalFile);
     TerminateJobObject(job,76);
     CloseHandle(pi.hThread);CloseHandle(pi.hProcess);CloseHandle(job);
+    if(parent)CloseHandle(parent);
     return managed ? 512 : 76;
   }
   CloseHandle(pi.hThread);
   // A Job handle is NOT signaled on ordinary last-process exit. Query the
   // accounting instead, and also watch the owning Agent for volatile tasks.
-  DWORD reason=0; // 0 natural, 1 requested stop, 2 timeout, 3 owner loss
-  BOOL empty=FALSE;
   ULONGLONG began=GetTickCount64();
-  for(;;){
+  while(reason==0){
     JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accounting={0};
     if(!QueryInformationJobObject(job,JobObjectBasicAccountingInformation,
            &accounting,sizeof(accounting),NULL)){
       diagnostic(L"job_accounting");
-      (void)terminate_and_observe_empty(job,77);
+      (void)terminate_and_observe_empty(job,pi.hProcess,77);
       break;
     }
-    if(accounting.ActiveProcesses==0){empty=TRUE;break;}
+    if(accounting.ActiveProcesses==0){
+      // Also require the retained root process object to be signaled.
+      // No PID-based fallback if that observation cannot be obtained.
+      empty=WaitForSingleObject(pi.hProcess,5000)==WAIT_OBJECT_0;
+      break;
+    }
     if(parent && WaitForSingleObject(parent,0)!=WAIT_TIMEOUT)reason=3;
     else if(managed && cancellation_pending(cancelPath))reason=1;
     else if(managed && runtimeTimeout && GetTickCount64()-began>=runtimeTimeout)reason=2;
@@ -608,7 +626,7 @@ int main(void){
       DWORD terminationCode=reason==1?125:reason==2?124:78;
       // Terminate through our retained exact Job HANDLE, then query its
       // accounting. Closing/killing the guardian is not cleanup evidence.
-      empty=terminate_and_observe_empty(job,terminationCode);
+      empty=terminate_and_observe_empty(job,pi.hProcess,terminationCode);
       break;
     }
     Sleep(25);
