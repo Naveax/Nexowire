@@ -116,12 +116,15 @@ export interface ProtectedTransferNativeStartup {
   tls:ProtectedTransferAuthorityTlsConfig;
   nativeMutationProvider:TrustedNativeMutationProvider;
   coreConsentProvider?:NativeCoreConsentAuthority;
+  /** Trusted supervisor graceful-stop signal, NOT a revoke/lease proof. */
+  shutdownSignal?:AbortSignal;
   withProtectedEffect:Parameters<typeof createProtectedNativeTransferAdmission>[1];
 }
 /** Explicit trusted owner-runtime entrypoint. No helper pin from CLI/env,
  * no test adapter, no auto-provisioning and no prelogin enablement.
  * The deployment lease spans publisher creation and the Agent lifetime. */
 export async function runProtectedTransferNativeAgent(config:ProtectedTransferNativeStartup,env:NodeJS.ProcessEnv=process.env):Promise<void>{
+  if(config?.shutdownSignal?.aborted)throw Error('PROTECTED_RUNTIME_STOPPED');
   if(process.platform!=='win32'||getWindowsPreloginAgentMode(env)||env.NEXOWIRE_AGENT_REQUIRE_ATOMIC_EFFECT_ADMISSION!=='1'||
      !env.NEXOWIRE_AGENT_RESERVATION_CAS_URL?.trim()||!env.NEXOWIRE_AGENT_RESERVATION_CAS_TOKEN?.trim()||
      !env.NEXOWIRE_AGENT_RESERVATION_CAS_AUTHORITY_ID?.trim()||!env.NEXOWIRE_AGENT_RESERVATION_CAS_EPOCH?.trim()||
@@ -174,7 +177,7 @@ export async function runProtectedTransferNativeAgent(config:ProtectedTransferNa
     });
     await check();
     try{
-      await runNativeAgent(env,config.nativeMutationProvider,config.coreConsentProvider,runtime.publisher,config.publisher.deviceId,scope.signal,()=>runtimeDrain.seal());
+      await runNativeAgent(env,config.nativeMutationProvider,config.coreConsentProvider,runtime.publisher,config.publisher.deviceId,scope.signal,()=>runtimeDrain.seal(),config.shutdownSignal);
       await runtimeDrain.wait();
       // A local return never releases the lease itself. The exact mTLS
       // selection provider asks the independent observer for RELEASE proof.
