@@ -1,4 +1,5 @@
 import type { PairingRecord } from './pairing.js';
+import type {D1DashboardMutationStore} from './dashboard-mutation-store.js';
 import type {
   BillingMode,
   CustomPlanInput,
@@ -206,6 +207,8 @@ export interface PrepaidRefundResult {
 }
 
 export interface ControlPlaneStore {
+  /** Only the durable backend supplies this. No in-memory browser mutation fallback. */
+  readonly dashboardMutations?:Pick<D1DashboardMutationStore,'revision'|'read'|'createPairing'|'applyCore'>;
   getQuotaSubject(
     id: string,
   ): Promise<ProductQuotaSubjectRecord | null>;
@@ -247,6 +250,11 @@ export interface ControlPlaneStore {
   getRemoteDeviceAuthorization(
     deviceId: string, credentialHash: string, ownerAccountId: string,
   ): Promise<number | null>;
+  /** Owner-scoped status readback only; never used as a mutation grant.
+   * Optional on older stores, where dashboard must report UNKNOWN. */
+  readRemoteAuthorizationStatus?(deviceId:string,ownerAccountId:string):Promise<{
+    authorizationEpoch:number;state:'ACTIVE'|'REVOKED';observedAtMs:number
+  }|null>;
   /** Atomic, persistent revocation. */
   revokeRemoteDeviceAuthorization(deviceId: string, ownerAccountId: string): Promise<boolean>;
   /** Trusted owner-account lifecycle hook; never accept caller-provided ownership. */

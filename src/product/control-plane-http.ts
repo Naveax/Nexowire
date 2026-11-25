@@ -149,6 +149,8 @@ function optionalFeatureList(
 }
 
 function errorStatus(message: string): number {
+  if (message === 'DASHBOARD_MUTATION_STORE_UNAVAILABLE'||message==='DASHBOARD_MUTATION_OUTCOME_UNKNOWN'||message==='CORE_AUTHORITY_UNAVAILABLE')return 503;
+  if(message.startsWith('DASHBOARD_MUTATION_'))return 409;
   if (message === 'BILLING_PAUSED' ||
       message === 'BRIDGE_GUARDIAN_SIGNING_KEY_NOT_ENROLLED') return 503;
   if (message === 'BRIDGE_COMMAND_DEVICE_UNAUTHENTICATED') return 401;
@@ -272,9 +274,19 @@ export function createControlPlaneHttpHandler(
         if(options.coreConsoleAuthority?.deviceStatus){
           for(const device of dashboard.devices){
             device.physicalConsole=await options.coreConsoleAuthority.deviceStatus(device.id,identity.accountId);
+            // A native readback may span an owner/revoke/consent transition.
+            // Do not issue a revision from before that transition.
+            if(device.coreMutationRevision!=null&&
+              await service.confirmDashboardMutationRevision(identity,device.id)!==device.coreMutationRevision)
+              device.coreMutationRevision=null;
           }
         }
         return json(200,dashboard);
+      }
+
+      if(request.method==='GET'&&path==='/api/v1/me/mutations/status'){
+        const result=await service.dashboardMutationStatus(identity,url.searchParams.get('mutationId')??'');
+        return result?json(200,result):json(404,{error:'MUTATION_NOT_FOUND'});
       }
 
       if (request.method === 'GET' &&
@@ -422,15 +434,10 @@ export function createControlPlaneHttpHandler(
         )) {
           return json(400, { error: 'CORE_CONFIRMATION_REQUIRED' });
         }
-        const result=await service.setDeviceCorePreference(
-          identity, stringField(body, 'deviceId'), body.enabled,
-        );
-        if(body.enabled&&options.coreConsoleAuthority?.requestEnrollment){
-          const status=await options.coreConsoleAuthority.deviceStatus?.(result.deviceId,identity.accountId);
-          if(!status?.localEnrolled)
-            await options.coreConsoleAuthority.requestEnrollment(result.deviceId,identity.accountId);
-        }
-        return json(200,result);
+        return json(200,await service.applyDashboardCoreMutation(identity,stringField(body,'deviceId'),
+          body.enabled?'core-enable':'core-disable',request.headers.get('x-nexowire-mutation-id')??'',
+          typeof body.expectedRevision==='number'?body.expectedRevision:NaN,
+          options.coreConsoleAuthority?.dashboardConsentAvailable?.()===true));
       }
 
       // Retry only the local consent REQUEST for an already owner-enabled CORE.
@@ -439,14 +446,10 @@ export function createControlPlaneHttpHandler(
         if(request.headers.get('x-nexowire-confirm')!=='core-enrollment-request-v1')
           return json(400,{error:'CORE_ENROLLMENT_REQUEST_CONFIRMATION_REQUIRED'});
         const body=await readJsonObject(request);
-        const result=await service.requestDeviceCoreEnrollment(
-          identity,stringField(body,'deviceId'));
-        if(!options.coreConsoleAuthority?.requestEnrollment)
-          return json(503,{error:'CORE_AUTHORITY_UNAVAILABLE'});
-        const current=await options.coreConsoleAuthority.deviceStatus?.(result.deviceId,identity.accountId);
-        if(current?.localEnrolled)return json(409,{error:'CORE_ALREADY_ENROLLED'});
-        await options.coreConsoleAuthority.requestEnrollment(result.deviceId,identity.accountId);
-        return json(200,result);
+        return json(200,await service.applyDashboardCoreMutation(identity,stringField(body,'deviceId'),
+          'core-consent',request.headers.get('x-nexowire-mutation-id')??'',
+          typeof body.expectedRevision==='number'?body.expectedRevision:NaN,
+          options.coreConsoleAuthority?.dashboardConsentAvailable?.()===true));
       }
 
       if (
@@ -557,9 +560,8 @@ export function createControlPlaneHttpHandler(
           await service.beginPairing(
             identity,
             stringField(body, 'deviceName'),
-            typeof body.deviceId === 'string'
-              ? body.deviceId
-              : undefined,
+            stringField(body,'deviceId'),
+            request.headers.get('x-nexowire-mutation-id')??'',
           ),
         );
       }

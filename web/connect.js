@@ -270,6 +270,50 @@ function validatedLoopbackCallback() {
   return url;
 }
 
+// A local native pairing session has a fresh 256-bit random state. Derive the
+// same opaque operation identity in every browser profile, without persisting
+// the raw callback state, URL, pairing ID or token. The server must separately
+// enforce this identity; the browser fence is only same-origin/profile.
+async function pairingMutationIdentity(localState) {
+  const digest=await crypto.subtle.digest('SHA-256',
+    new TextEncoder().encode('nexowire-pairing-v1\u0000'+localState));
+  return 'pairing-v1:'+Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('');
+}
+
+function pairingFenceKey(mutationId) {
+  return 'nexowire-pairing-uncertain-v1:'+mutationId;
+}
+
+function pairingFenceAvailable() {
+  return typeof navigator.locks?.request==='function'&&typeof crypto?.subtle?.digest==='function';
+}
+
+async function pairingMutationStatus(mutationId) {
+  try {
+    const response=await fetch('/api/v1/me/mutations/status?mutationId='+encodeURIComponent(mutationId),{
+      credentials:'include',headers:{Accept:'application/json'},cache:'no-store',signal:AbortSignal.timeout(8000)});
+    if(response.redirected===true)return 'UNKNOWN';
+    if(response.status===404){const body=await response.json();return body?.error==='MUTATION_NOT_FOUND'?'NOT_FOUND':'UNKNOWN'}
+    if(response.status!==200)return 'UNKNOWN';
+    const result=await response.json();
+    if(result?.mutationId!==mutationId||result.deviceId!==deviceId||
+       result.kind!=='pairing'||result.expectedRevision!==null||
+       !['APPLIED','DENIED','PENDING'].includes(result.state))return 'UNKNOWN';
+    return result.state;
+  }catch{return 'UNKNOWN'}
+}
+function pairingReceiptCopy(result) {
+  if(result==='APPLIED')return ' Sunucu D1 işlem kaydı: APPLIED. Yalnız eşleştirme isteği oluşturuldu; cihaz bağlantısı doğrulanmadı.';
+  if(result==='DENIED')return ' Sunucu D1 işlem kaydı: DENIED. İstek kabul edilmedi.';
+  if(result==='PENDING')return ' Sunucu D1 işlem kaydı: PENDING. Sonuç belirsiz.';
+  return '';
+}
+function blockPairingReplay(result='UNKNOWN') {
+  showError('Bu eşleştirme oturumunun sonucu belirsiz veya tarayıcı işlem koruması doğrulanamadı. Önce yerel uygulamadaki sonucu kontrol et; aynı oturumu tekrar gönderme.'+pairingReceiptCopy(result),false);
+  $('status-title').textContent='Bağlantı durduruldu';
+  $('status-text').textContent='Hata açıklamasını kontrol et.';
+}
+
 async function loadAccount() {
   const callback = validatedLoopbackCallback();
   if (!callback) {
@@ -290,6 +334,7 @@ async function loadAccount() {
   const response = await fetch('/api/v1/me/dashboard', {
     credentials: 'include',
     headers: { accept: 'application/json' },
+    cache:'no-store',
     signal: AbortSignal.timeout(8000),
   });
 
@@ -314,6 +359,18 @@ async function loadAccount() {
     // An unreadable or absent optional dashboard body must never invent CORE authority.
   }
   renderCoreStatus(coreStatusFromDashboard(dashboard));
+  let mutationId;
+  try {
+    if(!pairingFenceAvailable())throw Error('Pairing guard unavailable');
+    mutationId=await pairingMutationIdentity(state);
+    const attempted=localStorage.getItem(pairingFenceKey(mutationId))!==null;
+    const result=await pairingMutationStatus(mutationId);
+    // A missing record is not permission to retry an attempted local session.
+    // A new explicitly opened session can proceed to server atomic admission.
+    if(attempted||result!=='NOT_FOUND'){blockPairingReplay(result);return}
+  }catch{
+    blockPairingReplay();return;
+  }
   $('status-title').textContent = 'Eşleştirmeye hazır';
   $('status-text').textContent =
     'Hesap eşleştirmesi için ekstra erişim ayarı gerekmez. BAĞLA yalnızca cihazını hesabına ekler. CORE yetkisi için cihaz sahibinin yerel Windows onayı ayrıca gerekir.';
@@ -340,7 +397,18 @@ async function loadAccount() {
     let retryable = false;
     let visibleError = '';
     try {
-      // Once POST begins, no repeat is safe without a trusted idempotency readback.
+      const key=pairingFenceKey(mutationId);
+      // The durable marker is written under a shared exclusive lock BEFORE
+      // the request. Neither a reload nor another tab may blindly repeat it.
+      // A new locally initiated session uses a different mutation identity.
+      const claimed=await navigator.locks.request(key,{mode:'exclusive',ifAvailable:true},lock=>{
+        if(!lock||localStorage.getItem(key)!==null)return false;
+        localStorage.setItem(key,'attempted');
+        return localStorage.getItem(key)==='attempted';
+      });
+      if(!claimed){pairingOutcomeUncertain=true;blockPairingReplay(await pairingMutationStatus(mutationId));return}
+      // Even a success response is not proof that the local callback consumed
+      // the challenge. Never clear the marker or replay a token on reload.
       pairingOutcomeUncertain = true;
       const pairing = await fetch('/api/v1/pairing', {
         method: 'POST',
@@ -349,12 +417,17 @@ async function loadAccount() {
         headers: {
           accept: 'application/json',
           'content-type': 'application/json',
+          'X-Nexowire-Mutation-Id': mutationId,
         },
         body: JSON.stringify({ deviceName, deviceId }),
       });
 
       if (!pairing.ok) {
         const body = await pairing.json().catch(() => ({}));
+        if (pairing.status === 409 && typeof body?.error === 'string' && body.error.startsWith('DASHBOARD_MUTATION_')) {
+          visibleError='Sunucu eşleştirme işleminin tekrarını veya çakışmasını reddetti. Yerel uygulamadaki sonucu kontrol et.';
+          throw new Error('Bağlantı hazırlanamadı.');
+        }
         if (pairing.status === 401) {
           retryable = false;
           visibleError = 'Oturumun sona erdi. GitHub ile yeniden giriş yapıp bağlantıyı dene.';
@@ -366,7 +439,7 @@ async function loadAccount() {
             ? Number(retryAfter) : null;
           const wait = seconds !== null && seconds <= 3600
             ? `${seconds} saniye bekle.` : 'Biraz bekle.';
-          visibleError = 'Çok fazla bağlantı isteği. ' + wait + ' Sonucu kontrol edip sayfayı daha sonra yeniden aç.';
+          visibleError = 'Çok fazla bağlantı isteği. ' + wait + ' Sonucu yerel uygulamada kontrol et; gerekiyorsa yeni yerel oturum başlat.';
           throw new Error('İstek sınırına ulaşıldı.');
         }
         if (pairing.status === 503) {
@@ -403,7 +476,8 @@ async function loadAccount() {
         'Bağlantı hazırlanamadı.', 'Bağlantı cevabı geçersiz.',
         'Bu hesap için cihaz limiti dolu.', 'Bu cihaz bu hesaba bağlanamadı.',
       ]);
-      showError(visibleError || (known.has(rawMessage) ? rawMessage : 'Beklenmeyen bağlantı hatası. Bağlantı sonucu belirsiz. Önce yerel uygulamadaki sonucu kontrol et; tekrar istek gönderme.'), retryable);
+      const receipt=pairingOutcomeUncertain?await pairingMutationStatus(mutationId):'UNKNOWN';
+      showError((visibleError || (known.has(rawMessage) ? rawMessage : 'Beklenmeyen bağlantı hatası. Bağlantı sonucu belirsiz. Önce yerel uygulamadaki sonucu kontrol et; tekrar istek gönderme.'))+pairingReceiptCopy(receipt), retryable);
       $('status-title').textContent = retryable ? 'Tekrar deneyebilirsin' : 'Bağlantı durduruldu';
       $('status-text').textContent =
         retryable ? 'Ayarları değiştirmen gerekmez.' : 'Hata açıklamasını kontrol et.';
@@ -412,7 +486,7 @@ async function loadAccount() {
 }
 
 renderCoreStatus('UNKNOWN');
-loadAccount().catch(() => {
+const accountLoad = loadAccount().catch(() => {
   $('status-title').textContent = 'Hesap doğrulanamadı';
   $('status-text').textContent = 'Sayfayı yenilemeden önce bağlantını kontrol et.';
   showError('Hesap doğrulanamadı. Bağlantıyı kontrol edip yeniden dene.', false);

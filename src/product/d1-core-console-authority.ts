@@ -40,6 +40,8 @@ type Row={device_id:string;owner_account_id:string;installation_id:string|null;a
   windows_logon_luid:string|null;windows_logon_session_epoch:string|null};
 export interface CoreConsoleAuthority {
   requestEnrollment?(deviceId:string,ownerAccountId:string):Promise<void>;
+  /** Availability only, not local consent or a physical effect proof. */
+  dashboardConsentAvailable?():boolean;
   handle(credential:string,raw:unknown):Promise<{nonce:string;state:CoreAuthorityState}>;
   deviceStatus?(deviceId:string,ownerAccountId:string):Promise<{
     localEnrolled:boolean;active:boolean;observedAtMs:number|null;
@@ -49,6 +51,7 @@ export interface CoreConsoleAuthority {
 export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
   constructor(private readonly db:D1DatabaseLike,
     private readonly nativeEnrollmentVerifier?:TrustedNativeCoreEnrollmentVerifier){}
+  dashboardConsentAvailable():boolean{return !!this.nativeEnrollmentVerifier;}
   private async row(hash:string,id:string):Promise<Row>{
     const row=await this.db.prepare(`SELECT ${DB_NOW} authority_time_ms,d.id device_id,d.owner_account_id,c.installation_id,
       c.enrollment_id,c.public_key_spki,c.owner_epoch,c.grant_generation,c.revoke_epoch,
@@ -270,12 +273,21 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
     // certified device can mislead the UI and trigger unwanted local consent.
     // Keep this predicate in the same D1 UPDATE to close the read/write race.
     const result=await this.db.prepare(`UPDATE device_core_console_authority SET enrollment_requested=1
-      WHERE enrollment_id IS NULL AND device_id IN(SELECT c.device_id ${JOIN}
+      WHERE enrollment_id IS NULL AND enrollment_requested=0 AND device_id IN(SELECT c.device_id ${JOIN}
         WHERE d.id=? AND d.owner_account_id=? AND ${READY})`)
       .bind(deviceId,ownerAccountId).run();
-    if(result.success===false||result.meta?.changes!==1){
-      const current=await this.deviceStatus(deviceId,ownerAccountId);
-      if(current.localEnrolled)throw new Error('CORE_ALREADY_ENROLLED');
+    if(result.success===false)throw new Error('CORE_DEVICE_NOT_READY');
+    if(result.meta?.changes!==1){
+      // Existing internal callers may observe the already-pending request.
+      // An exact, owner-scoped READY row is required; this is a read-only
+      // no-op, not another UPDATE or a second request for local consent.
+      const current=await this.db.prepare(`SELECT c.enrollment_id,c.enrollment_requested,
+        CASE WHEN ${READY} THEN 1 ELSE 0 END device_ready
+        ${JOIN} WHERE d.id=? AND d.owner_account_id=?`)
+        .bind(deviceId,ownerAccountId).first<{enrollment_id:string|null;enrollment_requested:number;device_ready:number}>();
+      if(current?.enrollment_id)throw new Error('CORE_ALREADY_ENROLLED');
+      if(result.meta?.changes===0&&current?.enrollment_id===null&&
+        current.enrollment_requested===1&&current.device_ready===1)return;
       throw new Error('CORE_DEVICE_NOT_READY');
     }
   }

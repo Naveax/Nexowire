@@ -30,6 +30,7 @@ import {
   type ProductPlan,
 } from './plans.js';
 import { quoteToolUsage } from './usage-policy.js';
+import {dashboardMutationIntent,validDashboardMutationId,type DashboardMutationKind} from './dashboard-mutation-store.js';
 import { AdminBridgeModeReceiptSchema, verifyAdminBridgeModeReceipt, type AdminBridgeModeIntent } from '../protocol/admin-bridge-intent.js';
 import { GuardianSignedReceiptSchema, verifyGuardianSignedModeReceipt } from '../protocol/guardian-signed-receipt.js';
 import { resolveOwnerDeviceTarget, type DeviceTargetQuery, type TargetResolution } from './device-target-resolution.js';
@@ -341,11 +342,25 @@ export class ControlPlaneService {
       folders: folders.map(({id, name}) => ({id, name})),
       autoSelectDevices,
       devices: await Promise.all(devices.map(async (device) => {
-        const [lease, maintenance, bridgePreference] = await Promise.all([
+        // Do not pair a stale device card with a newer CAS token. Revision
+        // must bracket the relevant state reads and the original list row
+        // must still describe the same owner/device/readiness.
+        const revisionBefore=await this.confirmDashboardMutationRevision(identity,device.id);
+        const [lease, maintenance, bridgePreference, remoteAuthorization,currentDevice] = await Promise.all([
           this.store.getRootModeLease(device.id),
           this.store.getDeviceMaintenancePreference(device.id),
           this.store.getDeviceBridgePreference(device.id),
+          // Read-only owner-scoped D1 snapshot. Failure must not infer revoked
+          // or claim local STOP/drain. Legacy stores report unknown.
+          Promise.resolve().then(()=>this.store.readRemoteAuthorizationStatus?.(device.id,account.id)??null).catch(()=>null),
+          revisionBefore===null?Promise.resolve(null):this.store.getDevice(device.id),
         ]);
+        const revisionAfter=revisionBefore===null?null:await this.confirmDashboardMutationRevision(identity,device.id);
+        const matchingDevice=!!currentDevice&&currentDevice.ownerAccountId===account.id&&
+          currentDevice.credentialHash===device.credentialHash&&currentDevice.accessMode===device.accessMode&&
+          currentDevice.online===device.online&&currentDevice.platform===device.platform&&
+          currentDevice.privilegeMode===device.privilegeMode&&currentDevice.adminBridgeReady===device.adminBridgeReady;
+        const coreMutationRevision=matchingDevice&&revisionBefore===revisionAfter?revisionAfter:null;
         const unexpiredLease =
           lease?.ownerAccountId === account.id &&
           device.accessMode === 'full' &&
@@ -376,6 +391,13 @@ export class ControlPlaneService {
           // advertising effective elevated access from stale telemetry.
           active: false,
           updatedAt: maintenance?.ownerAccountId === account.id ? maintenance.updatedAt : null,
+        },
+        coreMutationRevision,
+        coreRevocation: {
+          version:1 as const,source:'D1_REMOTE_AUTHORIZATION' as const,
+          remoteAuthorization:remoteAuthorization??{state:'UNKNOWN' as const,authorizationEpoch:null,observedAtMs:null},
+          localStop:'UNKNOWN' as const,pendingRevoke:'UNKNOWN' as const,
+          nativeDrain:'UNKNOWN' as const,effectReadback:'UNKNOWN' as const,nativeEvidence:'NOT_AVAILABLE' as const,
         },
         bridgePreference: {
           desiredMode: bridgePreference?.ownerAccountId === account.id ? bridgePreference.desiredMode : 'auto',
@@ -523,6 +545,7 @@ export class ControlPlaneService {
     identity: ControlPlaneIdentity,
     deviceName: string,
     deviceIdInput?: string,
+    mutationId?:string,
   ): Promise<{
     pairingId: string;
     token: string;
@@ -559,7 +582,18 @@ export class ControlPlaneService {
           : {}),
       },
     );
-    await this.store.putPairing(challenge.record);
+    if(mutationId!==undefined){
+      if(identity.role==='service')throw Error('OWNER_LOGIN_REQUIRED');
+      if(!requestedDeviceId)throw Error('INVALID_MUTATION_SCOPE');
+      const ledger=this.store.dashboardMutations;
+      if(!ledger)throw Error('DASHBOARD_MUTATION_STORE_UNAVAILABLE');
+      const intent=dashboardMutationIntent({mutationId,ownerAccountId:account.id,deviceId:requestedDeviceId,
+        kind:'pairing',expectedRevision:null,semanticPayload:[challenge.record.requestedDeviceName],createdAt:challenge.record.createdAt});
+      await ledger.createPairing(intent,challenge.record);
+    }else{
+      // Existing trusted in-process callers only; HTTP never takes this path.
+      await this.store.putPairing(challenge.record);
+    }
     return {
       pairingId: challenge.record.id,
       token: challenge.token,
@@ -1041,6 +1075,43 @@ export class ControlPlaneService {
         active: false, expiresAt: enabled ? expiresAt : null,
       },
     };
+  }
+
+  /** Read-only CAS token. Never fabricate a revision on an unavailable store. */
+  async confirmDashboardMutationRevision(identity:ControlPlaneIdentity,deviceId:string):Promise<number|null>{
+    if(identity.role==='service')return null;
+    try{return await this.store.dashboardMutations?.revision(deviceId,identity.accountId)??null;}
+    catch{return null;}
+  }
+  /** Owner-authenticated read-only reconciliation; never returns a pairing token. */
+  async dashboardMutationStatus(identity:ControlPlaneIdentity,mutationId:string){
+    if(identity.role==='service')throw Error('OWNER_LOGIN_REQUIRED');
+    const account=await this.requireAccount(identity.accountId);
+    if(!validDashboardMutationId(mutationId))throw Error('INVALID_MUTATION_ID');
+    const ledger=this.store.dashboardMutations;
+    if(!ledger)throw Error('DASHBOARD_MUTATION_STORE_UNAVAILABLE');
+    return ledger.read(mutationId,account.id);
+  }
+  /** Browser mutation route: the D1 transaction, not a JS mutex or GET,
+   * owns admission, revision CAS and the actual preference/request write. */
+  async applyDashboardCoreMutation(identity:ControlPlaneIdentity,deviceIdInput:string,
+    kind:Exclude<DashboardMutationKind,'pairing'>,mutationId:string,expectedRevision:number,
+    consentAvailable:boolean){
+    if(identity.role==='service')throw Error('CORE_REQUIRES_OWNER_LOGIN');
+    const account=await this.requireAccount(identity.accountId);
+    const deviceId=boundedId('deviceId',deviceIdInput),device=await this.store.getDevice(deviceId);
+    if(!device||device.ownerAccountId!==account.id)throw Error('DEVICE_NOT_FOUND');
+    const createdAt=this.now().toISOString();
+    const intent=dashboardMutationIntent({mutationId,ownerAccountId:account.id,deviceId,kind,
+      expectedRevision,semanticPayload:[],createdAt});
+    const ledger=this.store.dashboardMutations;
+    if(!ledger)throw Error('DASHBOARD_MUTATION_STORE_UNAVAILABLE');
+    // OFF remains available without a consent issuer. Do not queue a new
+    // local consent request on a backend with no independent verifier.
+    if(kind!=='core-disable'&&consentAvailable!==true)throw Error('CORE_AUTHORITY_UNAVAILABLE');
+    await ledger.applyCore(intent);
+    if(kind==='core-consent')return {deviceId,enrollmentRequested:true as const,active:false as const,mutationId};
+    return {deviceId,persistentMaintenance:{enabled:kind==='core-enable',active:false as const,updatedAt:createdAt},mutationId};
   }
 
   /** Stores a durable, owner-controlled maintenance preference, not OS elevation. */

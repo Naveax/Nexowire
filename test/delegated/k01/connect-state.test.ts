@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { createContext, runInContext } from 'node:vm';
 
 // This is a deterministic DOM stub, not a browser or an auth/pairing integration test.
@@ -99,14 +100,18 @@ async function boot(options: {
   const requests: Array<{ path: string; method: string }> = [];
   const navigations: string[] = [];
   const origin = 'https://control.fixture.invalid';
+  const storage=new Map<string,string>();
   const context = createContext({
-    URL, URLSearchParams, AbortSignal,
+    URL, URLSearchParams, AbortSignal, TextEncoder,
+    crypto:{subtle:{digest:async(_algorithm:string,input:Uint8Array)=>createHash('sha256').update(input).digest()}},
+    localStorage:{getItem:(key:string)=>storage.get(key)??null,setItem:(key:string,value:string)=>storage.set(key,value)},
     document: {
       getElementById: el,
       querySelectorAll: () => tabs,
       querySelector: () => label,
     },
     navigator: {
+      locks:{request:async(_key:string,_options:unknown,callback:(lock:object)=>unknown)=>callback({})},
       userAgent: 'Windows NT 10.0; Win64; x64',
       clipboard: { writeText: async () => {} },
     },
@@ -121,6 +126,7 @@ async function boot(options: {
       if (path === '/api/v1/me/dashboard') {
         return options.dashboard?.() ?? Response.json({ user: 'fixture' });
       }
+      if(path.startsWith('/api/v1/me/mutations/status?'))return Response.json({error:'MUTATION_NOT_FOUND'},{status:404});
       if (path === '/api/v1/pairing') {
         return options.pairing?.() ?? Response.json({ pairingId: 'fixture-pair', token: 'fixture-token' });
       }
@@ -228,7 +234,7 @@ test('T-002/T-003: uncertain pairing never replays after an in-flight duplicate 
 
   // A separately initiated fresh pairing is still supported, unlike replay
   // of a request whose earlier server result is UNKNOWN.
-  const fresh=await boot({search:pairingSearch(),
+  const fresh=await boot({search:pairingSearch({state:'new-fixture-local-session'}),
     pairing:async()=>Response.json({pairingId:'fixture-pair',token:'fixture-token'})});
   await fresh.el('approve').dispatch('click');
   assert.equal(fresh.navigations.length,1);
