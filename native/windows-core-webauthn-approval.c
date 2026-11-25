@@ -10,6 +10,8 @@
 #include <webauthn.h>
 #include <wtsapi32.h>
 #include <sddl.h>
+#include <io.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <wchar.h>
@@ -153,7 +155,8 @@ static BOOL owner_token(PSID expected,DWORD session,LUID logon,TOKEN_STATISTICS 
 }
 int wmain(int argc,wchar_t **argv) {
   BOOL probe=argc==2&&wcscmp(argv[1],L"--probe")==0;
-  BOOL bound=argc==8&&wcscmp(argv[1],L"--assert-bound")==0;
+  BOOL pipeMode=argc==9&&wcscmp(argv[1],L"--assert-bound-pipe")==0;
+  BOOL bound=pipeMode||(argc==8&&wcscmp(argv[1],L"--assert-bound")==0);
   DWORD ownerSession=0;LUID ownerLogon={0};PSID ownerSid=NULL;TOKEN_STATISTICS before={0},after={0};
   BYTE challenge[32]={0},credentialBytes[1024]={0};size_t challengeSize=0,credentialSize=0;
   char rpAscii[254]={0},challenge64[44]={0},client[1024]={0};
@@ -170,6 +173,22 @@ int wmain(int argc,wchar_t **argv) {
     BOOL matches=owner_token(ownerSid,ownerSession,ownerLogon,&before);
     LocalFree(ownerSid);ownerSid=NULL;
     if(!matches)return unavailable("OWNER_TOKEN_BINDING_MISMATCH",E_ACCESSDENIED);
+  }
+  /* Cross-session handle inheritance is not supported. Only the fixed
+   * local owner-assertion pipe namespace may receive the bounded result.
+   * The SYSTEM launcher authenticates the connecting kernel process ID
+   * against its held child process handle; the pipe is not an authority. */
+  if(pipeMode){
+    const wchar_t prefix[]=L"\\\\.\\pipe\\Nexowire.CoreOwnerAssertion.";
+    size_t n=wcslen(prefix);BYTE id[32]={0};size_t idSize=0;
+    if(wcsncmp(argv[8],prefix,n)||!from_hex(argv[8]+n,id,32,32,&idSize))return 64;
+    HANDLE output=CreateFileW(argv[8],GENERIC_WRITE,0,NULL,OPEN_EXISTING,
+      SECURITY_SQOS_PRESENT|SECURITY_IDENTIFICATION,NULL);
+    if(output==INVALID_HANDLE_VALUE)return 77;
+    int fd=_open_osfhandle((intptr_t)output,_O_WRONLY|_O_BINARY);
+    if(fd<0){CloseHandle(output);return 77;}
+    if(_dup2(fd,_fileno(stdout))!=0){_close(fd);return 77;}
+    _close(fd);
   }
   HMODULE api=LoadLibraryExW(L"webauthn.dll",NULL,LOAD_LIBRARY_SEARCH_SYSTEM32);
   if(!api)return unavailable("WEBAUTHN_SYSTEM_API_UNAVAILABLE",HRESULT_FROM_WIN32(GetLastError()));
