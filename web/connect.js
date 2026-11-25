@@ -293,7 +293,7 @@ async function pairingMutationStatus(mutationId) {
     const response=await fetch('/api/v1/me/mutations/status?mutationId='+encodeURIComponent(mutationId),{
       credentials:'include',headers:{Accept:'application/json'},cache:'no-store',signal:AbortSignal.timeout(8000)});
     if(response.redirected===true)return 'UNKNOWN';
-    if(response.status===404)return 'NOT_FOUND';
+    if(response.status===404){const body=await response.json();return body?.error==='MUTATION_NOT_FOUND'?'NOT_FOUND':'UNKNOWN'}
     if(response.status!==200)return 'UNKNOWN';
     const result=await response.json();
     if(result?.mutationId!==mutationId||result.deviceId!==deviceId||
