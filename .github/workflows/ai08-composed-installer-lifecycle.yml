@@ -47,6 +47,7 @@ jobs:
           [[ "$id" =~ ^[0-9]+$ ]]
           echo "NX_JOB_ID=$id" >> "$GITHUB_ENV"
       - name: Execute strict lifecycle and native signed artifact fixtures
+        shell: powershell
         run: node scripts/ci/ai08-composed-installer-receipt.mjs
         env:
           NX_EXPECTED_NODE: "${{ matrix.node }}"
