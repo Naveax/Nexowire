@@ -126,7 +126,7 @@ test('AI-06 readback: ambiguous enable may persist preference; explicit OFF can 
   f.reconcileCoreReadback(snapshot([d]));
   assert.equal(f.coreOperations.has(d.id),false);
   const off=f.coreReadbackMessage(d);
-  assert.match(off,/hesap tercihi kapalı/);
+  assert.match(off,/hesap tercihini kapalı bildiriyor/);
   assert.match(off,/yerel STOP.*kanıtı değildir/);
   assert.doesNotMatch(off,/STOP başarılı|CORE FİZİKSEL AÇIK/);
 });
