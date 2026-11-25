@@ -7,6 +7,8 @@ const formatCompact = (value) => Number.isFinite(value)
 const FREE_ONLY_MODE = true;
 const openPcSettings = new Set();
 const bridgeCommandsInFlight = new Set();
+// Per-device operation fence survives card rerenders; only a fresh server GET reconciles it.
+const coreOperations = new Map();
 // CORE is a revocable owner preference; Broker remains authoritative for elevated actions.
 let currentSnapshot = null;
 let selectedDeviceFilter = 'all';
@@ -233,9 +235,75 @@ async function setDeviceRootMode(deviceId, enabled, row) {
   }
 }
 
-async function setDeviceCorePreference(deviceId, enabled, row) {
-  const action = row.querySelector('.core-toggle');
-  const approve = row.querySelector('.core-approve');
+function coreEnrollmentEligible(device) {
+  const physical = device?.physicalConsole;
+  return device?.platform === 'win32' && device.online === true &&
+    device.accessMode === 'full' && device.privilegeMode === 'broker' &&
+    device.adminBridgeReady === true && ['auto','on'].includes(device.bridgePreference?.desiredMode) &&
+    device.persistentMaintenance?.enabled === true &&
+    physical?.deviceReady === true && physical.localEnrolled === false &&
+    physical.enrollmentRequested === false && physical.active === false;
+}
+
+function coreActionDevice(deviceId) {
+  if(typeof currentSnapshot?.accountId !== 'string' || !currentSnapshot.accountId.trim())return null;
+  const matches = (Array.isArray(currentSnapshot?.devices) ? currentSnapshot.devices : [])
+    .filter(device => device?.id === deviceId);
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function coreOperationAllows(deviceId, kind) {
+  const previous = coreOperations.get(deviceId);
+  // A deliberate OFF is a separate safety action, never an automatic retry of
+  // consent/enable. Do not repeat an unresolved OFF or race an in-flight POST.
+  return !previous || (!previous.inFlight && previous.kind !== 'disable' && kind === 'disable');
+}
+
+function reconcileCoreReadback(snapshot) {
+  for (const [deviceId, operation] of coreOperations) {
+    if (operation.inFlight || operation.accountId !== snapshot.accountId) continue;
+    const matches = (Array.isArray(snapshot.devices) ? snapshot.devices : [])
+      .filter(device => device?.id === deviceId);
+    if (matches.length !== 1) continue;
+    const device = matches[0];
+    const core = device.persistentMaintenance;
+    const physical = device.physicalConsole;
+    const recorded = physical?.enrollmentRequested === true || physical?.localEnrolled === true;
+    const confirmed = operation.kind === 'disable' ? core?.enabled === false :
+      core?.enabled === true && (recorded || (operation.kind === 'enable' && operation.acknowledged));
+    if (confirmed) coreOperations.delete(deviceId);
+  }
+}
+
+function coreReadbackMessage(device, operation) {
+  const core = device.persistentMaintenance;
+  const physical = device.physicalConsole;
+  const stop = ' Fiziksel STOP için cihazdaki Nexowire CORE → KAPAT seçeneğini kullan; yerel iptal ve işlem durması burada doğrulanmadı.';
+  if (operation?.inFlight) return 'CORE isteği işleniyor; yeni istek gönderme.' + stop;
+  if (operation) return 'CORE isteğinin sonucu belirsiz veya sunucu durumunun yeniden doğrulanması bekleniyor. ' +
+    (operation.feedback ? operation.feedback + ' ' : '') + 'Durumu yenile; aynı isteği yineleme.' + stop;
+  if (core?.enabled === false) return 'Sunucu CORE hesap tercihini kapalı bildiriyor. Bu, yerel STOP veya yürüyen işlemlerin durduğunun kanıtı değildir.' + stop;
+  if (core?.enabled !== true) return 'CORE tercih durumu doğrulanamadı.' + stop;
+  if (physical?.localEnrolled === true)
+    return 'Yerel CORE kaydı bildirildi; güncel fiziksel erişim doğrulanamadı.' + stop;
+  if (physical?.enrollmentRequested === true)
+    return 'CORE onay isteği sunucuda kayıtlı; cihaza teslimi ve ilk yerel onay doğrulanmadı. Aynı isteği yeniden gönderme.' + stop;
+  if (coreEnrollmentEligible(device))
+    return 'CORE tercihi kayıtlı; ilk yerel onay henüz yok. Yalnızca yerel onay isteği yeniden kaydedilebilir.' + stop;
+  return 'CORE tercihi kayıtlı; onay kanalı veya cihaz hazır durumu doğrulanamadı. Yeni istek gönderilmedi.' + stop;
+}
+
+async function performCoreAction(deviceId, kind, row) {
+  if (!coreOperationAllows(deviceId, kind)) return;
+  const device = coreActionDevice(deviceId);
+  if (!device) return;
+  const enabled = kind === 'enable';
+  if (kind === 'consent' && !coreEnrollmentEligible(device)) return;
+  if (kind === 'disable' && device.persistentMaintenance?.enabled !== true) return;
+  if (enabled && (device.persistentMaintenance?.enabled !== false ||
+      device.platform !== 'win32' || device.online !== true || device.accessMode !== 'full' ||
+      device.privilegeMode !== 'broker' || device.adminBridgeReady !== true ||
+      !['auto','on'].includes(device.bridgePreference?.desiredMode))) return;
   const input = row.querySelector('.core-phrase');
   const status = row.querySelector('.core-copy');
   if (enabled && input.value.trim() !== 'CORE UNLIMITED') {
@@ -243,39 +311,64 @@ async function setDeviceCorePreference(deviceId, enabled, row) {
     input.focus();
     return;
   }
-  action.disabled = true;
-  approve.disabled = true;
-  status.textContent = enabled ? 'CORE kaydediliyor…' : 'CORE kapatılıyor…';
+  const operation = {kind, accountId:currentSnapshot.accountId, inFlight:true, acknowledged:false, feedback:''};
+  coreOperations.set(deviceId, operation);
+  for (const selector of ['.core-toggle','.core-approve','.core-enrollment-retry'])
+    row.querySelector(selector).disabled = true;
+  status.textContent = coreReadbackMessage(device, operation);
   try {
-    await postDeviceMode('/api/v1/me/devices/core-preference', deviceId,
-      { enabled, ...(enabled ? { confirmation: 'CORE UNLIMITED' } : {}) },
-      enabled ? 'core-preference-v1' : null);
+    const consent = kind === 'consent';
+    const headers = {Accept:'application/json','Content-Type':'application/json'};
+    if (consent) headers['X-Nexowire-Confirm'] = 'core-enrollment-request-v1';
+    if (enabled) headers['X-Nexowire-Confirm'] = 'core-preference-v1';
+    const response = await fetch(consent ? '/api/v1/me/devices/core-enrollment-request' :
+      '/api/v1/me/devices/core-preference', {
+        method:'POST',credentials:'include',headers,signal:AbortSignal.timeout(15000),
+        body:JSON.stringify({deviceId,...(consent ? {} : {enabled,
+          ...(enabled ? {confirmation:'CORE UNLIMITED'} : {})})}),
+      });
+    if (response.ok) {
+      const result = await response.json();
+      // The backend ACK is only a preference/request receipt, never local consent.
+      operation.acknowledged = result?.deviceId === deviceId && (consent
+        ? result.enrollmentRequested === true && result.active === false
+        : result.persistentMaintenance?.enabled === enabled &&
+          result.persistentMaintenance?.active === false);
+      if(!operation.acknowledged)operation.feedback='Sunucu yanıtı doğrulanamadı.';
+    } else {
+      const body=await response.json().catch(()=>null);
+      const errors={
+        CORE_AUTHORITY_UNAVAILABLE:'CORE onay servisi kullanılamıyor.',
+        CORE_NATIVE_CONSENT_PROVIDER_UNAVAILABLE:'Bağımsız yerel onay sağlayıcısı kullanılamıyor.',
+        CORE_ALREADY_ENROLLED:'Sunucu yerel CORE kaydının mevcut olduğunu bildiriyor.',
+        CORE_DEVICE_NOT_READY:'Sunucu cihazın CORE için hazır olmadığını bildiriyor.',
+        CORE_REQUIRES_FULL_ONLINE_BROKER:'FULL, çevrimiçi cihaz ve hazır Broker gerekli.',
+        CORE_NOT_ENABLED:'Sunucu CORE tercihinin açık olmadığını bildiriyor.',
+        CORE_REQUIRES_OWNER_LOGIN:'Cihaz sahibi hesabı gerekli.',
+        DEVICE_NOT_FOUND:'Sunucu cihazı bu hesap için bulamadı.',
+        UNAUTHENTICATED:'Oturum doğrulanamadı.',
+      };
+      const reason=typeof body?.error==='string'&&Object.hasOwn(errors,body.error)?errors[body.error]:'';
+      const status=Number.isInteger(response.status)&&response.status>=400&&response.status<=599?response.status:null;
+      operation.feedback=(status?'HTTP '+status+'. ':'')+(reason||'Sunucu isteği doğrulayamadı.');
+    }
+  } catch {
+    // A transport failure or malformed response may follow a durable write.
+    // Do not echo upstream data or repeat the mutation.
+    operation.feedback='Bağlantı veya sunucu yanıtı doğrulanamadı.';
+  } finally {
+    operation.inFlight = false;
+    // Discard stale dashboard presentation; a fresh GET is the only reconciliation.
     await load();
-  } catch (error) {
-    status.textContent = error.message;
-    action.disabled = false;
-    approve.disabled = false;
   }
 }
 
+async function setDeviceCorePreference(deviceId, enabled, row) {
+  return performCoreAction(deviceId, enabled ? 'enable' : 'disable', row);
+}
+
 async function retryCoreEnrollmentRequest(deviceId, row) {
-  const button=row.querySelector('.core-enrollment-retry');
-  const status=row.querySelector('.core-copy');
-  if(button.disabled)return;
-  button.disabled=true;
-  status.textContent='Yerel CORE onayı bu bilgisayardan isteniyor…';
-  try {
-    const result=await postDeviceMode(
-      '/api/v1/me/devices/core-enrollment-request',deviceId,{},
-      'core-enrollment-request-v1');
-    if(result.deviceId!==deviceId||result.enrollmentRequested!==true)
-      throw new Error('CORE kayıt isteği doğrulanamadı.');
-    status.textContent='Yerel onay isteği gönderildi. Cihazdaki Nexowire CORE penceresinden ilk onayı ver.';
-  } catch(error) {
-    status.textContent=error.message;
-  } finally {
-    button.disabled=false;
-  }
+  return performCoreAction(deviceId, 'consent', row);
 }
 
 async function setDeviceBridgePreference(deviceId, mode, row, focusSelector = '.bridge-toggle') {
@@ -512,8 +605,9 @@ function render(snapshot) {
         '  <small class="core-copy" role="status" aria-live="polite"></small>',
         '  <button type="button" class="secondary core-toggle">CORE aç</button>',
         '  <button type="button" class="secondary core-enrollment-retry" hidden>Yerel CORE kaydını yeniden iste</button>',
+        '  <button type="button" class="secondary core-readback">CORE durumunu yenile (salt okunur)</button>',
         '  <div class="core-confirm-panel" hidden>',
-        '   <small>CORE süresiz bir tercih kaydıdır. Yönetici yetkisi için ayrıca Broker, Windows UAC ve işlem denetimi gerekir.</small>',
+        '   <small>CORE süresiz bir tercih kaydıdır. Yönetici yetkisi için ayrıca Broker, Windows UAC ve işlem denetimi gerekir. Hesap tercihini kapatmak yerel STOP onayı değildir.</small>',
         '   <label>Onaylamak için CORE UNLIMITED yaz<input class="core-phrase" maxlength="32" autocomplete="off" placeholder="CORE UNLIMITED"></label>',
         '   <button type="button" class="primary core-approve">CORE etkinleştir</button>',
         '  </div>',
@@ -670,7 +764,7 @@ function render(snapshot) {
         void setDeviceRootMode(device.id, true, row);
       });
 
-      const core = device.persistentMaintenance ?? {enabled: false, active: false};
+      const core = device.persistentMaintenance ?? {};
       const corePanel = row.querySelector('.core-confirm-panel');
       const coreButton = row.querySelector('.core-toggle');
       const coreText = row.querySelector('.core-copy');
@@ -690,8 +784,20 @@ function render(snapshot) {
           : 'CORE kapalı. Full Access ve çalışan Admin Bridge varsa açılabilir.';
       const physical=device.physicalConsole;
       const coreRetry=row.querySelector('.core-enrollment-retry');
-      coreRetry.hidden=!(core.enabled&&!physical?.localEnrolled&&device.online&&mode==='full'&&ready&&
-        physical?.deviceReady!==false);
+      const coreOperation=coreOperations.get(device.id);
+      coreRetry.hidden=!(coreEnrollmentEligible(device) && coreActionDevice(device.id) && coreOperationAllows(device.id,'consent'));
+      coreRetry.disabled=coreRetry.hidden;
+      const coreReadback=row.querySelector('.core-readback');
+      coreReadback.disabled=coreOperation?.inFlight===true;
+      coreReadback.addEventListener('click',async()=>{
+        if(coreOperations.get(device.id)?.inFlight)return;
+        await load();
+        const refreshed=[...document.querySelectorAll('.device')].filter(card=>card.dataset.deviceId===device.id);
+        if(refreshed.length===1)refreshed[0].querySelector('.core-readback')?.focus({preventScroll:true});
+      });
+      coreButton.disabled=!coreActionDevice(device.id) || (core.enabled === true
+        ? !coreOperationAllows(device.id,'disable') : core.enabled !== false || !coreOperationAllows(device.id,'enable'));
+      row.querySelector('.core-approve').disabled=!coreActionDevice(device.id) || !coreOperationAllows(device.id,'enable');
       const physicalFresh=physicalCoreStatusVerifierInstalled&&
         physical?.localEnrolled===true&&physical.active===true&&
         Number.isFinite(physical.observedAtMs)&&Date.now()-physical.observedAtMs>=0&&
@@ -699,14 +805,8 @@ function render(snapshot) {
       if(physicalFresh){
         coreShortcut.textContent='CORE FİZİKSEL AÇIK';
         coreText.textContent='Yerel onaylı fiziksel kontrol süresiz etkin. PC tepsisindeki Nexowire CORE → KAPAT ile iptal edilir. Yönetici ve UAC izinleri ayrıdır.';
-      }else if(core.enabled){
-        coreText.textContent=physical?.localEnrolled
-          ? 'Yerel CORE kaydı var; güncel fiziksel erişim doğrulanamadı. Kilit, bağlantı veya Broker durumunu kontrol et.'
-          : physical?.enrollmentRequested
-            ? 'CORE isteği cihaz kuyruğunda. İlk yerel onay henüz doğrulanmadı; işlem tekrarlanmayacak.'
-            : physical?.deviceReady===false
-              ? 'CORE kaydı başlatılamadı: cihazın FULL/Broker hazır durumunu denetle.'
-              : 'CORE tercihi açık fakat yerel kayıt bekliyor. Kurulumu yeniden iste.';
+      }else{
+        coreText.textContent=coreReadbackMessage(device,coreOperation);
       }
       corePanel.hidden = true;
       coreShortcut.addEventListener('click', () => {
@@ -717,7 +817,7 @@ function render(snapshot) {
       coreButton.addEventListener('click', () => {
         if (core.enabled) {
           void setDeviceCorePreference(device.id, false, row);
-        } else if (mode !== 'full' || !device.online || !ready) {
+        } else if (device.platform !== 'win32' || mode !== 'full' || !device.online || !ready || device.bridgePreference?.desiredMode === 'off') {
           coreText.textContent = 'Önce Full Access aç; cihaz çevrimiçi ve Admin Bridge hazır olmalı.';
           coreShortcut.focus();
         } else {
@@ -834,6 +934,7 @@ async function load() {
     const response = await fetch('/api/v1/me/dashboard', {
       credentials: 'include',
       headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(8000),
     });
     if (loadId !== latestDashboardLoadId) return;
     if (response.status === 401) {
@@ -848,12 +949,12 @@ async function load() {
     if (!response.ok) throw new Error('HTTP ' + response.status);
     const snapshot = await response.json();
     if (loadId !== latestDashboardLoadId) return;
+    reconcileCoreReadback(snapshot);
     render(snapshot);
   } catch (error) {
     if (loadId !== latestDashboardLoadId) return;
     setPill('Bağlantı hatası', 'bad');
-    $('error-message').textContent =
-      error instanceof Error ? error.message : String(error);
+    $('error-message').textContent = 'Kontrol paneli doğrulanamadı. Bağlantıyı kontrol edip durumu yeniden yükle.';
     $('error-panel').classList.remove('hidden');
     setDeviceListMessage('Cihaz listesi yüklenemedi. Bağlantını kontrol edip yeniden dene.');
   }
