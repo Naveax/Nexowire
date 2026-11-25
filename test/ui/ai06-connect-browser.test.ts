@@ -84,6 +84,10 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
     ['/styles.css',{mime:'text/css; charset=utf-8',body:readFileSync('web/styles.css')}],
   ]);
   let requests=0;
+  const pairingMutationIds:string[]=[];
+  const coreMutationIds:string[]=[];
+  let releasePairing!:()=>void;
+  const pairingResponseGate=new Promise<void>(resolve=>{releasePairing=resolve});
   let offline=false;
   let dashboardMode=false;
   let coreEnabled=true;
@@ -133,8 +137,12 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
     }
     if(req.method==='POST'&&route==='/api/v1/pairing'){
       requests++;req.resume();
-      res.writeHead(503,{'content-type':'application/json'});
-      res.end(JSON.stringify({error:sentinel}));return;
+      const id=req.headers['x-nexowire-mutation-id'];
+      pairingMutationIds.push(typeof id==='string'?id:'');
+      void pairingResponseGate.then(()=>{
+        res.writeHead(503,{'content-type':'application/json'});
+        res.end(JSON.stringify({error:sentinel}));
+      });return;
     }
     if(req.method==='POST'&&dashboardMode&&
         (route==='/api/v1/me/devices/core-enrollment-request'||route==='/api/v1/me/devices/core-preference')){
@@ -145,6 +153,8 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
         let body:{deviceId?:string;enabled?:boolean};
         try{body=JSON.parse(raw)}catch{res.writeHead(400);res.end();return}
         const confirm=req.headers['x-nexowire-confirm'];
+        const mutationId=req.headers['x-nexowire-mutation-id'];
+        coreMutationIds.push(typeof mutationId==='string'?mutationId:'');
         corePosts.push({route,body,confirm:typeof confirm==='string'?confirm:undefined});
         if(body.deviceId!==deviceId){res.writeHead(400);res.end();return}
         if(route.endsWith('/core-enrollment-request')){
@@ -165,7 +175,7 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
   let secondWs:WebSocket|undefined;
   let child:ReturnType<typeof spawn>|undefined;
   t.after(async()=>{
-    releaseConsent();
+    releaseConsent();releasePairing();
     if(secondWs){secondWs.terminate();secondWs=undefined}
     if(ws){ws.terminate();ws=undefined}
     if(child&&child.exitCode===null&&child.signalCode===null){
@@ -257,6 +267,24 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
     assert.equal(response.exceptionDetails,undefined,'DOM evaluation failed: '+expression);
     return response.result.value as T;
   };
+  const openSecond=async(url:string)=>{
+    const secondTarget=await send<{targetId:string}>('Target.createTarget',{url});
+    const secondUrl=await until('second page CDP',async()=>{
+      const response=await fetch('http://127.0.0.1:'+port+'/json/list',{signal:AbortSignal.timeout(2000)});
+      const pages=await response.json() as Array<{id:string;webSocketDebuggerUrl?:string}>;
+      return pages.find(page=>page.id===secondTarget.targetId)?.webSocketDebuggerUrl??'';
+    },value=>value.startsWith('ws://127.0.0.1:'));
+    secondWs=new WebSocket(secondUrl);
+    await new Promise<void>((resolve,reject)=>{secondWs!.once('open',resolve);secondWs!.once('error',reject)});
+    const secondSend=cdp(secondWs);
+    const secondEvaluate=async<T>(expression:string):Promise<T>=>{
+      const response=await secondSend<{result:{value?:T};exceptionDetails?:unknown}>(
+        'Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});
+      assert.equal(response.exceptionDetails,undefined,'second tab evaluation failed');
+      return response.result.value as T;
+    };
+    return {evaluate:secondEvaluate,close:async()=>{secondWs?.terminate();secondWs=undefined;await send('Target.closeTarget',{targetId:secondTarget.targetId})}};
+  };
   const nav=async(url:string)=>{
     const response=await send<{errorText?:string}>('Page.navigate',{url});
     assert.equal(response.errorText,undefined);
@@ -324,6 +352,9 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
   assert.equal(await evaluate<string>('document.querySelector("#core-status-code").textContent'),'BROKER_RUNNING_BUT_UNVERIFIED');
   await layout('pairing');
   assert.equal(await evaluate<number>('document.querySelectorAll("#core-state-panel [aria-live=polite]").length'),1);
+  const pairingTab=await openSecond(pairingUrl);
+  await until('second pairing tab ready',()=>pairingTab.evaluate<string>('document.querySelector("#status-title")?.textContent??""'),value=>value==='Eşleştirmeye hazır');
+  await send('Page.bringToFront');
   await evaluate('document.querySelector("#approve").focus()');
   assert.equal(await evaluate<string>('document.activeElement.id'),'approve');
   assert.equal(await evaluate<boolean>('document.querySelector("#approve").disabled'),false);
@@ -331,6 +362,14 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
   // Separate driver activation from the error rendering assertion, so a
   // missing keyboard event cannot be mistaken for a failed HTTP response.
   await until('keyboard activated pairing POST',async()=>requests,value=>value>=1);
+  const expectedPairingId='pairing-v1:'+createHash('sha256').update('nexowire-pairing-v1\u0000'+fixtureState).digest('hex');
+  assert.deepEqual(pairingMutationIds,[expectedPairingId]);
+  await pairingTab.evaluate('document.querySelector("#approve").dispatchEvent(new Event("click"))');
+  await until('stale pairing tab denied',()=>pairingTab.evaluate<string>('document.querySelector("#status-title").textContent'),value=>value==='Bağlantı durduruldu');
+  assert.equal(requests,1);
+  await pairingTab.close();
+  await send('Page.bringToFront');
+  releasePairing();
   await until('uncertain pairing result',()=>evaluate<string>('document.querySelector("#error-message").textContent'),value=>value.includes('HTTP 503'));
   assert.equal(requests,1);
   assert.equal(await evaluate<boolean>('document.querySelector("#approve").disabled'),true);
@@ -345,8 +384,16 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
   assert.equal(png.subarray(0,8).toString('hex'),'89504e470d0a1a0a');
   t.diagnostic('Synthetic connect screenshot SHA256 '+createHash('sha256').update(png).digest('hex'));
 
+  await evaluate('globalThis.__ai06PairingBeforeReload=true');
+  await send('Page.reload',{ignoreCache:true});
+  await until('new pairing document',()=>evaluate<boolean>('!globalThis.__ai06PairingBeforeReload&&document.readyState==="complete"'),Boolean);
+  await until('pairing reload blocked',()=>evaluate<string>('document.querySelector("#status-title").textContent'),value=>value==='Bağlantı durduruldu');
+  assert.equal(await evaluate<boolean>('document.querySelector("#approve").disabled'),true);
+  assert.equal(requests,1);
+  // A genuinely new local session is distinct; offline CORE still UNKNOWN.
   offline=true;
-  await nav(pairingUrl);
+  query.set('state','n'.repeat(43));
+  await nav(origin+'/connect.html?'+query);
   await until('offline dashboard ready',()=>evaluate<string>('document.querySelector("#status-title").textContent'),value=>value==='Eşleştirmeye hazır');
   assert.equal(await evaluate<string>('document.querySelector("#core-status-code").textContent'),'UNKNOWN');
   assert.equal(requests,1);
@@ -361,21 +408,8 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
   assert.equal(await evaluate<boolean>('isSecureContext&&typeof navigator.locks?.request==="function"'),true);
   // Real second Chromium target in the same browser profile/origin, with a
   // separately loaded JS module and intentionally stale eligible dashboard.
-  const secondTarget=await send<{targetId:string}>('Target.createTarget',{url:origin+'/index.html'});
-  const secondUrl=await until('second page CDP',async()=>{
-    const response=await fetch('http://127.0.0.1:'+port+'/json/list',{signal:AbortSignal.timeout(2000)});
-    const pages=await response.json() as Array<{id:string;webSocketDebuggerUrl?:string}>;
-    return pages.find(page=>page.id===secondTarget.targetId)?.webSocketDebuggerUrl??'';
-  },value=>value.startsWith('ws://127.0.0.1:'));
-  secondWs=new WebSocket(secondUrl);
-  await new Promise<void>((resolve,reject)=>{secondWs!.once('open',resolve);secondWs!.once('error',reject)});
-  const secondSend=cdp(secondWs);
-  const secondEvaluate=async<T>(expression:string):Promise<T>=>{
-    const response=await secondSend<{result:{value?:T};exceptionDetails?:unknown}>(
-      'Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});
-    assert.equal(response.exceptionDetails,undefined,'second tab evaluation failed');
-    return response.result.value as T;
-  };
+  const second=await openSecond(origin+'/index.html');
+  const secondEvaluate=second.evaluate;
   const secondCopy=()=>secondEvaluate<string>('document.querySelector(".core-copy")?.textContent??""');
   await until('second tab eligible',secondCopy,value=>value.includes('ilk yerel onay henüz yok'));
   await send('Page.bringToFront');
@@ -431,12 +465,14 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
   await secondEvaluate('document.querySelector(".core-enrollment-retry").dispatchEvent(new Event("click"))');
   await until('stale second tab receives pending GET',secondCopy,value=>value.includes('sunucuda kayıtlı'));
   assert.equal(corePosts.length,1);
-  secondWs.terminate();secondWs=undefined;
-  await send('Target.closeTarget',{targetId:secondTarget.targetId});
+  await second.close();
   await activate('.core-toggle');
   await until('dashboard preference OFF readback',coreCopy,value=>value.includes('hesap tercihini kapalı bildiriyor'));
   assert.equal(corePosts.length,2);
   assert.deepEqual(corePosts[1],{route:'/api/v1/me/devices/core-preference',body:{deviceId,enabled:false},confirm:undefined});
+  assert.equal(coreMutationIds.length,2);
+  assert.ok(coreMutationIds.every(id=>/^core-v1:[0-9a-f-]{36}$/.test(id)));
+  assert.notEqual(coreMutationIds[0],coreMutationIds[1]);
   assert.match(await coreCopy(),/yerel STOP.*kanıtı değildir/);
   assert.equal(await evaluate<string>('document.querySelector(".core-shortcut").textContent'),'CORE');
   // Exact AI-03 #1330 v1 shape. Preference OFF does not imply remote revoke.
@@ -452,6 +488,7 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
   await until('D1 readback expired',coreCopy,value=>value.includes('Uzaktan yetki kaydı: UNKNOWN'));
   assert.doesNotMatch(await coreCopy(),/REVOKED \(epoch/);
   assert.equal(corePosts.length,2);
+  t.diagnostic('Pairing real Chromium: same local intent across tab/reload denied, stable opaque mutation identity; new local intent allowed');
   t.diagnostic('AI-03 v1 real Chromium: D1 ACTIVE/REVOKED epoch, expired UNKNOWN, no local STOP or drain proof');
   t.diagnostic('Dashboard real Chromium: cross-tab and reload no replay, stale-card preflight GET, one consent POST, one explicit OFF POST, no native STOP assertion');
 });
