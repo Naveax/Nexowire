@@ -9,7 +9,7 @@ import { hardenWindowsProgramDataAcl, verifyWindowsPrivateAcl } from '../securit
 import { verifyWindowsStackOuterAncestorAcl } from '../security/windows-programdata-acl.js';
 import {assertWindowsLocalTcpListenerOwnedByPid} from '../security/windows-local-listener-owner.js';
 import {verifyProtectedSystemHubCutoverReadOnly} from './system-hub-state-cutover.js';
-import {MACHINE_STARTUP_ADMISSION_PS,assertMachineStartupStateReadOnly} from '../security/windows-machine-startup-admission.js';
+import {MACHINE_STARTUP_ADMISSION_PS,assertMachineStartupStateReadOnly,assertNewSystemHubCutoverAdmission} from '../security/windows-machine-startup-admission.js';
 import {
   assertNoPrivilegedNodeStartupFlags,
   assertWindowsPrivilegedRuntimeTrusted,
@@ -857,6 +857,8 @@ export function assertHubBootActivationReadback(
 export async function installHubBootLifecycle(
   options: HubBootLifecycleOptions = {},
 ): Promise<HubBootLifecycleStatus> {
+  // A direct boot-install must not bypass AI-02's denied controlled cutover.
+  assertNewSystemHubCutoverAdmission();
   assertElevated();
   assertCanonicalHubBootTaskNames(options);
   const installMarker=options.cutoverInstallMarker??
