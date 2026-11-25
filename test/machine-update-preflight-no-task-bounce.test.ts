@@ -148,10 +148,13 @@ for(const scenario of cases){
       '[Console]::Error.WriteLine("AI05_PS_CUTOVER_FIXTURE_ENTERED")',
       actualTail,
     ].join('\r\n');
+    // Use a disposable script file instead of exceeding the Windows
+    // command-line limit as the production helper body grows.
+    const fixtureScript=path.join(root,'cutover-fixture.ps1');
+    writeFileSync(fixtureScript,'\ufeff'+source,'utf8');
     const started=performance.now();
     const child=spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
-      ['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',
-        Buffer.from(source,'utf16le').toString('base64')],{
+      ['-NoLogo','-NoProfile','-NonInteractive','-File',fixtureScript],{
         cwd:'C:\\Windows\\System32',
         // PowerShell 5.1 needs the real profile/temp environment, just as
         // the passing rollback-integrity fixture does. Restrict PATH and modules.

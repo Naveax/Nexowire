@@ -497,7 +497,7 @@ export function renderMachineCutoverScript(input: {
     '$fenceHash=$null',
     '$fenceIdentities=@{}',
     '$forwardHashes=@{}',
-    "function Task-Exists([string]$name){$matches=@(Get-ScheduledTask -TaskPath '\\' -ErrorAction Stop|Where-Object{$_.TaskName -ceq $name -and $_.TaskPath -ceq '\\'});if($matches.Count -gt 1){throw 'MACHINE_UPDATE_TASK_VISIBILITY_UNVERIFIED'};return ($matches.Count -eq 1)}",
+    "function Task-Exists([string]$name){$matches=@(Get-ScheduledTask -TaskPath '\\' -ErrorAction Stop|Where-Object{$_.TaskName -ieq $name});if($matches.Count -gt 1 -or ($matches.Count -eq 1 -and ([string]$matches[0].TaskName -cne $name -or [string]$matches[0].TaskPath -cne '\\'))){throw 'MACHINE_UPDATE_TASK_VISIBILITY_UNVERIFIED'};return ($matches.Count -eq 1)}",
     'function Assert-TaskIdentity([string]$name,[string]$launcher,[bool]$mustBeSystem,[switch]$ReturnTask){',
     "  $task=Get-ScheduledTask -TaskName $name -TaskPath '\\' -ErrorAction Stop",
     '  if(!$task){throw "MACHINE_UPDATE_TASK_DISAPPEARED"}',
