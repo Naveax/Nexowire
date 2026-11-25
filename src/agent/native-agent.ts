@@ -470,8 +470,10 @@ export async function runNativeAgent(
   trustedNativeTransferDeviceId?: string,
   trustedTransferLifetime?: AbortSignal,
   trustedTransferStop?:()=>void,
+  trustedTransferShutdown?:AbortSignal,
 ): Promise<void> {
   if(trustedTransferLifetime?.aborted)throw Error('TRANSFER_HELPER_RUNTIME_LEASE_RELEASED');
+  if(trustedTransferShutdown?.aborted)throw Error('PROTECTED_RUNTIME_STOPPED');
   const preloginBootstrap=getWindowsPreloginAgentMode(env);
   if(preloginBootstrap){
     // No user-writable code, owner DPAPI, identity creation, or journal I/O
@@ -648,13 +650,15 @@ export async function runNativeAgent(
       // Wait for accepted handlers before shutting down process state.
     }else{
       currentSocket?.close(1001, 'Agent shutting down');
-      void processes.shutdown();
+      processDrain??=processes.shutdown();
+      void processDrain.catch(()=>{});
     }
   };
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
   trustedTransferLifetime?.addEventListener('abort',stop,{once:true});
-  if(trustedTransferLifetime?.aborted)stop();
+  trustedTransferShutdown?.addEventListener('abort',stop,{once:true});
+  if(trustedTransferLifetime?.aborted||trustedTransferShutdown?.aborted)stop();
 
   while (!stopped) {
     const hubUrl = hubEndpoints[endpointIndex]!;
@@ -1017,6 +1021,7 @@ export async function runNativeAgent(
   }
 
   trustedTransferLifetime?.removeEventListener('abort',stop);
+  trustedTransferShutdown?.removeEventListener('abort',stop);
   process.removeListener('SIGINT',stop);
   process.removeListener('SIGTERM',stop);
   if(protectedDrain){
