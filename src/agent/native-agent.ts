@@ -656,6 +656,9 @@ export async function runNativeAgent(
 
     await new Promise<void>((resolve) => {
       const requestLifetime = new AbortController();
+      const fenceRequest=()=>requestLifetime.abort();
+      trustedTransferLifetime?.addEventListener('abort',fenceRequest,{once:true});
+      if(trustedTransferLifetime?.aborted)fenceRequest();
       let heartbeatTimer: NodeJS.Timeout | undefined;
       let lastPongAt = Date.now();
       let settled = false;
@@ -663,6 +666,7 @@ export async function runNativeAgent(
         if (settled) return;
         settled = true;
         requestLifetime.abort();
+        trustedTransferLifetime?.removeEventListener('abort',fenceRequest);
         revokePhysicalConsoleGrant();
         if (heartbeatTimer) clearInterval(heartbeatTimer);
         resolve();
@@ -714,6 +718,7 @@ export async function runNativeAgent(
         if (!greeted) return;
 
         socket.on('message', async (raw) => {
+          if(stopped||trustedTransferLifetime?.aborted)return;
           // Seal the exact incoming bytes before any authorization await.
           const exactRequestFrame = raw.toString();
           let decoded: unknown;
@@ -743,7 +748,7 @@ export async function runNativeAgent(
                   error:{code:'AGENT_PRELOGIN_CAPABILITY_UNAVAILABLE',
                     message:'The pre-login transport accepts only bounded machine status. Sign in for owner capabilities.'},
                 }
-              : nativeTransferRequest&&(!nativeTransferEnabled||request.data.accessMode!=='full')
+              : nativeTransferRequest&&(!nativeTransferEnabled||trustedTransferLifetime?.aborted||request.data.accessMode!=='full')
                 ? {type:'response',requestId:request.data.requestId,ok:false,
                    error:{code:'NATIVE_TRANSFER_AUTHORITY_REQUIRED',message:'Protected Native transfer admission unavailable.'}}
               : await requestCache.run(
@@ -956,7 +961,6 @@ export async function runNativeAgent(
       ...(closeCode !== undefined ? {wsCloseCode: closeCode} : {}),
       ...(transportErrorCode ? {errorCode: transportErrorCode} : {}),
     });
-    if (stopped)break;
     if (!retry.retryable) {
       stopped = true;
       shutdown.abort();
