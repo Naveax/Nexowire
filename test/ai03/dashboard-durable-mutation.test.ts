@@ -127,3 +127,34 @@ test('CORE consent request is a single pending transition, not local approval; m
     assert.equal((await post(b,consent,coreId(),{deviceId,expectedRevision:await rev()},'core-enrollment-request-v1')).status,409);
   }finally{f.close();}
 });
+
+test('dashboard CAS token is withheld if relevant state changes during dashboard or console readback',async()=>{
+  const f=dashboardMutationFixture();
+  try{
+    await accounts(f);const id=await device(f);
+    const read=async(h=handler(f))=>{
+      const response=await h(new Request('https://control.test/api/v1/me/dashboard'));
+      assert.equal(response.status,200);
+      const data=await response.json() as {devices:{id:string;coreMutationRevision:number|null}[]};
+      return data.devices.find(x=>x.id===id)?.coreMutationRevision;
+    };
+    const original=await read();assert.ok(original);
+    const get=f.store.getDeviceMaintenancePreference.bind(f.store);
+    f.store.getDeviceMaintenancePreference=async target=>{
+      const prior=await get(target);
+      f.db.prepare('UPDATE devices SET online=0 WHERE id=?').run(id);
+      return prior;
+    };
+    assert.equal(await read(),null);
+    f.store.getDeviceMaintenancePreference=get;
+    f.db.prepare('UPDATE devices SET online=1 WHERE id=?').run(id);
+    const stable=await read();assert.ok(stable&&stable>original);
+    const delayed=createControlPlaneHttpHandler(f.service,{authenticate:async()=>owner,
+      coreConsoleAuthority:{handle:async()=>{throw Error('not a device request');},
+        deviceStatus:async()=>{
+          f.db.prepare('UPDATE devices SET online=0 WHERE id=?').run(id);
+          return {localEnrolled:false,active:false,observedAtMs:null};
+        }}});
+    assert.equal(await read(delayed),null);
+  }finally{f.close();}
+});
