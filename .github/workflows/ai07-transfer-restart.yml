@@ -11,6 +11,9 @@ on:
       - 'src/security/protected-transfer-services-startup.ts'
       - 'src/agent/protected-broker-dispatch-service.ts'
       - 'src/installer/protected-transfer-helper-lifecycle.ts'
+      - 'src/security/protected-helper-selection-transport.ts'
+      - 'src/security/postgres-helper-selection-authority.ts'
+      - 'sql/helper-selection-authority.sql'
       - 'sql/large-transfer-authority.sql'
       - 'sql/core-broker-dispatch-authority.sql'
 permissions:
@@ -49,6 +52,7 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
+      - run: npm run typecheck
       - name: Protected startup and real disposable PostgreSQL crash recovery
         shell: bash
         env:
@@ -57,6 +61,7 @@ jobs:
           NEXOWIRE_PG_DISPATCH_TEST_PORT: ${{ job.services.postgres.ports[5432] }}
         run: |
           set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
           git rev-parse HEAD
           node --test --test-reporter=tap --import tsx --test-concurrency=1 test/mcp/ai07-transfer-startup.test.ts test/mcp/ai07-postgres-transfer-restart.test.ts | tee "$RUNNER_TEMP/ai07-transfer-restart.tap"
-          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/ai07-transfer-restart.tap" 6
+          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/ai07-transfer-restart.tap" 8
