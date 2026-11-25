@@ -355,6 +355,43 @@ function coreKindEligible(device,kind) {
     ['auto','on'].includes(device.bridgePreference?.desiredMode);
 }
 
+// AI-03 #1330 v1: the authenticated dashboard's D1 row is informational.
+// It is not a native STOP/drain witness, an admission credential or a lease.
+function coreRemoteReadback(device,snapshot,now=Date.now()) {
+  const unknown={text:' Uzaktan yetki kaydı: UNKNOWN. Yerel STOP, pendingRevoke ve drain doğrulanmadı.',expiresAtMs:null};
+  if(typeof snapshot?.accountId!=='string'||!snapshot.accountId.trim()||
+     typeof device?.id!=='string'||!Array.isArray(snapshot.devices))return unknown;
+  const matches=snapshot.devices.filter(candidate=>candidate?.id===device.id);
+  if(matches.length!==1||matches[0]!==device)return unknown;
+  const readback=device.coreRevocation;
+  const remote=readback?.remoteAuthorization;
+  if(readback?.version!==1||readback.source!=='D1_REMOTE_AUTHORIZATION'||
+     readback.localStop!=='UNKNOWN'||readback.pendingRevoke!=='UNKNOWN'||
+     readback.nativeDrain!=='UNKNOWN'||readback.effectReadback!=='UNKNOWN'||
+     readback.nativeEvidence!=='NOT_AVAILABLE'||
+     !['ACTIVE','REVOKED'].includes(remote?.state)||
+     !Number.isSafeInteger(remote.authorizationEpoch)||remote.authorizationEpoch<1||
+     !Number.isSafeInteger(remote.observedAtMs)||remote.observedAtMs<1||
+     !Number.isFinite(now)||now<remote.observedAtMs||now-remote.observedAtMs>=15000)return unknown;
+  return {text:' Sunucu D1 uzaktan yetki kaydı: '+remote.state+' (epoch '+remote.authorizationEpoch+
+    '). Bu, yürütme izni, fiziksel CORE, yerel STOP veya drain kanıtı değildir.',
+    expiresAtMs:remote.observedAtMs+15000};
+}
+
+function renderCoreReadbackCopy(element,device,snapshot,operation) {
+  const base=coreReadbackMessage(device,operation);
+  const remote=coreRemoteReadback(device,snapshot);
+  const message=base+remote.text;
+  element.textContent=message;
+  if(remote.expiresAtMs!==null&&typeof setTimeout==='function'){
+    // Do not overwrite an ongoing action's feedback or a new account/card.
+    setTimeout(()=>{
+      if(currentSnapshot===snapshot&&element.isConnected&&element.textContent===message)
+        element.textContent=base+coreRemoteReadback(device,snapshot,Math.max(Date.now(),remote.expiresAtMs)).text;
+    },Math.max(0,remote.expiresAtMs-Date.now()));
+  }
+}
+
 function coreReadbackMessage(device, operation) {
   const core = device.persistentMaintenance;
   const physical = device.physicalConsole;
@@ -906,7 +943,7 @@ function render(snapshot) {
         coreShortcut.textContent='CORE FİZİKSEL AÇIK';
         coreText.textContent='Yerel onaylı fiziksel kontrol süresiz etkin. PC tepsisindeki Nexowire CORE → KAPAT ile iptal edilir. Yönetici ve UAC izinleri ayrıdır.';
       }else{
-        coreText.textContent=coreReadbackMessage(device,coreOperation);
+        renderCoreReadbackCopy(coreText,device,snapshot,coreOperation);
       }
       corePanel.hidden = true;
       coreShortcut.addEventListener('click', () => {
