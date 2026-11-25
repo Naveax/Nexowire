@@ -591,6 +591,8 @@ async function verifyBrokerTaskStartFiles(options: PrivilegedBrokerTaskOptions):
   inspectPrivilegedStackSourceChainReadOnly([
     path.win32.dirname(trustedRoot),trustedRoot,launcherPath(options),
   ],verifyWindowsPrivateAcl);
+  // Explicit start and on/auto share this check. OFF/STOP remain available.
+  assertMachineStartupStateReadOnly();
 }
 
 export async function startPrivilegedBrokerTask(
