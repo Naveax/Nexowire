@@ -176,7 +176,8 @@ int wmain(int argc,wchar_t **argv){
   LocalFree(canonicalSid);
   HANDLE owner=NULL,current=NULL,file=INVALID_HANDLE_VALUE,job=NULL,pipe=INVALID_HANDLE_VALUE,event=NULL,childToken=NULL;
   PSECURITY_DESCRIPTOR descriptor=NULL,childDescriptor=NULL;PROCESS_INFORMATION child={0};BOOL drained=FALSE,success=FALSE;
-  OVERLAPPED ov={0};BOOL pending=FALSE;
+  OVERLAPPED ov={0};BOOL pending=FALSE,attributesReady=FALSE;
+  LPPROC_THREAD_ATTRIBUTE_LIST attributes=NULL;
   const char *reason="OWNER_BINDING_UNAVAILABLE";
   wchar_t helper[MAX_PATH]={0},pipeName[128]={0},sddl[400]={0},command[4096]={0};
   char output[8193]={0};DWORD used=0;
@@ -219,17 +220,28 @@ int wmain(int argc,wchar_t **argv){
   reason="OWNER_CHANGED_BEFORE_LAUNCH";
   if(!local_console(session)||!WTSQueryUserToken(session,&current)||!owner_token(current,sid,session,logon))goto done;
   CloseHandle(current);current=NULL;
-  STARTUPINFOW si={0};si.cb=sizeof(si);wchar_t desktop[]=L"winsta0\\default";si.lpDesktop=desktop;
+  STARTUPINFOEXW si={0};si.StartupInfo.cb=sizeof(si);wchar_t desktop[]=L"winsta0\\default";si.StartupInfo.lpDesktop=desktop;
+  /* Windows 10 atomic job assignment: no suspended unowned child may survive
+   * a launcher crash between CreateProcessAsUser and a later Job assignment. */
+  SIZE_T attributeBytes=0;
+  (void)InitializeProcThreadAttributeList(NULL,1,0,&attributeBytes);
+  if(!attributeBytes)goto done;
+  attributes=(LPPROC_THREAD_ATTRIBUTE_LIST)HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,attributeBytes);
+  if(!attributes||!InitializeProcThreadAttributeList(attributes,1,0,&attributeBytes))goto done;
+  attributesReady=TRUE;
+  HANDLE jobs[1]={job};
+  if(!UpdateProcThreadAttribute(attributes,0,PROC_THREAD_ATTRIBUTE_JOB_LIST,jobs,sizeof(jobs),NULL,NULL))goto done;
+  si.lpAttributeList=attributes;
   wchar_t environment[]=L"PATH=C:\\Windows\\System32;C:\\Windows\0SystemRoot=C:\\Windows\0windir=C:\\Windows\0";
   reason="CHILD_CREATE";
   if(!ConvertStringSecurityDescriptorToSecurityDescriptorW(L"O:SYG:SYD:P(A;;GA;;;SY)",SDDL_REVISION_1,&childDescriptor,NULL))goto done;
   SECURITY_ATTRIBUTES childSa={sizeof(childSa),childDescriptor,FALSE};
   /* bInheritHandles=FALSE is essential across Windows sessions. */
   if(!CreateProcessAsUserW(owner,helper,command,&childSa,&childSa,FALSE,
-    CREATE_SUSPENDED|CREATE_UNICODE_ENVIRONMENT|CREATE_NO_WINDOW,environment,L"C:\\Windows\\System32",&si,&child))goto done;
+    CREATE_SUSPENDED|CREATE_UNICODE_ENVIRONMENT|CREATE_NO_WINDOW|EXTENDED_STARTUPINFO_PRESENT,environment,L"C:\\Windows\\System32",&si.StartupInfo,&child))goto done;
   reason="CHILD_BINDING";
   BOOL inside=FALSE;wchar_t image[MAX_PATH]={0};DWORD imageLength=MAX_PATH;
-  if(!AssignProcessToJobObject(job,child.hProcess)||!IsProcessInJob(child.hProcess,job,&inside)||!inside||
+  if(!IsProcessInJob(child.hProcess,job,&inside)||!inside||
     !QueryFullProcessImageNameW(child.hProcess,0,image,&imageLength)||_wcsicmp(image,helper)||
     !OpenProcessToken(child.hProcess,TOKEN_QUERY,&childToken)||!owner_token(childToken,sid,session,logon)||
     !system_only_object(child.hProcess)||!system_only_object(child.hThread))goto done;
@@ -299,6 +311,8 @@ done:
   if(current)CloseHandle(current);
   if(descriptor)LocalFree(descriptor);
   if(childDescriptor)LocalFree(childDescriptor);
+  if(attributesReady)DeleteProcThreadAttributeList(attributes);
+  if(attributes)HeapFree(GetProcessHeap(),0,attributes);
   if(sid)LocalFree(sid);
   if(!success)return denied(reason);
   if(fwrite(output,1,used,stdout)!=(size_t)used||fflush(stdout)!=0)return 77;
