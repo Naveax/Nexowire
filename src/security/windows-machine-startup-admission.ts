@@ -125,3 +125,11 @@ export function assertMachineStartupStateReadOnly():void{
 export function assertOnlineMachineCutoverAdmission():void{
   throw Error('MACHINE_UPDATE_CANONICAL_STARTUP_AUTHORITY_REQUIRED');
 }
+
+/** Direct boot-install is a legacy-to-SYSTEM cutover, not a normal boot.
+ * It must not bypass AI-02's #1353 denial via a private offline receipt.
+ * Keep the existing lifecycle implementation for a future independently
+ * authorized admission, with no positive fallback or caller override. */
+export function assertNewSystemHubCutoverAdmission():void{
+  throw Error('AI04_SIGNED_SQLITE_RECOVERY_AUTHORITY_REQUIRED');
+}
