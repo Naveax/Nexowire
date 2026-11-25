@@ -785,6 +785,11 @@ export async function hubBootLifecycleStatus(
       // Report the mismatch instead of making boot-status unusable; keep the
       // strict identity gate unchanged for boot-install and boot-uninstall.
       hubBootStatusIdentityInspection,
+      // Installation's final readback must still be bound to its own marker.
+      ...(options.cutoverInstallMarker===undefined?[]:[
+        '$marker='+psLiteral(options.cutoverInstallMarker),
+        hubBootRollbackTaskOwnershipGuard,
+      ]),
       hubBootUserTaskVisibilityProbe,
       hubBootStartupSettingsProbe,
       '$bootState=if($bootTask){([string]$bootTask.State).ToLowerInvariant()}else{$bootVisibility}',
@@ -1131,7 +1136,7 @@ export async function installHubBootLifecycle(
       taskPreflight.legacyState,
     );
     hardenProgramDataAcl(p.root);
-    const finalStatus=await hubBootLifecycleStatus(options);
+    const finalStatus=await hubBootLifecycleStatus({...options,cutoverInstallMarker:installMarker});
     assertHubBootActivationReadback(finalStatus,healthyPid);
     assertWindowsLocalTcpListenerOwnedByPid(port,healthyPid);
     return finalStatus;
