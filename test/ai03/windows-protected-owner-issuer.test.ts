@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {validateWindowsOwnerLauncherPins,windowsOwnerLauncherArguments,createWindowsProtectedOwnerAssertionLauncher}
+import {validateWindowsOwnerLauncherPins,windowsOwnerLauncherArguments,createWindowsProtectedOwnerAssertionLauncher,
+  parseNativeOwnerObservation,matchNativeOwnerObservation}
   from '../../src/security/windows-protected-owner-issuer.js';
 
 const pins={launcherPath:'C:\\ProgramData\\Nexowire\\CoreOwner\\windows-core-owner-launcher.exe',
@@ -33,4 +34,17 @@ test('native owner launcher accepts only fixed protected artifact and bound cere
 });
 test('non-Windows cannot manufacture a protected owner launcher',async()=>{
   if(process.platform!=='win32')await assert.rejects(createWindowsProtectedOwnerAssertionLauncher(pins),/WINDOWS_REQUIRED/);
+});
+
+test('independent WTS observation is nonce-bound and cannot claim human approval or authority',()=>{
+  const nonce='f'.repeat(64),raw={version:1,kind:'core_owner_wts_observation_v1',nonce,
+    windowsUserSid:owner.binding.windowsUserSid,windowsSessionId:owner.binding.windowsSessionId,
+    windowsLogonLuid:owner.binding.windowsLogonLuid,humanApproval:false,coreAuthority:false};
+  const p=parseNativeOwnerObservation(raw,nonce);
+  assert.ok(Object.isFrozen(p));assert.equal(matchNativeOwnerObservation(p,owner.binding),true);
+  assert.equal(matchNativeOwnerObservation(p,{...owner.binding,windowsSessionId:3}),false);
+  assert.equal(matchNativeOwnerObservation(p,{...owner.binding,windowsLogonLuid:'000000000000b101'}),false);
+  for(const bad of [{...raw,humanApproval:true},{...raw,coreAuthority:true},{...raw,windowsSessionId:0},
+    {...raw,nonce:'e'.repeat(64)},{...raw,windowsLogonLuid:'0'.repeat(16)}])
+    assert.throws(()=>parseNativeOwnerObservation(bad,nonce));
 });
