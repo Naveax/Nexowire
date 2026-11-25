@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
 import {createContext,runInContext} from 'node:vm';
 
 const connectJs=readFileSync('web/connect.js','utf8');
@@ -35,30 +36,49 @@ class FakeElement {
   closest(){return this.row??this}
 }
 
+function pairingBrowser(){
+  const records=new Map<string,string>();
+  const locks=new Set<string>();
+  return {records,localStorage:{getItem:(key:string)=>records.get(key)??null,setItem:(key:string,value:string)=>records.set(key,value)},
+    locks:{request:async(key:string,_options:unknown,callback:(lock:object|null)=>unknown)=>{
+      if(locks.has(key))return callback(null);locks.add(key);
+      try{return await callback({})}finally{locks.delete(key)}
+    }}};
+}
+
 async function render(dashboard:unknown,options:{
   pairingStatus?:number; throwPairing?:boolean;
   pairingResponse?:()=>Promise<Response>;
   dashboardResponse?:()=>Promise<Response>;
+  browser?:ReturnType<typeof pairingBrowser>;
+  localState?:string;
 }={}) {
   const ids=new Map<string,FakeElement>();
   const get=(id:string)=>{if(!ids.has(id))ids.set(id,new FakeElement());return ids.get(id)!};
   const tabs=['windows','macos','linux'].map(os=>{const el=new FakeElement();el.dataset.os=os;return el});
   get('install-command').row=new FakeElement();
   let postCount=0;
+  const mutationIds:string[]=[];
+  const browser=options.browser??pairingBrowser();
+  const localSearch=new URLSearchParams(search);
+  if(options.localState!==undefined)localSearch.set('state',options.localState);
   const ctx=createContext({
-    URL,URLSearchParams,AbortSignal,Date,Response,
-    navigator:{userAgent:'Windows',clipboard:{writeText:async()=>{}}},
+    URL,URLSearchParams,AbortSignal,Date,Response,TextEncoder,
+    crypto:{subtle:{digest:async(_algorithm:string,input:Uint8Array)=>createHash('sha256').update(input).digest()}},
+    localStorage:browser.localStorage,
+    navigator:{userAgent:'Windows',locks:browser.locks,clipboard:{writeText:async()=>{}}},
     document:{
       getElementById:get,
       querySelectorAll:()=>tabs,
       querySelector:()=>new FakeElement(),
     },
-    window:{location:{search,pathname:'/connect.html',origin:'https://owner.fixture.invalid',
+    window:{location:{search:'?'+localSearch.toString(),pathname:'/connect.html',origin:'https://owner.fixture.invalid',
       replace:()=>{throw Error('fixture navigation blocked')}}},
-    fetch:async(path:string)=>{
+    fetch:async(path:string,init?:RequestInit)=>{
       if(path==='/api/v1/me/dashboard')return options.dashboardResponse?.()??Response.json(dashboard);
       if(path==='/api/v1/pairing'){
         postCount++;
+        mutationIds.push(new Headers(init?.headers).get('X-Nexowire-Mutation-Id')??'');
         if(options.pairingResponse)return options.pairingResponse();
         if(options.throwPairing)throw Error('ACK lost after POST');
         return Response.json({error:'UPSTREAM_UNKNOWN'},{status:options.pairingStatus??503});
@@ -69,7 +89,7 @@ async function render(dashboard:unknown,options:{
   runInContext(connectJs,ctx,{timeout:2000});
   await new Promise<void>(resolve=>setImmediate(resolve));
   await new Promise<void>(resolve=>setImmediate(resolve));
-  return {get,postCount:()=>postCount};
+  return {get,postCount:()=>postCount,mutationIds,browser};
 }
 
 function dashboard(physical:unknown,override:Record<string,unknown>={}){
@@ -196,4 +216,40 @@ test('AI-06: bilingual CORE panel and zoom/keyboard/forced-color contracts',()=>
     assert.ok(css.includes('max-width:'+breakpoint+'px'),'missing '+breakpoint+'px layout');
   assert.match(css,/prefers-reduced-motion:reduce/);
   assert.match(css,/forced-colors:active/);
+});
+
+test('AI-06 pairing: shared native session cannot POST in another tab or after reload',async()=>{
+  const browser=pairingBrowser();
+  const d=dashboard({active:false});
+  const a=await render(d,{browser});
+  const b=await render(d,{browser});
+  await a.get('approve').handlers.click!();
+  await b.get('approve').handlers.click!();
+  assert.equal(a.postCount(),1);
+  assert.equal(b.postCount(),0);
+  const reload=await render(d,{browser});
+  assert.equal(reload.get('approve').disabled,true);
+  assert.equal(reload.postCount(),0);
+  assert.equal(browser.records.size,1);
+  const [key,value]=[...browser.records.entries()][0]!;
+  assert.match(key,/pairing-v1:[0-9a-f]{64}$/);
+  assert.equal(value,'attempted');
+  assert.ok(!key.includes('s'.repeat(43)));
+  const otherProfile=await render(d);
+  await otherProfile.get('approve').handlers.click!();
+  assert.equal(otherProfile.postCount(),1,'different profiles require backend deduplication');
+  assert.deepEqual(otherProfile.mutationIds,a.mutationIds,'same local state derives identical opaque ID across profiles');
+  const fresh=await render(d,{browser,localState:'n'.repeat(43)});
+  await fresh.get('approve').handlers.click!();
+  assert.equal(fresh.postCount(),1);
+  assert.notEqual(fresh.mutationIds[0],a.mutationIds[0]);
+});
+
+test('AI-06 pairing: unavailable durable storage prevents POST',async()=>{
+  const browser=pairingBrowser();
+  browser.localStorage.setItem=()=>{throw Error('storage unavailable')};
+  const f=await render(dashboard({active:false}),{browser});
+  await f.get('approve').handlers.click!();
+  assert.equal(f.postCount(),0);
+  assert.equal(f.get('approve').disabled,true);
 });
