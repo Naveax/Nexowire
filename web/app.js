@@ -412,7 +412,9 @@ function renderCoreReadbackCopy(element,device,snapshot,operation) {
   const receipt=coreMutationReceipts.get(coreFenceKey(snapshot.accountId,device.id));
   const receiptText=!operation&&receipt?.revision===device.coreMutationRevision
     ? (receipt.state==='APPLIED'?' D1 işlem kaydı: APPLIED (yalnız veritabanı yazımı).':' D1 işlem kaydı: DENIED (işlem kabul edilmedi).') : '';
-  const base=coreReadbackMessage(device,operation)+receiptText;
+  const revisionText=validCoreRevision(device.coreMutationRevision)?'':
+    ' Sunucu CORE işlem revision bilgisi doğrulanamadı. Yeni işlem gönderilemez.';
+  const base=coreReadbackMessage(device,operation)+receiptText+revisionText;
   const remote=coreRemoteReadback(device,snapshot);
   const message=base+remote.text;
   element.textContent=message;
@@ -473,6 +475,7 @@ async function performCoreAction(deviceId, kind, row, renderedRevision=coreActio
       const fresh=await response.json();
       const matches=Array.isArray(fresh?.devices)?fresh.devices.filter(d=>d?.id===deviceId):[];
       if(fresh?.accountId!==accountId||currentSnapshot?.accountId!==accountId||
+         coreActionDevice(deviceId)?.coreMutationRevision!==expectedRevision||
          matches.length!==1||matches[0].coreMutationRevision!==expectedRevision||
          !coreKindEligible(matches[0],kind)){refresh=true;return}
       // The marker must be persisted and read back before crossing the POST
