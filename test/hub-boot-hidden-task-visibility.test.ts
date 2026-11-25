@@ -73,7 +73,7 @@ test('uncertain SYSTEM task visibility cannot be treated as installed or reboot-
     const result=assessWindowsUnattendedRebootReadiness({
       systemHubInstalled:false,
       systemHubTaskState:state,
-      agent:{installed:true,systemIdentity:true,bootTrigger:true,interactiveOnly:false},
+      agent:{installed:true,systemIdentity:true,bootTrigger:true,interactiveOnly:false,taskEnabled:true},
       autoAdminLogon:false,
     });
     assert.equal(result.startupTopologyReady,false);
@@ -89,7 +89,7 @@ test('genuinely absent SYSTEM task still reports its separate not-installed bloc
   const result=assessWindowsUnattendedRebootReadiness({
     systemHubInstalled:false,
     systemHubTaskState:'not-installed',
-    agent:{installed:true,systemIdentity:true,bootTrigger:true,interactiveOnly:false},
+    agent:{installed:true,systemIdentity:true,bootTrigger:true,interactiveOnly:false,taskEnabled:true},
     autoAdminLogon:false,
   });
   assert.deepEqual(result.blockers,[
