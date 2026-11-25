@@ -301,7 +301,7 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
     assert.equal(response.exceptionDetails,undefined,'DOM evaluation failed: '+expression);
     return response.result.value as T;
   };
-  const openSecond=async(url:string,existingTargetId?:string)=>{
+  const openSecond=async(url:string,existingTargetId?:string,closer=send)=>{
     const secondTarget=existingTargetId?{targetId:existingTargetId}:await send<{targetId:string}>('Target.createTarget',{url});
     const secondUrl=await until('second page CDP',async()=>{
       const response=await fetch('http://127.0.0.1:'+port+'/json/list',{signal:AbortSignal.timeout(2000)});
@@ -317,7 +317,7 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
       assert.equal(response.exceptionDetails,undefined,'second tab evaluation failed');
       return response.result.value as T;
     };
-    return {evaluate:secondEvaluate,send:secondSend,close:async()=>{secondWs?.terminate();secondWs=undefined;await send('Target.closeTarget',{targetId:secondTarget.targetId})}};
+    return {evaluate:secondEvaluate,send:secondSend,close:async()=>{secondWs?.terminate();secondWs=undefined;await closer('Target.closeTarget',{targetId:secondTarget.targetId})}};
   };
   const nav=async(url:string)=>{
     const response=await send<{errorText?:string}>('Page.navigate',{url});
@@ -488,7 +488,9 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
   assert.equal(corePosts.length,1);
   // The later owner-bound backend GET reports the request recorded.
   enrollmentPending=true;coreRevision=8;
+  await evaluate('document.querySelector(".core-copy").dataset.beforeReadback="yes"');
   await activate('.core-readback');
+  await until('new card after pending GET',()=>evaluate<boolean>('document.querySelector(".core-copy")?.dataset.beforeReadback!=="yes"&&!!document.querySelector(".core-copy")'),Boolean);
   await until('boolean alone is not receipt',coreCopy,value=>value.includes('sonucu belirsiz'));
   assert.equal(await fenceCount(),1);
   mutationReceipts.set(coreMutationIds[0]!,{mutationId:coreMutationIds[0],deviceId,
@@ -551,7 +553,8 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
     const foreign={accountId:'combined-ai06-foreign',role:'user'} as const;
     let profile:Awaited<ReturnType<typeof openSecond>>|undefined;
     let contextId:string|undefined;
-    const version=await (await fetch('http://127.0.0.1:'+port+'/json/version')).json() as {webSocketDebuggerUrl:string};
+    combined.after(()=>f.close());
+    const version=await (await fetch('http://127.0.0.1:'+port+'/json/version',{signal:AbortSignal.timeout(2000)})).json() as {webSocketDebuggerUrl:string};
     assert.match(version.webSocketDebuggerUrl,/^ws:\/\/127\.0\.0\.1:/);
     browserWs=new WebSocket(version.webSocketDebuggerUrl);
     await new Promise<void>((resolve,reject)=>{browserWs!.once('open',resolve);browserWs!.once('error',reject)});
@@ -576,6 +579,8 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
       let pendingPosts=0;
       let releaseBoth:()=>void=()=>{};
       let both=new Promise<void>(resolve=>{releaseBoth=resolve});
+      let releaseA:()=>void=()=>{};
+      let aDone=new Promise<void>(resolve=>{releaseA=resolve});
       const actualPosts:{route:string;id:string;status:number;revision:unknown}[]=[];
       realBackend=async request=>{
         const cookie=request.headers.get('cookie')??'';
@@ -587,8 +592,9 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
         const body=await request.clone().json() as {expectedRevision?:number};
         // Network scheduling barrier ensures both independent browsers passed
         // preflight before either transaction executes. Backend decides winners.
-        if(route===holdRoute){pendingPosts++;if(pendingPosts===2)releaseBoth();await both;}
-        const response=await h(request);
+        if(route===holdRoute){pendingPosts++;if(pendingPosts===2)releaseBoth();await both;if(isB)await aDone;}
+        let response:Response;
+        try{response=await h(request)}finally{if(route===holdRoute&&isA)releaseA();}
         actualPosts.push({route,id:request.headers.get('x-nexowire-mutation-id')??'',status:response.status,revision:body.expectedRevision});
         return response;
       };
@@ -600,7 +606,7 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
       const context=await browserSend<{browserContextId:string}>('Target.createBrowserContext');
       contextId=context.browserContextId;
       const target=await browserSend<{targetId:string}>('Target.createTarget',{url:'about:blank',browserContextId:contextId});
-      profile=await openSecond('about:blank',target.targetId);
+      profile=await openSecond('about:blank',target.targetId,browserSend);
       await setCookie(profile.send,'B');
       const navB=async(url:string)=>{
         await profile!.send('Page.navigate',{url});
@@ -623,16 +629,19 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
       const pid='pairing-v1:'+createHash('sha256').update('nexowire-pairing-v1\0'+pState).digest('hex');
       assert.ok(pairingPosts.every(p=>p.id===pid));
       assert.equal(Number(f.db.prepare('SELECT COUNT(*) n FROM pairings').get()?.n),pairingBefore+1);
-      // Depending on SQL admission order, the successful original caller alone
-      // may navigate to callback. A lost ACK or duplicate can never replay token.
-      assert.equal(pairingPosts.filter(p=>p.status===201).length<=1,true);
-      assert.equal(pairingPosts.some(p=>p.status===409||p.status===500),true);
+      // A's transaction commits but its adapter drops the ACK. B arrives
+      // concurrently, executes on another connection after A, and is denied.
+      assert.deepEqual(pairingPosts.map(p=>p.status).sort(),[409,500]);
       const statusUrl='https://control.test/api/v1/me/mutations/status?mutationId='+encodeURIComponent(pid);
       const receipt=await (await first(new Request(statusUrl))).json();
       assert.deepEqual(receipt,{mutationId:pid,deviceId:pDevice,kind:'pairing',state:'APPLIED',expectedRevision:null});
       assert.equal((await foreignHandler(new Request(statusUrl))).status,404);
       assert.equal((await anonymous(new Request(statusUrl))).status,401);
       assert.doesNotMatch(JSON.stringify(receipt),/nwx_pair_|token/);
+      for(const evalFn of [evaluate,profile.evaluate]){
+        await until('actual ACK-loss or duplicate readback',()=>evalFn<string>('document.querySelector("#error-message")?.textContent??""'),v=>v.includes('APPLIED'));
+        assert.equal(await evalFn<boolean>('document.querySelector("#approve").disabled'),true);
+      }
       // Both profiles revisit same native intent; status prevents a new POST.
       await nav(origin+'/index.html');await navB(origin+'/index.html');
       await nav(pUrl);await navB(pUrl);
@@ -646,6 +655,7 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
       // transaction, not localStorage/Web Locks, admits only one consent.
       holdRoute='/api/v1/me/devices/core-enrollment-request';pendingPosts=0;
       both=new Promise<void>(resolve=>{releaseBoth=resolve});
+      aDone=new Promise<void>(resolve=>{releaseA=resolve});
       const consentRoute=holdRoute;
       await nav(origin+'/index.html');await navB(origin+'/index.html');
       const copy=(evalFn:typeof evaluate)=>evalFn<string>('document.querySelector(".core-copy")?.textContent??""');
@@ -663,6 +673,7 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
       const consentPosts=actualPosts.filter(p=>p.route===consentRoute);
       assert.equal(new Set(consentPosts.map(p=>p.id)).size,2);
       assert.ok(consentPosts.every(p=>p.revision===before&&/^core-v1:[a-f0-9-]{36}$/.test(p.id)));
+      assert.deepEqual(consentPosts.map(p=>p.status).sort(),[409,500]);
       const receipts=consentPosts.map(p=>f.db.prepare('SELECT state FROM dashboard_mutation_claims WHERE mutation_id=?').get(p.id)?.state);
       assert.deepEqual(receipts.sort(),['APPLIED','DENIED']);
       assert.equal(f.db.prepare('SELECT enrollment_requested FROM device_core_console_authority WHERE device_id=?').get(actualId)?.enrollment_requested,1);
@@ -676,10 +687,9 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
       assert.equal(actualPosts.filter(p=>p.route===consentRoute).length,2);
       combined.diagnostic('Actual production HTTP + migrated SQLite D1 + two independent Chromium contexts: one pairing challenge, two distinct CORE UUIDs, one APPLIED/one DENIED; no native effect');
     }finally{
-      releaseBoth();realBackend=undefined;
+      releaseBoth();releaseA();realBackend=undefined;
       if(profile)await profile.close();
       if(contextId)await browserSend('Target.disposeBrowserContext',{browserContextId:contextId}).catch(()=>{});
-      f.close();
     }
   });
 });
