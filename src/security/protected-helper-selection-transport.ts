@@ -70,7 +70,7 @@ export class ProtectedHelperSelectionClient implements HelperSelectionLeaseTrans
     if(this.url.protocol!=='https:'||this.url.username||this.url.password||this.url.search||this.url.hash||this.url.pathname!==ROUTE||
        !role.safeParse(c.role).success||!hex.safeParse(c.serverSpkiSha256).success||typeof c.credential!=='function'||
        !c.certificatePem?.includes('BEGIN CERTIFICATE')||!c.keyPem?.includes('PRIVATE KEY-----')||!c.serverCaPem?.includes('BEGIN CERTIFICATE')||
-       !Number.isSafeInteger(this.timeout)||this.timeout<250||this.timeout>30000)return deny('HELPER_SELECTION_TLS_CONFIG_INVALID');
+       !Number.isSafeInteger(this.timeout)||this.timeout<250||this.timeout>30000)throw Error('HELPER_SELECTION_TLS_CONFIG_INVALID');
     this.c=Object.freeze({...c,scope:Object.freeze(scope.parse(c.scope))});
     this.authorityKey=key(createPublicKey(c.authorityPublicKeyPem));
   }
