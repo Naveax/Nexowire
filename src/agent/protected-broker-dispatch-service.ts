@@ -135,6 +135,12 @@ export async function startProtectedBrokerDispatchService(config:ProtectedBroker
   const authenticateBroker=createScopedDispatchBrokerResolver(credentials);
   const publicKey=createPublicKey(privateKeyPem);
   if(publicKey.asymmetricKeyType!=='ed25519')throw Error('DISPATCH_SERVICE_SIGNER_INVALID');
+  // An authority capable of signing its own native completion evidence is
+  // not an independent observer, even with valid signatures and DB roles.
+  const observerKey=createPublicKey(nativeCompletion.observerPublicKeyPem);
+  if(observerKey.asymmetricKeyType!=='ed25519'||
+    publicKey.export({type:'spki',format:'der'}).equals(observerKey.export({type:'spki',format:'der'})))
+    throw Error('DISPATCH_SERVICE_OBSERVER_KEY_NOT_INDEPENDENT');
   const publicKeyPem=publicKey.export({type:'spki',format:'pem'}).toString();
   const db=createProtectedPostgresDispatchPool(database);
   let server:ReturnType<typeof createCoreNativeVerifierServer>|undefined;
