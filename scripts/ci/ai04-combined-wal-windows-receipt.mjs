@@ -10,11 +10,12 @@ const tests={
  'test/agent/ai04-external-journal-owner.test.ts':['9d2daca025c666ab7be8b250481519f0bd1bffae',3],
  'test/agent/ai04-frameless-wal.test.ts':['235150296f55d11c4dfff3155b3783f667f41195',14],
  'test/native-agent-startup-diagnostic.test.ts':['4a9095dad4232313df8504071a1de1f557668a8c',10],
- 'test/agent/ai04-wal-index-convergence.test.ts':['faadbc30f16ae270b462e01c34482e9365dfa1d6',7]
+ 'test/agent/ai04-wal-index-convergence.test.ts':['faadbc30f16ae270b462e01c34482e9365dfa1d6',7],
+ 'test/agent/ai04-wal-path-readback.test.ts':['eab196e2de918475cfa686af15b80a00a3639dd4',8]
 };
 const dependencies={
  'src/agent/operation-journal.ts':'598882cf2a47c764a4e4d8b111228f60460fad1f',
- 'src/agent/operation-journal-wal.ts':'d5c84054b6b40a3d4b6774bfc80e0f58721b88b2',
+ 'src/agent/operation-journal-wal.ts':'4955276b173107bd45ef089caca85afc6069a09b',
  'src/agent/journal-owner-process.ts':'cabe4f51203c7c93b94640f5c3e0b19f516b7e5a',
  'src/agent/operation-journal-authority.ts':'b98e8a6f12ce740bfe7ddea3d6aa2561edde2575',
  'src/agent/native-agent-startup-diagnostic.ts':'7c5e4c3fda397617d412da67ede50896a7ebebb9',
