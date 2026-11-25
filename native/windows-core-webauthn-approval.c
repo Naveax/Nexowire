@@ -183,7 +183,7 @@ int wmain(int argc,wchar_t **argv) {
     const wchar_t prefix[]=L"\\\\.\\pipe\\Nexowire.CoreOwnerAssertion.";
     size_t n=wcslen(prefix);BYTE id[32]={0};size_t idSize=0;
     if(wcsncmp(argv[8],prefix,n)||!from_hex(argv[8]+n,id,32,32,&idSize))return 64;
-    HANDLE output=CreateFileW(argv[8],GENERIC_WRITE,0,NULL,OPEN_EXISTING,
+    HANDLE output=CreateFileW(argv[8],FILE_WRITE_DATA|SYNCHRONIZE,0,NULL,OPEN_EXISTING,
       SECURITY_SQOS_PRESENT|SECURITY_IDENTIFICATION,NULL);
     if(output==INVALID_HANDLE_VALUE)return 77;
     int fd=_open_osfhandle((intptr_t)output,_O_WRONLY|_O_BINARY);
