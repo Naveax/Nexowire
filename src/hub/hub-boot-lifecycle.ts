@@ -1142,6 +1142,9 @@ export async function installHubBootLifecycle(
             hubBootRegisteredTaskIdentityGuard,
             hubBootInstallTaskAbsenceGuard,
             hubBootRollbackTaskOwnershipGuard,
+            // A legacy state changed after our mutation attempt is not a
+            // fresh authorization to restore the old preflight state.
+            "if($restoreLegacyState -and ($null -eq $userTask -or [string]$userTask.State -cne 'Disabled')){throw 'HUB_USER_TASK_ROLLBACK_STATE_UNVERIFIED'}",
             'if($bootTask){',
             hubBootStartupSettingsProbe,
             // Even a pre-Enable receipt is insufficient if an external actor
