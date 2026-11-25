@@ -830,6 +830,23 @@ export function classifyHubBootHandoffFailure(receipt:unknown):
   return parsed.data.legacyMutationAttempted?'rollback-boot-and-legacy':'rollback-boot-only';
 }
 
+/**
+ * A healthy socket before final task readback is not proof of a completed
+ * handoff. The recorded Boot must still be runnable and its old writer
+ * must remain disabled/absent. Never convert an uncertain activation into
+ * successful installation; the caller retains recovery evidence.
+ */
+export function assertHubBootActivationReadback(
+  status:Pick<HubBootLifecycleStatus,'installed'|'taskPresence'|'state'|'startupEnabled'|'userTaskState'|'pid'>,
+  healthyPid:number,
+):void {
+  if(!status.installed||status.taskPresence!=='present'||status.state!=='running'||
+     status.startupEnabled!==true||status.pid!==healthyPid||
+     !['disabled','not-installed'].includes(status.userTaskState)){
+    throw new Error('HUB_BOOT_FINAL_ACTIVATION_UNVERIFIED');
+  }
+}
+
 export async function installHubBootLifecycle(
   options: HubBootLifecycleOptions = {},
 ): Promise<HubBootLifecycleStatus> {
@@ -1106,7 +1123,7 @@ export async function installHubBootLifecycle(
       envForTask,
     ));
     if(!handoffReceipt.ok)throw new Error(handoffReceipt.error);
-    await waitForBootHub(port, p.pid);
+    const healthyPid=await waitForBootHub(port, p.pid);
     await writeManifest(
       options,
       sourceSecretFile,
@@ -1114,7 +1131,10 @@ export async function installHubBootLifecycle(
       taskPreflight.legacyState,
     );
     hardenProgramDataAcl(p.root);
-    return await hubBootLifecycleStatus(options);
+    const finalStatus=await hubBootLifecycleStatus(options);
+    assertHubBootActivationReadback(finalStatus,healthyPid);
+    assertWindowsLocalTcpListenerOwnedByPid(port,healthyPid);
+    return finalStatus;
   } catch (error) {
     const disposition=classifyHubBootHandoffFailure(handoffReceipt);
     if(switched&&disposition==='preserve-for-recovery'){
@@ -1217,6 +1237,7 @@ export interface WindowsUnattendedRebootEvidence {
   systemHubInstalled: boolean;
   systemHubTaskState?: string;
   systemHubStartupEnabled?: boolean;
+  legacyHubTaskState?: string;
   agent: WindowsRebootAgentTaskEvidence;
   autoAdminLogon: boolean;
 }
@@ -1225,6 +1246,7 @@ export type WindowsRebootBlocker =
   | 'SYSTEM_HUB_BOOT_NOT_INSTALLED'
   | 'SYSTEM_HUB_BOOT_VISIBILITY_UNVERIFIED'
   | 'SYSTEM_HUB_BOOT_STARTUP_UNVERIFIED'
+  | 'LEGACY_HUB_QUIESCENCE_UNVERIFIED'
   | 'NATIVE_AGENT_NOT_INSTALLED'
   | 'NATIVE_AGENT_LOGON_ONLY'
   | 'NATIVE_AGENT_PRELOGIN_IDENTITY_UNVERIFIED'
@@ -1251,6 +1273,9 @@ export function assessWindowsUnattendedRebootReadiness(
   } else if(evidence.systemHubStartupEnabled!==true ||
       !['ready','running'].includes(evidence.systemHubTaskState??'')){
     blockers.push('SYSTEM_HUB_BOOT_STARTUP_UNVERIFIED');
+  }
+  if(evidence.systemHubInstalled&&!['disabled','not-installed'].includes(evidence.legacyHubTaskState??'')){
+    blockers.push('LEGACY_HUB_QUIESCENCE_UNVERIFIED');
   }
   if(!evidence.agent.installed) {
     blockers.push('NATIVE_AGENT_NOT_INSTALLED');
@@ -1304,6 +1329,7 @@ export async function inspectWindowsUnattendedRebootReadiness(
     systemHubInstalled:boot.installed,
     systemHubTaskState:boot.state,
     systemHubStartupEnabled:boot.startupEnabled,
+    legacyHubTaskState:boot.userTaskState,
     agent:probe.agent,
     autoAdminLogon:probe.autoAdminLogon,
   });
