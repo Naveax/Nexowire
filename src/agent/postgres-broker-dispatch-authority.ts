@@ -65,13 +65,13 @@ export class PostgresBrokerDispatchAuthority implements ExternalBrokerDispatchAu
   private readonly provenance:IndependentProvenanceCheck;
   private readonly observe:(request:BrokerDispatchRequest)=>Promise<ProtectedBrokerEvidence|undefined>;
   private readonly verifyRevoke:(request:DispatchRevokeRequest)=>Promise<boolean>;
-  private readonly verifyDrain:(request:DispatchRevokeRequest)=>Promise<boolean>;
+  private readonly verifyDrain:(request:DispatchRevokeRequest,signal?:AbortSignal)=>Promise<boolean>;
   constructor(config:{pool:DispatchStorePool;authorityId:string;privateKeyPem:string;
     verifyProvenance:IndependentProvenanceCheck;
     readProtectedBroker:(request:BrokerDispatchRequest)=>Promise<ProtectedBrokerEvidence|undefined>;
     verifyOwnerRevocation:(request:DispatchRevokeRequest)=>Promise<boolean>;
     /** Zero pending DB claims alone is not proof that kernel processes drained. */
-    verifyNativeDrain:(request:DispatchRevokeRequest)=>Promise<boolean>;
+    verifyNativeDrain:(request:DispatchRevokeRequest,signal?:AbortSignal)=>Promise<boolean>;
     permitMs?:number;drainTimeoutMs?:number;requireCredentialFence?:boolean;
     requireNativeCompletion?:boolean;nativeCompletion?:ProtectedNativeCompletionConfig}){
     this.authorityId=uuid.parse(config.authorityId);
@@ -304,6 +304,22 @@ export class PostgresBrokerDispatchAuthority implements ExternalBrokerDispatchAu
       await tx.db.query("UPDATE core_dispatch.claims SET state='RELEASED' WHERE request_id=$1",[op.requestId]);
     });
   }
+  /** Read-only native witness, never a retry of the revoked operation.
+   * Bound a hung observer while the grant/claim rows are locked. A late
+   * true response after the deadline cannot authorize a REVOKED receipt. */
+  private async nativeDrainBefore(op:DispatchRevokeRequest,deadline:bigint):Promise<boolean>{
+    const remaining=deadline-process.hrtime.bigint();
+    if(remaining<=0n)return false;
+    const budget=Math.max(1,Math.floor(Number(remaining)/1000000));
+    const ctrl=new AbortController();let timer:ReturnType<typeof setTimeout>|undefined;
+    try{
+      const ok=await Promise.race([
+        Promise.resolve().then(()=>this.verifyDrain(op,ctrl.signal)).catch(()=>false),
+        new Promise<boolean>(resolve=>{timer=setTimeout(()=>{ctrl.abort();resolve(false)},budget)})
+      ]);
+      return ok===true&&!ctrl.signal.aborted&&process.hrtime.bigint()<deadline;
+    }finally{clearTimeout(timer);ctrl.abort();}
+  }
   async revokeAndDrain(value:DispatchRevokeRequest,nonce:string):Promise<DispatchClaim>{
     const op=Object.freeze(revokeSchema.parse(value));nonceSchema.parse(nonce);
     if(op.expectedGeneration>=Number.MAX_SAFE_INTEGER)fail('DISPATCH_STORE_GENERATION_EXHAUSTED');
@@ -350,10 +366,9 @@ export class PostgresBrokerDispatchAuthority implements ExternalBrokerDispatchAu
           "WHERE authority_id=$1 AND device_id=$2 AND state='COMMITTED'",
           [this.authorityId,op.deviceId])).rows[0];
         if(integer(pending?.pending)>0)return false;
-        let nativeDrained=false;
-        try{nativeDrained=await this.verifyDrain(op)}catch{}
-        if(nativeDrained!==true)return false;
+        if(!await this.nativeDrainBefore(op,deadline))return false;
         await this.trusted();
+        if(process.hrtime.bigint()>=deadline)return false;
         await tx.db.query("UPDATE core_dispatch.grants SET state='REVOKED' "+
           'WHERE authority_id=$1 AND device_id=$2',[this.authorityId,op.deviceId]);
         return true;
