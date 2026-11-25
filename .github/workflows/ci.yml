@@ -166,6 +166,7 @@ jobs:
           node --test --import tsx --test-concurrency=1 \
             test/ai03-control-plane-authority.test.ts \
             test/ai04/atomic-mutation-authority.test.ts \
+            test/ai04/recovery-authorization-use-ledger.test.ts \
             test/ai05/atomic-boundaries.test.ts \
             test/ai05/migration-chain.test.ts \
             test/idempotency/hub-capacity-recovery.test.ts \
