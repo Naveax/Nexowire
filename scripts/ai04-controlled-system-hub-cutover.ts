@@ -434,13 +434,26 @@ function validateRecoveredScript():void{
   verifyWindowsPrivateAcl(RECOVERY);
   verifyWindowsPrivateAcl(JOURNAL);
 }
+/**
+ * The legacy cutover recovery artifact does not consume the independently
+ * signed recovery authority or machine updater activation fence. Until those
+ * real dependencies are composed, neither arming a new recovery task nor
+ * invoking the legacy rollback artifact is an admissible production action.
+ * This is deliberately a denial, not a verifier or configurable bypass.
+ * Existing on-disk recovery tasks require separate authorized reconciliation.
+ */
+function requireIndependentRecoveryAuthority():void{
+  throw new Error('AI04_SIGNED_SQLITE_RECOVERY_AUTHORITY_REQUIRED');
+}
 function runRollbackScript():void{
+  requireIndependentRecoveryAuthority();
   validateRecoveredScript();
   runPS('& '+psLiteral(RECOVERY),SYSTEM_HUB_ROLLBACK_TIMEOUT_MS);
 }
 export async function controlledSystemHubCutover(
   trustedCli:string,
 ):Promise<{booted:true;rollbackArmed:true;physicalRebootAccepted:false;pendingPhysicalAcceptance:true}>{
+  requireIndependentRecoveryAuthority();
   ensureElevated();
   const marker='Nexowire pre-logon Hub install '+randomUUID();
   const journal:Journal={
