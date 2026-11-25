@@ -38,11 +38,14 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - name: Exact startup, release fence and actual isolated Agent shutdown
-        shell: bash
+        shell: pwsh
         env:
           EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
-          set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
-          node --test --test-reporter=tap --import tsx --test-concurrency=1 test/mcp/ai07-protected-shutdown.test.ts test/ai05/protected-helper-startup-rollback.test.ts | tee "$RUNNER_TEMP/ai07-shutdown.tap"
-          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/ai07-shutdown.tap" 8
+          $ErrorActionPreference = 'Stop'
+          if ((git rev-parse HEAD).Trim() -ne $env:EXPECTED_HEAD) { throw 'AI07_HEAD_MISMATCH' }
+          $tap = Join-Path $env:RUNNER_TEMP 'ai07-shutdown.tap'
+          node --test --test-reporter=tap --import tsx --test-concurrency=1 test/mcp/ai07-protected-shutdown.test.ts test/ai05/protected-helper-startup-rollback.test.ts | Tee-Object -FilePath $tap
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/ci/assert-tap-summary.mjs $tap 8
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
