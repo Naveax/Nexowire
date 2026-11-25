@@ -1,5 +1,3 @@
-import {spawnSync} from 'node:child_process';
-
 /**
  * The existing SYSTEM Hub and Highest Broker launchers share this admission
  * boundary. It does not launch a process, repair ACLs, delete a fence, or
@@ -99,25 +97,14 @@ if(-not $nxRecoveryAbsent){throw 'MACHINE_STARTUP_HUB_RECOVERY_AUTHORITY_REQUIRE
  * changes a task. This does not authorize a migration or legacy recovery. */
 export function assertMachineStartupStateReadOnly():void{
   if(process.platform!=='win32')throw Error('MACHINE_STARTUP_WINDOWS_ONLY');
-  const script=["$ErrorActionPreference='Stop'",MACHINE_STARTUP_ADMISSION_PS,
-    "[Console]::WriteLine('MACHINE_STARTUP_CLEAN_STATE_VERIFIED')"].join('\r\n');
-  const result=spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',[
-    '-NoLogo','-NoProfile','-NonInteractive',
-    '-EncodedCommand',Buffer.from(script,'utf16le').toString('base64'),
-  ],{
-    shell:false,windowsHide:true,cwd:'C:\\Windows\\System32',encoding:'utf8',
-    stdio:['ignore','pipe','pipe'],timeout:20000,maxBuffer:128*1024,
-    env:{SystemRoot:'C:\\Windows',windir:'C:\\Windows',
-      ComSpec:'C:\\Windows\\System32\\cmd.exe',
-      PATH:'C:\\Windows\\System32;C:\\Windows',
-      PSModulePath:'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules'},
-  });
-  if(result.error||result.signal||result.status!==0||
-     result.stdout.trim()!=='MACHINE_STARTUP_CLEAN_STATE_VERIFIED'){
-    throw Error('MACHINE_STARTUP_STATE_UNVERIFIED');
-  }
+  // The existing Job guardian only observes members of its own Job. It
+  // cannot attest an external Schedule.Service COM activation or private
+  // desktop identity. Deny standalone installer/start preflight rather
+  // than launch on the owner desktop or substitute a generic executor.
+  // The already canonical scheduled launcher retains its inline read-only
+  // checks. Neither path provides a forward or recovery grant.
+  throw Error('MACHINE_STARTUP_NATIVE_ISOLATION_REQUIRED');
 }
-
 /** No positive installed-guard or forward grant issuer is supplied by
  * #1352. Deny online admission for BOTH guarded and unguarded installations,
  * before staging, ACL changes or detached script creation. Not a rollback

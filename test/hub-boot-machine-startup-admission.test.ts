@@ -6,7 +6,7 @@ import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {
   MACHINE_STARTUP_ADMISSION_PS,MACHINE_STARTUP_EVIDENCE_PS,
-  assertOnlineMachineCutoverAdmission,assertNewSystemHubCutoverAdmission,
+  assertOnlineMachineCutoverAdmission,assertNewSystemHubCutoverAdmission,assertMachineStartupStateReadOnly,
 } from '../src/security/windows-machine-startup-admission.js';
 
 test('online cutover admission is denied without an independent installed guard and forward authority',()=>{
@@ -132,4 +132,11 @@ test('Windows COM failure classifier accepts only the exact not-found HRESULT',{
       "Test-NxRecoveryTaskNotFound ([Exception]::new('wrapper',[Runtime.InteropServices.COMException]::new('fixture',"+code+")))"),
   ].join('\n');
   assert.deepEqual(runPS(script).split(/\r?\n/),['True','False','False']);
+});
+
+test('standalone startup preflight denies without a protected native isolation provider',()=>{
+  assert.throws(()=>assertMachineStartupStateReadOnly(),process.platform==='win32'?
+    /MACHINE_STARTUP_NATIVE_ISOLATION_REQUIRED/:/MACHINE_STARTUP_WINDOWS_ONLY/);
+  const source=readFileSync(new URL('../src/security/windows-machine-startup-admission.ts',import.meta.url),'utf8');
+  assert.doesNotMatch(source,/node:child_process|spawnSync\(|launchWindowsJob\(/);
 });

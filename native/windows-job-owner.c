@@ -1,6 +1,9 @@
 // Nexowire Windows Job Object owner. Build as a console subsystem EXE.
 // No native process is resumed unless its Job assignment is proven.
 #define WIN32_LEAN_AND_MEAN
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0601
+#endif
 #include <windows.h>
 #include <shellapi.h>
 #include <stdio.h>
@@ -220,6 +223,125 @@ static void diagnostic(const wchar_t *stage) {
   fwprintf(stderr,L"NEXOWIRE_WINJOB_ERROR %ls win32=%lu\n",stage,GetLastError());
 }
 
+/* Managed Node protocol v6 reuses the existing guardian, unnamed Job,
+ * and independent suspended-root verification. A cancellation marker
+ * can only STOP this Job; it is never an admission or recovery grant.
+ * Terminal evidence is local guardian observation, not a signed observer
+ * receipt and not evidence about out-of-Job COM or shell brokers. */
+static BOOL managed_session_trusted(HANDLE parent, DWORD parentPid, DWORD *session){
+  DWORD parentSession=0, tokenSession=0, bytes=0;
+  FILETIME pc,pe,pk,pu,gc,ge,gk,gu;
+  HANDLE token=NULL,parentToken=NULL;
+  BOOL trusted=FALSE;
+  if(!parent || WaitForSingleObject(parent,0)!=WAIT_TIMEOUT ||
+     GetProcessId(parent)!=parentPid ||
+     !GetProcessTimes(parent,&pc,&pe,&pk,&pu) ||
+     !GetProcessTimes(GetCurrentProcess(),&gc,&ge,&gk,&gu) ||
+     CompareFileTime(&pc,&gc)>0 ||
+     !ProcessIdToSessionId(GetCurrentProcessId(),session) ||
+     !ProcessIdToSessionId(parentPid,&parentSession) || parentSession!=*session)
+    return FALSE;
+  if(!OpenProcessToken(GetCurrentProcess(),TOKEN_QUERY,&token))return FALSE;
+  if(!GetTokenInformation(token,TokenSessionId,&tokenSession,sizeof(tokenSession),&bytes)
+      || tokenSession!=*session)goto done;
+  BYTE user[sizeof(TOKEN_USER)+SECURITY_MAX_SID_SIZE]={0};
+  BYTE owner[sizeof(TOKEN_USER)+SECURITY_MAX_SID_SIZE]={0};
+  DWORD ownerSession=0;
+  TOKEN_ELEVATION ownerElevation={0};
+  if(!GetTokenInformation(token,TokenUser,user,sizeof(user),&bytes) ||
+     !OpenProcessToken(parent,TOKEN_QUERY,&parentToken) ||
+     !GetTokenInformation(parentToken,TokenUser,owner,sizeof(owner),&bytes) ||
+     !GetTokenInformation(parentToken,TokenSessionId,&ownerSession,sizeof(ownerSession),&bytes) ||
+     !GetTokenInformation(parentToken,TokenElevation,&ownerElevation,sizeof(ownerElevation),&bytes) ||
+     ownerSession!=*session || !ownerElevation.TokenIsElevated ||
+     !EqualSid(((TOKEN_USER*)user)->User.Sid,((TOKEN_USER*)owner)->User.Sid))
+    goto done;
+  // Session 0 requires the actual LocalSystem identity. This is not proof
+  // of private desktop placement or isolation of external COM processes.
+  if(*session==0 && !IsWellKnownSid(((TOKEN_USER*)user)->User.Sid,WinLocalSystemSid))
+    goto done;
+  trusted=TRUE;
+done:
+  if(parentToken)CloseHandle(parentToken);
+  CloseHandle(token);
+  return trusted;
+}
+
+static BOOL create_managed_root(wchar_t *cmd,const wchar_t *cwd,PROCESS_INFORMATION *pi){
+  STARTUPINFOEXW info={0};
+  info.StartupInfo.cb=sizeof(info);
+  info.StartupInfo.dwFlags=STARTF_USESTDHANDLES;
+  // Only three explicit, duplicated pipe handles cross into the root.
+  // Never inherit an unrelated handle owned by the guardian or caller.
+  HANDLE pipes[3]={NULL,NULL,NULL};
+  const DWORD ids[3]={STD_INPUT_HANDLE,STD_OUTPUT_HANDLE,STD_ERROR_HANDLE};
+  SIZE_T bytes=0;
+  BOOL ready=FALSE, created=FALSE;
+  for(int i=0;i<3;i++){
+    HANDLE source=GetStdHandle(ids[i]);
+    if(!source || source==INVALID_HANDLE_VALUE || GetFileType(source)!=FILE_TYPE_PIPE ||
+       !DuplicateHandle(GetCurrentProcess(),source,GetCurrentProcess(),&pipes[i],
+         0,TRUE,DUPLICATE_SAME_ACCESS))goto cleanup;
+  }
+  info.StartupInfo.hStdInput=pipes[0];
+  info.StartupInfo.hStdOutput=pipes[1];
+  info.StartupInfo.hStdError=pipes[2];
+  (void)InitializeProcThreadAttributeList(NULL,1,0,&bytes);
+  if(!bytes)goto cleanup;
+  info.lpAttributeList=(LPPROC_THREAD_ATTRIBUTE_LIST)HeapAlloc(GetProcessHeap(),0,bytes);
+  if(!info.lpAttributeList)goto cleanup;
+  if(!InitializeProcThreadAttributeList(info.lpAttributeList,1,0,&bytes))goto cleanup;
+  ready=TRUE;
+  if(!UpdateProcThreadAttribute(info.lpAttributeList,0,PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+       pipes,sizeof(pipes),NULL,NULL))goto cleanup;
+  // Inherited session/desktop is NOT a private desktop attestation.
+  created=CreateProcessW(NULL,cmd,NULL,NULL,TRUE,
+    CREATE_SUSPENDED|CREATE_NO_WINDOW|EXTENDED_STARTUPINFO_PRESENT,NULL,cwd,&info.StartupInfo,pi);
+cleanup:
+  if(ready)DeleteProcThreadAttributeList(info.lpAttributeList);
+  if(info.lpAttributeList)HeapFree(GetProcessHeap(),0,info.lpAttributeList);
+  for(int i=0;i<3;i++)if(pipes[i])CloseHandle(pipes[i]);
+  return created;
+}
+
+static BOOL cancellation_pending(const wchar_t *file){
+  DWORD a=GetFileAttributesW(file);
+  if(a!=INVALID_FILE_ATTRIBUTES)return TRUE;
+  // Unknown or inaccessible control state also cancels; never permits work.
+  return GetLastError()!=ERROR_FILE_NOT_FOUND;
+}
+
+static BOOL terminate_and_observe_empty(HANDLE job,DWORD reason){
+  if(!TerminateJobObject(job,reason))return FALSE;
+  ULONGLONG start=GetTickCount64();
+  do{
+    JOBOBJECT_BASIC_ACCOUNTING_INFORMATION a={0};
+    if(!QueryInformationJobObject(job,JobObjectBasicAccountingInformation,&a,sizeof(a),NULL))
+      return FALSE;
+    if(a.ActiveProcesses==0)return TRUE;
+    Sleep(25);
+  }while(GetTickCount64()-start<5000);
+  return FALSE;
+}
+
+static BOOL publish_managed_terminal(const wchar_t *file,DWORD pid,
+    unsigned long long ticks,DWORD reason,DWORD rootExit){
+  // Exclusive, flushed result. No result means UNKNOWN even if guardian
+  // exited. This local result is not externally authenticated.
+  char message[160]={0};
+  int size=snprintf(message,sizeof(message),"NWJOB6 %lu %llu %lu %lu %lu\n",
+    (unsigned long)pid,ticks,(unsigned long)GetCurrentProcessId(),
+    (unsigned long)reason,(unsigned long)rootExit);
+  if(size<=0||(size_t)size>=sizeof(message))return FALSE;
+  HANDLE output=CreateFileW(file,GENERIC_WRITE,0,NULL,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,NULL);
+  if(output==INVALID_HANDLE_VALUE)return FALSE;
+  DWORD written=0;
+  BOOL result=WriteFile(output,message,(DWORD)size,&written,NULL) &&
+    written==(DWORD)size && FlushFileBuffers(output);
+  CloseHandle(output);
+  return result;
+}
+
 int main(void){
   int argc=0;
   wchar_t **argv=CommandLineToArgvW(GetCommandLineW(),&argc);
@@ -232,35 +354,60 @@ int main(void){
   }
   if(!argv || argc<11 || wcscmp(argv[1],L"--status") ||
      wcscmp(argv[3],L"--cwd") || wcscmp(argv[5],L"--parent") ||
-     wcscmp(argv[7],L"--release") || wcscmp(argv[9],L"--")){
+     wcscmp(argv[7],L"--release")){
     fwprintf(stderr,L"NEXOWIRE_WINJOB_ERROR invalid_arguments\n");
     return 64;
   }
+  int commandIndex=10;
+  BOOL managed=FALSE;
+  DWORD runtimeTimeout=0;
+  if(!wcscmp(argv[9],L"--lifecycle-v6")){
+    if(argc<13 || wcscmp(argv[11],L"--") || !argv[10][0])return 64;
+    for(const wchar_t *digit=argv[10];*digit;digit++)
+      if(*digit<L'0'||*digit>L'9')return 64;
+    wchar_t *timeoutEnd=NULL;
+    unsigned long budget=wcstoul(argv[10],&timeoutEnd,10);
+    if(*timeoutEnd || budget>600000)return 64;
+    runtimeTimeout=(DWORD)budget;
+    managed=TRUE;
+    commandIndex=12;
+  }else if(wcscmp(argv[9],L"--"))return 64;
   const wchar_t *statusPath=argv[2];
   const wchar_t *cwd=wcscmp(argv[4],L"-")==0?NULL:argv[4];
   const wchar_t *releasePath=argv[8];
-  if(!statusPath[0]||!releasePath[0]||!argv[10][0])return 64;
+  if(!statusPath[0]||!releasePath[0]||!argv[commandIndex][0])return managed ? 512 : 64;
+  wchar_t cancelPath[32768]={0}, terminalPath[32768]={0};
+  if(managed && (wcslen(statusPath)>32000 ||
+      swprintf(cancelPath,32768,L"%ls.cancel",statusPath)<0 ||
+      swprintf(terminalPath,32768,L"%ls.terminal",statusPath)<0))return managed ? 512 : 64;
   wchar_t *parentEnd=NULL;
   unsigned long parentPid=wcstoul(argv[6],&parentEnd,10);
-  if(!argv[6][0]||*parentEnd)return 64;
+  if(!argv[6][0]||*parentEnd)return managed ? 512 : 64;
   // No Job is created, handle published, or root resumed on missing HIGH
   // token/elevation/mandatory no-write-up or failed process DACL readback.
-  if(!enforce_guardian_isolation())return 79;
+  if(!enforce_guardian_isolation())return managed ? 512 : 79;
   // Guardian's handle to volatile parent prevents PID reuse while it lives.
   // Volatile sessions watch Agent; durable sidecars watch their own worker.
   // Neither mode may depend solely on ancestry after Agent exit.
   HANDLE parent=parentPid?OpenProcess(SYNCHRONIZE|PROCESS_QUERY_LIMITED_INFORMATION,
     FALSE,parentPid):NULL;
-  if(parentPid&&!parent){diagnostic(L"parent_open");return 70;}
+  if(parentPid&&!parent){diagnostic(L"parent_open");return managed ? 512 : 70;}
+  DWORD session=0;
+  if(managed && (!managed_session_trusted(parent,(DWORD)parentPid,&session) ||
+      cancellation_pending(cancelPath))){
+    diagnostic(L"managed_parent_session_or_cancel");
+    if(parent)CloseHandle(parent);
+    return managed ? 512 : 79;
+  }
   size_t total=1;
-  for(int i=10;i<argc;i++)total+=wcslen(argv[i])*2+4;
-  if(total>32760){fwprintf(stderr,L"NEXOWIRE_WINJOB_ERROR command_too_long\n");return 64;}
+  for(int i=commandIndex;i<argc;i++)total+=wcslen(argv[i])*2+4;
+  if(total>32760){fwprintf(stderr,L"NEXOWIRE_WINJOB_ERROR command_too_long\n");return managed ? 512 : 64;}
   wchar_t *cmd=(wchar_t*)calloc(total,sizeof(wchar_t));
-  if(!cmd)return 70;
+  if(!cmd)return managed ? 512 : 70;
   wchar_t *out=cmd; const wchar_t *end=cmd+total-1;
-  for(int i=10;i<argc;i++){
-    if(i>10){if(out>=end){free(cmd);return 64;}*out++=L' ';}
-    if(!quote_arg(argv[i],&out,end)){free(cmd);return 64;}
+  for(int i=commandIndex;i<argc;i++){
+    if(i>commandIndex){if(out>=end){free(cmd);return managed ? 512 : 64;}*out++=L' ';}
+    if(!quote_arg(argv[i],&out,end)){free(cmd);return managed ? 512 : 64;}
   }
   *out=0;
 
@@ -269,12 +416,12 @@ int main(void){
   // the separate boundary against MEDIUM-integrity PROCESS_DUP_HANDLE.
   // A same-HIGH attacker can still duplicate and retain this handle.
   HANDLE job=CreateJobObjectW(NULL,NULL);
-  if(!job){diagnostic(L"create_job");free(cmd);return 70;}
+  if(!job){diagnostic(L"create_job");free(cmd);return managed ? 512 : 70;}
   JOBOBJECT_EXTENDED_LIMIT_INFORMATION limit={0};
   limit.BasicLimitInformation.LimitFlags=JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
   if(!SetInformationJobObject(job,JobObjectExtendedLimitInformation,
        &limit,sizeof(limit))){
-    diagnostic(L"set_limit");CloseHandle(job);free(cmd);return 70;
+    diagnostic(L"set_limit");CloseHandle(job);free(cmd);return managed ? 512 : 70;
   }
   STARTUPINFOW si={0};si.cb=sizeof(si);
   si.dwFlags=STARTF_USESTDHANDLES;
@@ -283,41 +430,67 @@ int main(void){
   si.hStdError=GetStdHandle(STD_ERROR_HANDLE);
   PROCESS_INFORMATION pi={0};
   // Inherited stdout/stderr/stdin are Node's pipes to this helper.
-  BOOL created=CreateProcessW(NULL,cmd,NULL,NULL,TRUE,
-    CREATE_SUSPENDED|CREATE_NO_WINDOW,NULL,cwd,&si,&pi);
+  BOOL created=managed ? create_managed_root(cmd,cwd,&pi) :
+    CreateProcessW(NULL,cmd,NULL,NULL,TRUE,
+      CREATE_SUSPENDED|CREATE_NO_WINDOW,NULL,cwd,&si,&pi);
   free(cmd);
-  if(!created){diagnostic(L"create_process");CloseHandle(job);return 70;}
+  if(!created){diagnostic(L"create_process");CloseHandle(job);return managed ? 512 : 70;}
   if(!AssignProcessToJobObject(job,pi.hProcess)){
     diagnostic(L"assign_job");
     TerminateProcess(pi.hProcess,71);
     CloseHandle(pi.hThread);CloseHandle(pi.hProcess);CloseHandle(job);
-    return 71;
+    return managed ? 512 : 71;
   }
   BOOL inside=FALSE;
   if(!IsProcessInJob(pi.hProcess,job,&inside)||!inside){
     diagnostic(L"verify_job");
     TerminateJobObject(job,72);
     CloseHandle(pi.hThread);CloseHandle(pi.hProcess);CloseHandle(job);
-    return 72;
+    return managed ? 512 : 72;
+  }
+  DWORD childSession=0;
+  if(managed && (!ProcessIdToSessionId(pi.dwProcessId,&childSession) || childSession!=session)){
+    (void)terminate_and_observe_empty(job,79);
+    CloseHandle(pi.hThread);CloseHandle(pi.hProcess);CloseHandle(job);
+    if(parent)CloseHandle(parent);
+    return managed ? 512 : 79;
   }
   FILETIME c={0},e={0},k={0},u={0};
   if(!GetProcessTimes(pi.hProcess,&c,&e,&k,&u)){
     diagnostic(L"process_times");
     TerminateJobObject(job,73);
     CloseHandle(pi.hThread);CloseHandle(pi.hProcess);CloseHandle(job);
-    return 73;
+    return managed ? 512 : 73;
   }
   unsigned long long ticks=((unsigned long long)c.dwHighDateTime<<32)|c.dwLowDateTime;
   wchar_t message[128]={0};
-  int length=swprintf(message,128,L"NWJOB5 %lu %llu %llu\n",pi.dwProcessId,ticks,
+  int length=0;
+  if(managed){
+    FILETIME gc,ge,gk,gu;
+    if(!GetProcessTimes(GetCurrentProcess(),&gc,&ge,&gk,&gu)){
+      (void)terminate_and_observe_empty(job,79);
+      CloseHandle(pi.hThread);CloseHandle(pi.hProcess);CloseHandle(job);
+      if(parent)CloseHandle(parent);
+      return 512;
+    }
+    unsigned long long guardianTicks=((unsigned long long)gc.dwHighDateTime<<32)|gc.dwLowDateTime;
+    length=swprintf(message,128,L"NWJOB6 %lu %llu %llu %llu %lu\n",pi.dwProcessId,ticks,
+      (unsigned long long)(uintptr_t)job,guardianTicks,(unsigned long)session);
+  }else length=swprintf(message,128,L"NWJOB5 %lu %llu %llu\n",pi.dwProcessId,ticks,
     (unsigned long long)(uintptr_t)job);
+  if(length<=0 || length>=128){
+    (void)terminate_and_observe_empty(job,74);
+    CloseHandle(pi.hThread);CloseHandle(pi.hProcess);CloseHandle(job);
+    if(parent)CloseHandle(parent);
+    return managed ? 512 : 74;
+  }
   HANDLE marker=CreateFileW(statusPath,GENERIC_WRITE,0,NULL,CREATE_NEW,
     FILE_ATTRIBUTE_NORMAL,NULL);
   if(marker==INVALID_HANDLE_VALUE){
     diagnostic(L"status_create");
     TerminateJobObject(job,74);
     CloseHandle(pi.hThread);CloseHandle(pi.hProcess);CloseHandle(job);
-    return 74;
+    return managed ? 512 : 74;
   }
   char utf8[128]={0};DWORD count=0;
   int size=WideCharToMultiByte(CP_UTF8,0,message,length,utf8,sizeof(utf8),NULL,NULL);
@@ -329,7 +502,7 @@ int main(void){
     DeleteFileW(statusPath);
     TerminateJobObject(job,75);
     CloseHandle(pi.hThread);CloseHandle(pi.hProcess);CloseHandle(job);
-    return 75;
+    return managed ? 512 : 75;
   }
   // The suspended root MUST remain suspended until the Agent independently
   // duplicates this exact unnamed Job handle from the guardian and verifies
@@ -337,10 +510,11 @@ int main(void){
   // A plaintext marker never authorizes process execution on its own.
   BOOL released=FALSE;
   for(int i=0;i<400;i++){
+    if(parent && WaitForSingleObject(parent,0)!=WAIT_TIMEOUT)break;
+    if(managed && cancellation_pending(cancelPath))break;
     HANDLE gate=CreateFileW(releasePath,GENERIC_READ,FILE_SHARE_READ,NULL,
       OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
     if(gate!=INVALID_HANDLE_VALUE){CloseHandle(gate);released=TRUE;break;}
-    if(parent && WaitForSingleObject(parent,0)==WAIT_OBJECT_0)break;
     Sleep(25);
   }
   if(!released){
@@ -348,7 +522,7 @@ int main(void){
     TerminateJobObject(job,76);
     CloseHandle(pi.hThread);CloseHandle(pi.hProcess);CloseHandle(job);
     if(parent)CloseHandle(parent);
-    return 76;
+    return managed ? 512 : 76;
   }
   // A release marker alone does not allow the root to resume. New equal-HIGH
   // PROCESS_DUP_HANDLE opens must be denied BEFORE the first side effect.
@@ -357,40 +531,55 @@ int main(void){
     TerminateJobObject(job,79);
     CloseHandle(pi.hThread);CloseHandle(pi.hProcess);CloseHandle(job);
     if(parent)CloseHandle(parent);
-    return 79;
+    return managed ? 512 : 79;
   }
-  if(ResumeThread(pi.hThread)==(DWORD)-1){
+  if((parent && WaitForSingleObject(parent,0)!=WAIT_TIMEOUT) ||
+     (managed && cancellation_pending(cancelPath)) || ResumeThread(pi.hThread)!=1){
     diagnostic(L"resume");
     TerminateJobObject(job,76);
     CloseHandle(pi.hThread);CloseHandle(pi.hProcess);CloseHandle(job);
-    return 76;
+    return managed ? 512 : 76;
   }
   CloseHandle(pi.hThread);
   // A Job handle is NOT signaled on ordinary last-process exit. Query the
   // accounting instead, and also watch the owning Agent for volatile tasks.
+  DWORD reason=0; // 0 natural, 1 requested stop, 2 timeout, 3 owner loss
+  BOOL empty=FALSE;
+  ULONGLONG began=GetTickCount64();
   for(;;){
-    if(parent && WaitForSingleObject(parent,0)==WAIT_OBJECT_0){
-      // Do not assume the guardian owns the only Job handle: the named Job
-      // may temporarily be opened by an independent verifier. Explicitly
-      // terminate members even when another query handle remains open.
-      TerminateJobObject(job,78);
-      CloseHandle(job);CloseHandle(pi.hProcess);CloseHandle(parent);return 78;
-    }
     JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accounting={0};
     if(!QueryInformationJobObject(job,JobObjectBasicAccountingInformation,
            &accounting,sizeof(accounting),NULL)){
       diagnostic(L"job_accounting");
-      TerminateJobObject(job,77);
-      CloseHandle(job);CloseHandle(pi.hProcess);
-      if(parent)CloseHandle(parent);
-      return 77;
+      (void)terminate_and_observe_empty(job,77);
+      break;
     }
-    if(accounting.ActiveProcesses==0)break;
+    if(accounting.ActiveProcesses==0){empty=TRUE;break;}
+    if(parent && WaitForSingleObject(parent,0)!=WAIT_TIMEOUT)reason=3;
+    else if(managed && cancellation_pending(cancelPath))reason=1;
+    else if(managed && runtimeTimeout && GetTickCount64()-began>=runtimeTimeout)reason=2;
+    if(reason){
+      DWORD terminationCode=reason==1?125:reason==2?124:78;
+      // Terminate through our retained exact Job HANDLE, then query its
+      // accounting. Closing/killing the guardian is not cleanup evidence.
+      empty=terminate_and_observe_empty(job,terminationCode);
+      break;
+    }
     Sleep(25);
   }
-  DWORD result=1;GetExitCodeProcess(pi.hProcess,&result);
+  DWORD result=1;
+  BOOL terminal=empty && WaitForSingleObject(pi.hProcess,0)==WAIT_OBJECT_0 &&
+    GetExitCodeProcess(pi.hProcess,&result);
+  if(managed && terminal)
+    terminal=publish_managed_terminal(terminalPath,pi.dwProcessId,ticks,reason,result);
   CloseHandle(pi.hProcess);
   CloseHandle(job);
   if(parent)CloseHandle(parent);
+  // All managed protocol errors use a disjoint exit code. A root cannot
+  // forge a valid local completion merely by precreating the terminal file.
+  if(!terminal)return managed ? 512 : 77;
+  if(reason==1)return 125;
+  if(reason==2)return 124;
+  if(reason==3)return 78;
   return result<=255?(int)result:1;
 }
