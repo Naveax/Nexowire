@@ -103,7 +103,11 @@ jobs:
             test/delegated/k19/p006-receiver-ack-reference.test.ts \
             test/delegated/pool-k17/markdown-anchors.test.ts \
             test/delegated/pool-k19/audit-physical-pass-labels.test.ts \
-            > "$RUNNER_TEMP/nw-delegated-source-transfer.tap"
+            > "$RUNNER_TEMP/nw-delegated-source-transfer.tap" || {
+              test_status=$?
+              cat "$RUNNER_TEMP/nw-delegated-source-transfer.tap"
+              exit "$test_status"
+            }
           cat "$RUNNER_TEMP/nw-delegated-source-transfer.tap"
           node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/nw-delegated-source-transfer.tap" 409
       - name: Verify denied-admin 403 body privacy and retry status on actual source
