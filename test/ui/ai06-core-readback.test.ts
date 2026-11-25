@@ -201,10 +201,14 @@ test('AI-06 cross-tab/reload: shared uncertainty survives lost ACK and stale car
   const action=first.performCoreAction(d.id,'consent',first.row);
   await new Promise<void>(resolve=>setImmediate(resolve));
   assert.equal(first.posts.length,1);
+  const inFlightCapture=second.captureCoreFences();
   await second.performCoreAction(d.id,'consent',second.row);
   await second.performCoreAction(d.id,'disable',second.row);
   assert.equal(second.posts.length,0);
   release(Response.json({error:'PRIVATE_SENTINEL'},{status:503}));await action;
+  const earlyPending=device({physicalConsole:{deviceReady:true,localEnrolled:false,enrollmentRequested:true,active:false}});
+  await second.reconcileCoreReadback(snapshot([earlyPending]),inFlightCapture);
+  assert.equal(shared.records.size,1,'GET started during earlier in-flight phase cannot clear settled marker');
   const reloaded=fixture(d,async()=>Response.json({}),shared);
   await reloaded.performCoreAction(d.id,'consent',reloaded.row);
   assert.equal(reloaded.posts.length,0);
