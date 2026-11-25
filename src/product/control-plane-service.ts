@@ -342,15 +342,25 @@ export class ControlPlaneService {
       folders: folders.map(({id, name}) => ({id, name})),
       autoSelectDevices,
       devices: await Promise.all(devices.map(async (device) => {
-        const [lease, maintenance, bridgePreference, remoteAuthorization,coreMutationRevision] = await Promise.all([
+        // Do not pair a stale device card with a newer CAS token. Revision
+        // must bracket the relevant state reads and the original list row
+        // must still describe the same owner/device/readiness.
+        const revisionBefore=await this.confirmDashboardMutationRevision(identity,device.id);
+        const [lease, maintenance, bridgePreference, remoteAuthorization,currentDevice] = await Promise.all([
           this.store.getRootModeLease(device.id),
           this.store.getDeviceMaintenancePreference(device.id),
           this.store.getDeviceBridgePreference(device.id),
           // Read-only owner-scoped D1 snapshot. Failure must not infer revoked
           // or claim local STOP/drain. Legacy stores report unknown.
           Promise.resolve().then(()=>this.store.readRemoteAuthorizationStatus?.(device.id,account.id)??null).catch(()=>null),
-          Promise.resolve().then(()=>this.store.dashboardMutations?.revision(device.id,account.id)??null).catch(()=>null),
+          revisionBefore===null?Promise.resolve(null):this.store.getDevice(device.id),
         ]);
+        const revisionAfter=revisionBefore===null?null:await this.confirmDashboardMutationRevision(identity,device.id);
+        const matchingDevice=!!currentDevice&&currentDevice.ownerAccountId===account.id&&
+          currentDevice.credentialHash===device.credentialHash&&currentDevice.accessMode===device.accessMode&&
+          currentDevice.online===device.online&&currentDevice.platform===device.platform&&
+          currentDevice.privilegeMode===device.privilegeMode&&currentDevice.adminBridgeReady===device.adminBridgeReady;
+        const coreMutationRevision=matchingDevice&&revisionBefore===revisionAfter?revisionAfter:null;
         const unexpiredLease =
           lease?.ownerAccountId === account.id &&
           device.accessMode === 'full' &&
@@ -1067,6 +1077,12 @@ export class ControlPlaneService {
     };
   }
 
+  /** Read-only CAS token. Never fabricate a revision on an unavailable store. */
+  async confirmDashboardMutationRevision(identity:ControlPlaneIdentity,deviceId:string):Promise<number|null>{
+    if(identity.role==='service')return null;
+    try{return await this.store.dashboardMutations?.revision(deviceId,identity.accountId)??null;}
+    catch{return null;}
+  }
   /** Owner-authenticated read-only reconciliation; never returns a pairing token. */
   async dashboardMutationStatus(identity:ControlPlaneIdentity,mutationId:string){
     if(identity.role==='service')throw Error('OWNER_LOGIN_REQUIRED');
