@@ -48,9 +48,9 @@ test('empty receipt directory is incomplete, not a green global CI claim',t=>{
   assert.equal(r.comprehensiveCoverage,false);
 });
 
-test('runtime scope has nine exact files and 35 minimum cases, no silent signed-host skip',()=>{
+test('runtime scope has nine exact files and 37 minimum cases, no silent signed-host skip',()=>{
   assert.equal(Object.keys(RUNTIME_FIXTURES).length,9);
-  assert.equal(Object.values(RUNTIME_FIXTURES).reduce((n,p)=>n+p.minimum,0),35);
+  assert.equal(Object.values(RUNTIME_FIXTURES).reduce((n,p)=>n+p.minimum,0),37);
   const lanes=reviewedLanes({platform:'win32',nodeVersion:'v24.22.3'});
   const runtime=lanes.find(l=>l.policy.id==='runtime');
   assert.equal(runtime.policy.scope,'REVIEWED_WINDOWS_SIGNED_RUNTIME_INSTALLER_ACL_FIXTURES_ONLY');
