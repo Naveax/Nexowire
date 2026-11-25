@@ -1,0 +1,9 @@
+# AI-08 | Platform-aware ACL and SQLite sidecar fixtures
+
+2026-11-24, #1205. Base d2696376aae7a23aa9e0df01c19aa5c9b07f0595. Source-only isolated Draft, no production mutation.
+
+The six complete fixture files were reviewed and have the same Git blobs in coordinator #1250 and AI-03 #1239. No explicit invocation was found in the eleven base workflows. Four Windows-only files cover local ephemeral loopback listener ownership, read-only ACL audit/PowerShell parser, generic ACL rights, and temporary user-owned file denial. The Broker task-control ACL file verifies root rejection before invoking task operations and has platform-specific test skips. The real production start/stop preflight was inspected: Linux rejects the platform; Windows rejects the invalid root before any task lookup. Run only on disposable hosted workers. The SQLite sidecar fixture executes on Linux only because its Windows symlink test has a silent EPERM early return.
+
+Windows Node22/24: five files, target 16 passing cases and one explicitly named skipped case, hence four fully PASS files and one SKIP (partial), not five PASS. Linux Node22/24: two files, target 13 passing cases and two named skipped cases, one fully PASS file and one SKIP. The Broker mixed file has six exact ordered top-level case identities; each of its platform-specific cases is expected to execute on the appropriate platform. The parser rejects unexpected or moved skips, missing/duplicate footer, substituted names, failed subprocess, incomplete plan, and unreviewed file bytes. This matrix does not infer cross-platform full-file PASS or physical acceptance.
+
+No existing workflow or pending branch changed. Source pins and parser negative contracts included. Child CI PENDING. Coordinator must review the new workflow and incorporate appropriate required checks on the combined SHA before promotion. No main merge, stable tag or release.

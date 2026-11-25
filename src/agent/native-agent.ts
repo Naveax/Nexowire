@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { executeTrustedNativeMutation, type TrustedNativeMutationProvider } from './native-atomic-effect-admission.js';
+import { NATIVE_TRANSFER_CAPABILITIES, isNativeTransferCapability, executeNativeTransferWire } from './native-transfer-wire.js';
+import type { NativeTransferPublisher } from './native-transfer-publisher.js';
 import {setTimeout as sleep} from 'node:timers/promises';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
@@ -109,6 +111,21 @@ export function reconnectWaitMs(
   const sample = Math.min(1, Math.max(0, random()));
   const factor = 0.8 + sample * 0.4;
   return Math.min(30_000, Math.max(250, Math.round(boundedBase * factor)));
+}
+
+/** Bound opening handshake even if TCP accepts but no HTTP 101 ever arrives.
+ * Without this deadline the Agent cannot rotate to a healthy local/remote Hub. */
+export const HUB_HANDSHAKE_TIMEOUT_MS=10_000;
+export function openHubTransportSocket(
+  hubUrl:string,
+  headers?:Record<string,string>,
+  handshakeTimeoutMs=HUB_HANDSHAKE_TIMEOUT_MS,
+):WebSocket{
+  if(!Number.isSafeInteger(handshakeTimeoutMs)||
+      handshakeTimeoutMs<250||handshakeTimeoutMs>30_000)
+    throw new Error('Hub handshake timeout must be between 250 and 30000 milliseconds');
+  return new WebSocket(hubUrl,{handshakeTimeout:handshakeTimeoutMs,
+    ...(headers?{headers}:{})});
 }
 
 export function parseHubEndpoints(
@@ -448,6 +465,7 @@ export async function runNativeAgent(
   env: NodeJS.ProcessEnv = process.env,
   trustedNativeMutationProvider?: TrustedNativeMutationProvider,
   trustedCoreConsentProvider?: NativeCoreConsentAuthority,
+  trustedNativeTransferPublisher?: NativeTransferPublisher,
 ): Promise<never> {
   const preloginBootstrap=getWindowsPreloginAgentMode(env);
   if(preloginBootstrap){
@@ -519,9 +537,12 @@ export async function runNativeAgent(
     ? new RemoteMutationCasClient({endpoint:casEndpoint,token:casToken,
         authorityId:casAuthorityId,epoch:casEpoch,deviceId:identity.id})
     : undefined;
+  const nativeTransferEnabled=Boolean(!preloginBootstrap&&remoteCas&&trustedNativeMutationProvider&&
+    trustedNativeTransferPublisher&&env.NEXOWIRE_AGENT_REQUIRE_ATOMIC_EFFECT_ADMISSION==='1');
   const advertisedCapabilities = filterWindowsPreloginCapabilities(
     await capabilitiesForAgent(process.platform,env),preloginBootstrap,
   );
+  if(nativeTransferEnabled)advertisedCapabilities.push(...NATIVE_TRANSFER_CAPABILITIES);
 
   let stopped = false;
   const shutdown = new AbortController();
@@ -619,7 +640,7 @@ export async function runNativeAgent(
   while (!stopped) {
     const hubUrl = hubEndpoints[endpointIndex]!;
     const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
-    const socket = new WebSocket(hubUrl, headers ? { headers } : undefined);
+    const socket = openHubTransportSocket(hubUrl, headers);
     currentSocket = socket;
     let openedAt: number | undefined;
     let closeCode: number | undefined;
@@ -698,6 +719,7 @@ export async function runNativeAgent(
           const request = HubRequestSchema.safeParse(decoded);
           if (!request.success) return;
 
+          const nativeTransferRequest=isNativeTransferCapability(request.data.capability);
           let response: AgentResponse;
           try {
             const fingerprint = fingerprintAgentRequest(
@@ -714,6 +736,9 @@ export async function runNativeAgent(
                   error:{code:'AGENT_PRELOGIN_CAPABILITY_UNAVAILABLE',
                     message:'The pre-login transport accepts only bounded machine status. Sign in for owner capabilities.'},
                 }
+              : nativeTransferRequest&&(!nativeTransferEnabled||request.data.accessMode!=='full')
+                ? {type:'response',requestId:request.data.requestId,ok:false,
+                   error:{code:'NATIVE_TRANSFER_AUTHORITY_REQUIRED',message:'Protected Native transfer admission unavailable.'}}
               : await requestCache.run(
               request.data.requestId,
               fingerprint,
@@ -777,7 +802,10 @@ export async function runNativeAgent(
                 }
                 let outcome: AgentResponse;
                 try {
-                  const execute = () => executeCapability(
+                  const execute = () => nativeTransferRequest
+                    ? executeNativeTransferWire(trustedNativeTransferPublisher,identity.id,request.data.requestId,
+                        request.data.capability,request.data.input,policy)
+                    : executeCapability(
                     request.data.capability,
                     request.data.input,
                     policy,
@@ -802,7 +830,7 @@ export async function runNativeAgent(
                   // Opt-in mode refuses effects when the independently trusted
                   // authority is unavailable; do not infer a grant from the wire.
                   const data = mutation &&
-                    env.NEXOWIRE_AGENT_REQUIRE_ATOMIC_EFFECT_ADMISSION === '1'
+                    (nativeTransferRequest||env.NEXOWIRE_AGENT_REQUIRE_ATOMIC_EFFECT_ADMISSION === '1')
                     ? await executeTrustedNativeMutation({
                         provider: trustedNativeMutationProvider,
                         deviceId: identity.id,

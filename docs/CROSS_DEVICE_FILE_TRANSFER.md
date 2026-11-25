@@ -16,11 +16,11 @@ This change introduces `file_transfer_between_devices` as an MCP operation for c
 ```
 
 - **Source bytes are not included in the final MCP tool response.** The MCP server reads and writes bounded 48 KiB chunks internally.
-- The file is checked by SHA-256 before transfer, source SHA-256 is checked again afterward, and the destination staging digest must agree.
+- The file is checked by SHA-256 before transfer, source SHA-256 is checked again afterward, the destination staging digest must agree, and the **final published destination file** must independently pass SHA-256 readback before `COMPLETE` is reported.
 - On the destination agent, chunks are written to a randomly named sibling `.nexowire-upload-<UUID>.tmp` file. `files.write` supports `create` (exclusive file creation) and `write_at` (bounded offset writes, no sparse gaps) for this workflow; normal `overwrite` and `append` behavior remains available.
 - The final commit is a **same-directory, atomic no-replace hard-link publish** using `files.move` with `atomic_no_overwrite=true`, followed by removal of the stage link. If the destination already exists, publication fails instead of replacing it.
 - The source and destination device IDs are authorized independently through Nexowire's existing per-device policy checks. MCP restricted credentials must also allow `file_read`, `file_stat`, `file_hash`, `file_write`, `file_move`, `file_delete` and the composite tool.
-- The pilot is bounded to 8 MiB per transfer; the default and maximum are 8 MiB. To raise the limit later, benchmark end-to-end latency, request timeouts and provider quotas first.
+- The default remains 8 MiB; callers may explicitly request up to **16 MiB** with `max_bytes`. Each file operation still uses bounded 48 KiB chunks, and the independent helper maximum remains 64 MiB. A Work-PC two-simulated-Agent loopback benchmark is not a provider/WAN quota or timeout guarantee; real-device acceptance and larger resumable files remain open under #588.
 
 ## Known limits / cautions
 

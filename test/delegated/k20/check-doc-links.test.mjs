@@ -37,6 +37,8 @@ test('fenced code snippets are not mistaken for links; local fragments are check
 test('symlink escape is rejected even when target exists', () => fixture(root => {
   const file = join(root, 'README.md');
   writeFileSync(file, '[bad](outside)');
-  symlinkSync(tmpdir(), join(root, 'outside'));
+  // Junctions do not need SeCreateSymbolicLinkPrivilege on Windows.
+  // Both link forms must resolve outside the checkout and be rejected.
+  symlinkSync(tmpdir(), join(root, 'outside'), process.platform === 'win32' ? 'junction' : 'dir');
   assert.equal(checkLinks(root, [file]).findings[0].problem, 'symlink-outside-repository');
 }));

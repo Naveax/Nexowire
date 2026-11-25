@@ -218,22 +218,101 @@ export async function startCloudflareConnection(input:unknown,config:NexowireCon
     exit=new Promise<void>(resolve=>{child!.once('exit',()=>resolve());child!.once('error',()=>resolve());});
     const current=child;
     await new Promise<void>((resolve,reject)=>{current.once('spawn',resolve);current.once('error',()=>reject(Error('Cloudflare connector could not start')));});
-    const done=exit.then(async()=>{if(!stopped){await close();throw Error('Cloudflare connector exited; connection unavailable');}});
+    const done=exit.then(async()=>{if(!stopped){await close();throw new CloudflareConnectorExitedError();}});
     // Prevent an unhandled rejection between returning the handle and awaiting it.
     void done.catch(()=>{});
     return {close,done,resource:config.mcpResourceUrl!};
   }catch(error){await close();throw error;}
 }
 
+/** Only an unexpected exit of an already verified connector is recoverable.
+ * Preflight failures (binary, credentials, Hub auth) remain fatal and are never
+ * turned into an endless task restart. */
+export class CloudflareConnectorExitedError extends Error {
+  readonly code='CLOUDFLARE_CONNECTOR_EXITED';
+  constructor(){super('Cloudflare connector exited; connection unavailable');}
+}
+
+export function cloudflareReconnectWaitMs(failures:number,random:()=>number=Math.random):number {
+  const count=Number.isSafeInteger(failures)?Math.max(1,failures):32;
+  const base=Math.min(30_000,1_000*2**Math.min(5,count-1));
+  const raw=random();
+  const sample=Number.isFinite(raw)?Math.min(1,Math.max(0,raw)):0.5;
+  return Math.min(30_000,Math.max(800,Math.round(base*(0.8+sample*0.4))));
+}
+
+export interface CloudflareForegroundHandle {
+  close():Promise<void>;
+  done:Promise<void>;
+}
+function waitForCloudflareRetry(ms:number,signal:AbortSignal):Promise<void>{
+  if(signal.aborted)return Promise.resolve();
+  return new Promise(resolve=>{
+    let timer:NodeJS.Timeout;
+    const finish=()=>{
+      clearTimeout(timer);
+      signal.removeEventListener('abort',finish);
+      resolve();
+    };
+    timer=setTimeout(finish,ms);
+    signal.addEventListener('abort',finish,{once:true});
+    if(signal.aborted)finish();
+  });
+}
+
+/** Keeps the user-logon task alive across transient connector exits.
+ * Every attempt reacquires its own immutable binary and credential custody;
+ * no tunnel/Agent identity or operation receipt is reused by the supervisor. */
+export async function superviseCloudflareConnection(
+  start:()=>Promise<CloudflareForegroundHandle>,
+  shutdown:AbortSignal,
+  options:{random?:()=>number;now?:()=>number;wait?:(ms:number,signal:AbortSignal)=>Promise<void>}={},
+):Promise<void>{
+  let active:CloudflareForegroundHandle|undefined;
+  let failures=0;
+  const closeActive=()=>{void active?.close().catch(()=>{});};
+  shutdown.addEventListener('abort',closeActive);
+  try {
+    while(!shutdown.aborted){
+      // Startup/preflight errors are deliberately not retried.
+      const handle=await start();
+      active=handle;
+      const startedAt=(options.now??Date.now)();
+      if(shutdown.aborted){await handle.close();active=undefined;break;}
+      let failure:unknown;
+      try{await handle.done;}catch(error){failure=error;}
+      finally{await handle.close();active=undefined;}
+      if(shutdown.aborted)break;
+      if(!(failure instanceof CloudflareConnectorExitedError)){
+        if(failure)throw failure;
+        throw new Error('Cloudflare connector completed without shutdown');
+      }
+      const aliveMs=Math.max(0,(options.now??Date.now)()-startedAt);
+      failures=aliveMs>=10_000?1:Math.min(32,failures+1);
+      await (options.wait??waitForCloudflareRetry)(
+        cloudflareReconnectWaitMs(failures,options.random),shutdown);
+    }
+  }finally{
+    shutdown.removeEventListener('abort',closeActive);
+    if(active)await active.close();
+  }
+}
+
 export async function runCloudflareConnection(profileFile:string,config:NexowireConfig){
   if(!path.isAbsolute(profileFile))throw new Error('Cloudflare profile path must be absolute');
-  const profile=JSON.parse((await regularFile(profileFile,16*1024)).toString('utf8'));
-  const handle=await startCloudflareConnection(profile,config);
-  const stop=()=>{void handle.close();};
+  const shutdown=new AbortController();
+  const stop=()=>shutdown.abort();
   process.once('SIGINT',stop);process.once('SIGTERM',stop);
-  // Process launch is not remote readiness. Do not print token/path/account IDs.
-  process.stderr.write('Nexowire Cloudflare connector started; external OAuth/MCP readiness not yet verified.\n');
-  try{await handle.done;}finally{
-    process.off('SIGINT',stop);process.off('SIGTERM',stop);await handle.close();
+  try{
+    await superviseCloudflareConnection(async()=>{
+      // Revalidate the original selected profile and all trust boundaries
+      // before EVERY transient recovery attempt.
+      const profile=JSON.parse((await regularFile(profileFile,16*1024)).toString('utf8'));
+      const handle=await startCloudflareConnection(profile,config);
+      process.stderr.write('Nexowire Cloudflare connector started; external OAuth/MCP readiness not yet verified.\n');
+      return handle;
+    },shutdown.signal);
+  }finally{
+    process.off('SIGINT',stop);process.off('SIGTERM',stop);
   }
 }

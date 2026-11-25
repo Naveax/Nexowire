@@ -91,7 +91,8 @@
       <button type="button" class="secondary" id="folder-delete" disabled>Klasörü sil</button>
       <small class="folder-feedback" id="folder-status" role="status" aria-live="polite"></small>
     </section>
-    <section id="devices" class="device-list" aria-live="polite">
+    <p id="device-list-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true">Cihaz listesi yükleniyor…</p>
+    <section id="devices" class="device-list" aria-label="Cihazlar" aria-busy="true">
       <div class="empty">Cihaz listesi yükleniyor…</div>
     </section>
 

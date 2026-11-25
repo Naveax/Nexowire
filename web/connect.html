@@ -72,22 +72,35 @@
       </div>
     </section>
 
-    <section class="card connect-card hidden" id="pair-panel" aria-label="Cihaz eşleştirme onayı">
+    <section class="card connect-card hidden" id="pair-panel" aria-label="Cihaz eşleştirme onayı" aria-busy="true">
       <span class="label">Bağlanmak isteyen cihaz</span>
       <strong id="device-name">—</strong>
       <small id="platform">Hazırlanıyor</small>
-      <div class="connect-copy">
+      <div class="connect-copy" role="status" aria-live="polite" aria-atomic="true">
         <h2 id="status-title">Hesap kontrol ediliyor</h2>
         <p id="status-text" class="subtle">Gerekirse giriş ekranı otomatik açılır.</p>
       </div>
-      <p class="subtle">Kurulum ve güvenli bağlantının geri kalanını Nexowire tamamlar. Ekstra erişim ayarı gerekmez.</p>
+      <p class="subtle">Kurulum ve güvenli bağlantının geri kalanını Nexowire tamamlar. Bu yalnızca hesap eşleştirmesi içindir: CORE yönetici yetkisi için cihaz sahibinin kendi bilgisayarında ayrıca açık Windows/UAC onayı gerekir.</p>
       <button id="approve" class="primary connect-button" disabled>BAĞLA</button>
       <a class="secondary connect-cancel" href="/">Vazgeç ve panele dön</a>
     </section>
 
-    <section id="error-panel" class="error-panel hidden" role="alert">
-      <strong>Bağlantı tamamlanamadı.</strong>
+    <section class="card connect-card core-state-panel" id="core-state-panel" aria-labelledby="core-state-heading">
+      <div class="connect-title-row">
+        <div><span class="label">Yerel yetki / Local authority</span><h2 id="core-state-heading">CORE durumu / CORE status</h2></div>
+        <span id="core-status-code" class="pill muted" aria-describedby="core-status-tr core-status-en">UNKNOWN</span>
+      </div>
+      <div class="core-state-description" role="status" aria-live="polite" aria-atomic="true">
+        <p id="core-status-tr" lang="tr">CORE durumu doğrulanamadı. Eşleştirme, yönetici yetkisi veya CORE erişimi kanıtlamaz.</p>
+        <p id="core-status-en" lang="en">CORE status could not be verified. Pairing does not prove administrator rights or CORE access.</p>
+      </div>
+      <p class="subtle">CORE açma/iptal işlemi yalnızca cihaz sahibinin yerel onayıyla yapılır. Bu ekran uzaktan yönetici izni vermez.</p>
+    </section>
+
+    <section id="error-panel" class="error-panel hidden" role="alert" aria-labelledby="error-title" tabindex="-1">
+      <strong id="error-title">Bağlantı tamamlanamadı.</strong>
       <p id="error-message"></p>
+      <p id="retry-hint"></p>
       <a href="/" class="secondary connect-cancel">Kontrol paneline dön</a>
     </section>
   </main>

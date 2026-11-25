@@ -1,0 +1,58 @@
+name: AI-08 Windows Storage Source Fixtures
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/ai08-windows-storage-fixtures.yml"
+      - "scripts/ci/windows-storage-fixture-receipt.mjs"
+      - "scripts/ci/test-inventory.mjs"
+      - "scripts/ci/assert-tap-summary.mjs"
+      - "test/ci/windows-storage-fixture-receipt.test.mjs"
+      - "test/agent-operation-journal.test.ts"
+      - "test/guardian-sqlite-crash-recovery.test.ts"
+      - "test/ai06-sqlite-task-absence.test.ts"
+      - "test/journal-unknown-save-sticky.test.ts"
+      - "test/journal-save-admission.test.ts"
+      - "test/journal-save-identity-integrity.test.ts"
+      - "test/system-hub-cutover-recovery.test.ts"
+      - "src/agent/**"
+      - "src/hub/**"
+      - "src/operations/**"
+      - "src/security/**"
+      - "scripts/ai04-controlled-system-hub-cutover.ts"
+      - "scripts/ai06-hub-sqlite-cutover-preflight.ps1"
+      - "package.json"
+      - "package-lock.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai08-storage-fixtures-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  reviewed-windows-storage-fixtures:
+    runs-on: windows-latest
+    timeout-minutes: 32
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - name: Verify source pins and receipt rejection contracts
+        run: node --test test/ci/windows-storage-fixture-receipt.test.mjs
+      - name: Execute seven reviewed Windows storage and recovery fixtures
+        env:
+          NEXOWIRE_EXPECTED_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/ci/windows-storage-fixture-receipt.mjs --json

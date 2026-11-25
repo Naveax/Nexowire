@@ -1,0 +1,89 @@
+name: AI-08 Combined Exact Execution Coverage
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/ai08-combined-execution-coverage.yml"
+      - ".github/workflows/release-readiness.yml"
+      - "scripts/ci/**"
+      - "test/**"
+      - "src/**"
+      - "scripts/ai03-system-dpapi-acceptance.ps1"
+      - "scripts/ai04-controlled-system-hub-cutover.ts"
+      - "scripts/Build-Nexowire-SystemHubStage.ps1"
+      - "scripts/smoke-windows-user-setup.ts"
+      - "scripts/build-windows-user-bundle.ts"
+      - "scripts/build-windows-job-owner.ps1"
+      - "scripts/ci/prepare-signed-runtime-fixture.ps1"
+      - "package.json"
+      - "package-lock.json"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ai08-combined-${{ github.event.pull_request.number || github.ref }}-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: false
+jobs:
+  combined-exact-target:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        node-version: [22, 24]
+    env:
+      NEXOWIRE_EXPECTED_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - name: Verify all source and receipt contracts
+        id: contracts
+        run: node --test test/ci/test-execution-coverage.test.mjs test/ci/combined-lane-coverage.test.mjs
+      - name: Require disposable non-SYSTEM Windows runner
+        id: identity
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value -eq 'S-1-5-18') { throw 'AI08_NON_SYSTEM_HOST_REQUIRED' }
+      - name: Inspect or provision signed Node runtime on disposable hosted Windows only
+        if: runner.os == 'Windows'
+        shell: pwsh
+        timeout-minutes: 12
+        run: ./scripts/ci/prepare-signed-runtime-fixture.ps1
+      - name: Execute reviewed independent source lanes
+        if: ${{ !cancelled() && steps.contracts.outcome == 'success' && (runner.os != 'Windows' || steps.identity.outcome == 'success') }}
+        run: node scripts/ci/combined-lane-coverage.mjs --run-source "${{ runner.temp }}/nx-ai08-receipts"
+      - name: Build actual isolated installer bundle
+        id: bundle
+        if: ${{ !cancelled() && runner.os == 'Windows' && steps.contracts.outcome == 'success' && steps.identity.outcome == 'success' }}
+        shell: pwsh
+        timeout-minutes: 25
+        run: |
+          ./scripts/build-windows-job-owner.ps1
+          if (-not $?) { throw 'AI08_JOB_OWNER_BUILD_FAILED' }
+          npm run build
+          if ($LASTEXITCODE -ne 0) { throw 'AI08_BUILD_FAILED' }
+          node --import tsx scripts/build-windows-user-bundle.ts --output-dir release-windows --source-sha $env:NEXOWIRE_EXPECTED_COMMIT_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'AI08_BUNDLE_BUILD_FAILED' }
+      - name: Execute real disposable installer upgrade and checksum fixtures
+        if: ${{ !cancelled() && runner.os == 'Windows' && steps.bundle.outcome == 'success' }}
+        env:
+          NEXOWIRE_AI05_RUN_BUNDLE_SMOKE: '1'
+        run: node scripts/ci/combined-lane-coverage.mjs --run-installer "${{ runner.temp }}/nx-ai08-receipts"
+      - name: Reconcile exact target receipts and deny incomplete acceptance
+        if: ${{ !cancelled() && steps.contracts.outcome == 'success' }}
+        run: node scripts/ci/combined-lane-coverage.mjs --reconcile "${{ runner.temp }}/nx-ai08-receipts"
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.contracts.outcome == 'success' }}
+        with:
+          name: ai08-exact-coverage-${{ matrix.os }}-node${{ matrix.node-version }}-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/nx-ai08-receipts/*.json
+          if-no-files-found: error
+          retention-days: 14

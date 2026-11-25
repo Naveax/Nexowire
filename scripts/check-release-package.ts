@@ -68,6 +68,14 @@ assert.equal(
 assert.equal(packageJson.bin?.nexowire, 'dist/src/cli.js');
 assert.deepEqual(packageJson.files, [
   'dist/src',
+  'dist/scripts/ai04-controlled-system-hub-cutover.js',
+  'dist/scripts/ai04-prepare-system-hub-state-copy.js',
+  'dist/scripts/ai04-issue-system-state-receipt.js',
+  'dist/scripts/ai04-offline-migration-integrity.js',
+  'dist/scripts/ai04-state-snapshot-proof.js',
+  'dist/scripts/ai04-system-state-inventory.js',
+  'scripts/Resolve-Nexowire-LegacySystemHubTask.ps1',
+  'scripts/ai03-system-dpapi-acceptance.ps1',
   'skills',
   'README.md',
 ]);
@@ -140,6 +148,8 @@ for (const required of [
   'package.json',
   'README.md',
   'dist/src/cli.js',
+  'scripts/Resolve-Nexowire-LegacySystemHubTask.ps1',
+  'scripts/ai03-system-dpapi-acceptance.ps1',
 ]) {
   assert.ok(
     packedPaths.has(required),
@@ -158,9 +168,12 @@ const deniedPrefixes = [
   '.github/',
   'src/',
   'test/',
-  'scripts/',
   '.nexowire/',
 ];
+const allowedMaintenanceScripts = new Set([
+  'scripts/Resolve-Nexowire-LegacySystemHubTask.ps1',
+  'scripts/ai03-system-dpapi-acceptance.ps1',
+]);
 const deniedExact = new Set([
   '.env',
   '.env.example',
@@ -172,7 +185,8 @@ const deniedExact = new Set([
 for (const file of pack.files) {
   assert.equal(
     deniedExact.has(file.path) ||
-      deniedPrefixes.some((prefix) => file.path.startsWith(prefix)),
+      deniedPrefixes.some((prefix) => file.path.startsWith(prefix)) ||
+      (file.path.startsWith('scripts/') && !allowedMaintenanceScripts.has(file.path)),
     false,
     'Release package unexpectedly includes development-only path: ' + file.path,
   );

@@ -472,3 +472,215 @@ test('malformed or cyclic transport receipt never reaches verifier or effect',as
   assert.equal(verified,0);
   assert.equal(f.events.includes('invoke'),false);
 });
+
+test('broker effect input rejects getters, toJSON and non-JSON structures before CAS',async()=>{
+  let executed=0;
+  const accessor=Object.defineProperty({action:'enable'},'name',{
+    enumerable:true,get(){executed++;return 'untrusted';},
+  });
+  const withToJson={action:'enable',toJSON(){executed++;return {action:'enable'};}};
+  const sparse=new Array(2);
+  sparse[1]='x';
+  const inherited=Object.assign(Object.create({unauthorized:'prototype'}),{action:'enable'});
+  for(const raw of [accessor,withToJson,sparse,inherited,
+    {nested:{action:undefined}},{nested:{value:Infinity}},
+    {nested:{value:Symbol('bad')}}]){
+    const f=fixture();
+    await assert.rejects(f.run(op,raw),deny);
+    assert.deepEqual(f.events,[],'invalid input must not contact authority or effect');
+  }
+  assert.equal(executed,0,'no attacker-defined code runs during snapshot');
+});
+
+test('untrusted reservation and commit receipt accessors deny without invocation',async()=>{
+  for(const stage of ['begin','commit'] as const){
+    const f=fixture();
+    let executed=0,verified=0;
+    const originalBegin=f.authority.begin.bind(f.authority);
+    const originalCommit=f.authority.commit.bind(f.authority);
+    f.authority.verifyReceipt=async()=>{verified++;return true;};
+    const tamper=(receipt:BrokerEffectReceipt|null)=>{
+      if(receipt){
+        Object.defineProperty(receipt,'ticket',{
+          configurable:true,enumerable:true,
+          get(){executed++;return 'malicious_getter';},
+        });
+      }
+      return receipt;
+    };
+    if(stage==='begin')
+      f.authority.begin=async(...args)=>tamper(await originalBegin(...args));
+    else
+      f.authority.commit=async(...args)=>tamper(await originalCommit(...args));
+    await assert.rejects(f.run(),deny,stage);
+    assert.equal(executed,0,stage);
+    assert.equal(verified,stage==='begin'?0:1,stage);
+    assert.equal(f.events.includes('invoke'),false,stage);
+  }
+});
+
+test('receipt toJSON method is never invoked to forge signed bytes',async()=>{
+  const f=fixture();
+  let executed=0,verified=0;
+  const original=f.authority.begin.bind(f.authority);
+  f.authority.begin=async(...args)=>{
+    const receipt=await original(...args);
+    if(receipt)Object.assign(receipt,{
+      toJSON(){executed++;return {state:'RESERVED'};},
+    });
+    return receipt;
+  };
+  f.authority.verifyReceipt=async()=>{verified++;return true;};
+  await assert.rejects(f.run(),deny);
+  assert.equal(executed,0);
+  assert.equal(verified,0);
+  assert.equal(f.events.includes('invoke'),false);
+});
+
+test('Proxy-backed Broker input is denied before any trap or external authority CAS',async()=>{
+  let traps=0;
+  const attack=new Proxy({command:'blocked'},{
+    getPrototypeOf(){traps++;throw Error('PROXY_GET_PROTO_EXECUTED');},
+    ownKeys(){traps++;throw Error('PROXY_OWN_KEYS_EXECUTED');},
+    getOwnPropertyDescriptor(){traps++;throw Error('PROXY_DESCRIPTOR_EXECUTED');},
+    get(){traps++;throw Error('PROXY_GET_EXECUTED');},
+  });
+  const revoked=Proxy.revocable({command:'revoked'},{});
+  revoked.revoke();
+  for(const raw of [attack,{nested:[{p:attack}]},[attack],revoked.proxy]){
+    const f=fixture();
+    await assert.rejects(f.run(op,raw),deny);
+    assert.deepEqual(f.events,[],'Proxy must fail before authority read');
+    assert.equal(traps,0,'no caller trap may run');
+  }
+});
+
+test('Proxy-backed reserve/commit receipts refuse before verifier and effect',async()=>{
+  for(const stage of ['begin','commit'] as const){
+    for(const shape of ['root','nested-binding','revoked'] as const){
+      const f=fixture();
+      let metadataTraps=0,thenReads=0,otherReads=0,verified=0;
+      // A Promise resolves an object by querying its 'then' property.
+      // A top-level Proxy returned by an async authority therefore receives
+      // this one class of trap BEFORE snapshotReceipt can inspect it.
+      // The snapshot boundary still must execute ZERO metadata traps and
+      // must never verify, commit or execute a hostile receipt.
+      const trapHandler={
+        getPrototypeOf(){metadataTraps++;throw Error('PROXY_GET_PROTO_EXECUTED');},
+        ownKeys(){metadataTraps++;throw Error('PROXY_OWN_KEYS_EXECUTED');},
+        getOwnPropertyDescriptor(){metadataTraps++;throw Error('PROXY_DESCRIPTOR_EXECUTED');},
+        get(_target:object,key:string|symbol){
+          if(key==='then'){thenReads++;return undefined;}
+          otherReads++;throw Error('PROXY_GET_EXECUTED');
+        },
+      };
+      const begin=f.authority.begin.bind(f.authority);
+      const commit=f.authority.commit.bind(f.authority);
+      const verify=f.authority.verifyReceipt.bind(f.authority);
+      f.authority.verifyReceipt=async(...args)=>{
+        verified++;return verify(...args);
+      };
+      const malicious=(receipt:BrokerEffectReceipt|null):BrokerEffectReceipt|null=>{
+        if(!receipt)return null;
+        if(shape==='nested-binding'){
+          return {...receipt,
+            binding:new Proxy<BrokerVerifiedEffectBinding>(receipt.binding,trapHandler)}
+        }
+        if(shape==='revoked'){
+          const rev=Proxy.revocable<BrokerEffectReceipt>(receipt,trapHandler);
+          rev.revoke();
+          return rev.proxy;
+        }
+        return new Proxy<BrokerEffectReceipt>(receipt,trapHandler);
+      };
+      if(stage==='begin'){
+        f.authority.begin=async(...args)=>malicious(await begin(...args));
+      }else{
+        f.authority.commit=async(...args)=>malicious(await commit(...args));
+      }
+      await assert.rejects(f.run(),deny,stage+'/'+shape);
+      assert.equal(metadataTraps,0,stage+'/'+shape);
+      assert.equal(otherReads,0,stage+'/'+shape);
+      if(shape==='root')
+        assert.ok(thenReads>0,'async Promise assimilation must be distinguished');
+      else
+        assert.equal(thenReads,0,stage+'/'+shape);
+      assert.equal(verified,stage==='begin'?0:1,stage+'/'+shape);
+      assert.equal(f.events.includes('invoke'),false,stage+'/'+shape);
+    }
+  }
+});
+
+
+test('protected binding readbacks reject accessors and Proxies before reading fields',async()=>{
+  for(const stage of ['initial','recent','immediate'] as const){
+    for(const shape of ['getter','proxy','revoked','extra'] as const){
+      const f=fixture();
+      let hooks=0,thenReads=0,reads=0;
+      const read=f.authority.readVerifiedBinding.bind(f.authority);
+      const sync=f.authority.readVerifiedBindingNow.bind(f.authority);
+      const alter=(value:BrokerVerifiedEffectBinding|null):BrokerVerifiedEffectBinding|null=>{
+        if(!value)return null;
+        if(shape==='getter'){
+          return Object.defineProperty({...value},'ownerEpoch',{
+            enumerable:true,configurable:true,get(){hooks++;return value.ownerEpoch;},
+          });
+        }
+        if(shape==='extra'){
+          const extra={...value,unexpected:true};return extra;
+        }
+        const handler={
+          getPrototypeOf(){hooks++;throw Error('unexpected prototype read');},
+          ownKeys(){hooks++;throw Error('unexpected keys read');},
+          getOwnPropertyDescriptor(){hooks++;throw Error('unexpected descriptor read');},
+          get(_target:object,key:string|symbol){
+            if(key==='then'){thenReads++;return undefined;}
+            hooks++;throw Error('unexpected property read');
+          },
+        };
+        if(shape==='revoked'){
+          const r=Proxy.revocable<BrokerVerifiedEffectBinding>(value,handler);
+          r.revoke();return r.proxy;
+        }
+        return new Proxy<BrokerVerifiedEffectBinding>(value,handler);
+      };
+      f.authority.readVerifiedBinding=async()=>{
+        const value=await read();reads++;
+        return (stage==='initial'&&reads===1)||(stage==='recent'&&reads===2)
+          ?alter(value):value;
+      };
+      f.authority.readVerifiedBindingNow=()=>stage==='immediate'?alter(sync()):sync();
+      await assert.rejects(f.run(),deny,stage+'/'+shape);
+      assert.equal(hooks,0,stage+'/'+shape);
+      if(shape==='proxy'&&stage!=='immediate')assert.ok(thenReads>0);
+      else assert.equal(thenReads,0);
+      assert.equal(f.events.includes('invoke'),false,stage+'/'+shape);
+      assert.equal(f.events.includes('begin'),stage!=='initial',stage+'/'+shape);
+      assert.equal(f.events.includes('commit'),stage!=='initial',stage+'/'+shape);
+    }
+  }
+});
+
+test('readback binding is detached and immutable before the first reservation',async()=>{
+  const f=fixture();
+  const original=proof();
+  f.setBinding(original);
+  let returned:BrokerVerifiedEffectBinding|undefined;
+  const read=f.authority.readVerifiedBinding.bind(f.authority);
+  f.authority.readVerifiedBinding=async()=>{
+    const b=await read();
+    if(!returned&&b)returned=b;
+    return b;
+  };
+  const begin=f.authority.begin.bind(f.authority);
+  f.authority.begin=async(req,nonce)=>{
+    assert.ok(returned);
+    assert.notEqual(req.binding,returned);
+    assert.equal(Object.isFrozen(req.binding),true);
+    Object.defineProperty(returned,'generation',{value:100,enumerable:true});
+    assert.equal(req.binding.generation,original.generation);
+    return begin(req,nonce);
+  };
+  assert.deepEqual(await f.run(),input);
+  assert.equal(f.events.filter(x=>x==='invoke').length,1);
+});

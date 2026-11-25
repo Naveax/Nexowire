@@ -50,11 +50,11 @@ async function boot(options:{response?:()=>Promise<Response>;clipboardFails?:boo
 test('first-time Windows onboarding uses the tested Unicode-safe bootstrap and discovers the distinct MCP resource',async()=>{
   const f=await boot();
   assert.equal(f.el('download-installer').href,
-    'https://github.com/Naveax/Nexowire/blob/96315d5dd4986fffbd24a96859309271d2a88ffe/installers/Nexowire-Setup.cmd');
+    'https://github.com/Naveax/Nexowire/releases/download/v1.0.8/Nexowire-Setup.cmd');
   assert.equal(f.el('verify-installer').href,
-    'https://github.com/Naveax/Nexowire/blob/96315d5dd4986fffbd24a96859309271d2a88ffe/installers/SHA256SUMS-Windows');
-  assert.ok(f.el('install-command').value.includes('https://raw.githubusercontent.com/Naveax/Nexowire/96315d5dd4986fffbd24a96859309271d2a88ffe/installers/Nexowire-Setup.cmd'));
-  assert.match(f.el('install-description').textContent,/Download raw/);
+    'https://github.com/Naveax/Nexowire/releases/download/v1.0.8/SHA256SUMS-Windows');
+  assert.ok(f.el('install-command').value.includes('https://github.com/Naveax/Nexowire/releases/download/v1.0.8/Nexowire-Setup.cmd'));
+  assert.match(f.el('install-description').textContent,/resmî GitHub Release kurucusunu/);
   assert.equal(f.el('chatgpt-address').value,resource);
   assert.notEqual(f.el('chatgpt-address').value,origin+'/mcp','login origin is not the MCP data plane');
   assert.equal(f.el('copy-chatgpt-address').disabled,false);

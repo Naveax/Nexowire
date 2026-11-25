@@ -1,0 +1,55 @@
+name: AI-08 Windows Broker Source Fixtures
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/ai08-windows-broker-fixtures.yml"
+      - "scripts/ci/windows-broker-fixture-receipt.mjs"
+      - "scripts/ci/test-inventory.mjs"
+      - "scripts/ci/assert-tap-summary.mjs"
+      - "test/ci/windows-broker-fixture-receipt.test.mjs"
+      - "test/privileged-broker-root-boundary.test.ts"
+      - "test/privileged-broker-shell-trust.test.ts"
+      - "test/privileged-broker-elevation-shell-trust.test.ts"
+      - "test/privileged-broker-task-control-identity.test.ts"
+      - "test/windows-prelogin-handoff.test.ts"
+      - "test/windows-uac-shell-trust.test.ts"
+      - "src/agent/**"
+      - "src/core/agent-broker.ts"
+      - "src/protocol/agent.ts"
+      - "src/security/**"
+      - "package.json"
+      - "package-lock.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai08-broker-fixtures-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  reviewed-windows-broker-fixtures:
+    runs-on: windows-latest
+    timeout-minutes: 28
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - name: Verify source pins and receipt rejection contracts
+        run: node --test test/ci/windows-broker-fixture-receipt.test.mjs
+      - name: Execute six reviewed Windows source fixture files
+        env:
+          NEXOWIRE_EXPECTED_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/ci/windows-broker-fixture-receipt.mjs --json

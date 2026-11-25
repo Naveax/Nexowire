@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Nexowire · Çevrimdışı responsive QA fixture</title>
+  <link rel="stylesheet" href="../../../web/styles.css">
+</head>
+<body>
+  <!-- Offline fixture only: no scripts, credentials, network requests or live Agent. -->
+  <header class="topbar">
+    <a href="#content" class="brand">NEXOWIRE</a>
+    <div class="topbar-right">
+      <a class="connect-back" href="#content">← Geri dön</a>
+      <span class="pill muted" role="status">İstemci bağlantısı yeniden doğrulanıyor…</span>
+    </div>
+  </header>
+  <main id="content" class="shell">
+    <h1>Dar ekran ve yakınlaştırma QA</h1>
+    <p class="subtle">320px / 375px / 768px; ayrıca %200 ve %400 tarayıcı zoom.</p>
+    <section class="device-list" aria-label="Sentetik cihazlar">
+      <article class="device" id="unicode-device">
+        <div class="device-header">
+          <div class="device-identity">
+            <span class="device-icon" aria-hidden="true">◎</span>
+            <div>
+              <h2 class="device-name">İŞİİŞİ-🖥️-ÇĞÖŞÜİ-🚀-ÇĞÖŞÜİ-🛠️-ÇĞÖŞÜİ-UZUNUZUNUZUNUZUNUZUNUZUNUZUNUZUNUZUNUZUNUZUNUZUNUZUN</h2>
+              <span class="platform">Windows 11 / Unicode fixture</span>
+            </div>
+          </div>
+          <span class="status">Cihaz henüz doğrulanmadı ve ağ bilgisi bekleniyor</span>
+        </div>
+        <div class="device-meta"><span class="meta-chip">Çevrimdışı / belirsiz</span></div>
+        <div class="bridge-live-status">AşırıUzunDurumKodu_🚀_İŞĞÜ_1234567890123456789012345678901234567890</div>
+        <div class="device-foot">
+          <button class="secondary" disabled>Geçici olarak kullanılamıyor</button>
+          <button class="secondary">Detaylara bak</button>
+        </div>
+      </article>
+      <article class="device" id="url-device">
+        <div class="connect-title-row"><h2>Bağlantı hatası</h2><span class="pill bad">Bekleniyor</span></div>
+        <p class="error-panel" id="long-url">https://invalid.example.test/tenant/abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789</p>
+        <button id="approve" class="primary connect-button" data-busy="true" disabled>BAĞLANIYOR…</button>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

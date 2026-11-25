@@ -1,4 +1,4 @@
-import { promises as fs } from 'node:fs';
+import { constants as fsConstants, promises as fs } from 'node:fs';
 import path from 'node:path';
 import {
   evaluateSkillManifest,
@@ -55,10 +55,45 @@ export class SkillRegistry {
 
   async load(name: string): Promise<LoadedSkill> {
     this.assertName(name);
-    const markdown = await fs.readFile(
-      path.join(this.skillsDir, name, 'SKILL.md'),
-      'utf8',
-    );
+    // Discovery ignores symlinked directories. Direct loading must enforce
+    // the same rule; otherwise a caller can read a manifest outside the catalog.
+    const catalogRoot = await fs.realpath(this.skillsDir);
+    const skillDirectory = path.join(this.skillsDir, name);
+    const directoryStat = await fs.lstat(skillDirectory);
+    if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink()) {
+      throw new Error('Skill directory must be a regular directory.');
+    }
+    const realDirectory = await fs.realpath(skillDirectory);
+    if (path.relative(catalogRoot, realDirectory) !== name) {
+      throw new Error('Skill directory escapes the configured catalog.');
+    }
+
+    const manifestPath = path.join(realDirectory, 'SKILL.md');
+    const manifestStat = await fs.lstat(manifestPath);
+    if (!manifestStat.isFile() || manifestStat.isSymbolicLink()) {
+      throw new Error('Skill manifest must be a regular file.');
+    }
+    const realManifest = await fs.realpath(manifestPath);
+    if (path.dirname(realManifest) !== realDirectory) {
+      throw new Error('Skill manifest escapes its directory.');
+    }
+    // O_NOFOLLOW prevents a last-component link swap on POSIX. Compare the
+    // opened inode with the preceding lstat before reading either platform.
+    const flags = fsConstants.O_RDONLY |
+      (process.platform === 'win32' ? 0 : fsConstants.O_NOFOLLOW);
+    const handle = await fs.open(realManifest, flags);
+    let markdown: string;
+    try {
+      const openedStat = await handle.stat();
+      if (!openedStat.isFile() ||
+          openedStat.dev !== manifestStat.dev ||
+          openedStat.ino !== manifestStat.ino) {
+        throw new Error('Skill manifest changed while opening.');
+      }
+      markdown = await handle.readFile('utf8');
+    } finally {
+      await handle.close();
+    }
     const manifest = parseSkillManifest(markdown, name);
     if (manifest.name !== name) {
       throw new Error(

@@ -1,4 +1,6 @@
 import { createServer, type IncomingMessage } from 'node:http';
+import { executeLocallyEnrolledBrokerEffect } from './core-windows-mutation-dispatch.js';
+import { createWindowsLocalOwnerBrokerAdmission, brokerRunEffectMode, type LocalOwnerBrokerAdmission } from './privileged-broker-local-owner.js';
 import { spawnSync } from 'node:child_process';
 import { matchesBearerHeader, parseTokenList } from '../security/tokens.js';
 import {
@@ -47,6 +49,8 @@ export interface PrivilegedBrokerServerOptions {
    * Neither the HTTP body nor the bearer token may supply this object.
    */
   effectAdmission?: BrokerExternalEffectAdmission;
+  /** Only constructed by the protected Broker startup path, never HTTP JSON. */
+  localOwnerAdmission?: LocalOwnerBrokerAdmission;
   execute?: (
     capability: string,
     input: unknown,
@@ -143,6 +147,9 @@ export async function startPrivilegedBroker(
     );
   }
 
+  if (options.effectAdmission && options.localOwnerAdmission)
+    throw new Error('BROKER_EFFECT_AUTHORITY_CONFLICT');
+
   const host = options.host ?? '127.0.0.1';
   if (!isLoopbackHost(host)) {
     throw new Error(
@@ -216,7 +223,11 @@ export async function startPrivilegedBroker(
         elevated: brokerHealthElevationClaim(),
         // Transport/elevation readiness does not establish executable effect
         // admission. The default Broker process has no external CAS provider.
-        effectAdmissionConfigured: options.effectAdmission !== undefined,
+        effectAdmissionConfigured: options.effectAdmission !== undefined ||
+          options.localOwnerAdmission !== undefined,
+        // A separate authenticated declaration. An old external CAS fixture
+        // cannot be treated as locally enrolled merely because it is READY.
+        localOwnerAdmissionConfigured: options.localOwnerAdmission !== undefined,
       }));
       return;
     }
@@ -310,18 +321,30 @@ export async function startPrivilegedBroker(
                   requestedInput,
                 ));
 
-      // The Broker owns this gate. It is applied equally to native Windows
-      // effects and injected execute / installer / updater callbacks. A
-      // successful bearer check or a trusted-looking HTTP field cannot skip it.
-      // An unprovisioned external monotonic CAS denies by default.
-      const data = await invokeBrokerEffectOnce(
-        options.effectAdmission,
-        decoded.operation_id,
-        capability,
-        decoded.input,
-        (boundInput) => execute(capability, boundInput),
-        () => options.requireElevation === false || isWindowsProcessElevated(),
-      );
+      // A local-owner grant is explicitly selected by the protected Broker
+      // process, never by the HTTP request. Its separate durable UUID
+      // reservation is not an external signed monotonic CAS. The strict
+      // external admission path remains unchanged when local mode is absent.
+      let data: unknown;
+      if (options.localOwnerAdmission) {
+        await options.localOwnerAdmission.authorizeOnce(decoded.operation_id);
+        if (options.requireElevation !== false && !isWindowsProcessElevated())
+          throw Object.assign(new Error('BROKER_HIGH_TOKEN_REQUIRED'),
+            { code: 'BROKER_HIGH_TOKEN_REQUIRED' });
+        data = await executeLocallyEnrolledBrokerEffect(
+          capability, decoded.input,
+          (boundInput) => execute(capability, boundInput),
+        );
+      } else {
+        data = await invokeBrokerEffectOnce(
+          options.effectAdmission,
+          decoded.operation_id,
+          capability,
+          decoded.input,
+          (boundInput) => execute(capability, boundInput),
+          () => options.requireElevation === false || isWindowsProcessElevated(),
+        );
+      }
 
       response.writeHead(200, {
         'content-type': 'application/json',
@@ -375,6 +398,7 @@ export async function startPrivilegedBroker(
 
 export async function runPrivilegedBroker(
   env: NodeJS.ProcessEnv = process.env,
+  args: readonly string[] = process.argv.slice(4),
 ): Promise<never> {
   let tokens = parseTokenList(
     env.NEXOWIRE_PRIVILEGED_BROKER_TOKEN,
@@ -401,7 +425,12 @@ export async function runPrivilegedBroker(
     );
   }
 
+  const effectMode = brokerRunEffectMode(args);
+  const localOwnerAdmission = effectMode === 'local-owner'
+    ? await createWindowsLocalOwnerBrokerAdmission(env, tokens[0]!)
+    : undefined;
   const handle = await startPrivilegedBroker({
+    ...(localOwnerAdmission ? {localOwnerAdmission} : {}),
     host:
       env.NEXOWIRE_PRIVILEGED_BROKER_HOST?.trim() ||
       '127.0.0.1',
@@ -414,7 +443,10 @@ export async function runPrivilegedBroker(
   );
 
   const stop = (): void => {
-    void handle.close().finally(() => process.exit(0));
+    void handle.close().finally(() => {
+      localOwnerAdmission?.close();
+      process.exit(0);
+    });
   };
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);

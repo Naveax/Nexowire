@@ -6,6 +6,7 @@ import { promises as fs } from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 function fail(message: string): never {
   throw new Error(message);
@@ -28,11 +29,12 @@ function parseArgs(args: readonly string[]): {
   bundleDir: string;
   profile: 'ascii' | 'unicode';
   downloadSource: 'fixture' | 'github';
-  scenario: 'install' | 'checksum-mismatch';
+  scenario: 'install' | 'checksum-mismatch' | 'upgrade-preserve' | 'upgrade-checksum-mismatch';
+  publicSourceSha: string | undefined;
 } {
   for (let index = 0; index < args.length; index++) {
     const arg = args[index]!;
-    if (['--bundle-dir', '--profile', '--download-source', '--scenario'].includes(arg)) {
+    if (['--bundle-dir', '--profile', '--download-source', '--scenario', '--public-source-sha'].includes(arg)) {
       index++;
       if (index >= args.length) fail(arg + ' requires a value.');
       continue;
@@ -45,8 +47,15 @@ function parseArgs(args: readonly string[]): {
   const downloadSource = argValue(args, '--download-source') ?? 'fixture';
   if (downloadSource !== 'fixture' && downloadSource !== 'github') fail('Invalid smoke download source.');
   const scenario = argValue(args, '--scenario') ?? 'install';
-  if (scenario !== 'install' && scenario !== 'checksum-mismatch') fail('Invalid smoke scenario.');
-  if (scenario === 'checksum-mismatch' && downloadSource !== 'fixture') fail('Checksum fault injection requires the isolated fixture.');
+  if (scenario !== 'install' && scenario !== 'checksum-mismatch' &&
+      scenario !== 'upgrade-preserve' && scenario !== 'upgrade-checksum-mismatch') {
+    fail('Invalid smoke scenario.');
+  }
+  if (scenario !== 'install' && downloadSource !== 'fixture') fail('Upgrade and checksum fault injection require the isolated fixture.');
+  const publicSourceSha = argValue(args, '--public-source-sha');
+  if (downloadSource === 'github' && !/^[a-f0-9]{40}$/.test(publicSourceSha ?? '')) {
+    fail('Public bootstrap smoke requires an immutable exact GitHub commit SHA.');
+  }
   return {
     bundleDir: path.resolve(
       argValue(args, '--bundle-dir') ?? 'release-windows',
@@ -54,22 +63,31 @@ function parseArgs(args: readonly string[]): {
     profile,
     downloadSource,
     scenario,
+    publicSourceSha,
   };
 }
 
-async function sha256File(file: string): Promise<string> {
+export async function sha256File(file: string): Promise<string> {
   const hash = createHash('sha256');
-  hash.update(await fs.readFile(file));
+  // Keep the installer ZIP out of a single large Buffer on hosted runners.
+  for await (const chunk of createReadStream(file)) hash.update(chunk);
   return hash.digest('hex');
 }
 
-function parseChecksumFile(text: string): Map<string, string> {
+export function parseChecksumFile(text: string): Map<string, string> {
+  const expected = new Set(['Nexowire-Setup.cmd', 'Nexowire-Windows-x64.zip']);
   const result = new Map<string, string>();
   for (const line of text.split(/\r?\n/)) {
     if (!line.trim()) continue;
     const match = /^([a-fA-F0-9]{64})\s{2}(.+)$/.exec(line);
     if (!match) fail('Invalid Windows checksum line: ' + line);
-    result.set(match[2]!, match[1]!.toLowerCase());
+    const filename = match[2]!;
+    if (!expected.has(filename)) fail('Unexpected Windows checksum filename: ' + filename);
+    if (result.has(filename)) fail('Duplicate Windows checksum filename: ' + filename);
+    result.set(filename, match[1]!.toLowerCase());
+  }
+  for (const filename of expected) {
+    if (!result.has(filename)) fail('Missing Windows checksum filename: ' + filename);
   }
   return result;
 }
@@ -119,7 +137,7 @@ async function main(): Promise<void> {
     fail('Windows setup smoke must run on Windows.');
   }
 
-  const { bundleDir, profile: profileKind, downloadSource, scenario } = parseArgs(process.argv.slice(2));
+  const { bundleDir, profile: profileKind, downloadSource, scenario, publicSourceSha } = parseArgs(process.argv.slice(2));
   const payload = path.join(
     bundleDir,
     'Nexowire-Windows-x64.zip',
@@ -193,6 +211,48 @@ async function main(): Promise<void> {
     USERPROFILE: profile, APPDATA: appData, LOCALAPPDATA: fakeLocalAppData,
     TEMP: tempRoot, TMP: tempRoot,
   };
+  // Reproduce an already-installed 1.0.8 version using only disposable files.
+  // The installer must neither delete nor overwrite this prior release,
+  // regardless of success or a failed checksum preflight for the new ZIP.
+  const preserveLegacy = scenario.startsWith('upgrade-');
+  const preservedFixtures = new Map<string, string>([
+    [
+      path.join(fakeLocalAppData, 'Nexowire', 'versions',
+        '1.0.8-ai05-preserved', 'runtime', 'node.exe'),
+      'previous-v1.0.8-binary-sentinel',
+    ],
+    [
+      path.join(fakeLocalAppData, 'Nexowire', 'versions',
+        '1.0.8-ai05-preserved', 'app', 'dist', 'src', 'cli.js'),
+      'previous-v1.0.8-cli-sentinel',
+    ],
+    [
+      path.join(fakeLocalAppData, 'Nexowire', 'state',
+        'local-identity-sentinel.json'),
+      '{"fixture":"persisted-local-state"}',
+    ],
+    [
+      path.join(appData, 'Nexowire', 'preferences-sentinel.json'),
+      '{"fixture":"persisted-roaming-preferences"}',
+    ],
+    [
+      path.join(profile, '.nexowire', 'state', 'owner-sentinel.json'),
+      '{"fixture":"per-user-owner-state"}',
+    ],
+  ]);
+  if (preserveLegacy) {
+    for (const [filename, contents] of preservedFixtures) {
+      await fs.mkdir(path.dirname(filename), { recursive: true });
+      await fs.writeFile(filename, contents, 'utf8');
+    }
+  }
+  const assertOldInstallIntact = async (): Promise<void> => {
+    if (!preserveLegacy) return;
+    for (const [filename, contents] of preservedFixtures) {
+      assert.equal(await fs.readFile(filename, 'utf8'), contents,
+        'Installer modified a preexisting 1.0.8 or user-state fixture: ' + filename);
+    }
+  };
   for (const tool of ['node', 'npm', 'git', 'pwsh']) {
     const probe = await waitForChild(path.join(system32, 'where.exe'), [tool], {
       cwd: tempRoot, env: cleanEnv,
@@ -211,7 +271,7 @@ async function main(): Promise<void> {
       'content-type': 'application/zip',
     });
     fixtureRequests++;
-    if (scenario === 'checksum-mismatch') {
+    if (scenario === 'checksum-mismatch' || scenario === 'upgrade-checksum-mismatch') {
       // Keep the original installer and expected digest. Only the test HTTP
       // response is corrupted, as with a truncated/intercepted ZIP download.
       response.end('controlled incomplete Nexowire ZIP fixture');
@@ -236,7 +296,10 @@ async function main(): Promise<void> {
         ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
           "$ErrorActionPreference='Stop'; $web=New-Object System.Net.WebClient; try { $web.DownloadFile($env:NEXOWIRE_SMOKE_SETUP_URL, $env:NEXOWIRE_SMOKE_SETUP_FILE) } finally { $web.Dispose() }"],
         { cwd: tempRoot, env: { ...cleanEnv,
-          NEXOWIRE_SMOKE_SETUP_URL: 'https://raw.githubusercontent.com/Naveax/Nexowire/96315d5dd4986fffbd24a96859309271d2a88ffe/installers/Nexowire-Setup.cmd',
+          // Resolve exactly the commit whose checked-in setup is under test.
+          // An older immutable source URL mismatches whenever the bootstrap
+          // changes while the old published release remains unchanged.
+          NEXOWIRE_SMOKE_SETUP_URL: 'https://raw.githubusercontent.com/Naveax/Nexowire/' + publicSourceSha + '/installers/Nexowire-Setup.cmd',
           NEXOWIRE_SMOKE_SETUP_FILE: downloadedSetup,
         } },
       );
@@ -257,26 +320,33 @@ async function main(): Promise<void> {
     let smokeSetup = downloadSource === 'fixture'
       ? verifiedSetupText.replace(urlMatch[1]!, localUrl)
       : verifiedSetupText;
-    smokeSetup = smokeSetup.replace(
-      "$shortcutPath = Join-Path ([Environment]::GetFolderPath('Programs')) 'Nexowire.lnk';",
-      "$shortcutPath = Join-Path $env:NX_INSTALL 'Nexowire.lnk';",
-    );
+    // Both stable and preview shortcuts must be redirected into the fixture
+    // directory; never touch the runner's real Start Menu.
+    for (const shortcutName of ['Nexowire.lnk', 'Nexowire Experimental.lnk']) {
+      smokeSetup = smokeSetup.replace(
+        "$shortcutPath = Join-Path ([Environment]::GetFolderPath('Programs')) '" + shortcutName + "';",
+        "$shortcutPath = Join-Path $env:NX_INSTALL '" + shortcutName + "';",
+      );
+    }
     smokeSetup = smokeSetup.replace(
       "Start-Process -FilePath $shortcut.TargetPath -ArgumentList $shortcut.Arguments -WorkingDirectory $env:NX_INSTALL;",
       "Write-Output 'launcher-ready';",
     );
-    // The setup smoke must not register a real task on the host.
-    smokeSetup = smokeSetup.replace(
-      '& $autoNode $autoCli update auto install | Out-Null;',
-      "$global:LASTEXITCODE=0; Write-Output 'hourly-updater-simulated';",
-    );
+    // The setup smoke must never register a real task on the host.
+    // Stable installers contain an updater; experimental installers omit it.
+    if (smokeSetup.includes('& $autoNode $autoCli update auto install | Out-Null;')) {
+      smokeSetup = smokeSetup.replace(
+        '& $autoNode $autoCli update auto install | Out-Null;',
+        "$global:LASTEXITCODE=0; Write-Output 'hourly-updater-simulated';",
+      );
+    }
     smokeSetup = smokeSetup.replace(
       /^pause$/m,
       'rem smoke-no-pause',
     );
 
     assert.match(smokeSetup, /launcher-ready/);
-    assert.match(smokeSetup, /hourly-updater-simulated/);
+    assert.match(smokeSetup, /hourly-updater-simulated|Nexowire experimental preview: automatic updates disabled/);
     assert.doesNotMatch(smokeSetup, /& \$autoNode \$autoCli update auto install/);
     assert.doesNotMatch(
       smokeSetup,
@@ -318,16 +388,19 @@ async function main(): Promise<void> {
     } else {
       assert.ok(fixtureRequests > 0, 'Installer did not request the fixture payload.');
     }
-    if (scenario === 'checksum-mismatch') {
+    if (scenario === 'checksum-mismatch' || scenario === 'upgrade-checksum-mismatch') {
       assert.notEqual(installed.exitCode, 0, 'Corrupt payload must be rejected.');
       assert.match(installed.stdout + installed.stderr, /Nexowire payload checksum mismatch/);
-      assert.doesNotMatch(installed.stdout, /^(?:launcher-ready|hourly-updater-simulated)$/m);
+      assert.doesNotMatch(installed.stdout, /^(?:launcher-ready|hourly-updater-simulated|Nexowire experimental preview: automatic updates disabled)$/m);
       await assert.rejects(fs.access(installRoot), { code: 'ENOENT' });
+      await assertOldInstallIntact();
       process.stdout.write(JSON.stringify({
         testPassed: true, scenario, installed: false,
         setupExitCode: installed.exitCode, rejectedBeforeExtraction: true,
         ambientNodeNpmGitPwshAbsent: true, profileIsolated: true, profileKind,
         taskRegistrationAndBrowserSimulated: true, oauthOrDevicePairingVerified: false,
+        existingReleasePreserved: preserveLegacy,
+        preservedFixtureCount: preserveLegacy ? preservedFixtures.size : 0,
       }, null, 2) + '\n');
       return;
     }
@@ -342,7 +415,7 @@ async function main(): Promise<void> {
       ].join('\n'),
     );
     assert.match(installed.stdout, /launcher-ready/);
-    assert.match(installed.stdout, /hourly-updater-simulated/);
+    assert.match(installed.stdout, /hourly-updater-simulated|Nexowire experimental preview: automatic updates disabled/);
 
     const nodeExe = path.join(
       installRoot,
@@ -362,7 +435,7 @@ async function main(): Promise<void> {
     );
     const shortcut = path.join(
       installRoot,
-      'Nexowire.lnk',
+      version.includes('-') ? 'Nexowire Experimental.lnk' : 'Nexowire.lnk',
     );
 
     for (const required of [
@@ -384,6 +457,7 @@ async function main(): Promise<void> {
     );
     assert.equal(runtime.exitCode, 0, runtime.stderr);
     assert.equal(runtime.stdout.trim(), version);
+    await assertOldInstallIntact();
 
     // Test the actual hidden launcher with a disposable sentinel CLI, after
     // verifying the real packaged CLI version. Never start an Agent or OAuth
@@ -411,10 +485,61 @@ async function main(): Promise<void> {
       await fs.writeFile(cli, originalCli);
     }
 
+    // The release workflow already executes this default fixture smoke on
+    // Windows. Run both isolated upgrade cases here as well, without
+    // changing shared CI workflows or pretending the fake 1.0.8 profile is
+    // a real production data-migration exercise.
+    const numericVersion = /^(\d+)\.(\d+)\.(\d+)(?:-|$)/.exec(version);
+    const runsAfter108 = numericVersion !== null &&
+      (Number(numericVersion[1]) > 1 ||
+       (Number(numericVersion[1]) === 1 && Number(numericVersion[2]) > 0) ||
+       (Number(numericVersion[1]) === 1 && Number(numericVersion[2]) === 0 &&
+        Number(numericVersion[3]) > 8));
+    const upgradeMatrix: string[] = [];
+    if (scenario === 'install' && downloadSource === 'fixture' && runsAfter108) {
+      const smokeEntry = process.argv[1];
+      if (!smokeEntry) fail('AI05_UPGRADE_SMOKE_ENTRY_MISSING');
+      for (const upgradeScenario of ['upgrade-preserve', 'upgrade-checksum-mismatch']) {
+        const run = await waitForChild(process.execPath, [
+          '--import', 'tsx', path.resolve(smokeEntry),
+          '--bundle-dir', bundleDir,
+          '--download-source', 'fixture',
+          '--profile', 'unicode',
+          '--scenario', upgradeScenario,
+        ], { cwd: process.cwd(), env: process.env });
+        assert.equal(run.exitCode, 0,
+          'AI-05 upgrade scenario failed: ' + upgradeScenario + '\\n' +
+          run.stdout + '\\n' + run.stderr);
+        const result = JSON.parse(run.stdout) as {
+          ok?: boolean;
+          testPassed?: boolean;
+          scenario?: string;
+          preservedFixtureCount?: number;
+          existingReleasePreserved?: boolean;
+          rejectedBeforeExtraction?: boolean;
+          taskRegistrationAndBrowserSimulated?: boolean;
+          oauthOrDevicePairingVerified?: boolean;
+        };
+        assert.equal(result.scenario, upgradeScenario);
+        assert.equal(result.existingReleasePreserved, true);
+        assert.equal(result.preservedFixtureCount, 5);
+        assert.equal(result.taskRegistrationAndBrowserSimulated, true);
+        assert.equal(result.oauthOrDevicePairingVerified, false);
+        if (upgradeScenario === 'upgrade-checksum-mismatch') {
+          assert.equal(result.testPassed, true);
+          assert.equal(result.rejectedBeforeExtraction, true);
+        } else {
+          assert.equal(result.ok, true);
+        }
+        upgradeMatrix.push(upgradeScenario);
+      }
+    }
+
     process.stdout.write(
       JSON.stringify(
         {
           ok: true,
+          scenario,
           version,
           buildId,
           setupExitCode: installed.exitCode,
@@ -423,6 +548,9 @@ async function main(): Promise<void> {
           profileIsolated: true,
           profileKind,
           downloadSource,
+          existingReleasePreserved: preserveLegacy,
+          preservedFixtureCount: preserveLegacy ? preservedFixtures.size : 0,
+          upgradeMatrix,
           payloadDownloadedOverPublicHttps: downloadSource === 'github',
           bootstrapDownloadedOverPublicHttps: downloadSource === 'github',
           taskRegistrationAndBrowserSimulated: true,
@@ -450,4 +578,6 @@ async function main(): Promise<void> {
   }
 }
 
-await main();
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  await main();
+}

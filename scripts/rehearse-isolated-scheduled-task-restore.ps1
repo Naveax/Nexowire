@@ -62,9 +62,32 @@ function Validate-Fixture([object]$task,[string]$expectedName){
   throw 'FIXTURE_UNEXPECTED_LOGON_TYPE'
  }
 }
+# Only COM GetTask exact not-found proves that an unpredictable disabled
+# fixture is truly unregistered. Silent task cmdlet failures are not proof.
+function Assert-FixtureAbsent([scriptblock]$lookup,[string]$name){
+ if($name -cnotmatch '^Nexowire-P0-Restore-Fixture-[0-9a-f]{32}$'){
+  throw 'FIXTURE_ABSENCE_NAME_UNTRUSTED'
+ }
+ $registered=$null
+ try{$registered=& $lookup $name}catch{
+  $err=$_.Exception
+  while($null -ne $err.InnerException){$err=$err.InnerException}
+  if([int]$err.HResult -eq -2147024894){return}
+  throw 'FIXTURE_ABSENCE_VISIBILITY_UNVERIFIED'
+ }
+ if($null -eq $registered){throw 'FIXTURE_ABSENCE_VISIBILITY_UNVERIFIED'}
+ throw 'FIXTURE_TASK_STILL_REGISTERED'
+}
+function Confirm-FixtureAbsent(){
+ $svc=New-Object -ComObject 'Schedule.Service' -ErrorAction Stop
+ $svc.Connect()
+ $folder=$svc.GetFolder('\')
+ Assert-FixtureAbsent {param($name) $folder.GetTask($name)} $taskName
+}
 try{
  $prior=Get-ScheduledTask -TaskPath $taskPath -TaskName $taskName -ErrorAction SilentlyContinue
  if($prior){throw 'FIXTURE_NAME_COLLISION'}
+ Confirm-FixtureAbsent
  $phase='CREATE_FIXTURE'
  $action=New-ScheduledTaskAction -Execute 'C:\Windows\System32\cmd.exe' -Argument '/c exit 0'
  $settings=New-ScheduledTaskSettingsSet -Disable -Hidden
@@ -125,7 +148,8 @@ try{
     Unregister-ScheduledTask -TaskPath $taskPath -TaskName $taskName -Confirm:$false -ErrorAction Stop
    }
   }
-  $cleanupComplete=(-not (Get-ScheduledTask -TaskPath $taskPath -TaskName $taskName -ErrorAction SilentlyContinue))
+  Confirm-FixtureAbsent
+  $cleanupComplete=$true
  }catch{$failure='FIXTURE_RESTORE_CLEANUP_FAILED'}
  foreach($bytes in @($plain,$cipher,$unsealed)){
   if($null -ne $bytes){[array]::Clear($bytes,0,$bytes.Length)}

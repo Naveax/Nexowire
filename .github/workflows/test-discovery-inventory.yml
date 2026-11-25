@@ -1,0 +1,47 @@
+name: Test Discovery Inventory
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: discovery-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: tracked TS inventory (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Verify deterministic test-path inventory and hostile Git index fixtures
+        run: node --test test/ci/test-inventory.test.mjs
+      - name: Check source-bound reviewed shard planning and denial contracts
+        run: node --test test/ci/test-execution-plan.test.mjs
+      - name: Verify full source-bound test review queue and denial contracts
+        run: node --test test/ci/test-review-triage.test.mjs
+      - name: Report bounded static triage hints without executing tests
+        env:
+          NEXOWIRE_EXPECTED_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/ci/test-review-triage.mjs --summary
+      - name: Report reviewed-only portable shards and all unreviewed tests
+        env:
+          NEXOWIRE_EXPECTED_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/ci/test-execution-plan.mjs --json --shards=2
+      - name: Report exact-commit tracked test paths (discovery only, not execution)
+        env:
+          NEXOWIRE_EXPECTED_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/ci/test-inventory.mjs --json

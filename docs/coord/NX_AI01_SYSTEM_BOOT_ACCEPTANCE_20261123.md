@@ -1,0 +1,131 @@
+# NX AI-01 | SYSTEM Hub boot identity and protected state | 2026-11-23
+
+## Scope / evidence
+- Base: `Naveax/Nexowire` #1160, HEAD `83c8b651106ecd1244fb9d982cf94fd390c15b6b` (checked 2026-11-23).
+- This AI-01 branch changes only Hub boot/lifecycle-owned source and Hub boot tests.
+- Source acceptance does **not** constitute Windows physical acceptance. Only AI-09 may mutate production Work-PC.
+- Existing 1.0.8 Work-PC state (`Nexowire Hub Boot` absent; CORE `REVOKED_LOCALLY`) is historical and must be rechecked, not inferred from an ONLINE agent or HTTP 200.
+- `C:\ProgramData` and `C:\Windows` remain explicit current-build path invariants. A Windows deployment with relocated system directories must fail closed pending dedicated trusted-known-folder support, **not** guess from `%ProgramData%` inherited environment.
+
+## Source invariant matrix
+| Surface | Required property | Negative case | Expected |
+|---|---|---|---|
+| Task root/name | Single `\\Nexowire Hub Boot` | duplicate / another task path | DENY |
+| Task principal | `S-1-5-18`, ServiceAccount, Highest | wrong SID / limited principal | DENY |
+| Task action | one absolute trusted PowerShell executable + exact launcher args | wrong executable, args, or nonempty working directory | DENY |
+| Task trigger | exactly one enabled `MSFT_TaskBootTrigger` | no trigger, AtLogOn, disabled, duplicate | DENY |
+| Task visibility | COM differentiates true ABSENT, ACCESS_DENIED and unverified | hidden task | NOT verified absent, DENY mutation |
+| State root | exact `C:\ProgramData\Nexowire\hub-state` | inherited user writable `NEXOWIRE_STATE_DIR` | DENY |
+| Machine secret | exact `C:\ProgramData\Nexowire\hub-boot\control-plane-service-token.machine.dpapi.json` | user DPAPI/legacy plaintext reference | DENY |
+| PID path | exact `C:\ProgramData\Nexowire\hub-boot\hub.pid` | user profile path | DENY |
+| Parent trust | canonical path, private parent and target ACL, safe shared ancestors | junction/reparse, writable parent, delete/replace | DENY |
+| Runtime | trusted Node/CLI and no Node preload flags | replaced/unsigned/untrusted executable | DENY before DPAPI or task mutation |
+
+## Read-only commands for AI-09 (Windows PowerShell 5.1, owner-authorized VM)
+
+Do not paste sensitive contents into issue/PR. Execute in a local disposable VM, not on production for this AI-01 role.
+
+```powershell
+$task = Get-ScheduledTask -TaskName 'Nexowire Hub Boot' -TaskPath '\' -ErrorAction SilentlyContinue
+if ($null -eq $task) {
+  'NOT_VISIBLE: cannot equate this with verified absence; use the COM visibility probe'
+} else {
+  $task | Select-Object TaskName,TaskPath,State
+  $task.Principal | Select-Object UserId,LogonType,RunLevel
+  $task.Actions | Select-Object Execute,Arguments,WorkingDirectory
+  $task.Triggers | ForEach-Object {
+    [pscustomobject]@{
+      Type = $_.CimClass.CimClassName
+      Enabled = $_.Enabled
+    }
+  }
+}
+Get-Acl -LiteralPath 'C:\ProgramData\Nexowire' |
+  Select-Object Path,Owner,AreAccessRulesProtected,AccessToString
+Get-Acl -LiteralPath 'C:\ProgramData\Nexowire\hub-state' |
+  Select-Object Path,Owner,AreAccessRulesProtected,AccessToString
+Get-CimInstance Win32_OperatingSystem |
+  Select-Object Caption,Version,OSArchitecture,LastBootUpTime
+Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
+  Where-Object LocalPort -eq 43110 |
+  Select-Object LocalAddress,LocalPort,OwningProcess
+```
+
+No `Get-Content` on DPAPI blobs, bearer tokens, raw SQLite, task credential dumps or secrets. If task is hidden, the source's COM visibility probe must be used; generic `Get-ScheduledTask` absence is insufficient.
+
+## Disposable Windows VM acceptance, AI-09 execution only
+
+1. Capture VM identity, Windows 10 19045 / supported Windows 11 build, Node22/24, owner SID, installer SHA, source commit, exact task XML backup hash, state/WAL/SHM counts/hashes and rollback snapshot.
+2. On a disposable cloned state, validate ProgramData ancestor ACL, root and SQLite ACL, no reparse components, trusted executable digest/publisher, existing user Hub task/principal and lease of TCP port 43110. Never treat C: free space alone as proof of integrity.
+3. Run source-only fixture tests and PowerShell identity probe with valid AtStartup task. Inject wrong SID, disabled trigger, logon-only trigger, multiple triggers, wrong action/working directory, inaccessible hidden task and path-swap/writable ancestor. Verify no creation, overwrite or secret unseal on denial.
+4. In VM only, with explicit elevated owner approval, rehearse the AI-02 protected-state cutover; install one SYSTEM task; reboot with **no interactive sign-in**. Confirm task principal `S-1-5-18`, exact launch path and startup trigger; perform authenticated Hub WSS nonce/issuer exchange and attribute listener to the SYSTEM Hub PID. HTTP 200 alone is insufficient.
+5. Reboot twice. Verify user Hub does not respawn/compete, agent and Broker identity are unchanged, state/WAL record counts and hashes are preserved or explained by authorized writes. Prove restart after interrupted install or absent task is fail-closed, never a synthetic PASS.
+6. Simulate task start failure and rollback on disposable snapshot. Verify original user Hub task state restored only when allowed, no newer SYSTEM writes discarded and rollback secrets available. On UNKNOWN writer state, stop and preserve both state trees.
+7. Record a separate evidence row for source tests, Windows PowerShell simulation, VM before-login WSS, real Work-PC acceptance and rollback. Missing VM/physical result is `NOT_RUN`.
+
+## Failure stop conditions
+- Incorrect/multiple/hidden Scheduled Task, no verified AtStartup, foreign action or principal.
+- Wrong or writable ProgramData parent, reparse chain, unexpected file entries, untrusted executable or executable digest drift.
+- No consistent cutover receipt, DPAPI scope mismatch, missing backup/integrity proof, active legacy Hub listener, unknown WAL writer/rollback state.
+- No elevated local owner approval, task operation on production outside AI-09 or conflicting executor.
+
+**Rollout boundary:** No direct changes to `main`, #1160, Windows production tasks, SQLite/DPAPI, or releases from this AI-01 branch.
+
+## CI coverage gap and targeted operator test command (2026-11-23)
+
+- For source SHA `95a268549196474464b19abd79e640eed6769115`, Portable Root run `45181707698` recorded **655 tracked test files, 35 executed, 620 NOT_RUN**. It did **not** execute the new AI-01 startup-trigger test. This is evidence only for that older SHA; later PR commits require new exact-SHA receipts.
+- Generic CI `45181707815` passed on that older SHA but cannot be used as Windows PowerShell behavioral acceptance for the omitted tests.
+- #1205 / AI-08 owns the reviewed Windows-hosted shard and execution receipts. Do not edit shared CI or rerun already-active identical workflows from AI-01.
+- The SYSTEM install transaction now verifies the **actual registered task** (principal, action, AtStartup trigger, marker) **before stopping the legacy user Hub**, not only the preliminary candidate or registration arguments.
+
+On an authorized disposable Windows runner, after clean checkout of **exact PR HEAD** and `npm ci`, run:
+
+```powershell
+npm run typecheck
+$tests = @(
+  'test/hub-boot-startup-trigger-integrity.test.ts',
+  'test/hub-boot-handoff-transaction.test.ts',
+  'test/hub-boot-root-boundary.test.ts',
+  'test/hub-boot-status-legacy-user.test.ts',
+  'test/hub-boot-task-shell-trust.test.ts',
+  'test/hub-boot-hidden-task-visibility.test.ts',
+  'test/hub-boot-protected-state-gate.test.ts',
+  'test/hub-boot-shared-ancestor-trust.test.ts',
+  'test/hub-lifecycle.test.ts'
+)
+node --test --import tsx @tests
+```
+
+These are source/PowerShell identity tests; they do **not** install or mutate a SYSTEM Scheduled Task. Verify runner SHA in the receipt. If the physical shared ancestor ACL check is unsupported in CI, record its specific SKIP/FAIL rather than quietly turning it green.
+
+## User launcher environment isolation (additional AI-01 source guard)
+
+- Interactive launchers may persist `NEXOWIRE_SKILLS_DIR` for their own user-mode context. It is **not an authorized SYSTEM input**: before composing the protected launcher, installation drops that inherited setting; direct launcher-builder calls with the setting fail closed.
+- The generated `launch.ps1` also clears any ambient `NEXOWIRE_SKILLS_DIR` override before spawning Node, preventing inherited machine/task environment from silently choosing a non-audited directory.
+- The generated `launch.ps1` sets fixed system PowerShell `PATH` and `PSModulePath` (plus `SystemRoot`, `windir`, `ComSpec`) at the start of the scheduled `AtStartup` action. The isolated environment used *while registering the task* does not automatically carry over to *executing the task after reboot*.
+- A protected SYSTEM Hub may discover skills only using the packaged runtime's normal default lookup; a custom external skills catalog needs a separately reviewed, immutable, ACL-verified deployment rather than an inherited user string.
+- This is a **source-only fix**. Negative tests are at `test/hub-boot-startup-trigger-integrity.test.ts`; real PowerShell 5.1 and Windows before-login execution require independent CI/AI-09 evidence.
+
+## Windows PowerShell 5.1 synthetic fixture results (2026-11-23)
+
+**Source tested:** `b10598e4504a228d5737f48d48a2093fe8068d69`. The guard text was extracted from the exact GitHub source blob at that commit, not rewritten to mimic expected behavior. The environment scrub command was also located in that exact source before execution.
+
+**Execution environment:** online Windows 10 computer `DESKTOP-ONDD84S`, Windows PowerShell `5.1.19041.6456`, Nexowire first-party `shell.exec` headless PowerShell invocation. **No task API, scheduler read/write, reboot, Windows service change, file write, DPAPI, SQLite, or CORE operation** in these simulations. All task identities, paths, secrets, and environment variables used by the scripts were *synthetic*.
+
+| Source simulation | Cases | Result | Request ID |
+|---|---:|---|---|
+| SYSTEM Boot identity: canonical, no trigger, AtLogOn, disabled, duplicate, foreign working directory, foreign principal | 7 | **7 PASS / 0 FAIL** | `183e38c5-e207-4628-8ebc-0bcda930f490` |
+| User Hub identity: canonical, approved legacy `powershell.exe`, wrong SID, Highest, wrong args, foreign name, foreign executable, spoofed legacy description | 8 | **8 PASS / 0 FAIL** | `b20ece2e-9e7a-45cc-8c50-cafe136d7939` |
+| Inherited machine `NEXOWIRE_*` cleanup before restoring reviewed SYSTEM allowlist | 1 | **1 PASS / 0 FAIL** | `ffe537f5-cac2-4ff3-aeeb-bbb9bab0fce2` |
+
+These are **16 source-level PowerShell fixture scenarios PASS**, not an execution of the full Node test files, Task Scheduler API integration, actual task XML, disposable VM, unattended boot, or physical Work-PC acceptance.
+
+**Evidence separation:** `test/hub-boot-startup-trigger-integrity.test.ts` is still **NOT_RUN** in the general hosted root-level TypeScript test suite unless a separate exact-commit Node + Windows shard proves otherwise. At this stage, source PowerShell fixture checks are `PASS`; source test-file execution, VM cutover/rollback and real physical acceptance stay `NOT_RUN`. AI-08 owns the hosted exact-SHA test shard (#1205), AI-09 owns physical Windows acceptance (#1161).
+
+### Follow-up synthetic ownership/state-race cases
+
+- Tested against exact source commit `ca0112cf91c3ad2553bb2da0b1deeb8c65d94572`, request ID `f73460dc-f97b-47be-a04b-f446fc4ae55b`, same Windows PowerShell 5.1 executor.
+- **Ownership marker guard 3/3 PASS:** own marker allowed, foreign marker denied `HUB_BOOT_ROLLBACK_TASK_NOT_OURS`, missing synthetic boot task handled without attempting a mutation. A *real* absent task still requires the separate COM visibility guard.
+- **User-task state race 5/5 PASS:** unchanged Running, NotInstalled and Disabled accepted; Ready replacing Running and disappearing user task denied `HUB_USER_TASK_STATE_RACE`.
+- Combined synthetic PowerShell fixture evidence: **24/24 expected outcomes, 0 unexpected**, spanning SYSTEM identity (7), user identity (8), ambient environment cleanup (1), ownership marker (3), and user state race (5).
+- The last two sets exercised the exact extracted ownership guard plus the source-matched state comparison in isolated PowerShell variables, not any actual Scheduled Task. This is not physical acceptance, integration test execution, or proof that cross-process timing is atomically safe.

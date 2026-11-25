@@ -49,6 +49,7 @@ function fixture(source: Buffer, options: {
       return bytes.length;
     },
     hashStage: async () => digest(staging ?? Buffer.alloc(0)),
+    hashDestination: async () => digest(destination ?? Buffer.alloc(0)),
     commitStage: async () => {
       await options.beforePublish?.();
       if (destination !== null) {
@@ -125,11 +126,12 @@ test('T-112: same-name destination collision never replaces an existing file', a
   const f = fixture(Buffer.alloc(150 * 1024, 4), {existingDestination: original});
   await assert.rejects(
     transferCrossDeviceFile('reports/same-name.bin', f.ops),
-    /EEXIST/,
+    {code:'TRANSFER_PUBLISH_OUTCOME_UNKNOWN'},
   );
   assert.deepEqual(f.destination, original);
   assert.equal(f.publishCount, 0);
-  assert.equal(f.cleanupCount, 1);
+  assert.equal(f.cleanupCount, 0);
+  assert.deepEqual(f.staging,Buffer.alloc(150 * 1024,4));
 });
 
 test('T-113: lost publish acknowledgement makes retry ambiguous, never overwrites destination', async () => {
@@ -137,16 +139,18 @@ test('T-113: lost publish acknowledgement makes retry ambiguous, never overwrite
   const f = fixture(source, {losePublishAcknowledgement: true});
   await assert.rejects(
     transferCrossDeviceFile('reports/ambiguous.bin', f.ops),
-    /acknowledgement lost/,
+    {code:'TRANSFER_PUBLISH_OUTCOME_UNKNOWN'},
   );
   assert.deepEqual(f.destination, source, 'publication may succeed despite a failed call');
-  assert.equal(f.cleanupCount, 1);
+  assert.equal(f.cleanupCount, 0);
   await assert.rejects(
     transferCrossDeviceFile('reports/ambiguous.bin', f.ops),
-    /EEXIST/,
+    {code:'TRANSFER_PUBLISH_OUTCOME_UNKNOWN'},
   );
   assert.deepEqual(f.destination, source, 'retry must not overwrite a possibly published file');
   assert.equal(f.publishCount, 1);
+  assert.equal(f.cleanupCount,0);
+  assert.deepEqual(f.staging,source);
 });
 
 test('T-114: successful offline fixture is not physical two-device acceptance', async () => {

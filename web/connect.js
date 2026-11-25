@@ -6,12 +6,93 @@ const state = params.get('state') ?? '';
 const deviceId = params.get('deviceId') ?? '';
 const deviceName = params.get('deviceName') ?? '';
 const platform = params.get('platform') ?? '';
-// Pin the already tested Unicode-safe bootstrap; branch cleanup must not break downloads.
-const INSTALLER_REF = '96315d5dd4986fffbd24a96859309271d2a88ffe';
-const INSTALLER_VIEW = 'https://github.com/Naveax/Nexowire/blob/' + INSTALLER_REF + '/installers/';
-const INSTALLER_RAW = 'https://raw.githubusercontent.com/Naveax/Nexowire/' + INSTALLER_REF + '/installers/';
+// Pin the verified published stable installer assets, not an archived source-tree bootstrap.
+// Update this alongside the release asset snapshot and installation contracts.
+const INSTALLER_RELEASE_ASSETS = 'https://github.com/Naveax/Nexowire/releases/download/v1.0.8/';
 const RELEASE_PAGE = 'https://github.com/Naveax/Nexowire/releases/latest';
 let chatgptAddress = '';
+
+/*
+ * CORE is not equivalent to account pairing, a running Broker or a dashboard
+ * toggle. The deployed independent OS verifier must be separately reviewed
+ * before this interface may advertise READY_VERIFIED.
+ */
+const CORE_INDEPENDENT_VERIFIER_INSTALLED = false;
+const CORE_STATUS_MESSAGES = Object.freeze({
+  NOT_INSTALLED: [
+    'CORE bileşeninin kurulu olmadığı doğrulandı. Önce resmî kurucuyu kullan.',
+    'CORE is confirmed not installed. Use the official installer first.',
+  ],
+  PERMISSION_REQUIRED: [
+    'Bu bilgisayardaki cihaz sahibinin Windows yönetici/UAC onayı gerekiyor. Uzaktan onay verilemez.',
+    'The device owner must approve the Windows administrator/UAC prompt locally. Remote approval does not count.',
+  ],
+  AWAITING_PHYSICAL_ACCEPTANCE: [
+    'CORE onay isteği kaydedildi, ancak cihaza ulaştığı veya yerel Windows onayı henüz doğrulanmadı. Aynı isteği yeniden gönderme.',
+    'A CORE consent request is recorded, but delivery to the PC and local Windows approval are unverified. Do not resend it.'
+  ],
+  REVOKED_LOCALLY: [
+    'CORE erişimi bu cihazda yerel olarak iptal edildi. Yeni bir açık yerel onay gerekir.',
+    'CORE access was revoked locally on this PC. Fresh local consent is required.',
+  ],
+  BROKER_RUNNING_BUT_UNVERIFIED: [
+    'Broker çalışıyor görünebilir; bağımsız Windows yetki ve gerçek işlem doğrulaması yok. CORE hazır değil.',
+    'The Broker may appear to be running, but independent Windows authority and real effect are unverified. CORE is not ready.',
+  ],
+  READY_VERIFIED: [
+    'Bağımsız yerel Windows onayı ve güncel fiziksel CORE durumu doğrulandı. Yetkili işlemlerde Broker denetimi sürer.',
+    'Independent local Windows consent and fresh physical CORE status are verified. Broker checks still apply to privileged actions.',
+  ],
+  UNKNOWN: [
+    'CORE durumu doğrulanamadı. Eşleştirme, yönetici yetkisi veya CORE erişimi kanıtlamaz.',
+    'CORE status could not be verified. Pairing does not prove administrator rights or CORE access.',
+  ],
+});
+
+function coreStatusFromDashboard(dashboard) {
+  const devices = Array.isArray(dashboard?.devices) ? dashboard.devices : [];
+  // Duplicate or unmatched IDs cannot identify one trustworthy target.
+  const matched = devices.filter((entry) => entry && entry.id === deviceId);
+  if (matched.length !== 1) return 'UNKNOWN';
+  const device = matched[0];
+  const physical = device.physicalConsole;
+  // Only explicit source-of-truth negatives produce specific negative statuses.
+  if (device.installationStatus === 'NOT_INSTALLED') return 'NOT_INSTALLED';
+  if (physical?.state === 'REVOKED_LOCALLY') return 'REVOKED_LOCALLY';
+  if (physical?.permissionRequired === true) return 'PERMISSION_REQUIRED';
+  if (physical?.enrollmentRequested === true && physical?.localEnrolled !== true) {
+    return 'AWAITING_PHYSICAL_ACCEPTANCE';
+  }
+
+  const age = Date.now() - physical?.observedAtMs;
+  if (CORE_INDEPENDENT_VERIFIER_INSTALLED &&
+      dashboard?.corePhysicalStatusVerifierInstalled === true &&
+      device.platform === 'win32' && device.online === true &&
+      device.accessMode === 'full' && device.privilegeMode === 'broker' &&
+      device.adminBridgeReady === true && device.persistentMaintenance?.enabled === true &&
+      physical?.deviceReady === true && physical?.localEnrolled === true &&
+      physical?.active === true && Number.isFinite(age) && age >= 0 && age < 15000) {
+    return 'READY_VERIFIED';
+  }
+  // A stored broker configuration on an offline device does not prove a running broker.
+  if (device.platform === 'win32' && device.online === true &&
+      (device.privilegeMode === 'broker' || device.adminBridgeReady === true)) {
+    return 'BROKER_RUNNING_BUT_UNVERIFIED';
+  }
+  return 'UNKNOWN';
+}
+
+function renderCoreStatus(code) {
+  const status = Object.hasOwn(CORE_STATUS_MESSAGES, code) ? code : 'UNKNOWN';
+  const [tr, en] = CORE_STATUS_MESSAGES[status];
+  $('core-status-code').textContent = status;
+  $('core-status-code').className =
+    'pill ' + (status === 'READY_VERIFIED' ? 'good'
+      : status === 'REVOKED_LOCALLY' ? 'bad' : 'muted');
+  $('core-status-tr').textContent = tr;
+  $('core-status-en').textContent = en;
+}
+
 
 function detectedOS(ua = navigator.userAgent) {
   if (/windows/i.test(ua)) return 'windows';
@@ -22,12 +103,12 @@ function detectedOS(ua = navigator.userAgent) {
 const installers = {
   windows: {
     heading: 'Windows kurulumu',
-    description: 'Windows 10/11 x64: açılan GitHub sayfasında Download raw ile indir ve dosyaya çift tıkla. Node.js, npm, Git veya PowerShell 7 gerekmez. Tarayıcıda giriş yapıp BAĞLA’ya bas.',
-    command: "Invoke-WebRequest -Uri '" + INSTALLER_RAW + "Nexowire-Setup.cmd' -OutFile \"$env:USERPROFILE\\Downloads\\Nexowire-Setup.cmd\"",
-    url: INSTALLER_VIEW + 'Nexowire-Setup.cmd',
+    description: 'Windows 10/11 x64: resmî GitHub Release kurucusunu indir ve dosyaya çift tıkla. Node.js, npm, Git veya PowerShell 7 gerekmez. Tarayıcıda giriş yapıp BAĞLA’ya bas.',
+    command: "Invoke-WebRequest -Uri '" + INSTALLER_RELEASE_ASSETS + "Nexowire-Setup.cmd' -OutFile \"$env:USERPROFILE\\Downloads\\Nexowire-Setup.cmd\"",
+    url: INSTALLER_RELEASE_ASSETS + 'Nexowire-Setup.cmd',
     label: 'Windows kurucusunu aç ↗',
-    checksum: INSTALLER_VIEW + 'SHA256SUMS-Windows',
-    note: 'Depodaki düzeltilmiş kurucu, yayımlanmış v1.0.7 paketini doğrulayarak kullanır. Yönetici olarak çalıştırman gerekmez. İstersen kopyalama düğmesiyle yalnızca indirme komutunu alabilirsin.',
+    checksum: INSTALLER_RELEASE_ASSETS + 'SHA256SUMS-Windows',
+    note: 'Resmî v1.0.8 GitHub Release kurucusu ve aynı yayının SHA256SUMS-Windows dosyası kullanılır. SHA-256 bütünlük kontrolüdür, yayıncı imzası değildir. İstersen kopyalama düğmesiyle yalnızca indirme komutunu alabilirsin.',
   },
   macos: {
     heading: 'macOS kurulumu',
@@ -117,8 +198,12 @@ async function loadChatGPTSetup() {
     $('chatgpt-address').value = chatgptAddress;
     $('copy-chatgpt-address').disabled = false;
     $('chatgpt-status').textContent = 'Bu adresi ChatGPT’deki sunucu alanına yapıştır. Kimlik doğrulama: OAuth.';
-  } catch {
-    $('chatgpt-status').textContent = httpStatus >= 400
+  } catch (error) {
+    $('chatgpt-status').textContent = error?.name === 'TimeoutError'
+      ? 'Bağlantı adresi 5 saniye içinde alınamadı. Sayfayı yenile; sunucu adresini tahmin etme.'
+      : error?.name === 'AbortError'
+      ? 'Bağlantı adresi isteği durduruldu. Yeniden denemek için sayfayı yenile.'
+      : httpStatus >= 400
       ? 'Bağlantı adresi alınamadı (HTTP ' + httpStatus + '). Hizmete erişimi kontrol et; Windows kurulumunu tekrarlama.'
       : 'Bağlantı adresi alınamadı. Sayfayı yenile veya bağlantı bilgisini aç. Rastgele adresle ilerleme.';
   }
@@ -144,10 +229,21 @@ function showError(message, retryable = false) {
   setPill('Hata', 'bad');
   $('error-message').textContent = message;
   $('error-panel').classList.remove('hidden');
+  $('pair-panel').setAttribute('aria-busy', 'false');
   const approve = $('approve');
   approve.disabled = !retryable;
   approve.textContent = retryable ? 'TEKRAR DENE' : 'BAĞLA';
   approve.dataset.busy = 'false';
+  $('retry-hint').textContent = retryable
+    ? 'Tekrar denemek için TEKRAR DENE düğmesine bas.'
+    : 'Önce Nexowire uygulamasından eşleştirme sonucunu kontrol et. Yeniden bağlamak gerekiyorsa yeni oturumu yerel uygulamadan başlat; bu isteği otomatik tekrarlama.';
+  if (retryable) {
+    approve.setAttribute('aria-describedby', 'error-message retry-hint');
+    approve.focus();
+  } else {
+    approve.removeAttribute('aria-describedby');
+    $('error-panel').focus();
+  }
 }
 
 function validatedLoopbackCallback() {
@@ -185,6 +281,7 @@ async function loadAccount() {
   }
   $('chatgpt-panel').classList.add('hidden');
   $('install-panel').classList.add('hidden');
+  setPill('Hesap kontrol ediliyor', 'muted');
   $('pair-panel').classList.remove('hidden');
 
   $('device-name').textContent = deviceName;
@@ -193,6 +290,7 @@ async function loadAccount() {
   const response = await fetch('/api/v1/me/dashboard', {
     credentials: 'include',
     headers: { accept: 'application/json' },
+    signal: AbortSignal.timeout(8000),
   });
 
   if (response.status === 401) {
@@ -208,28 +306,45 @@ async function loadAccount() {
     throw new Error('Hesap doğrulanamadı. Lütfen tekrar dene.');
   }
 
-  $('status-title').textContent = 'Hazır';
+  // A pairing dashboard is not evidence of local CORE approval.
+  let dashboard = null;
+  try {
+    if (typeof response.json === 'function') dashboard = await response.json();
+  } catch {
+    // An unreadable or absent optional dashboard body must never invent CORE authority.
+  }
+  renderCoreStatus(coreStatusFromDashboard(dashboard));
+  $('status-title').textContent = 'Eşleştirmeye hazır';
   $('status-text').textContent =
-    'Ekstra erişim ayarı gerekmez. BAĞLA dediğinde cihaz hesabına eklenir ve bağlantı otomatik hazırlanır.';
+    'Hesap eşleştirmesi için ekstra erişim ayarı gerekmez. BAĞLA yalnızca cihazını hesabına ekler. CORE yetkisi için cihaz sahibinin yerel Windows onayı ayrıca gerekir.';
   $('approve').disabled = false;
-  setPill('Hazır', 'good');
+  $('pair-panel').setAttribute('aria-busy', 'false');
+  setPill('Eşleştirmeye hazır', 'muted');
 
+  let pairingOutcomeUncertain = false;
   $('approve').addEventListener('click', async () => {
     const approve = $('approve');
-    if (approve.dataset.busy === 'true') return;
+    if (approve.dataset.busy === 'true' || approve.disabled || pairingOutcomeUncertain) return;
 
     approve.dataset.busy = 'true';
     approve.disabled = true;
     approve.textContent = 'BAĞLANIYOR…';
+    approve.removeAttribute('aria-describedby');
     $('error-panel').classList.add('hidden');
+    $('pair-panel').setAttribute('aria-busy', 'true');
     setPill('Bağlanıyor', 'muted');
     $('status-title').textContent = 'Bağlanıyor';
     $('status-text').textContent =
       'Başka bir ayar yapmana gerek yok.';
 
+    let retryable = false;
+    let visibleError = '';
     try {
+      // Once POST begins, no repeat is safe without a trusted idempotency readback.
+      pairingOutcomeUncertain = true;
       const pairing = await fetch('/api/v1/pairing', {
         method: 'POST',
+        signal: AbortSignal.timeout(15000),
         credentials: 'include',
         headers: {
           accept: 'application/json',
@@ -240,7 +355,27 @@ async function loadAccount() {
 
       if (!pairing.ok) {
         const body = await pairing.json().catch(() => ({}));
+        if (pairing.status === 401) {
+          retryable = false;
+          visibleError = 'Oturumun sona erdi. GitHub ile yeniden giriş yapıp bağlantıyı dene.';
+          throw new Error('Oturum sona erdi.');
+        }
+        if (pairing.status === 429) {
+          const retryAfter = pairing.headers.get('retry-after');
+          const seconds = retryAfter !== null && /^[1-9][0-9]{0,3}$/.test(retryAfter)
+            ? Number(retryAfter) : null;
+          const wait = seconds !== null && seconds <= 3600
+            ? `${seconds} saniye bekle.` : 'Biraz bekle.';
+          visibleError = 'Çok fazla bağlantı isteği. ' + wait + ' Sonucu kontrol edip sayfayı daha sonra yeniden aç.';
+          throw new Error('İstek sınırına ulaşıldı.');
+        }
+        if (pairing.status === 503) {
+          // Do not echo upstream 503 payloads; preserve a safe retry path.
+          visibleError = 'Bağlantı sonucu belirsiz (HTTP 503). Önce Nexowire uygulamasındaki eşleştirmeyi kontrol et; aynı isteği körlemesine yineleme.';
+          throw new Error('Servis geçici olarak kullanılamıyor.');
+        }
         if (pairing.status === 403) {
+          retryable = false;
           throw new Error(
             body.error === 'DEVICE_LIMIT_REACHED'
               ? 'Bu hesap için cihaz limiti dolu.'
@@ -252,8 +387,8 @@ async function loadAccount() {
 
       const body = await pairing.json();
       if (
-        typeof body.pairingId !== 'string' ||
-        typeof body.token !== 'string'
+        typeof body.pairingId !== 'string' || !body.pairingId.trim() ||
+        typeof body.token !== 'string' || !body.token.trim()
       ) {
         throw new Error('Bağlantı cevabı geçersiz.');
       }
@@ -263,20 +398,22 @@ async function loadAccount() {
       callback.searchParams.set('token', body.token);
       window.location.replace(callback.toString());
     } catch (error) {
-      showError(
-        error instanceof Error ? error.message : String(error),
-        true,
-      );
-      $('status-title').textContent = 'Tekrar deneyebilirsin';
+      const rawMessage = error instanceof Error ? error.message : '';
+      const known = new Set([
+        'Bağlantı hazırlanamadı.', 'Bağlantı cevabı geçersiz.',
+        'Bu hesap için cihaz limiti dolu.', 'Bu cihaz bu hesaba bağlanamadı.',
+      ]);
+      showError(visibleError || (known.has(rawMessage) ? rawMessage : 'Beklenmeyen bağlantı hatası. Bağlantı sonucu belirsiz. Önce yerel uygulamadaki sonucu kontrol et; tekrar istek gönderme.'), retryable);
+      $('status-title').textContent = retryable ? 'Tekrar deneyebilirsin' : 'Bağlantı durduruldu';
       $('status-text').textContent =
-        'Ayarları değiştirmen gerekmez.';
+        retryable ? 'Ayarları değiştirmen gerekmez.' : 'Hata açıklamasını kontrol et.';
     }
   });
 }
 
-loadAccount().catch((error) => {
-  showError(
-    error instanceof Error ? error.message : String(error),
-    false,
-  );
+renderCoreStatus('UNKNOWN');
+loadAccount().catch(() => {
+  $('status-title').textContent = 'Hesap doğrulanamadı';
+  $('status-text').textContent = 'Sayfayı yenilemeden önce bağlantını kontrol et.';
+  showError('Hesap doğrulanamadı. Bağlantıyı kontrol edip yeniden dene.', false);
 });

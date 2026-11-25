@@ -19,6 +19,11 @@ const op=z.object({
     requiredPrivilege:z.enum(['CORE','ROOT']),
   }).strict(),
 }).strict();
+const evidence=z.object({
+  verified:z.literal(true),brokerId:id,ownerEpoch:z.number().int().positive().safe(),
+  grantGeneration:z.number().int().positive().safe(),highIntegrityToken:z.literal(true),
+  signedProtectedImage:z.literal(true),protectedParentAndImports:z.literal(true),
+}).strict();
 const releaseScope=z.object({
   dispatchId:id,brokerId:id,request:op,
 }).strict();
@@ -43,8 +48,13 @@ function deny(code:string):never{throw new BrokerDispatchTransportError(code)}
  */
 export class HttpsBrokerDispatchAuthority implements ExternalBrokerDispatchAuthority {
   private readonly base:URL;
-  constructor(private readonly config:{
+  private readonly timeoutMs:number;
+  private readonly transport:typeof fetch;
+  private readonly brokerCredential:()=>Promise<string|undefined>;
+  constructor(config:{
     endpoint:string;timeoutMs?:number;
+    /** Protected composition supplies the pinned mTLS adapter. Legacy fixture transport is not production. */
+    transport?:typeof fetch;
     /** Resolve only from authenticated protected Broker enrollment. */
     brokerCredential:()=>Promise<string|undefined>;
   }){
@@ -54,41 +64,91 @@ export class HttpsBrokerDispatchAuthority implements ExternalBrokerDispatchAutho
     if(url.protocol!=='https:'||url.username||url.password||
        url.search||url.hash||url.pathname!=='/v1/broker-dispatch')
       deny('BROKER_DISPATCH_ENDPOINT_INVALID');
+    const timeout=config.timeoutMs??3500;
+    if(!Number.isSafeInteger(timeout)||timeout<100||timeout>10000||
+       typeof config.brokerCredential!=='function'||
+       (config.transport!==undefined&&typeof config.transport!=='function'))
+      deny('BROKER_DISPATCH_TRANSPORT_CONFIGURATION_INVALID');
     this.base=url;
+    this.timeoutMs=timeout;
+    this.brokerCredential=config.brokerCredential;
+    this.transport=config.transport??fetch;
   }
-  private async send<T>(
+  private async send(
     action:'begin'|'commit'|'revoke-and-drain'|'release',
     payload:unknown,expectsReceipt:boolean,
   ):Promise<DispatchClaim|undefined>{
-    let token:string|undefined;
-    try{token=await this.config.brokerCredential()}
-    catch{return deny('BROKER_DISPATCH_CREDENTIAL_MISSING')}
-    if(!token||token.length<16)return deny('BROKER_DISPATCH_CREDENTIAL_MISSING');
-    let response:Response;
+    // Capture wire bytes before any asynchronous credential lookup.
+    const body=JSON.stringify(payload);
+    if(Buffer.byteLength(body,'utf8')>16384)deny('BROKER_DISPATCH_REQUEST_TOO_LARGE');
+    const controller=new AbortController(),started=process.hrtime.bigint();
+    let timer:ReturnType<typeof setTimeout>|undefined;
+    const deadline=new Promise<never>((_,reject)=>{
+      timer=setTimeout(()=>{
+        controller.abort();
+        reject(new BrokerDispatchTransportError('BROKER_DISPATCH_TRANSPORT_UNKNOWN'));
+      },this.timeoutMs);
+    });
+    const checked=()=>{
+      const elapsed=process.hrtime.bigint()-started;
+      if(controller.signal.aborted||elapsed<0n||elapsed>=BigInt(this.timeoutMs)*1000000n)
+        deny('BROKER_DISPATCH_TRANSPORT_UNKNOWN');
+    };
     try{
-      response=await fetch(new URL('/v1/broker-dispatch/'+action,this.base),{
+      let token:string|undefined;
+      try{token=await Promise.race([Promise.resolve().then(()=>this.brokerCredential()),deadline])}
+      catch(e){if(e instanceof BrokerDispatchTransportError)throw e;
+        return deny('BROKER_DISPATCH_CREDENTIAL_MISSING')}
+      checked();
+      if(typeof token!=='string'||!/^[^\s,\x00-\x1f\x7f]{16,4096}$/.test(token))
+        return deny('BROKER_DISPATCH_CREDENTIAL_MISSING');
+      const response=await Promise.race([this.transport(new URL('/v1/broker-dispatch/'+action,this.base),{
         method:'POST',redirect:'error',cache:'no-store',
         headers:{authorization:'Bearer '+token,'content-type':'application/json'},
-        body:JSON.stringify(payload),
-        signal:AbortSignal.timeout(this.config.timeoutMs??3500),
-      });
-    }catch{return deny('BROKER_DISPATCH_TRANSPORT_UNKNOWN')}
-    if(!response.ok)return deny('BROKER_DISPATCH_REMOTE_REFUSED');
-    if(!expectsReceipt)return undefined;
-    let body:string;
-    try{body=await response.text()}
-    catch{return deny('BROKER_DISPATCH_RECEIPT_INVALID')}
-    if(body.length>8192)return deny('BROKER_DISPATCH_RECEIPT_INVALID');
-    let data:unknown;
-    try{data=JSON.parse(body)}
-    catch{return deny('BROKER_DISPATCH_RECEIPT_INVALID')}
-    const parsed=claim.safeParse(data);
-    if(!parsed.success)return deny('BROKER_DISPATCH_RECEIPT_INVALID');
-    return parsed.data;
+        body,signal:controller.signal,
+      }),deadline]);
+      checked();
+      if(response.redirected||response.status!==(expectsReceipt?200:204))
+        return deny('BROKER_DISPATCH_REMOTE_REFUSED');
+      if(!expectsReceipt)return undefined;
+      const type=response.headers.get('content-type'),encoding=response.headers.get('content-encoding');
+      if(!/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(type??'')||
+         (encoding!==null&&encoding.toLowerCase()!=='identity'))
+        return deny('BROKER_DISPATCH_RECEIPT_INVALID');
+      const reader=response.body?.getReader();
+      if(!reader)return deny('BROKER_DISPATCH_RECEIPT_INVALID');
+      const chunks:Uint8Array[]=[];let size=0;
+      try{
+        for(;;){
+          const part=await Promise.race([reader.read(),deadline]);checked();
+          if(part.done)break;
+          size+=part.value.byteLength;
+          if(size>8192)return deny('BROKER_DISPATCH_RECEIPT_INVALID');
+          chunks.push(part.value);
+        }
+      }finally{
+        void reader.cancel().catch(()=>undefined);reader.releaseLock();
+      }
+      checked();
+      let data:unknown;
+      try{data=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks)))}
+      catch{return deny('BROKER_DISPATCH_RECEIPT_INVALID')}
+      const parsed=claim.safeParse(data);
+      if(!parsed.success)return deny('BROKER_DISPATCH_RECEIPT_INVALID');
+      return Object.freeze(parsed.data);
+    }catch(error){
+      if(error instanceof BrokerDispatchTransportError)throw error;
+      return deny('BROKER_DISPATCH_TRANSPORT_UNKNOWN');
+    }finally{
+      if(timer!==undefined)clearTimeout(timer);
+      controller.abort();
+    }
   }
   async beginIfCurrent(request:BrokerDispatchRequest,
     broker:ProtectedBrokerEvidence,challengeNonce:string):Promise<DispatchClaim>{
-    const input=op.parse(request);
+    const input=op.parse(request),snapshot=evidence.safeParse(broker);
+    if(!snapshot.success)return deny('BROKER_DISPATCH_ELEVATION_UNVERIFIED');
+    broker=snapshot.data;
     if(!/^[0-9a-f]{64}$/.test(challengeNonce))
       deny('BROKER_DISPATCH_CHALLENGE_INVALID');
     if(broker.verified!==true||!id.safeParse(broker.brokerId).success||
@@ -106,7 +166,9 @@ export class HttpsBrokerDispatchAuthority implements ExternalBrokerDispatchAutho
   async commitIfCurrent(request:BrokerDispatchRequest,
     broker:ProtectedBrokerEvidence,dispatchId:string,
     challengeNonce:string):Promise<DispatchClaim>{
-    const input=op.parse(request);
+    const input=op.parse(request),snapshot=evidence.safeParse(broker);
+    if(!snapshot.success)return deny('BROKER_COMMIT_EFFECTIVE_TOKEN_UNVERIFIED');
+    broker=snapshot.data;
     if(!id.safeParse(dispatchId).success||
        !/^[0-9a-f]{64}$/.test(challengeNonce))
       deny('BROKER_COMMIT_SCOPE_INVALID');

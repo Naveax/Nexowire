@@ -3,6 +3,16 @@ import assert from 'node:assert/strict';
 import {execFileSync, spawnSync} from 'node:child_process';
 import {randomBytes} from 'node:crypto';
 import {ProcessManager} from '../src/agent/process-manager.js';
+import {useWindowsJobForProcess} from '../src/agent/process-launch-mode.js';
+
+// A local-owner session deliberately launches ordinary processes. Native
+// guardian tests are meaningful only when the production launch selector
+// actually uses Windows Jobs; hosted Windows CI pins this profile to 'native'.
+const nativeWindowsJobOnly = process.platform !== 'win32'
+  ? 'Windows Job acceptance requires Win32'
+  : !useWindowsJobForProcess()
+    ? 'local-owner uses ordinary processes, not a native Job guardian'
+    : false;
 import {PathPolicy} from '../src/agent/path-policy.js';
 
 interface WinProc {
@@ -29,7 +39,7 @@ function markedChild(marker:string):WinProc|undefined {
 }
 
 test('Windows Job guardian death kills only its attached synthetic descendants', {
-  skip:process.platform!=='win32',timeout:32_000,
+  skip:nativeWindowsJobOnly,timeout:32_000,
 },async()=>{
   const marker='NW_GUARD_DEATH_'+randomBytes(12).toString('hex');
   const manager=new ProcessManager();
@@ -88,7 +98,7 @@ test('Windows Job guardian death kills only its attached synthetic descendants',
 
 
 test('Windows volatile Job is killed when its exact synthetic Agent parent crashes', {
-  skip:process.platform!=='win32',timeout:35_000,
+  skip:nativeWindowsJobOnly,timeout:35_000,
 },async()=>{
   const marker='NW_PARENT_DEATH_'+randomBytes(12).toString('hex');
   const {spawn}=await import('node:child_process');
@@ -157,7 +167,7 @@ test('Windows volatile Job is killed when its exact synthetic Agent parent crash
 
 
 test('Windows Job preserves separate stdin/stdout/stderr pipes', {
-  skip:process.platform!=='win32',timeout:18_000,
+  skip:nativeWindowsJobOnly,timeout:18_000,
 },async()=>{
   const manager=new ProcessManager();
   const session=await manager.start({
@@ -187,7 +197,7 @@ test('Windows Job preserves separate stdin/stdout/stderr pipes', {
 });
 
 test('Windows Job fast-exit stdout/stderr drained across 12 cycles', {
-  skip:process.platform!=='win32',timeout:75_000,
+  skip:nativeWindowsJobOnly,timeout:75_000,
 },async()=>{
   // Multiple isolated, short-lived commands target the race between the
   // guardian assignment marker, guardian exit and stream data delivery.
@@ -227,7 +237,7 @@ test('Windows Job fast-exit stdout/stderr drained across 12 cycles', {
 });
 
 test('Win32 Job launch is fail-closed when the requested image cannot be started', {
-  skip:process.platform!=='win32',timeout:14_000,
+  skip:nativeWindowsJobOnly,timeout:14_000,
 },async()=>{
   const {launchWindowsJob}=await import('../src/agent/windows-job-owner.js');
   const name='NX_NONEXISTENT_'+randomBytes(12).toString('hex')+'.exe';
@@ -238,7 +248,7 @@ test('Win32 Job launch is fail-closed when the requested image cannot be started
 
 
 test('Windows durable sidecar worker crash closes owned Job without killing Agent', {
-  skip:process.platform!=='win32',timeout:42_000,
+  skip:nativeWindowsJobOnly,timeout:42_000,
 },async()=>{
   const {promises:fs}=await import('node:fs');
   const os=await import('node:os');
@@ -305,7 +315,7 @@ test('Windows durable sidecar worker crash closes owned Job without killing Agen
 
 
 test('Windows helper path cannot be replaced by inherited environment', {
-  skip:process.platform!=='win32',
+  skip:nativeWindowsJobOnly,
   timeout:18_000,
 },async()=>{
   const {launchWindowsJob}=await import('../src/agent/windows-job-owner.js');
@@ -336,7 +346,7 @@ test('Windows helper path cannot be replaced by inherited environment', {
 
 
 test('Windows Job fast-exit stdout/stderr drained across 64 cycles', {
-  skip:process.platform!=='win32',timeout:140_000,
+  skip:nativeWindowsJobOnly,timeout:140_000,
 },async()=>{
   // Reproduce #565: short-lived synthetic commands must never finalize
   // before the guardian's inherited pipes have been fully consumed.

@@ -1,0 +1,9 @@
+# AI-08 | Exact-target lane evidence reconciliation
+
+2026-11-24 #1205. Base d2696376aae7a23aa9e0df01c19aa5c9b07f0595. Separate source-only Draft; no execution on production machines.
+
+Existing single portable-root reconciliation remains unchanged. The new reconcileLaneCoverage API in the same owned module accepts independently reviewed lane policies and separately acquired raw receipts for a single exact commit, complete Git manifest, OS, and full Node version. Do not derive policies from receipts. The caller must establish trusted policy provenance and trusted artifact/log acquisition; this function is a structural reconciliation helper, not cryptographic execution attestation.
+
+Validates source, exact policy file sets and blobs, receipt counters, duplicate/unknown lane IDs, named platform skips, and v2 failed-file semantics. Missing required lanes stay NOT_RUN and make acceptance INCOMPLETE. File state uses FAIL > SKIP > PASS > NOT_RUN for overlapping evidence; missing required lane remains separate even if overlapping file passed elsewhere. Counts are unique file paths; assertions remain per-lane only and are never summed across overlapping lanes. Separate platforms/Node versions and different child SHAs cannot be combined. Expected platform SKIP is not full-file PASS. No physical acceptance inference.
+
+Six synthetic regression cases added to the existing exact-head Release Readiness reconciliation contract; no workflow edits or new duplicate dispatch. No production source changes. This is an API for the coordinator's future combined-SHA receipt collector, not yet a deployed collection/gating workflow. The existing #1260 Broker Health prerelease fixture correction is owner-dependent and remains FAIL. #1252/#1253/#1255/#1258 all applicable workflows now green; unchanged SHA results preserved. Coordinated #1243 recovery parser repin still required. Child CI pending.

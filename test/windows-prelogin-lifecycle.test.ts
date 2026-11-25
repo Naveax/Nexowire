@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {spawnSync} from 'node:child_process';
 import {
   planSystemAgentPrelogin,
   renderSystemAgentPreloginLauncher,
   systemAgentPreloginEnvironment,
+  PRELOGIN_AGENT_TASK_VISIBILITY_PS,
 } from '../src/agent/windows-prelogin-lifecycle.js';
 import {assertWindowsPreloginStartupConfiguration} from '../src/agent/windows-prelogin-bootstrap.js';
 import {persistedNativeAgentEnvironment} from '../src/agent/native-agent-lifecycle.js';
@@ -119,6 +121,63 @@ test('task shell is fixed Windows PowerShell with bounded noninteractive executi
   assert.match(shell,/stdio:\['ignore','pipe','pipe'\]/);
   assert.match(shell,/PSModulePath:/);
   assert.doesNotMatch(shell,/\bexecSync\(|Start-Process|UseShellExecute/);
+});
+
+test('SYSTEM prelogin status and mutations require independent COM task absence',()=>{
+  const source=readFileSync(new URL('../src/agent/windows-prelogin-lifecycle.ts',import.meta.url),'utf8');
+  assert.match(source,/export const PRELOGIN_AGENT_TASK_VISIBILITY_PS/);
+  assert.match(source,/Resolve-PreloginTaskVisibility/);
+  assert.match(source,/PRELOGIN_AGENT_TASK_VISIBILITY_UNVERIFIED/);
+  assert.match(source,/PRELOGIN_AGENT_UNREGISTER_READBACK_UNVERIFIED/);
+  assert.match(source,/if\(task.state!=='not-installed'\)/);
+  assert.match(source,/if\(before.state!=='not-installed'\)/);
+  const register=source.indexOf('"Register-ScheduledTask -TaskPath');
+  const comRecheck=source.lastIndexOf('Read-PreloginTaskVisibility',register);
+  assert.ok(comRecheck>0&&comRecheck<register,'independent COM recheck before registration');
+  assert.doesNotMatch(source,/if\(created&&!queryTaskState\(\)\.installed\)/);
+});
+
+test('SYSTEM prelogin COM lookup distinguishes true absence from hidden and inaccessible tasks',{
+  skip:process.platform!=='win32',
+},()=>{
+  const ps=[
+    "$ErrorActionPreference='Stop'",
+    "$ProgressPreference='SilentlyContinue'",
+    PRELOGIN_AGENT_TASK_VISIBILITY_PS,
+    "$name='Nexowire Prelogin Agent'",
+    "foreach($mode in @('absent','denied','present','null','fault','invalid-name')){",
+    " $script:mode=$mode",
+    " $lookup={param($n)",
+    "  if($script:mode -eq 'absent' -or $script:mode -eq 'invalid-name'){throw ([Runtime.InteropServices.COMException]::new('not found',-2147024894))}",
+    "  if($script:mode -eq 'denied'){throw ([Runtime.InteropServices.COMException]::new('denied',-2147024891))}",
+    "  if($script:mode -eq 'present'){return [pscustomobject]@{Name=$n}}",
+    "  if($script:mode -eq 'null'){return $null}",
+    "  throw 'SYNTHETIC_COM_FAILURE'",
+    " }",
+    " $checked=if($mode -eq 'invalid-name'){'Nexowire Hub Boot'}else{$name}",
+    " $result='PASS'",
+    " try{$result=Resolve-PreloginTaskVisibility $lookup $checked}catch{$result=$_.Exception.Message}",
+    " [pscustomobject]@{mode=$mode;result=$result}|ConvertTo-Json -Compress",
+    "}",
+  ].join('\r\n');
+  const r=spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',[
+    '-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',
+    Buffer.from(ps,'utf16le').toString('base64'),
+  ],{encoding:'utf8',windowsHide:true,timeout:15000,maxBuffer:128*1024});
+  assert.equal(r.status,0,r.stderr);
+  const values=r.stdout.trim().split(/\r?\n/).filter(Boolean).map(v=>JSON.parse(v) as {
+    mode:string;result:string;
+  });
+  const expected:Record<string,string>={
+    absent:'not-installed',
+    denied:'access-denied',
+    present:'identity-unverified',
+    null:'visibility-unverified',
+    fault:'visibility-unverified',
+    'invalid-name':'PRELOGIN_AGENT_TASK_NAME_UNTRUSTED',
+  };
+  assert.equal(values.length,Object.keys(expected).length);
+  for(const v of values)assert.equal(v.result,expected[v.mode],v.mode);
 });
 
 test('CI executes prelogin lifecycle tests on actual Windows Node 22 and 24',()=>{

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {randomBytes} from 'node:crypto';
 import {ProcessManager} from '../src/agent/process-manager.js';
+import {useWindowsJobForProcess} from '../src/agent/process-launch-mode.js';
 import {PathPolicy} from '../src/agent/path-policy.js';
 
 type RunningChild={ProcessId:number;ParentProcessId:number;CreationDate:string};
@@ -74,7 +75,11 @@ test('Windows process.stop exposes bounded tree termination evidence and checks 
 });
 
 test('Windows Job owner reaps descendants after the root PID is deliberately lost', {
-  skip:process.platform!=='win32',
+  // The explicit personal local-owner profile intentionally opts out of the
+  // native Job guardian. This acceptance remains mandatory on Windows CI in
+  // its normal Job-enabled profile, but is not a valid local-owner assertion.
+  skip:process.platform!=='win32' ? 'Windows Job requires Win32' :
+    !useWindowsJobForProcess() ? 'local-owner intentionally does not use a Windows Job guardian' : false,
   timeout:95_000,
 },async()=>{
   const marker='NW_ORPHAN_TEST_'+randomBytes(12).toString('hex');

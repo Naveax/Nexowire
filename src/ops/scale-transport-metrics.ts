@@ -91,3 +91,44 @@ export function compareScaleMetricReports(
     return [name,b.events<a.events||b.bytes<a.bytes?'DECREASED':'NON_DECREASING'];
   })) as Record<ScaleMetricName,ScaleMetricProgress>;
 }
+
+
+/**
+ * Offline/synthetic transfer progress only. Sent or received bytes, even if
+ * equal to totalBytes, are NOT proof of durable completion. No device I/O.
+ * Historical idea reviewed in PR #1107, with stricter acknowledgement
+ * consistency before displaying progress.
+ */
+export function summarizeOfflineTransferProgress(input:unknown){
+  const unknown=()=>({
+    classification:'UNKNOWN' as const,
+    phase:'UNKNOWN' as const,
+    totalBytes:null,sentBytes:null,receivedBytes:null,acknowledgedBytes:null,
+    progressPercent:null,complete:false,
+  });
+  if(!input||typeof input!=='object'||Array.isArray(input))return unknown();
+  const row=input as Record<string,unknown>;
+  const valid=(v:unknown):v is number=>
+    typeof v==='number'&&Number.isSafeInteger(v)&&v>=0;
+  const allowed=['PARTIAL','COMPLETE','ALREADY_PRESENT','INTERRUPTED','FAILED'];
+  if(!valid(row.totalBytes)||!valid(row.sentBytes)||
+     !valid(row.receivedBytes)||!valid(row.acknowledgedBytes)||
+     typeof row.phase!=='string'||!allowed.includes(row.phase)||
+     typeof row.finalReceiptVerified!=='boolean')return unknown();
+  const total=row.totalBytes;
+  const sent=row.sentBytes;
+  const received=row.receivedBytes;
+  const acknowledged=row.acknowledgedBytes;
+  if(acknowledged>total||acknowledged>received||received>sent)return unknown();
+  const complete=(row.phase==='COMPLETE'||row.phase==='ALREADY_PRESENT')&&
+    row.finalReceiptVerified===true&&acknowledged===total;
+  const rawPercent=total===0?0:
+    Number((BigInt(acknowledged)*100n)/BigInt(total));
+  return {
+    classification:'SYNTHETIC_EVIDENCE_ONLY' as const,
+    phase:row.phase,totalBytes:total,sentBytes:sent,receivedBytes:received,
+    acknowledgedBytes:acknowledged,
+    progressPercent:complete?100:Math.min(99,rawPercent),
+    complete,
+  };
+}

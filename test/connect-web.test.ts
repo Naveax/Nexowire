@@ -19,8 +19,11 @@ test('hosted connect page keeps the normal user flow to one BAĞLA action', asyn
 
   assert.match(
     js,
-    /Ekstra erişim ayarı gerekmez/,
+    /Hesap eşleştirmesi için ekstra erişim ayarı gerekmez/,
   );
+  assert.match(js, /CORE yetkisi için cihaz sahibinin yerel Windows onayı ayrıca gerekir/);
+  assert.match(js, /CORE_INDEPENDENT_VERIFIER_INSTALLED = false/);
+  assert.match(js, /pairingOutcomeUncertain/);
   assert.match(
     js,
     /\/auth\/github\/start\?next=/,

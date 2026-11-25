@@ -1,0 +1,58 @@
+name: AI-08 Windows Authority Ledger Source Fixtures
+
+on:
+  pull_request:
+    paths:
+      - "scripts/ci/windows-authority-ledger-fixture-receipt.mjs"
+      - "test/ci/windows-authority-ledger-fixture-receipt.test.mjs"
+      - ".github/workflows/ai08-windows-authority-ledger-fixtures.yml"
+      - "scripts/ci/test-inventory.mjs"
+      - "scripts/ci/assert-tap-summary.mjs"
+      - "test/idempotency-journal-concurrency.test.ts"
+      - "test/guardian-sqlite-replay-ledger.test.ts"
+      - "test/guardian-sqlite-signed-command.test.ts"
+      - "test/privileged-broker-denial.test.ts"
+      - "test/privileged-broker-health.test.ts"
+      - "test/windows-programdata-acl.test.ts"
+      - "test/windows-uac-status.test.ts"
+      - "test/idempotency/fixtures/model-exited-hub-writer.ts"
+      - "src/agent/**"
+      - "src/operations/**"
+      - "src/protocol/**"
+      - "src/security/**"
+      - "src/mcp/tool-capabilities.ts"
+      - "package.json"
+      - "package-lock.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai08-authority-ledger-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  reviewed-windows-authority-ledger-fixtures:
+    runs-on: windows-latest
+    timeout-minutes: 32
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - name: Verify reviewed source pins and receipt rejection contracts
+        run: node --test test/ci/windows-authority-ledger-fixture-receipt.test.mjs
+      - name: Execute reviewed authority and ledger fixtures
+        env:
+          NEXOWIRE_EXPECTED_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/ci/windows-authority-ledger-fixture-receipt.mjs --json

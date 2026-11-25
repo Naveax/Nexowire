@@ -253,3 +253,157 @@ test('policy rejects truthy non-booleans and noncanonical signature encodings fr
     signatureBase64:original.certificate!.signatureBase64+'\n'}});
   assert.equal((await f.controller.status('full')).active,false);
 });
+
+test('CORE console rejects executable input properties before native inspection',async()=>{
+  for(const shape of ['getter','toJSON','sparse'] as const){
+    let executed=0,inspected=0;
+    const f=fixture({inspect:async()=>{inspected++;return evidence();}});
+    let input:unknown;
+    if(shape==='getter'){
+      input=Object.defineProperty({action:'click'},'target',{
+        enumerable:true,get(){executed++;return {hwnd:'1'};},
+      });
+    }else if(shape==='toJSON'){
+      input={action:'click',toJSON(){executed++;return {action:'click'};}};
+    }else{
+      input=new Array(2);
+      (input as unknown[])[1]='noncanonical';
+    }
+    await assert.rejects(
+      f.controller.execute('windows.pointer.click',input,randomUUID(),'full'),
+      code('CORE_CONSOLE_INPUT_NOT_CANONICAL'),shape);
+    assert.equal(executed,0,shape);
+    assert.equal(inspected,0,shape);
+    assert.equal(f.calls(),0,shape);
+  }
+});
+
+test('CORE console rejects nested and revoked Proxy before native provider inspection',async()=>{
+  let traps=0;
+  const handler:ProxyHandler<object>={
+    getPrototypeOf(){traps++;throw Error('PROXY_GET_PROTO');},
+    ownKeys(){traps++;throw Error('PROXY_KEYS');},
+    getOwnPropertyDescriptor(){traps++;throw Error('PROXY_DESC');},
+    get(){traps++;throw Error('PROXY_GET');},
+  };
+  const proxy=new Proxy({action:'click'},handler);
+  const revoked=Proxy.revocable({action:'click'},handler);
+  revoked.revoke();
+  for(const raw of [proxy,{target:[{attrs:proxy}]},revoked.proxy]){
+    let inspections=0,executions=0;
+    const f=fixture({inspect:async()=>{inspections++;return evidence();},
+      execute:async req=>{executions++;
+        return {requestId:req.requestId,fingerprint:req.fingerprint,outcome:'succeeded'};}});
+    await assert.rejects(
+      f.controller.execute('windows.pointer.click',raw,randomUUID(),'full'),
+      code('CORE_CONSOLE_INPUT_NOT_CANONICAL'));
+    assert.equal(traps,0);
+    assert.equal(inspections,0);
+    assert.equal(executions,0);
+  }
+});
+
+test('STOP cancels a pending enrollment and late approval cannot reopen CORE',async()=>{
+  let entered!:()=>void,release!:(approved:boolean)=>void;
+  const started=new Promise<void>(resolve=>{entered=resolve;});
+  const decision=new Promise<boolean>(resolve=>{release=resolve;});
+  let receivedSignal:AbortSignal|undefined,requests=0;
+  const f=fixture({binding,enroll:async signal=>{
+    receivedSignal=signal;++requests;entered();return decision;
+  }});
+  const pending=f.controller.enroll(new AbortController().signal);
+  try{
+    await started;
+    await f.controller.revoke();
+    assert.equal(receivedSignal?.aborted,true);
+    assert.equal(await f.controller.enroll(new AbortController().signal),false);
+    assert.equal(requests,1);
+    release(true);
+    assert.equal(await pending,false);
+    assert.equal((await f.controller.status('full')).state,'REVOKED_LOCALLY');
+    await assert.rejects(f.controller.execute('windows.pointer.click',{},randomUUID(),'full'),
+      code('REVOKED_LOCALLY'));
+    assert.equal(f.calls(),0);
+    // Only a new explicit provider enrollment after the old attempt drains
+    // may reopen the local latch; fresh native authority is still required.
+    assert.equal(await f.controller.enroll(new AbortController().signal),true);
+    assert.equal(requests,2);
+  }finally{release(false);await pending.catch(()=>{});}
+});
+
+test('CORE enrollment stays blocked until all pending durable revokes settle',async()=>{
+  let releaseFirst!:()=>void,releaseSecond!:()=>void;
+  const firstGate=new Promise<void>(resolve=>{releaseFirst=resolve;});
+  const secondGate=new Promise<void>(resolve=>{releaseSecond=resolve;});
+  let enrollments=0,revocations=0;
+  const f=fixture({binding,revoke:()=>++revocations===1?firstGate:secondGate,
+    enroll:async()=>{enrollments++;return true;}});
+  const first=f.controller.revoke(),second=f.controller.revoke();
+  try{
+    assert.equal(await f.controller.enroll(new AbortController().signal),false);
+    assert.equal(enrollments,0);
+    assert.equal((await f.controller.status('full')).state,'REVOKED_LOCALLY');
+    releaseFirst();await first;
+    assert.equal(await f.controller.enroll(new AbortController().signal),false);
+    assert.equal(enrollments,0);
+    releaseSecond();await second;
+    assert.equal(await f.controller.enroll(new AbortController().signal),true);
+    assert.equal(enrollments,1);
+  }finally{releaseFirst();releaseSecond();await Promise.allSettled([first,second]);}
+});
+
+test('pre-aborted enrollment never calls provider and enrollment failure leaves STOP intact',async()=>{
+  let enrollments=0;
+  const f=fixture({binding,enroll:async()=>{
+    ++enrollments;throw new Error('synthetic enrollment failure');
+  }});
+  await f.controller.revoke();
+  const cancelled=new AbortController();cancelled.abort();
+  assert.equal(await f.controller.enroll(cancelled.signal),false);
+  assert.equal(enrollments,0);
+  await assert.rejects(f.controller.enroll(new AbortController().signal),/synthetic enrollment failure/);
+  assert.equal(enrollments,1);
+  assert.equal((await f.controller.status('full')).state,'REVOKED_LOCALLY');
+  await assert.rejects(f.controller.enroll(new AbortController().signal),/synthetic enrollment failure/);
+  assert.equal(enrollments,2,'failed enrollment must release the prompt slot');
+  assert.equal(f.calls(),0);
+});
+
+test('repeated successful enrollment cannot orphan pending effect cancellation on STOP',async()=>{
+  let entered!:()=>void,release!:()=>void;
+  const started=new Promise<void>(resolve=>{entered=resolve;});
+  const gate=new Promise<void>(resolve=>{release=resolve;});
+  let effectSignal:AbortSignal|undefined,effects=0,approvals=0;
+  const f=fixture({
+    binding,
+    enroll:async()=>{approvals++;return true;},
+    execute:async(request,signal)=>{
+      effects++;
+      effectSignal=signal;entered();
+      await gate;
+      return {requestId:request.requestId,fingerprint:request.fingerprint,
+        outcome:'succeeded'};
+    },
+  });
+  const pending=f.controller.execute('windows.pointer.click',{},randomUUID(),'full');
+  const rejected=assert.rejects(pending,code('CORE_CONSOLE_MUTATION_STATE_UNKNOWN'));
+  try{
+    await started;
+    assert.equal(effectSignal?.aborted,false);
+    for(let i=0;i<3;i++){
+      assert.equal(await f.controller.enroll(new AbortController().signal),true);
+    }
+    assert.equal(approvals,3);
+    assert.equal(effectSignal?.aborted,false);
+    await f.controller.revoke();
+    assert.equal(effectSignal?.aborted,true,
+      'STOP must cancel requests from before an idempotent enrollment');
+    await rejected;
+    assert.equal(effects,1);
+    assert.equal((await f.controller.status('full')).state,'REVOKED_LOCALLY');
+    // A later explicit local approval may start a new lifetime, never
+    // clear or reuse the old request's permanently aborted signal.
+    assert.equal(await f.controller.enroll(new AbortController().signal),true);
+    assert.equal(effectSignal?.aborted,true);
+  }finally{release();await rejected;}
+});

@@ -2,7 +2,7 @@ import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync, backup } from 'node:sqlite';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -72,6 +72,21 @@ test('two Windows Hub processes cannot own the same ledger; independent stateDir
   assert.equal(allowed.stdout.trim(), 'CLAIMED');
   assert.equal((await owner.begin(request('owner-key'))).created, true);
   assert.equal(await new IdempotencyStore(independent).get('owner-key'), undefined);
+});
+
+test('same-process second store does not tombstone an active reservation', async (t) => {
+  const root = await disposable(t);
+  const first = new IdempotencyStore(root);
+  const pending = await first.begin(request('same-process-pending'));
+  assert.equal(pending.created, true);
+
+  // The second instance shares this process incarnation. Only a *new Hub*
+  // recovering a prior writer is allowed to mark abandoned work UNKNOWN.
+  const second = new IdempotencyStore(root);
+  await second.initialize();
+  assert.equal((await second.get('same-process-pending'))?.status, 'in_progress');
+  await first.complete('same-process-pending', 'succeeded');
+  assert.equal((await second.get('same-process-pending'))?.status, 'succeeded');
 });
 
 test('synthetic PID reuse and stolen hub_writer identity reject further mutations', async (t) => {
@@ -177,6 +192,43 @@ test('synthetic SQLite disk-full INSERT failure never allocates a replay reserva
     assert.equal((await store.get('disk-full-at-reserve'))?.operationId,
       attempt.record.operationId);
   } finally { db.close(); }
+});
+
+test('online SQLite backup includes committed WAL rows without stopping the Hub writer', async (t) => {
+  const root = await disposable(t);
+  const owner = new IdempotencyStore(root);
+  const finished = await owner.begin(request('before-live-snapshot'));
+  await owner.complete('before-live-snapshot', 'succeeded');
+  const pending = await owner.begin(request('pending-at-snapshot'));
+  const snapshot = path.join(root, 'online-snapshot.sqlite');
+  const reader = new DatabaseSync(sqlFile(root), { readOnly: true });
+  try {
+    await backup(reader, snapshot);
+  } finally { reader.close(); }
+
+  const copy = new DatabaseSync(snapshot, { readOnly: true });
+  try {
+    assert.equal((copy.prepare('PRAGMA quick_check').get() as {quick_check: string})
+      .quick_check, 'ok');
+    const rows = copy.prepare(
+      'SELECT key, operation_id AS operationId, status FROM idempotency_records ORDER BY key',
+    ).all().map((row) => ({ ...row })) as { key: string; operationId: string; status: string }[];
+    assert.deepEqual(rows, [
+      { key: 'before-live-snapshot', operationId: finished.record.operationId, status: 'succeeded' },
+      { key: 'pending-at-snapshot', operationId: pending.record.operationId, status: 'in_progress' },
+    ]);
+  } finally { copy.close(); }
+
+  // Snapshotting is read-only to the live writer: new keys may still commit.
+  const later = await owner.begin(request('after-live-snapshot'));
+  assert.equal(later.created, true);
+  const copied = new DatabaseSync(snapshot, { readOnly: true });
+  try {
+    assert.equal(copied.prepare(
+      'SELECT key FROM idempotency_records WHERE key=?',
+    ).get('after-live-snapshot'), undefined);
+  } finally { copied.close(); }
+  assert.equal((await owner.get('after-live-snapshot'))?.status, 'in_progress');
 });
 
 test('JSON-only rollback would miss newly committed SQLite keys and must be rejected at deployment', async (t) => {

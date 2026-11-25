@@ -1,0 +1,86 @@
+/**
+ * Reversible transition driver. All side effects are supplied by the Windows
+ * adapter; an armed recovery path must exist before the old writer is stopped.
+ */
+/**
+ * A healthy SYSTEM PID and HTTP 200 are a provisional deployment, not
+ * physical cutover acceptance. Keep the independent rollback task armed.
+ */
+export function postHealthSystemHubDisposition():{
+  journalPhase:'AWAITING_PHYSICAL_ACCEPTANCE';
+  retainRecoveryTask:true;
+  physicalRebootAccepted:false;
+}{
+  return {journalPhase:'AWAITING_PHYSICAL_ACCEPTANCE',
+    retainRecoveryTask:true,physicalRebootAccepted:false};
+}
+export interface SystemCutoverOperations {
+  preflight():Promise<void>;
+  armRecovery():Promise<void>;
+  confirmRecoveryBeforeQuiesce():Promise<void>;
+  quiesceLegacy():Promise<void>;
+  copyProtectedState():Promise<void>;
+  issueReceipt():Promise<void>;
+  installSystemHub():Promise<void>;
+  verifySystemHub():Promise<void>;
+  commit():Promise<void>;
+  rollback():Promise<void>;
+}
+export type SystemCutoverStep =
+  'preflight'|'arm-recovery'|'quiesce-legacy'|'copy-protected-state'|
+  'issue-receipt'|'install-system-hub'|'verify-system-hub'|'commit';
+export class SystemCutoverFailed extends Error {
+  readonly outcomeUnknown:boolean;
+  constructor(
+    readonly failedStep:SystemCutoverStep,
+    readonly rollbackFailed:boolean,
+    readonly cause:unknown,
+    readonly rollbackAttempted=true,
+  ){
+    super('SYSTEM_HUB_CUTOVER_FAILED_'+failedStep.toUpperCase().replaceAll('-','_')+
+      (!rollbackAttempted
+        ?failedStep==='commit'?'_COMMIT_OUTCOME_UNKNOWN':'_RECOVERY_UNVERIFIED'
+        :rollbackFailed?'_ROLLBACK_FAILED':'_ROLLED_BACK'));
+    this.name='SystemCutoverFailed';
+    // Commit can be durable despite an exception; do not treat it as a failed recovery arm.
+    this.outcomeUnknown=failedStep==='commit'&&!rollbackAttempted;
+  }
+}
+export async function runRecoverableSystemHubCutover(
+  ops:SystemCutoverOperations,
+):Promise<{booted:true;rollbackArmed:true;physicalRebootAccepted:false;pendingPhysicalAcceptance:true}>{
+  await ops.preflight();
+  // An incomplete arm or pre-quiesce recheck does not prove a durable
+  // recovery task exists. The old writer has not been stopped yet, so
+  // attempting a rollback here could execute an unverified recovery script.
+  try{
+    await ops.armRecovery();
+    await ops.confirmRecoveryBeforeQuiesce();
+  }catch(error){
+    throw new SystemCutoverFailed('arm-recovery',false,error,false);
+  }
+  let step:SystemCutoverStep='quiesce-legacy';
+  try{
+    await ops.quiesceLegacy();
+    step='copy-protected-state'; await ops.copyProtectedState();
+    step='issue-receipt'; await ops.issueReceipt();
+    step='install-system-hub'; await ops.installSystemHub();
+    step='verify-system-hub'; await ops.verifySystemHub();
+    step='commit'; await ops.commit();
+  }catch(error){
+    // Commit can durably advance the recovery journal before throwing (for
+    // example, an interrupted fsync/rename/readback). Its outcome is UNKNOWN.
+    // An automatic rollback would risk replaying the legacy writer after
+    // SYSTEM has accepted new operations. Preserve the recovery task and
+    // require operator reconciliation instead.
+    if(step==='commit'){
+      throw new SystemCutoverFailed(step,false,error,false);
+    }
+    try{await ops.rollback()}catch(rollbackError){
+      throw new SystemCutoverFailed(step,true,new AggregateError(
+        [error,rollbackError],'SYSTEM_HUB_CUTOVER_AND_ROLLBACK_FAILED'));
+    }
+    throw new SystemCutoverFailed(step,false,error);
+  }
+  return {booted:true,rollbackArmed:true,physicalRebootAccepted:false,pendingPhysicalAcceptance:true};
+}
