@@ -271,7 +271,8 @@ function readCoreFence(accountId,deviceId) {
     const value=JSON.parse(raw);
     if(value?.accountId!==accountId||value.deviceId!==deviceId||
        !['enable','consent','disable'].includes(value.kind)||
-       typeof value.id!=='string'||!value.id||typeof value.acknowledged!=='boolean')
+       typeof value.id!=='string'||!value.id||typeof value.acknowledged!=='boolean'||
+       !['in-flight','settled'].includes(value.phase))
       throw Error('Invalid local uncertainty marker');
     return {key,raw,operation:{kind:value.kind,id:value.id,accountId,deviceId,
       acknowledged:value.acknowledged,inFlight:false}};
@@ -283,7 +284,8 @@ function readCoreFence(accountId,deviceId) {
 function storeCoreFence(key,operation) {
   // No response bodies, tokens, approval proofs or OS/session IDs in storage.
   const raw=JSON.stringify({id:operation.id,accountId:operation.accountId,
-    deviceId:operation.deviceId,kind:operation.kind,acknowledged:operation.acknowledged});
+    deviceId:operation.deviceId,kind:operation.kind,acknowledged:operation.acknowledged,
+    phase:operation.inFlight?'in-flight':'settled'});
   localStorage.setItem(key,raw);
   if(localStorage.getItem(key)!==raw)throw Error('Local uncertainty marker not retained');
 }
@@ -305,7 +307,7 @@ function coreOperationFor(deviceId) {
   const local=coreOperations.get(deviceId);
   if(local?.accountId===accountId&&local.inFlight)return local;
   const persisted=readCoreFence(accountId,deviceId).operation;
-  return persisted&&local?.id===persisted.id?{...persisted,feedback:local.feedback}:persisted;
+  return persisted&&local&&local.id===persisted.id?{...persisted,feedback:local.feedback}:persisted;
 }
 function coreOperationAllows(deviceId, kind) {
   const previous = coreOperationFor(deviceId);
@@ -448,7 +450,6 @@ async function performCoreAction(deviceId, kind, row) {
         // A transport failure or malformed response may follow a durable write.
         // Do not echo upstream data or repeat the mutation.
         operation.feedback='Bağlantı veya sunucu yanıtı doğrulanamadı.';
-    
       } finally {
         operation.inFlight=false;
         // Retain the original unresolved marker if the ACK write fails.
