@@ -11,7 +11,7 @@ export interface OfflineSqliteStatusEvidence {
   readonly unknown:number;
   readonly inProgress:number;
 }
-const fail=(code:string):never=>{throw Error('AI02_OFFLINE_RECOVERY_'+code)};
+function fail(code:string):never{throw Error('AI02_OFFLINE_RECOVERY_'+code)}
 const samePath=(a:string,b:string)=>process.platform==='win32'?a.toLowerCase()===b.toLowerCase():a===b;
 function ordinary(file:string,optional:boolean):void{
   let stat;

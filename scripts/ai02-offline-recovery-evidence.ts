@@ -12,7 +12,7 @@ export interface ApprovedOfflineRecoveryBaseline {
   readonly sqliteRecords:number;
   readonly runtimeManifestSha256:string;
 }
-const fail=(code:string):never=>{throw Error('AI02_OFFLINE_RECOVERY_'+code)};
+function fail(code:string):never{throw Error('AI02_OFFLINE_RECOVERY_'+code)}
 const isHash=(v:unknown):v is string=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v);
 function approve(v:ApprovedOfflineRecoveryBaseline){
   const {treeSha256,sqliteRecords,runtimeManifestSha256}=v;
