@@ -92,17 +92,17 @@ test('Windows staged activation rejects ambiguous settings and premature activat
     {change:"$bootTask.Settings=$null",staged:false,enabled:false},
     {change:"$bootTask=$null",staged:false,enabled:false},
   ];
-  const out=runPS([
-    "$ErrorActionPreference='Stop'","$out=@()",
-    ...cases.flatMap(c=>[
+  // Keep each EncodedCommand below Windows' process command-line limit.
+  for(const c of cases){
+    const out=runPS([
+      "$ErrorActionPreference='Stop'",
       "$bootTask=[pscustomobject]@{State='Disabled';Settings=[pscustomobject]@{Enabled=$false;DisallowStartIfOnBatteries=$false;StopIfGoingOnBatteries=$false;RunOnlyIfIdle=$false}}",
       c.change,hubBootStartupSettingsProbe,"$staged=$false",
       'try {',hubBootStagedActivationGuard,'$staged=$true',"}catch{if($_.Exception.Message -cne 'HUB_BOOT_STAGED_ACTIVATION_UNVERIFIED'){throw}}",
-      '$out+= [pscustomobject]@{staged=$staged;enabled=$bootStartupEnabled}',
-    ]),
-    '$out|ConvertTo-Json -Compress',
-  ].join('\n'));
-  assert.deepEqual(JSON.parse(out),cases.map(({staged,enabled})=>({staged,enabled})));
+      '[pscustomobject]@{staged=$staged;enabled=$bootStartupEnabled}|ConvertTo-Json -Compress',
+    ].join('\n'));
+    assert.deepEqual(JSON.parse(out),{staged:c.staged,enabled:c.enabled},c.change);
+  }
 });
 
 test('Windows legacy visibility gate permits only observed task or verified COM absence',{
