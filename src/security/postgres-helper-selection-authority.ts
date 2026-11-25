@@ -135,16 +135,17 @@ export class PostgresHelperSelectionAuthority {
   }
   beginRuntime(requestId:string){return this.begin('RUNTIME',requestId);}
   beginDeployment(input:HelperRequest){const req=parsedRequest(input);return this.begin('DEPLOYMENT',req.requestId,req);}
-  private async held(db:DispatchStoreConnection,id:string,current:HelperSelection){
+  private async held(db:DispatchStoreConnection,id:string,current:HelperSelection,kind?:HelperLease['kind']){
     const row=(await db.query("SELECT * FROM helper_selection.leases WHERE id=$1 AND authority_id=$2 AND device_id=$3 FOR UPDATE",
       [uuid.parse(id),this.c.scope.authorityId,this.c.scope.deviceId])).rows[0];
     if(!row||!['ACTIVE','COMMITTED'].includes(String(row.state))||!['RUNTIME','DEPLOYMENT'].includes(String(row.kind))||
        current.revision!==(row.committed_revision??row.expected_revision))return deny('HELPER_LEASE_FENCED');
+    if(kind!==undefined&&row.kind!==kind)return deny('HELPER_LEASE_ROLE_FENCED');
     const lease:HelperLease=Object.freeze({id:uuid.parse(row.id),requestId:uuid.parse(row.request_id),kind:row.kind as HelperLease['kind'],expectedRevision:uuid.parse(row.expected_revision)});
     return {row,lease};
   }
-  read(leaseId:string):Promise<HelperSelection>{
-    return this.tx(async(db,current)=>{const {lease}=await this.held(db,leaseId,current);await this.evidence('READ',lease,current);return current;});
+  read(leaseId:string,kind?:HelperLease['kind']):Promise<HelperSelection>{
+    return this.tx(async(db,current)=>{const {lease}=await this.held(db,leaseId,current,kind);await this.evidence('READ',lease,current);return current;});
   }
   commit(leaseId:string,input:HelperRequest):Promise<HelperCommit>{
     const req=parsedRequest(input);
@@ -165,9 +166,9 @@ export class PostgresHelperSelectionAuthority {
   /** Explicit, independently verified permanent drain. No TTL/reconnect
    * release, no retry on UNKNOWN, and no clearance after revoke by this role.
    * A revoked scope or unavailable DB requires operator reconciliation. */
-  release(leaseId:string):Promise<void>{
+  release(leaseId:string,kind?:HelperLease['kind']):Promise<void>{
     return this.tx(async(db,current)=>{
-      const {lease}=await this.held(db,leaseId,current);
+      const {lease}=await this.held(db,leaseId,current,kind);
       await this.evidence('RELEASE',lease,current);
       const row=(await db.query("UPDATE helper_selection.leases SET state='RELEASED' WHERE id=$1 AND state IN ('ACTIVE','COMMITTED') RETURNING id",[lease.id])).rows[0];
       if(row?.id!==lease.id)return deny('HELPER_LEASE_RELEASE_FENCED');
@@ -187,14 +188,17 @@ export interface HelperSelectionLeaseTransport {
 export function createHelperSelectionLeaseProvider(transport:HelperSelectionLeaseTransport):TransferHelperDeploymentAuthority&{
   withActiveSelection<T>(effect:()=>Promise<T>):Promise<T>;
 }{
-  let busy=false,held:HelperLease|undefined;
+  let busy=false,poisoned=false,runtimeUsed=false,held:HelperLease|undefined;
   const validateLease=(lease:HelperLease,kind:HelperLease['kind'],requestId:string)=>{
     if(!lease||lease.kind!==kind||uuid.parse(lease.requestId)!==requestId||!uuid.safeParse(lease.id).success||!uuid.safeParse(lease.expectedRevision).success)
       return deny('HELPER_LEASE_RECEIPT_INVALID');
     return Object.freeze({id:lease.id,requestId,kind,expectedRevision:lease.expectedRevision});
   };
   async function use<T>(kind:HelperLease['kind'],effect:()=>Promise<T>,req?:Readonly<HelperRequest>){
-    if(busy)return deny('HELPER_LOCAL_SCOPE_BUSY');busy=true;
+    if(busy)return deny('HELPER_LOCAL_SCOPE_BUSY');
+    if(poisoned||runtimeUsed)return deny('HELPER_LOCAL_SCOPE_RETIRED');
+    if(kind==='RUNTIME')runtimeUsed=true;
+    busy=true;
     try{
       const id=req?.requestId??randomUUID();
       held=validateLease(await (req?transport.beginDeployment(req):transport.beginRuntime(id)),kind,id);
@@ -204,15 +208,22 @@ export function createHelperSelectionLeaseProvider(transport:HelperSelectionLeas
       // release until the service independently verifies permanent drain.
       await transport.release(held.id);
       return result;
-    }finally{held=undefined;busy=false;}
+    }catch(error){poisoned=true;throw error;}
+    finally{held=undefined;busy=false;}
   }
   return Object.freeze({
     withActiveSelection<T>(effect:()=>Promise<T>){return use('RUNTIME',effect);},
     withExclusiveQuiescedDeployment<T>(req:Readonly<HelperRequest>,effect:()=>Promise<T>){return use('DEPLOYMENT',effect,parsedRequest(req));},
-    async readSelection(){if(!held)return deny('HELPER_LEASE_REQUIRED');return transport.read(held.id);},
+    async readSelection(){
+      const lease=held;if(!lease)return deny('HELPER_LEASE_REQUIRED');
+      const value=await transport.read(lease.id);
+      if(held!==lease)return deny('HELPER_LEASE_FENCED');return value;
+    },
     async commitSelection(req:Readonly<HelperRequest>){
       if(!held||held.kind!=='DEPLOYMENT'||held.requestId!==req.requestId)return deny('HELPER_DEPLOYMENT_LEASE_REQUIRED');
-      return transport.commit(held.id,parsedRequest(req));
+      const lease=held;
+      const value=await transport.commit(lease.id,parsedRequest(req));
+      if(held!==lease)return deny('HELPER_AUTHORITY_TRANSACTION_UNKNOWN');return value;
     },
   });
 }

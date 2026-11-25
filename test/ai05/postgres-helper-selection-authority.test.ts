@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {Pool} from 'pg';
+import {createProtectedHelperSelectionServer,ProtectedHelperSelectionClient} from '../../src/security/protected-helper-selection-transport.js';
+import {createHelperSelectionTlsFixture} from './helper-selection-tls-fixture.js';
 import {PostgresHelperSelectionAuthority,createHelperSelectionLeaseProvider,type HelperAuthorityEvidenceRequest,type HelperAuthorityScope,type HelperSelectionLeaseTransport} from '../../src/security/postgres-helper-selection-authority.js';
 import {runTransferHelperLifecycle,type HelperSelection,type HelperRequest,type TransferHelperArtifactStore} from '../../src/installer/protected-transfer-helper-lifecycle.js';
 import type {DispatchStorePool} from '../../src/agent/postgres-broker-dispatch-authority.js';
@@ -38,7 +40,26 @@ test('durable independent helper selection excludes runtime/deployment, preserve
     return new PostgresHelperSelectionAuthority({pool:pool as unknown as DispatchStorePool,scope,verifyEvidence,
       verifyProvenance:async()=>({verified:true,authorityId:scope.authorityId,validUntil:Date.now()+60000})});
   }
-  const first=backend(),second=backend(),provider=createHelperSelectionLeaseProvider(first);
+  const first=backend(),second=backend();
+  const tls=createHelperSelectionTlsFixture();
+  const runtimeToken='r'.repeat(43),deploymentToken='d'.repeat(43);
+  const server=createProtectedHelperSelectionServer({tls:{key:tls.server.key,cert:tls.server.cert,ca:tls.ca},
+    scope,authorityPrivateKeyPem:tls.privateKey,backend:first,
+    async resolvePrincipal(cert,credential){
+      if(cert===tls.runtime.certSha256&&credential===runtimeToken)return {scope,role:'runtime'};
+      if(cert===tls.deployment.certSha256&&credential===deploymentToken)return {scope,role:'deployment'};
+      return undefined;
+    },
+  });
+  t.after(async()=>{try{server.closeAllConnections();if(server.listening)await new Promise<void>((resolve,reject)=>server.close(e=>e?reject(e):resolve()));}finally{tls.close();}});
+  await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',()=>resolve());});
+  const address=server.address();assert(address&&typeof address==='object');
+  const transportConfig={endpoint:'https://127.0.0.1:'+address.port+'/v1/helper-selection',scope,
+    serverCaPem:tls.ca,serverSpkiSha256:tls.server.spkiSha256,authorityPublicKeyPem:tls.publicKey};
+  const runtimeConfig={...transportConfig,role:'runtime' as const,certificatePem:tls.runtime.cert,keyPem:tls.runtime.key,credential:async()=>runtimeToken};
+  const deploymentClient=new ProtectedHelperSelectionClient({...transportConfig,role:'deployment',certificatePem:tls.deployment.cert,keyPem:tls.deployment.key,credential:async()=>deploymentToken});
+  const runtimeClient=new ProtectedHelperSelectionClient(runtimeConfig);
+  const provider=createHelperSelectionLeaseProvider(deploymentClient);
   const stored=new Set<string>();
   const store:TransferHelperArtifactStore={
     async stage(_file,p){stored.add(p.sha256);},
@@ -49,13 +70,26 @@ test('durable independent helper selection excludes runtime/deployment, preserve
   current=installed.selection;assert.deepEqual(current.pin,a);
   await assert.rejects(first.beginDeployment(install),/STALE|REPLAY/);
   const runtimeRequest=randomUUID();
-  const runtime=await first.beginRuntime(runtimeRequest);
+  await assert.rejects(deploymentClient.beginRuntime(randomUUID()),/ROLE_DENIED/);
+  await assert.rejects(runtimeClient.beginDeployment(req('upgrade',current,b,'inert fixture B')),/ROLE_DENIED/);
+  const wrongPin=new ProtectedHelperSelectionClient({...runtimeConfig,serverSpkiSha256:'0'.repeat(64)});
+  await assert.rejects(wrongPin.beginRuntime(randomUUID()),/TRANSPORT_UNKNOWN/);
+  const wrongCredential=new ProtectedHelperSelectionClient({...runtimeConfig,credential:async()=>deploymentToken});
+  await assert.rejects(wrongCredential.beginRuntime(randomUUID()),/TRANSPORT_UNKNOWN/);
+  const runtime=await runtimeClient.beginRuntime(runtimeRequest);
+  assert.deepEqual(await runtimeClient.read(runtime.id),current);
+  await assert.rejects(deploymentClient.read(runtime.id),/TRANSPORT_UNKNOWN/);
+  await assert.rejects(deploymentClient.release(runtime.id),/TRANSPORT_UNKNOWN/);
+  const wrongSigner=new ProtectedHelperSelectionClient({...runtimeConfig,authorityPublicKeyPem:tls.wrongPublicKey});
+  await assert.rejects(wrongSigner.read(runtime.id),/SIGNATURE_INVALID/);
+  const wrongScope=new ProtectedHelperSelectionClient({...runtimeConfig,scope:{...scope,deviceId:randomUUID()}});
+  await assert.rejects(wrongScope.read(runtime.id),/TRANSPORT_UNKNOWN/);
   await assert.rejects(second.beginDeployment(req('upgrade',current,b,'inert fixture B')),/LEASE_OCCUPIED/);
   await assert.rejects(second.beginRuntime(randomUUID()),/LEASE_OCCUPIED/);
   assert.deepEqual(await second.read(runtime.id),current);
   allowRelease=false;await assert.rejects(second.release(runtime.id),/EVIDENCE_DENIED/);
   const recreated=backend();await assert.rejects(recreated.beginRuntime(randomUUID()),/LEASE_OCCUPIED/);
-  allowRelease=true;await recreated.release(runtime.id);
+  allowRelease=true;await runtimeClient.release(runtime.id);
   await assert.rejects(second.beginRuntime(runtimeRequest),/REQUEST_REPLAY/);
   const upgrade=req('upgrade',current,b,'inert fixture B');
   const races=await Promise.allSettled([first.beginDeployment(upgrade),second.beginDeployment(req('upgrade',current,b,'inert fixture B'))]);
@@ -65,8 +99,12 @@ test('durable independent helper selection excludes runtime/deployment, preserve
   assert.deepEqual(current.pin,b);
   const rollback=await runTransferHelperLifecycle(req('rollback',current,a),provider,store);current=rollback.selection;
   assert.deepEqual(current.pin,a);assert.equal(stored.size,2);
-  const stale=await first.beginDeployment(req('uninstall',current,null));
+  const detachRequest=req('uninstall',current,null);
+  const stale=await deploymentClient.beginDeployment(detachRequest);
+  await assert.rejects(runtimeClient.read(stale.id),/TRANSPORT_UNKNOWN/);
+  await assert.rejects(runtimeClient.release(stale.id),/TRANSPORT_UNKNOWN/);
   allowCommit=false;
+  await assert.rejects(deploymentClient.commit(stale.id,detachRequest),/TRANSPORT_UNKNOWN/);
   // Exact original request hash required; changed request ID cannot commit.
   await assert.rejects(first.commit(stale.id,req('uninstall',current,null)),/COMMIT_FENCED/);
   await second.release(stale.id);allowCommit=true;
@@ -85,7 +123,7 @@ test('durable independent helper selection excludes runtime/deployment, preserve
   await assert.rejects(second.release(pending.id),/GRANT_FENCED/);
   assert.equal((await admin.query('SELECT state FROM helper_selection.leases WHERE id=$1',[pending.id])).rows[0].state,'ACTIVE');
   assert.equal((await admin.query("SELECT count(*)::int AS n FROM helper_selection.leases WHERE state<>'RELEASED'")).rows[0].n,1);
-  t.diagnostic('Real PostgreSQL durable selection, cross-pool exclusion, replay, rollback/detach and revoke fence verified; external evidence and file store are fixture-only');
+  t.diagnostic('Real PostgreSQL + pinned mTLS selection lifecycle; cross-pool exclusion, exact roles, wrong TLS pin/credential/scope/signer denial, replay, rollback/detach and revoke fence verified; external evidence and file store are fixture-only');
 });
 test('provider retains lease on callback failure and refuses nested local acquisition',async()=>{
   const id=randomUUID(),revision=randomUUID();let releases=0,begins=0;
@@ -103,4 +141,20 @@ test('provider retains lease on callback failure and refuses nested local acquis
   }),/callback failure/);
   assert.equal(begins,1);assert.equal(releases,0);
   await assert.rejects(provider.readSelection(),/LEASE_REQUIRED/);
+  await assert.rejects(provider.withActiveSelection(async()=>{}),/SCOPE_RETIRED/);
+});
+
+test('a completed runtime lease provider cannot be rebound to a new runtime or deployment',async()=>{
+  let released=0;
+  const transport:HelperSelectionLeaseTransport={
+    async beginRuntime(requestId){return {id:randomUUID(),requestId,kind:'RUNTIME',expectedRevision:randomUUID()};},
+    async beginDeployment(){throw Error('unexpected');},
+    async read(){throw Error('unexpected');},async commit(){throw Error('unexpected');},
+    async release(){released++;},
+  };
+  const provider=createHelperSelectionLeaseProvider(transport);
+  assert.equal(await provider.withActiveSelection(async()=>42),42);
+  assert.equal(released,1);
+  await assert.rejects(provider.withActiveSelection(async()=>{}),/SCOPE_RETIRED/);
+  await assert.rejects(provider.withExclusiveQuiescedDeployment(req('clean-install',{revision:randomUUID(),pin:null},a,'fixture'),async()=>{}),/SCOPE_RETIRED/);
 });

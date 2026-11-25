@@ -5,6 +5,9 @@ on:
       - '.github/workflows/ai05-helper-selection-authority.yml'
       - 'sql/helper-selection-authority.sql'
       - 'src/security/postgres-helper-selection-authority.ts'
+      - 'src/security/protected-helper-selection-transport.ts'
+      - 'src/security/protected-helper-selection-service.ts'
+      - 'test/ai05/helper-selection-tls-fixture.ts'
       - 'test/ai05/postgres-helper-selection-authority.test.ts'
 permissions:
   contents: read
@@ -52,4 +55,4 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
           node --test --test-reporter=tap --import tsx --test-concurrency=1 test/ai05/postgres-helper-selection-authority.test.ts | tee "$RUNNER_TEMP/ai05-helper-selection.tap"
-          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/ai05-helper-selection.tap" 2
+          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/ai05-helper-selection.tap" 3
