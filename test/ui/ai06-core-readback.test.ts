@@ -19,7 +19,7 @@ function device(overrides:Record<string,unknown>={}){
 type Device=ReturnType<typeof device>;
 function snapshot(devices:Device[],accountId='fixture-owner'){return {accountId,devices}}
 class Element {
-  disabled=false;value='CORE UNLIMITED';textContent='';focused=false;
+  disabled=false;value='CORE UNLIMITED';textContent='';focused=false;isConnected=true;
   focus(){this.focused=true}
 }
 function sharedBrowser(){
@@ -48,9 +48,11 @@ function fixture(initial:Device,handler:()=>Promise<Response>,shared=sharedBrows
   const posts:{path:string;init:RequestInit}[]=[];
   let reads=0;
   let server=snapshot([initial]);
+  const timers:(()=>void)[]=[];
   const ctx=runInNewContext('const coreOperations=new Map();let currentSnapshot=null;\n'+
-    source.slice(start,end)+'\n({setSnapshot:value=>currentSnapshot=value,coreOperations,coreEnrollmentEligible,coreReadbackMessage,reconcileCoreReadback,coreOperationAllows,performCoreAction,captureCoreFences,coreOperationFor})',{
+    source.slice(start,end)+'\n({setSnapshot:value=>currentSnapshot=value,coreOperations,coreEnrollmentEligible,coreReadbackMessage,reconcileCoreReadback,coreOperationAllows,performCoreAction,captureCoreFences,coreOperationFor,coreRemoteReadback,renderCoreReadbackCopy})',{
       AbortSignal,crypto:{randomUUID},navigator:shared.navigator,localStorage:shared.localStorage,
+      setTimeout:(callback:()=>void)=>{timers.push(callback)},
       fetch:async(path:string,init:RequestInit)=>{if(init.method!=='POST')return Response.json(server);posts.push({path,init});return handler()},
       load:async()=>{reads++},
     }) as {
@@ -58,6 +60,8 @@ function fixture(initial:Device,handler:()=>Promise<Response>,shared=sharedBrows
       coreOperations:Map<string,{inFlight:boolean;acknowledged:boolean;kind:string}>;
       coreEnrollmentEligible(value:Device):boolean;
       coreReadbackMessage(value:Device,operation?:unknown):string;
+      coreRemoteReadback(value:Device,view:ReturnType<typeof snapshot>,now?:number):{text:string;expiresAtMs:number|null};
+      renderCoreReadbackCopy(element:Element,value:Device,view:ReturnType<typeof snapshot>,operation?:unknown):void;
       reconcileCoreReadback(value:ReturnType<typeof snapshot>,captured:Map<string,string>):Promise<void>;
       captureCoreFences():Map<string,string>;
       coreOperationFor(id:string):unknown;
@@ -65,7 +69,7 @@ function fixture(initial:Device,handler:()=>Promise<Response>,shared=sharedBrows
       performCoreAction(id:string,kind:string,row:unknown):Promise<void>;
     };
   ctx.setSnapshot(snapshot([initial]));
-  return {...ctx,row,posts,reads:()=>reads,shared,
+  return {...ctx,row,posts,reads:()=>reads,shared,timers,
     setSnapshot(value:ReturnType<typeof snapshot>){server=value;ctx.setSnapshot(value)},
     setServer(value:ReturnType<typeof snapshot>){server=value},
     reconcileCoreReadback(value:ReturnType<typeof snapshot>,captured=ctx.captureCoreFences()){return ctx.reconcileCoreReadback(value,captured)},
@@ -252,4 +256,64 @@ test('AI-06 cross-tab/reload: unavailable lock or failed durable write never fal
   const g=fixture(d,async()=>Response.json({}),unsupported);
   await g.performCoreAction(d.id,'consent',g.row);
   assert.equal(g.posts.length,0);
+});
+
+function revocationV1(now:number,state='REVOKED',epoch=8){
+  return {version:1,source:'D1_REMOTE_AUTHORIZATION',
+    remoteAuthorization:{state,authorizationEpoch:epoch,observedAtMs:now},
+    localStop:'UNKNOWN',pendingRevoke:'UNKNOWN',nativeDrain:'UNKNOWN',
+    effectReadback:'UNKNOWN',nativeEvidence:'NOT_AVAILABLE'};
+}
+test('AI-06 AI-03 contract v1: only exact fresh owner dashboard D1 epoch is visible; native STOP remains unknown',()=>{
+  const now=1700000000000;
+  const f=fixture(device(),async()=>Response.json({}));
+  for(const [state,epoch] of [['ACTIVE',7],['REVOKED',8]] as const){
+    const d=device({coreRevocation:revocationV1(now,state,epoch)});
+    const view=snapshot([d]);
+    const read=f.coreRemoteReadback(d,view,now+14999);
+    assert.match(read.text,new RegExp(state+' \\(epoch '+epoch+'\\)'));
+    assert.match(read.text,/yerel STOP veya drain kanıtı değildir/);
+    assert.equal(read.expiresAtMs,now+15000);
+    assert.match(f.coreRemoteReadback(d,view,now+15000).text,/UNKNOWN/);
+    assert.match(f.coreRemoteReadback(d,view,now-1).text,/UNKNOWN/);
+    assert.match(f.coreRemoteReadback(d,snapshot([d,d]),now).text,/UNKNOWN/);
+    assert.match(f.coreRemoteReadback(d,snapshot([d],''),now).text,/UNKNOWN/);
+    assert.match(f.coreRemoteReadback(d,snapshot([device({coreRevocation:revocationV1(now)})]),now).text,/UNKNOWN/);
+  }
+  const v1=revocationV1(now);
+  for(const candidate of [undefined,null,{...v1,version:2},{...v1,source:'OTHER'},
+    {...v1,localStop:'CONFIRMED'},{...v1,pendingRevoke:false},{...v1,nativeDrain:'COMPLETE'},
+    {...v1,effectReadback:'VERIFIED'},{...v1,nativeEvidence:'VERIFIED'},
+    {...v1,remoteAuthorization:{...v1.remoteAuthorization,authorizationEpoch:0}},
+    {...v1,remoteAuthorization:{...v1.remoteAuthorization,authorizationEpoch:1.5}},
+    {...v1,remoteAuthorization:{...v1.remoteAuthorization,observedAtMs:null}},
+    {...v1,remoteAuthorization:{...v1.remoteAuthorization,state:'UNKNOWN'}},
+  ]){
+    const d=device({coreRevocation:candidate});
+    const read=f.coreRemoteReadback(d,snapshot([d]),now);
+    assert.match(read.text,/UNKNOWN/);
+    assert.equal(read.expiresAtMs,null);
+  }
+});
+
+test('AI-06 AI-03 contract v1: expired status clears existing copy, not newer action feedback or account',()=>{
+  const d=device({coreRevocation:revocationV1(Date.now()-1000)});
+  const f=fixture(d,async()=>Response.json({}));
+  const view=snapshot([d]);f.setSnapshot(view);
+  const element=new Element();
+  f.renderCoreReadbackCopy(element,d,view);
+  assert.match(element.textContent,/REVOKED \(epoch 8\)/);
+  assert.equal(f.timers.length,1);
+  f.timers.shift()!();
+  assert.match(element.textContent,/Uzaktan yetki kaydı: UNKNOWN/);
+  assert.doesNotMatch(element.textContent,/REVOKED \(epoch/);
+  f.renderCoreReadbackCopy(element,d,view);
+  element.textContent='New action feedback';
+  f.timers.shift()!();
+  assert.equal(element.textContent,'New action feedback');
+  f.renderCoreReadbackCopy(element,d,view);
+  f.setSnapshot(snapshot([device()],'other-owner'));
+  const previous=element.textContent;
+  f.timers.shift()!();
+  assert.equal(element.textContent,previous,'old detached account callback must not update new account');
 });
