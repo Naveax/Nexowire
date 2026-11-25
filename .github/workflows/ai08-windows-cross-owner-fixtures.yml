@@ -13,6 +13,7 @@ on:
       - "test/ai03/system-dpapi-acceptance.test.ts"
       - "test/ai04/transactional-handoff-recovery-required.test.ts"
       - "test/ai04/recovery-script-rollback-boundaries.test.ts"
+      - "test/ai04/production-recovery-admission.test.ts"
       - "test/ai05/system-stage-plan-windows.test.ts"
       - "test/windows-installer-command-root-trust.test.ts"
       - "test/windows-user-bundle-local-payload.test.ts"

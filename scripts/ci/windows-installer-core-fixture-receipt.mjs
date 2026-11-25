@@ -16,7 +16,7 @@ export const INSTALLER_FIXTURES=Object.freeze({
   'test/ai05/windows-setup-regressions.test.ts':Object.freeze({blob:'6c97aa80226476d69a7b5c0868b189be0a35d7cf',minimum:8,timeoutMs:480000}),
 });
 export const RUNTIME_FIXTURES=Object.freeze({
-  'test/mcp/ai07-transfer-startup.test.ts':Object.freeze({blob:'80e6a6f84757a9fb9ac768b3908afa92ee37a9be',minimum:5,timeoutMs:180000}),
+  'test/mcp/ai07-transfer-startup.test.ts':Object.freeze({blob:'857417b5e91004f3b7f4976a458478a04e7abff7',minimum:7,timeoutMs:180000}),
   'test/ai03/native-effect-startup-boundary.test.ts':Object.freeze({blob:'ac0b8808742debe2d05d7ed76002fa6a959e5b5d',minimum:3,timeoutMs:180000}),
   'test/windows-user-bundle.test.ts':Object.freeze({blob:'c2d4adfbdb4f765a3c345c24e9a2d71c890dd1d5',minimum:4,timeoutMs:180000}),
   'test/ai05/core-broker-install-mode.test.ts':Object.freeze({blob:'4e21a7aabc860495881199ac9805c73cc622065a',minimum:4,timeoutMs:180000}),
@@ -43,19 +43,19 @@ const installerDependencies=Object.freeze({
 });
 const runtimeDependencies=Object.freeze({
   'src/agent/privileged-broker.ts':'6fe4ade7e4f79fe981703717f6d3271d595b99a3',
-  'src/agent/protected-transfer-startup.ts':'0d9077b2e1608c9a5bbf8e7faff31c7c7d739e01',
+  'src/agent/protected-transfer-startup.ts':'d095602080ffc7d35d5b5e3c7828e44314af7e5e',
   'src/installer/protected-transfer-helper-lifecycle.ts':'84f9cce7ee56744308e81b8f838d87f54fb8eba7',
   'src/mcp/http.ts':'5d3cc338c34700f5d0adb0ba8bc9214de3749213',
   'src/mcp/protected-transfer-hub-startup.ts':'bbbdbe94857ae6d44b7fe18e5cb88e7f41b96cef',
   'src/runtime.ts':'463ec7146556c264212520d55ed91685fa390937',
-  'src/security/protected-transfer-services-startup.ts':'52abb21d4c2cac592363e7923880b8596d20a61e',
+  'src/security/protected-transfer-services-startup.ts':'a51d980188b031f799856afa711af543bc2fae81',
   'src/agent/windows-core-consent-transport.ts':'bcf994f6d23bc139ce43b26dcb77f8e1fdaf9cab',
   'src/agent/windows-core-console-provider.ts':'2e305fbaefa8f3fdcbfe26d98aefc5e4564bd317',
   'scripts/build-windows-user-bundle.ts':'3f71be3ce204e25b68fdf94d7bc33035e864f58f',
   'src/agent/native-agent-lifecycle.ts':'5c054ee34c306f3490a2fabd3b7c8e4ff1b1c382',
   // Reviewed #1285 additive protected transfer path. Retain strict exact pin;
   // no fallback to unreviewed content or earlier receipt.
-  'src/agent/native-agent.ts':'ffd22528e2c74111599cbbbd47c68a2d99556fea',
+  'src/agent/native-agent.ts':'38abcec5b2c02a2c1cf62fe0ca95bb691397b2bd',
   'src/agent/native-transfer-wire.ts':'5d8091f6d87b21b4b2a4b0cb209a25d2bab574a4',
   'src/agent/native-transfer-publisher.ts':'e920d8a736aacc81882baefea156329b9d580ec5',
   'src/agent/native-transfer-io.ts':'11f887d00a479c5ff7200a269d5231a6120bc921',
@@ -66,7 +66,8 @@ const runtimeDependencies=Object.freeze({
   'src/protocol/capabilities.ts':'f661b6e27794184bacf7dfbcf3f53e7fc5f5919d',
   'test/fixtures/agent-remote-cas-fixture.ts':'6d3e6e680543818d5c859409db291364be3ae1eb',
   'src/agent/windows-core-console-native.ts':'f3b7dddab82bc94075375866b12ee51e0ffb5909',
-  'src/hub/hub-boot-lifecycle.ts':'daa88893c1b447b41fcfd8d91f9e5b312552d80c',
+  'src/hub/hub-boot-lifecycle.ts':'e73e6c2b953d2f624652675e81b3db0450547f15',
+  'src/security/windows-machine-startup-admission.ts':'43659ac5f133fed3dc8d19d4e7b612e2f482ecf3',
   'src/security/windows-privileged-runtime-trust.ts':'2eb3029f9790cd7b94aa7bf87711a2296e3d3df3',
   'src/agent/core-windows-mutation-dispatch.ts':'e8e34f4b8ff420efce6f78a37b65c48edf3d650b',
 });

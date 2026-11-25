@@ -19,6 +19,7 @@ export const REVIEWED_CROSS_OWNER_FIXTURES=Object.freeze({
   'test/ai05/system-stage-plan-windows.test.ts':Object.freeze({blob:'e5b648e3b4bbbaa71108f5e345bff82d8775b4a9',minimum:2,timeoutMs:300000}),
   'test/windows-installer-command-root-trust.test.ts':Object.freeze({blob:'a1ab244910a6e8df0e5cc61b003c9e7d2136bdc7',minimum:3,timeoutMs:180000}),
   'test/windows-user-bundle-local-payload.test.ts':Object.freeze({blob:'39df7e3cf229b417440e12e8e78a45fe5034bab7',minimum:2,timeoutMs:180000}),
+  'test/ai04/production-recovery-admission.test.ts':Object.freeze({blob:'c3da9a247d8cf609fdc612ba5786674a3bbb0455',minimum:2,timeoutMs:180000}),
 });
 const SHA=/^[0-9a-f]{40}$/;
 const MAX_BUFFER=2*1024*1024;
@@ -92,7 +93,7 @@ const reviewedDependencies=Object.freeze({
   'scripts/ai03-system-dpapi-acceptance.ps1':'446a1f31466b9ee8b941be20175dc42ab01d366d',
   'scripts/Build-Nexowire-SystemHubStage.ps1':'612445bfa2bb74037223ee67d03c1150c0e4b622',
   'scripts/build-windows-user-bundle.ts':'3f71be3ce204e25b68fdf94d7bc33035e864f58f',
-  'scripts/ai04-controlled-system-hub-cutover.ts':'8bfc5fbf83e2f85e4a93748b61f8ffcac547035a',
+  'scripts/ai04-controlled-system-hub-cutover.ts':'c0cf0263c7128f8243eff3501429b70d05b07710',
 });
 function assertReviewedDependencies(root){
   for(const [file,pin] of Object.entries(reviewedDependencies)){

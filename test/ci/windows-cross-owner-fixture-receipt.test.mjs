@@ -8,9 +8,9 @@ const paths=Object.keys(REVIEWED_CROSS_OWNER_FIXTURES);
 const tap=(n,skip=0)=>['TAP version 13','1..'+n,'# tests '+n,
   '# pass '+(n-skip),'# fail 0','# cancelled 0','# skipped '+skip,'# todo 0',''].join('\n');
 const result=(file,status=0)=>({status,signal:null,stdout:tap(REVIEWED_CROSS_OWNER_FIXTURES[file].minimum)});
-test('exact eight cross-owner fixtures match reviewed Git bytes and bounded deadlines',()=>{
-  assert.equal(paths.length,8);
-  assert.equal(paths.reduce((n,p)=>n+REVIEWED_CROSS_OWNER_FIXTURES[p].minimum,0),42);
+test('exact nine cross-owner fixtures match reviewed Git bytes and bounded deadlines',()=>{
+  assert.equal(paths.length,9);
+  assert.equal(paths.reduce((n,p)=>n+REVIEWED_CROSS_OWNER_FIXTURES[p].minimum,0),44);
   for(const file of paths){
     const p=REVIEWED_CROSS_OWNER_FIXTURES[file];
     assert.match(p.blob,/^[a-f0-9]{40}$/,file);
@@ -39,8 +39,8 @@ test('independent execution continues, failed files remain FAIL, counters are ne
   assert.equal(files.at(-1).result,'PASS');
   const r=summarizeReviewedFixtureOutcomes(files,672);
   assert.equal(r.acceptance,'FAIL');
-  assert.deepEqual(r.statusCounts,{PASS:7,FAIL:1,SKIP:0,NOT_RUN:664});
-  assert.equal(r.passedAssertions,38);
+  assert.deepEqual(r.statusCounts,{PASS:8,FAIL:1,SKIP:0,NOT_RUN:663});
+  assert.equal(r.passedAssertions,40);
   assert.throws(()=>summarizeReviewedFixtureOutcomes(files.slice(1),672),/INVALID_OUTCOME_SET/);
 });
 test('all source admission checks precede fixture execution',()=>{

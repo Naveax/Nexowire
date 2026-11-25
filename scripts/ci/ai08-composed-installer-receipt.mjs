@@ -9,12 +9,14 @@ const tests={
  'test/ai05/transfer-flush-artifact.test.ts':['fe6591365f963c790ab99148807efde82231ed6b',4],
  'test/ai04/signed-sqlite-rollback-review.test.ts':['5acefe71677fdeb5485dfd7565666b78f9dd1ace',7],
  'test/ai04/sqlite-rollback-offline-evidence.test.ts':['ad75339a553be86f5bbb957f03a3db86de14ef6c',4],
- 'test/ai05/signed-sqlite-helper-review.test.ts':['7ac34e12c301b6294860d8ec790f6ee83de07e35',1]
+ 'test/ai05/signed-sqlite-helper-review.test.ts':['7ac34e12c301b6294860d8ec790f6ee83de07e35',1],
+ 'test/ai04/offline-recovery-receipt-identity.test.ts':['2ac8962cd944567c0bb7581fa34b14160823f29f',4],
+ 'test/ai04/offline-recovery-receipt-boundary.test.ts':['b88954d6ce1f3d71d7b41142c0ff28c659ec7ae5',1]
 };
 const pins={
  '.gitattributes':'c039ea0d6cdd0a0551d278dc728c257973164c5b',
  'src/installer/protected-transfer-helper-lifecycle.ts':'84f9cce7ee56744308e81b8f838d87f54fb8eba7',
- 'src/agent/protected-transfer-startup.ts':'76ca0caa424020f18aff4a22af63d92be3e89191',
+ 'src/agent/protected-transfer-startup.ts':'d095602080ffc7d35d5b5e3c7828e44314af7e5e',
  'src/security/windows-programdata-acl.ts':'55d5814efd87f66e3ff553b415c42f37e23fce12',
  'src/security/windows-privileged-runtime-trust.ts':'2eb3029f9790cd7b94aa7bf87711a2296e3d3df3',
  'native/windows-transfer-volume-flush.cs':'7a62bf6c027544dfceb14f3ca939d7d76eb2ced9',
@@ -27,9 +29,10 @@ const pins={
  'src/security/protected-helper-rollback-guard.ts':'bb298c736a74951807427595a0990b16def2061b',
  'src/security/core-runtime-package-manifest.ts':'5f432bfe8cfe2f83095c0b4ad1698a0da367e083',
  'scripts/ai04-state-snapshot-proof.ts':'20c9dd4f295fdcd2843bacc7028cbba099cb0e59',
- 'scripts/ai02-offline-recovery-evidence.ts':'00cf90f03adce76fc469c07a54f4d1005c695318',
+ 'scripts/ai02-offline-recovery-evidence.ts':'b1633ccab142c9c04e27c709561b5b366f9c1d8e',
  'src/hub/sqlite-rollback-offline-evidence.ts':'0b1e39e22e8621a6eece4b32b92f2128b4f4b8e5',
- 'scripts/ai04-controlled-system-hub-cutover.ts':'8bfc5fbf83e2f85e4a93748b61f8ffcac547035a',
+ 'src/hub/offline-recovery-receipt-identity.ts':'e1028264121b0b91777ceff216a610504909d678',
+ 'scripts/ai04-controlled-system-hub-cutover.ts':'c0cf0263c7128f8243eff3501429b70d05b07710',
  ...Object.fromEntries(Object.entries(tests).map(([f,[b]])=>[f,b]))
 };
 const git=(...a)=>execFileSync('git',a,{encoding:'utf8'}).trim();
