@@ -252,27 +252,105 @@ function coreActionDevice(deviceId) {
   return matches.length === 1 ? matches[0] : null;
 }
 
+// Same-origin tabs share a durable *uncertainty* marker, not an authority receipt.
+// Web Locks serializes check/write/POST; localStorage survives reload or tab loss.
+// Never fall back to an in-memory-only mutation when these facilities are unavailable.
+const CORE_FENCE_PREFIX = 'nexowire-core-uncertain-v1:';
+function coreFenceKey(accountId,deviceId) {
+  return CORE_FENCE_PREFIX + JSON.stringify([accountId,deviceId]);
+}
+function coreLockAvailable() {
+  return typeof navigator !== 'undefined' && typeof navigator.locks?.request === 'function' &&
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function';
+}
+function readCoreFence(accountId,deviceId) {
+  const key=coreFenceKey(accountId,deviceId);
+  try {
+    const raw=localStorage.getItem(key);
+    if(raw===null)return {key,raw,operation:null};
+    const value=JSON.parse(raw);
+    if(value?.accountId!==accountId||value.deviceId!==deviceId||
+       !['enable','consent','disable'].includes(value.kind)||
+       typeof value.id!=='string'||!value.id||typeof value.acknowledged!=='boolean')
+      throw Error('Invalid local uncertainty marker');
+    return {key,raw,operation:{kind:value.kind,id:value.id,accountId,deviceId,
+      acknowledged:value.acknowledged,inFlight:false}};
+  } catch {
+    return {key,raw:null,operation:{kind:'blocked',inFlight:false,
+      feedback:'Tarayıcı işlem koruması doğrulanamadı.'}};
+  }
+}
+function storeCoreFence(key,operation) {
+  // No response bodies, tokens, approval proofs or OS/session IDs in storage.
+  const raw=JSON.stringify({id:operation.id,accountId:operation.accountId,
+    deviceId:operation.deviceId,kind:operation.kind,acknowledged:operation.acknowledged});
+  localStorage.setItem(key,raw);
+  if(localStorage.getItem(key)!==raw)throw Error('Local uncertainty marker not retained');
+}
+function captureCoreFences() {
+  const result=new Map();
+  try {
+    for(let index=0;index<localStorage.length;index++){
+      const key=localStorage.key(index);
+      if(key?.startsWith(CORE_FENCE_PREFIX))result.set(key,localStorage.getItem(key));
+    }
+  } catch { /* no captured marker means no reconciliation */ }
+  return result;
+}
+function coreOperationFor(deviceId) {
+  const accountId=currentSnapshot?.accountId;
+  if(typeof accountId!=='string'||!accountId.trim())return {kind:'blocked',inFlight:false};
+  if(!coreLockAvailable())return {kind:'blocked',inFlight:false,
+    feedback:'Tarayıcı sekmeler arası işlem korumasını desteklemiyor.'};
+  const local=coreOperations.get(deviceId);
+  if(local?.accountId===accountId&&local.inFlight)return local;
+  const persisted=readCoreFence(accountId,deviceId).operation;
+  return persisted&&local?.id===persisted.id?{...persisted,feedback:local.feedback}:persisted;
+}
 function coreOperationAllows(deviceId, kind) {
-  const previous = coreOperations.get(deviceId);
+  const previous = coreOperationFor(deviceId);
   // A deliberate OFF is a separate safety action, never an automatic retry of
-  // consent/enable. Do not repeat an unresolved OFF or race an in-flight POST.
-  return !previous || (!previous.inFlight && previous.kind !== 'disable' && kind === 'disable');
+  // consent/enable. A blocked/corrupt marker does not authorize any POST.
+  return !previous || (!previous.inFlight && ['enable','consent'].includes(previous.kind) && kind === 'disable');
 }
 
-function reconcileCoreReadback(snapshot) {
-  for (const [deviceId, operation] of coreOperations) {
-    if (operation.inFlight || operation.accountId !== snapshot.accountId) continue;
-    const matches = (Array.isArray(snapshot.devices) ? snapshot.devices : [])
-      .filter(device => device?.id === deviceId);
-    if (matches.length !== 1) continue;
-    const device = matches[0];
-    const core = device.persistentMaintenance;
-    const physical = device.physicalConsole;
-    const recorded = physical?.enrollmentRequested === true || physical?.localEnrolled === true;
-    const confirmed = operation.kind === 'disable' ? core?.enabled === false :
-      core?.enabled === true && (recorded || (operation.kind === 'enable' && operation.acknowledged));
-    if (confirmed) coreOperations.delete(deviceId);
+async function reconcileCoreReadback(snapshot, captured) {
+  if(!coreLockAvailable()||typeof snapshot?.accountId!=='string'||!snapshot.accountId.trim())return;
+  const devices=Array.isArray(snapshot.devices)?snapshot.devices:[];
+  for(const device of devices){
+    if(typeof device?.id!=='string'||devices.filter(candidate=>candidate?.id===device.id).length!==1)continue;
+    const key=coreFenceKey(snapshot.accountId,device.id);
+    const expected=captured.get(key);
+    if(typeof expected!=='string')continue;
+    try {
+      await navigator.locks.request(key,{mode:'exclusive',ifAvailable:true},lock=>{
+        if(!lock)return; // Another tab is executing, so its marker is not terminal.
+        const current=readCoreFence(snapshot.accountId,device.id);
+        const operation=current.operation;
+        if(current.raw!==expected||!operation||operation.kind==='blocked')return;
+        const core=device.persistentMaintenance;
+        const physical=device.physicalConsole;
+        const recorded=physical?.enrollmentRequested===true||physical?.localEnrolled===true;
+        const confirmed=operation.kind==='disable'?core?.enabled===false:
+          core?.enabled===true&&(recorded||(operation.kind==='enable'&&operation.acknowledged));
+        // This only reconciles the observed preference/request. It never proves
+        // a native effect, STOP/drain or durable backend mutation identity.
+        if(confirmed){
+          localStorage.removeItem(key);
+          if(coreOperations.get(device.id)?.id===operation.id)coreOperations.delete(device.id);
+        }
+      });
+    } catch { /* leave uncertainty intact when the lock/storage is unavailable */ }
   }
+}
+
+function coreKindEligible(device,kind) {
+  if(kind==='consent')return coreEnrollmentEligible(device);
+  if(kind==='disable')return device?.persistentMaintenance?.enabled===true;
+  return kind==='enable'&&device?.persistentMaintenance?.enabled===false&&
+    device.platform==='win32'&&device.online===true&&device.accessMode==='full'&&
+    device.privilegeMode==='broker'&&device.adminBridgeReady===true&&
+    ['auto','on'].includes(device.bridgePreference?.desiredMode);
 }
 
 function coreReadbackMessage(device, operation) {
@@ -296,14 +374,9 @@ function coreReadbackMessage(device, operation) {
 async function performCoreAction(deviceId, kind, row) {
   if (!coreOperationAllows(deviceId, kind)) return;
   const device = coreActionDevice(deviceId);
-  if (!device) return;
+  if (!device || !coreKindEligible(device,kind)) return;
+  const accountId=currentSnapshot.accountId;
   const enabled = kind === 'enable';
-  if (kind === 'consent' && !coreEnrollmentEligible(device)) return;
-  if (kind === 'disable' && device.persistentMaintenance?.enabled !== true) return;
-  if (enabled && (device.persistentMaintenance?.enabled !== false ||
-      device.platform !== 'win32' || device.online !== true || device.accessMode !== 'full' ||
-      device.privilegeMode !== 'broker' || device.adminBridgeReady !== true ||
-      !['auto','on'].includes(device.bridgePreference?.desiredMode))) return;
   const input = row.querySelector('.core-phrase');
   const status = row.querySelector('.core-copy');
   if (enabled && input.value.trim() !== 'CORE UNLIMITED') {
@@ -311,56 +384,82 @@ async function performCoreAction(deviceId, kind, row) {
     input.focus();
     return;
   }
-  const operation = {kind, accountId:currentSnapshot.accountId, inFlight:true, acknowledged:false, feedback:''};
-  coreOperations.set(deviceId, operation);
-  for (const selector of ['.core-toggle','.core-approve','.core-enrollment-retry'])
-    row.querySelector(selector).disabled = true;
-  status.textContent = coreReadbackMessage(device, operation);
+  const key=coreFenceKey(accountId,deviceId);
+  let refresh=false;
   try {
-    const consent = kind === 'consent';
-    const headers = {Accept:'application/json','Content-Type':'application/json'};
-    if (consent) headers['X-Nexowire-Confirm'] = 'core-enrollment-request-v1';
-    if (enabled) headers['X-Nexowire-Confirm'] = 'core-preference-v1';
-    const response = await fetch(consent ? '/api/v1/me/devices/core-enrollment-request' :
-      '/api/v1/me/devices/core-preference', {
-        method:'POST',credentials:'include',headers,signal:AbortSignal.timeout(15000),
-        body:JSON.stringify({deviceId,...(consent ? {} : {enabled,
-          ...(enabled ? {confirmation:'CORE UNLIMITED'} : {})})}),
-      });
-    if (response.ok) {
-      const result = await response.json();
-      // The backend ACK is only a preference/request receipt, never local consent.
-      operation.acknowledged = result?.deviceId === deviceId && (consent
-        ? result.enrollmentRequested === true && result.active === false
-        : result.persistentMaintenance?.enabled === enabled &&
-          result.persistentMaintenance?.active === false);
-      if(!operation.acknowledged)operation.feedback='Sunucu yanıtı doğrulanamadı.';
-    } else {
-      const body=await response.json().catch(()=>null);
-      const errors={
-        CORE_AUTHORITY_UNAVAILABLE:'CORE onay servisi kullanılamıyor.',
-        CORE_NATIVE_CONSENT_PROVIDER_UNAVAILABLE:'Bağımsız yerel onay sağlayıcısı kullanılamıyor.',
-        CORE_ALREADY_ENROLLED:'Sunucu yerel CORE kaydının mevcut olduğunu bildiriyor.',
-        CORE_DEVICE_NOT_READY:'Sunucu cihazın CORE için hazır olmadığını bildiriyor.',
-        CORE_REQUIRES_FULL_ONLINE_BROKER:'FULL, çevrimiçi cihaz ve hazır Broker gerekli.',
-        CORE_NOT_ENABLED:'Sunucu CORE tercihinin açık olmadığını bildiriyor.',
-        CORE_REQUIRES_OWNER_LOGIN:'Cihaz sahibi hesabı gerekli.',
-        DEVICE_NOT_FOUND:'Sunucu cihazı bu hesap için bulamadı.',
-        UNAUTHENTICATED:'Oturum doğrulanamadı.',
-      };
-      const reason=typeof body?.error==='string'&&Object.hasOwn(errors,body.error)?errors[body.error]:'';
-      const status=Number.isInteger(response.status)&&response.status>=400&&response.status<=599?response.status:null;
-      operation.feedback=(status?'HTTP '+status+'. ':'')+(reason||'Sunucu isteği doğrulayamadı.');
-    }
-  } catch {
-    // A transport failure or malformed response may follow a durable write.
-    // Do not echo upstream data or repeat the mutation.
-    operation.feedback='Bağlantı veya sunucu yanıtı doğrulanamadı.';
-  } finally {
-    operation.inFlight = false;
-    // Discard stale dashboard presentation; a fresh GET is the only reconciliation.
-    await load();
+    await navigator.locks.request(key,{mode:'exclusive',ifAvailable:true},async lock=>{
+      if(!lock){status.textContent='CORE isteği başka bir sekmede işleniyor; aynı isteği gönderme.';return}
+      if(currentSnapshot?.accountId!==accountId||!coreOperationAllows(deviceId,kind))return;
+      // A tab can have an old card even after another tab reconciled its
+      // marker. Read the backend again under the same lock before any POST.
+      const response=await fetch('/api/v1/me/dashboard',{credentials:'include',
+        headers:{Accept:'application/json'},cache:'no-store',signal:AbortSignal.timeout(8000)});
+      if(!response.ok){refresh=true;return}
+      const fresh=await response.json();
+      const matches=Array.isArray(fresh?.devices)?fresh.devices.filter(d=>d?.id===deviceId):[];
+      if(fresh?.accountId!==accountId||currentSnapshot?.accountId!==accountId||
+         matches.length!==1||!coreKindEligible(matches[0],kind)){refresh=true;return}
+      // The marker must be persisted and read back before crossing the POST
+      // boundary. A tab/browser crash leaves an unresolved marker on disk.
+      const operation={kind,accountId,deviceId,id:crypto.randomUUID(),inFlight:true,acknowledged:false,feedback:''};
+      storeCoreFence(key,operation);
+      coreOperations.set(deviceId,operation);
+      for(const selector of ['.core-toggle','.core-approve','.core-enrollment-retry'])
+        row.querySelector(selector).disabled=true;
+      status.textContent=coreReadbackMessage(matches[0],operation);
+      refresh=true;
+      try {
+        const consent = kind === 'consent';
+        const headers = {Accept:'application/json','Content-Type':'application/json'};
+        if (consent) headers['X-Nexowire-Confirm'] = 'core-enrollment-request-v1';
+        if (enabled) headers['X-Nexowire-Confirm'] = 'core-preference-v1';
+        const response = await fetch(consent ? '/api/v1/me/devices/core-enrollment-request' :
+          '/api/v1/me/devices/core-preference', {
+            method:'POST',credentials:'include',headers,signal:AbortSignal.timeout(15000),
+            body:JSON.stringify({deviceId,...(consent ? {} : {enabled,
+              ...(enabled ? {confirmation:'CORE UNLIMITED'} : {})})}),
+          });
+        if (response.ok) {
+          const result = await response.json();
+          // The backend ACK is only a preference/request receipt, never local consent.
+          operation.acknowledged = result?.deviceId === deviceId && (consent
+            ? result.enrollmentRequested === true && result.active === false
+            : result.persistentMaintenance?.enabled === enabled &&
+              result.persistentMaintenance?.active === false);
+          if(!operation.acknowledged)operation.feedback='Sunucu yanıtı doğrulanamadı.';
+        } else {
+          const body=await response.json().catch(()=>null);
+          const errors={
+            CORE_AUTHORITY_UNAVAILABLE:'CORE onay servisi kullanılamıyor.',
+            CORE_NATIVE_CONSENT_PROVIDER_UNAVAILABLE:'Bağımsız yerel onay sağlayıcısı kullanılamıyor.',
+            CORE_ALREADY_ENROLLED:'Sunucu yerel CORE kaydının mevcut olduğunu bildiriyor.',
+            CORE_DEVICE_NOT_READY:'Sunucu cihazın CORE için hazır olmadığını bildiriyor.',
+            CORE_REQUIRES_FULL_ONLINE_BROKER:'FULL, çevrimiçi cihaz ve hazır Broker gerekli.',
+            CORE_NOT_ENABLED:'Sunucu CORE tercihinin açık olmadığını bildiriyor.',
+            CORE_REQUIRES_OWNER_LOGIN:'Cihaz sahibi hesabı gerekli.',
+            DEVICE_NOT_FOUND:'Sunucu cihazı bu hesap için bulamadı.',
+            UNAUTHENTICATED:'Oturum doğrulanamadı.',
+          };
+          const reason=typeof body?.error==='string'&&Object.hasOwn(errors,body.error)?errors[body.error]:'';
+          const status=Number.isInteger(response.status)&&response.status>=400&&response.status<=599?response.status:null;
+          operation.feedback=(status?'HTTP '+status+'. ':'')+(reason||'Sunucu isteği doğrulayamadı.');
+        }
+      } catch {
+        // A transport failure or malformed response may follow a durable write.
+        // Do not echo upstream data or repeat the mutation.
+        operation.feedback='Bağlantı veya sunucu yanıtı doğrulanamadı.';
+    
+      } finally {
+        operation.inFlight=false;
+        // Retain the original unresolved marker if the ACK write fails.
+        try{storeCoreFence(key,operation)}catch{/* fail closed on subsequent reads */}
+      }
+    });
+  }catch{
+    status.textContent='Tarayıcı işlem koruması veya sunucu durumu doğrulanamadı. Yeni istek gönderme.';
   }
+  // Do not hold the lock while load attempts reconciliation.
+  if(refresh)await load();
 }
 
 async function setDeviceCorePreference(deviceId, enabled, row) {
@@ -784,13 +883,13 @@ function render(snapshot) {
           : 'CORE kapalı. Full Access ve çalışan Admin Bridge varsa açılabilir.';
       const physical=device.physicalConsole;
       const coreRetry=row.querySelector('.core-enrollment-retry');
-      const coreOperation=coreOperations.get(device.id);
+      const coreOperation=coreOperationFor(device.id);
       coreRetry.hidden=!(coreEnrollmentEligible(device) && coreActionDevice(device.id) && coreOperationAllows(device.id,'consent'));
       coreRetry.disabled=coreRetry.hidden;
       const coreReadback=row.querySelector('.core-readback');
       coreReadback.disabled=coreOperation?.inFlight===true;
       coreReadback.addEventListener('click',async()=>{
-        if(coreOperations.get(device.id)?.inFlight)return;
+        if(coreOperationFor(device.id)?.inFlight)return;
         await load();
         const refreshed=[...document.querySelectorAll('.device')].filter(card=>card.dataset.deviceId===device.id);
         if(refreshed.length===1)refreshed[0].querySelector('.core-readback')?.focus({preventScroll:true});
@@ -926,6 +1025,7 @@ function render(snapshot) {
 
 async function load() {
   const loadId = ++latestDashboardLoadId;
+  const capturedCoreFences=captureCoreFences();
   $('error-panel').classList.add('hidden');
   $('login').classList.add('hidden');
   setPill('Kontrol ediliyor', 'muted');
@@ -934,6 +1034,7 @@ async function load() {
     const response = await fetch('/api/v1/me/dashboard', {
       credentials: 'include',
       headers: { Accept: 'application/json' },
+      cache: 'no-store',
       signal: AbortSignal.timeout(8000),
     });
     if (loadId !== latestDashboardLoadId) return;
@@ -949,7 +1050,8 @@ async function load() {
     if (!response.ok) throw new Error('HTTP ' + response.status);
     const snapshot = await response.json();
     if (loadId !== latestDashboardLoadId) return;
-    reconcileCoreReadback(snapshot);
+    await reconcileCoreReadback(snapshot,capturedCoreFences);
+    if(loadId !== latestDashboardLoadId)return;
     render(snapshot);
   } catch (error) {
     if (loadId !== latestDashboardLoadId) return;
