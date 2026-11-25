@@ -39,6 +39,8 @@ function invoke(content:string){
     writeFileSync(file,content,'utf8');
     const fixture=[
       "$ErrorActionPreference='Stop'",
+      "Import-Module -Name 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules\\Microsoft.PowerShell.Utility\\Microsoft.PowerShell.Utility.psd1' -ErrorAction Stop",
+      "Import-Module -Name 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules\\Microsoft.PowerShell.Management\\Microsoft.PowerShell.Management.psd1' -ErrorAction Stop",
       '$NewRoot='+"'"+newer+"'",
       '$backups=@{}',
       '$previousRoots=@{}',
@@ -52,6 +54,7 @@ function invoke(content:string){
         Buffer.from(fixture,'utf16le').toString('base64')],{
         cwd:'C:\\Windows\\System32',
         env:{
+          ...Object.fromEntries(Object.entries(process.env).filter(([k])=>!/^(PATH|PSMODULEPATH|SYSTEMROOT|WINDIR)$/i.test(k))),
           SystemRoot:'C:\\Windows',windir:'C:\\Windows',
           PATH:'C:\\Windows\\System32;C:\\Windows',
           PSModulePath:'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules',
@@ -68,6 +71,10 @@ test('launcher rendering requires a unique, fully linked versioned executable an
   assert.match(script,/MACHINE_UPDATE_LAUNCHER_EXECUTABLE_MISMATCH/);
   assert.match(script,/MACHINE_UPDATE_LAUNCHER_ROOT_UNTRUSTED/);
   assert.match(script,/MACHINE_UPDATE_LAUNCHER_TOO_LARGE/);
+  assert.match(fn,/\$backupStream\.Flush\(\$true\)/);
+  assert.match(fn,/\$launcherStream\.Flush\(\$true\)/);
+  assert.match(fn,/MACHINE_UPDATE_LAUNCHER_BACKUP_UNVERIFIED/);
+  assert.match(fn,/MACHINE_UPDATE_LAUNCHER_READBACK_MISMATCH/);
   assert.doesNotMatch(script,/if\(\$text\.Contains\(\$NewRoot\)\)\{return\}/);
 });
 
@@ -80,6 +87,8 @@ for(const [name,launcher] of [['Hub',hub(old)],['Broker',broker(old)]] as const)
     assert.ok(x.content.includes(newer+'\\runtime\\node.exe'));
     assert.ok(x.content.includes(newer+'\\app\\dist\\src\\cli.js'));
     assert.ok(!x.content.includes(old+'\\runtime\\node.exe'));
+    // Exact PS5.1 UTF8 BOM and replacement bytes, including original line endings.
+    assert.equal(x.content,'\ufeff'+launcher.replaceAll(old,newer));
   });
 }
 test('already upgraded verified runtime does not rewrite/backup launcher',{skip:process.platform!=='win32'},()=>{
