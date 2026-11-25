@@ -371,6 +371,7 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
   };
   const secondCopy=()=>secondEvaluate<string>('document.querySelector(".core-copy")?.textContent??""');
   await until('second tab eligible',secondCopy,value=>value.includes('ilk yerel onay henüz yok'));
+  await send('Page.bringToFront');
   const activate=async(selector:string)=>{
     await evaluate('document.querySelector('+JSON.stringify(selector)+').focus()');
     assert.equal(await evaluate<boolean>('document.activeElement.matches('+JSON.stringify(selector)+')'),true);
@@ -396,7 +397,9 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
   assert.equal(await evaluate<boolean>('document.querySelector(".core-enrollment-retry").disabled'),true);
   assert.equal(await evaluate<boolean>('document.body.innerText.includes('+JSON.stringify(sentinel)+')'),false);
   // Reload destroys the original module/Map; the same-origin marker survives.
+  await evaluate('globalThis.__ai06BeforeReload=true');
   await send('Page.reload',{ignoreCache:true});
+  await until('new document after reload',()=>evaluate<boolean>('!globalThis.__ai06BeforeReload&&document.readyState==="complete"'),Boolean);
   await until('reload retains uncertain CORE',coreCopy,value=>value.includes('sonucu belirsiz'));
   assert.equal(await fenceCount(),1);
   assert.equal(await evaluate<boolean>('document.querySelector(".core-enrollment-retry").disabled'),true);
