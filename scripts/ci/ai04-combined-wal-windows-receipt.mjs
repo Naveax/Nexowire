@@ -10,7 +10,7 @@ const tests={
  'test/agent/ai04-external-journal-owner.test.ts':['9d2daca025c666ab7be8b250481519f0bd1bffae',3],
  'test/agent/ai04-frameless-wal.test.ts':['235150296f55d11c4dfff3155b3783f667f41195',14],
  'test/native-agent-startup-diagnostic.test.ts':['4a9095dad4232313df8504071a1de1f557668a8c',10],
- 'test/agent/ai04-wal-index-convergence.test.ts':['24bc621403a26d97683a5ef322f35b035a889292',7]
+ 'test/agent/ai04-wal-index-convergence.test.ts':['faadbc30f16ae270b462e01c34482e9365dfa1d6',7]
 };
 const dependencies={
  'src/agent/operation-journal.ts':'598882cf2a47c764a4e4d8b111228f60460fad1f',

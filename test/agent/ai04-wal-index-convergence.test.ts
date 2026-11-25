@@ -96,11 +96,15 @@ test('AI-04 index convergence: one torn copy cannot erase the other verified pri
 });
 test('AI-04 index convergence: valid index checksums do not authenticate a false prior commit digest',async t=>{
   const f=await fixture(t);
-  const wrong=Buffer.from(f.early);
-  const first=wrong.subarray(0,48);
-  put(first,24,u32(first,24)^1);rechecksum(first);
-  first.copy(wrong,48);
-  await f.run(wrong,[f.terminal],'CORRUPT');
+  // JS bitwise operators yield signed int32 values. Exercise both
+  // high-bit states and normalize to uint32 before encoding the forged digest.
+  for(const mask of [1,0x80000000]){
+    const wrong=Buffer.from(f.early);
+    const first=wrong.subarray(0,48);
+    put(first,24,(u32(first,24)^mask)>>>0);rechecksum(first);
+    first.copy(wrong,48);
+    await f.run(wrong,[f.terminal],'CORRUPT');
+  }
 });
 test('AI-04 index convergence: terminal evidence cannot retreat to an authentic earlier commit',async t=>{
   const f=await fixture(t);
