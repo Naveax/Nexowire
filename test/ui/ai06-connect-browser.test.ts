@@ -553,6 +553,8 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
     const foreign={accountId:'combined-ai06-foreign',role:'user'} as const;
     let profile:Awaited<ReturnType<typeof openSecond>>|undefined;
     let contextId:string|undefined;
+    let releaseBoth:()=>void=()=>{};
+    let releaseA:()=>void=()=>{};
     combined.after(()=>f.close());
     const version=await (await fetch('http://127.0.0.1:'+port+'/json/version',{signal:AbortSignal.timeout(2000)})).json() as {webSocketDebuggerUrl:string};
     assert.match(version.webSocketDebuggerUrl,/^ws:\/\/127\.0\.0\.1:/);
@@ -577,9 +579,7 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
       const anonymous=makeHandler(b,null);
       let holdRoute='';
       let pendingPosts=0;
-      let releaseBoth:()=>void=()=>{};
       let both=new Promise<void>(resolve=>{releaseBoth=resolve});
-      let releaseA:()=>void=()=>{};
       let aDone=new Promise<void>(resolve=>{releaseA=resolve});
       const actualPosts:{route:string;id:string;status:number;revision:unknown}[]=[];
       realBackend=async request=>{
@@ -688,8 +688,9 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
       combined.diagnostic('Actual production HTTP + migrated SQLite D1 + two independent Chromium contexts: one pairing challenge, two distinct CORE UUIDs, one APPLIED/one DENIED; no native effect');
     }finally{
       releaseBoth();releaseA();realBackend=undefined;
-      if(profile)await profile.close();
-      if(contextId)await browserSend('Target.disposeBrowserContext',{browserContextId:contextId}).catch(()=>{});
+      try{if(profile)await profile.close()}finally{
+        if(contextId)await browserSend('Target.disposeBrowserContext',{browserContextId:contextId});
+      }
     }
   });
 });
