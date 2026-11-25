@@ -47,14 +47,26 @@ function check(){for(const [f,b] of Object.entries(pins)){
 }}
 check();
 for(const [f,[b]] of Object.entries(tests))if(!entries.some(e=>e.path===f&&e.blob===b))throw Error('INVENTORY_MISMATCH:'+f);
+// Use the reviewed Windows PowerShell 5.1 host and its system-only module
+// path, not the PowerShell 7 module path inherited by a default Actions step.
+const ps='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
+const moduleRoot='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules';
+const childEnv=Object.fromEntries(Object.entries(process.env).filter(([key])=>key.toLowerCase()!=='psmodulepath'));
+childEnv.PSModulePath=moduleRoot;
 const dir='ai08-installer-receipts';mkdirSync(dir,{recursive:true});
 const receipt={schemaVersion:1,sourceCommitSha:report.commitSha,sourceManifestSha256:report.manifestSha256,nodeVersion:process.version,platform:process.platform,runId:process.env.GITHUB_RUN_ID,jobId:process.env.NX_JOB_ID,runAttempt:process.env.GITHUB_RUN_ATTEMPT,scope:'HOSTED_INSTALLER_LIFECYCLE_ONLY',pins,files:[],signedStorageFixture:'NOT_RUN',productionAcceptance:false};
 const save=()=>writeFileSync(path.join(dir,'receipt.json'),JSON.stringify(receipt,null,2)+'\n');
 save();
+const probe=spawnSync(ps,['-NoLogo','-NoProfile','-NonInteractive','-Command',
+ "$ErrorActionPreference='Stop'; Import-Module -Name 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules\\Microsoft.PowerShell.Security\\Microsoft.PowerShell.Security.psd1' -ErrorAction Stop; $c=Get-Command Microsoft.PowerShell.Security\\Get-AuthenticodeSignature -ErrorAction Stop; if($c.ModuleName -ne 'Microsoft.PowerShell.Security'){throw 'SIGNATURE_MODULE_MISMATCH'}; [Console]::WriteLine('WINDOWS_SYSTEM_SIGNATURE_MODULE_READY')"],
+ {env:childEnv,encoding:'utf8',timeout:30000,windowsHide:true});
+receipt.signatureModulePreflight=probe.status===0&&!probe.error&&!probe.signal&&!probe.stderr?.trim()&&probe.stdout?.trim()==='WINDOWS_SYSTEM_SIGNATURE_MODULE_READY'?'PASS':'FAIL';
+save();
+if(receipt.signatureModulePreflight!=='PASS'){process.stderr.write(probe.stderr??'');console.log(JSON.stringify(receipt));throw Error('WINDOWS_SYSTEM_SIGNATURE_MODULE_UNAVAILABLE');}
 for(const [file,[blob,expected]] of Object.entries(tests)){
  check();
  const r={file,blob,expected,status:'FAIL'};receipt.files.push(r);
- const child=spawnSync(process.execPath,['--test','--test-reporter=tap','--test-concurrency=1','--import','tsx',file],{encoding:'utf8',timeout:480000,maxBuffer:8*1024*1024,windowsHide:true});
+ const child=spawnSync(process.execPath,['--test','--test-reporter=tap','--test-concurrency=1','--import','tsx',file],{env:childEnv,encoding:'utf8',timeout:480000,maxBuffer:8*1024*1024,windowsHide:true});
  const tap=child.stdout??'';writeFileSync(path.join(dir,path.basename(file)+'.tap'),tap);process.stdout.write(tap);if(child.stderr)process.stderr.write(child.stderr);
  r.tapSha256=sha(tap);
  try{if(child.error||child.signal||child.status!==0)throw Error('CHILD_FAILED');r.counts=assertTapSummary(tap,expected);if(r.counts.tests!==expected)throw Error('EXACT_COUNT_MISMATCH');r.status='PASS';}catch(e){r.failure=e.message;}
@@ -62,7 +74,7 @@ for(const [file,[blob,expected]] of Object.entries(tests)){
 }
 if(receipt.files.every(f=>f.status==='PASS')){
  check();
- const child=spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',['-NoProfile','-NonInteractive','-File','scripts/ci/ai05-protected-helper-fixture.ps1'],{encoding:'utf8',timeout:600000,maxBuffer:8*1024*1024,windowsHide:true});
+ const child=spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',['-NoProfile','-NonInteractive','-File','scripts/ci/ai05-protected-helper-fixture.ps1'],{env:childEnv,encoding:'utf8',timeout:600000,maxBuffer:8*1024*1024,windowsHide:true});
  const log=child.stdout??'';writeFileSync(path.join(dir,'signed-storage.log'),log);process.stdout.write(log);if(child.stderr)process.stderr.write(child.stderr);
  receipt.signedStorageFixture='FAIL';receipt.signedStorageLogSha256=sha(log);
  try{
