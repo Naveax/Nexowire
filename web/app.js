@@ -266,14 +266,18 @@ function coreLockAvailable() {
   return typeof navigator !== 'undefined' && typeof navigator.locks?.request === 'function' &&
     typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function';
 }
-function readCoreFence(accountId,deviceId) {
-  const key=coreFenceKey(accountId,deviceId);
+function coreMutationSlot(accountId,deviceId,kind){
+  return coreFenceKey(accountId,deviceId)+(kind==='disable'?':off':'');
+}
+function readCoreFence(accountId,deviceId,kind='enable') {
+  const key=coreMutationSlot(accountId,deviceId,kind);
   try {
     const raw=localStorage.getItem(key);
     if(raw===null)return {key,raw,operation:null};
     const value=JSON.parse(raw);
     if(value?.accountId!==accountId||value.deviceId!==deviceId||
        !['enable','consent','disable'].includes(value.kind)||
+       (kind==='disable')!==(value.kind==='disable')||
        typeof value.id!=='string'||!(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/).test(value.id)||
        !validCoreRevision(value.expectedRevision)||typeof value.acknowledged!=='boolean'||
        !['in-flight','settled'].includes(value.phase))
@@ -310,14 +314,16 @@ function coreOperationFor(deviceId) {
     feedback:'Tarayıcı sekmeler arası işlem korumasını desteklemiyor.'};
   const local=coreOperations.get(deviceId);
   if(local?.accountId===accountId&&local.inFlight)return local;
-  const persisted=readCoreFence(accountId,deviceId).operation;
+  const positive=readCoreFence(accountId,deviceId).operation;
+  const off=readCoreFence(accountId,deviceId,'disable').operation;
+  const persisted=off||positive;
   return persisted&&local&&local.id===persisted.id?{...persisted,feedback:local.feedback}:persisted;
 }
 function coreOperationAllows(deviceId, kind) {
   const previous = coreOperationFor(deviceId);
-  // Do not overwrite the only durable identity of an unresolved operation.
-  // A new explicit OFF may follow a terminal receipt; local STOP remains available.
-  return !previous;
+  // OFF is a separate explicit action with its own durable slot. It never
+  // overwrites an unresolved positive intent. The same device lock serializes both.
+  return !previous||(!previous.inFlight&&['enable','consent'].includes(previous.kind)&&kind==='disable');
 }
 
 async function readCoreMutationStatus(operation) {
@@ -338,20 +344,22 @@ async function reconcileCoreReadback(snapshot, captured) {
   const devices=Array.isArray(snapshot.devices)?snapshot.devices:[];
   for(const device of devices){
     if(typeof device?.id!=='string'||devices.filter(candidate=>candidate?.id===device.id).length!==1)continue;
-    const key=coreFenceKey(snapshot.accountId,device.id);
+    const lockKey=coreFenceKey(snapshot.accountId,device.id);
+    for(const kind of ['enable','disable']){
+    const key=coreMutationSlot(snapshot.accountId,device.id,kind);
     const expected=captured.get(key);
     if(typeof expected!=='string')continue;
     try {
-      await navigator.locks.request(key,{mode:'exclusive',ifAvailable:true},async lock=>{
+      await navigator.locks.request(lockKey,{mode:'exclusive',ifAvailable:true},async lock=>{
         if(!lock)return; // Another tab is executing, so its marker is not terminal.
-        const current=readCoreFence(snapshot.accountId,device.id);
+        const current=readCoreFence(snapshot.accountId,device.id,kind);
         const operation=current.operation;
         if(current.raw!==expected||!operation||operation.kind==='blocked')return;
         const state=await readCoreMutationStatus(operation);
         // 404, PENDING, malformed or unreachable status never clears a marker.
         // Even an identical preference/consent dashboard value is not a receipt.
         if(!['APPLIED','DENIED'].includes(state)||
-           readCoreFence(snapshot.accountId,device.id).raw!==expected)return;
+           readCoreFence(snapshot.accountId,device.id,kind).raw!==expected)return;
         // A terminal ledger receipt alone does not prove that the earlier GET
         // reflects the mutation. Keep the fence until a newer dashboard view.
         if(state==='APPLIED'&&(!validCoreRevision(device.coreMutationRevision)||
@@ -359,10 +367,11 @@ async function reconcileCoreReadback(snapshot, captured) {
         localStorage.removeItem(key);
         if(coreOperations.get(device.id)?.id===operation.id)coreOperations.delete(device.id);
         // Informational only; the current dashboard remains the preference view.
-        coreMutationReceipts.set(key,{state,revision:device.coreMutationRevision});
+        coreMutationReceipts.set(lockKey,{state,revision:device.coreMutationRevision});
 
       });
     } catch { /* leave uncertainty intact when the lock/storage is unavailable */ }
+    }
   }
 }
 
@@ -434,10 +443,11 @@ function coreReadbackMessage(device, operation) {
   return 'CORE tercihi kayıtlı; onay kanalı veya cihaz hazır durumu doğrulanamadı. Yeni istek gönderilmedi.' + stop;
 }
 
-async function performCoreAction(deviceId, kind, row) {
+async function performCoreAction(deviceId, kind, row, renderedRevision=coreActionDevice(deviceId)?.coreMutationRevision) {
   if (!coreOperationAllows(deviceId, kind)) return;
   const device = coreActionDevice(deviceId);
   if (!device || !coreKindEligible(device,kind)) return;
+  if(device.coreMutationRevision!==renderedRevision){await load();return}
   const accountId=currentSnapshot.accountId;
   const expectedRevision=device.coreMutationRevision;
   const enabled = kind === 'enable';
@@ -448,10 +458,11 @@ async function performCoreAction(deviceId, kind, row) {
     input.focus();
     return;
   }
-  const key=coreFenceKey(accountId,deviceId);
+  const lockKey=coreFenceKey(accountId,deviceId);
+  const key=coreMutationSlot(accountId,deviceId,kind);
   let refresh=false;
   try {
-    await navigator.locks.request(key,{mode:'exclusive',ifAvailable:true},async lock=>{
+    await navigator.locks.request(lockKey,{mode:'exclusive',ifAvailable:true},async lock=>{
       if(!lock){status.textContent='CORE isteği başka bir sekmede işleniyor; aynı isteği gönderme.';return}
       if(currentSnapshot?.accountId!==accountId||!coreOperationAllows(deviceId,kind))return;
       // A tab can have an old card even after another tab reconciled its
@@ -468,7 +479,7 @@ async function performCoreAction(deviceId, kind, row) {
       // boundary. A tab/browser crash leaves an unresolved marker on disk.
       const operation={kind,accountId,deviceId,id:crypto.randomUUID(),expectedRevision,inFlight:true,acknowledged:false,feedback:''};
       storeCoreFence(key,operation);
-      coreMutationReceipts.delete(key);
+      coreMutationReceipts.delete(lockKey);
       coreOperations.set(deviceId,operation);
       for(const selector of ['.core-toggle','.core-approve','.core-enrollment-retry'])
         row.querySelector(selector).disabled=true;
@@ -533,12 +544,12 @@ async function performCoreAction(deviceId, kind, row) {
   if(refresh)await load();
 }
 
-async function setDeviceCorePreference(deviceId, enabled, row) {
-  return performCoreAction(deviceId, enabled ? 'enable' : 'disable', row);
+async function setDeviceCorePreference(deviceId, enabled, row, revision) {
+  return performCoreAction(deviceId, enabled ? 'enable' : 'disable', row, revision);
 }
 
-async function retryCoreEnrollmentRequest(deviceId, row) {
-  return performCoreAction(deviceId, 'consent', row);
+async function retryCoreEnrollmentRequest(deviceId, row, revision) {
+  return performCoreAction(deviceId, 'consent', row, revision);
 }
 
 async function setDeviceBridgePreference(deviceId, mode, row, focusSelector = '.bridge-toggle') {
@@ -986,7 +997,7 @@ function render(snapshot) {
       });
       coreButton.addEventListener('click', () => {
         if (core.enabled) {
-          void setDeviceCorePreference(device.id, false, row);
+          void setDeviceCorePreference(device.id, false, row, device.coreMutationRevision);
         } else if (device.platform !== 'win32' || mode !== 'full' || !device.online || !ready || device.bridgePreference?.desiredMode === 'off') {
           coreText.textContent = 'Önce Full Access aç; cihaz çevrimiçi ve Admin Bridge hazır olmalı.';
           coreShortcut.focus();
@@ -996,10 +1007,10 @@ function render(snapshot) {
         }
       });
       row.querySelector('.core-approve').addEventListener('click', () => {
-        void setDeviceCorePreference(device.id, true, row);
+        void setDeviceCorePreference(device.id, true, row, device.coreMutationRevision);
       });
       row.querySelector('.core-enrollment-retry').addEventListener('click', () => {
-        void retryCoreEnrollmentRequest(device.id, row);
+        void retryCoreEnrollmentRequest(device.id, row, device.coreMutationRevision);
       });
       const bridgeLabel = row.querySelector('.bridge-live-status');
       bridgeLabel.textContent = ready ? 'HAZIR BİLDİRİMİ' :
