@@ -33,7 +33,7 @@ const coreDependencies=Object.freeze({
   'src/agent/core-console-admission.ts':'2cc476df8c13bf9e7c3e83032dbe5d4e225a5eae',
   'src/agent/privileged-broker-effect-admission.ts':'32df088b3e8d4dfdcaceda5abd8bd9daec188e02',
   'src/agent/core-windows-mutation-dispatch.ts':'e8e34f4b8ff420efce6f78a37b65c48edf3d650b',
-  'src/agent/privileged-broker.ts':'481b23c7ba0c9a7b3f5b879828d0fccb12428001',
+  'src/agent/privileged-broker.ts':'6fe4ade7e4f79fe981703717f6d3271d595b99a3',
 });
 const installerDependencies=Object.freeze({
   'scripts/smoke-windows-user-setup.ts':'1e2c9ab56121e89013c72fb595df02822093b7ce',
@@ -48,7 +48,7 @@ const runtimeDependencies=Object.freeze({
   'src/agent/native-transfer-wire.ts':'5d8091f6d87b21b4b2a4b0cb209a25d2bab574a4',
   'src/agent/native-transfer-publisher.ts':'e920d8a736aacc81882baefea156329b9d580ec5',
   'src/agent/native-transfer-io.ts':'11f887d00a479c5ff7200a269d5231a6120bc921',
-  'src/agent/native-atomic-effect-admission.ts':'0cb78a4ca0d4760429aff3476a16d02c7c044f96',
+  'src/agent/native-atomic-effect-admission.ts':'7799559aa34a311eecde9f2773020a8a49e89b5e',
   'src/agent/remote-mutation-cas.ts':'aaf39646fd125962c1ef4928643e362f32ad934f',
   'src/agent/path-policy.ts':'7c3d07497462fffbe2fcbd2d4b521eb734b72a99',
   'src/protocol/agent.ts':'6bd55d19f898021fd1e70e78045ddba656aaf4e5',
