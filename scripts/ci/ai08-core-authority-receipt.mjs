@@ -12,9 +12,9 @@ const deps={
  'src/agent/windows-core-consent-transport.ts':'bcf994f6d23bc139ce43b26dcb77f8e1fdaf9cab',
  'src/agent/windows-core-console-provider.ts':'2e305fbaefa8f3fdcbfe26d98aefc5e4564bd317',
  'src/security/core-webauthn-approval.ts':'4b66824edb04d0fea503012f83b70c068a8c5c14',
- 'src/agent/broker-dispatch-authority-handler.ts':'172241587504a80f51d697888e0d1afac4a02a68',
+ 'src/agent/broker-dispatch-authority-handler.ts':'f559be00a35a683f0f3e8bb10fc9b7c2ec7fbb58',
  'src/agent/broker-dispatch-mtls-fetch.ts':'a5e8dc574a047095f77f7b9dec1278e30b3555a9',
- 'src/agent/protected-broker-dispatch-service.ts':'e23d4c5c0b54ecc6a870f422a22eb6ca21dac8b3',
+ 'src/agent/protected-broker-dispatch-service.ts':'eb29ce4ea890accc7fbdc84912852eb889d4e3d0',
  'src/agent/https-broker-dispatch-authority.ts':'40e044f35b4ea55a4f2b35a6ff0ef75fcc66bb74',
  'src/agent/protected-dispatch-native-installation-readback.ts':'4d5502266fc1f9789cc578abcb9d66ab2a8d4260',
  'src/agent/postgres-dispatch-credential-store.ts':'acd931e125e01c8ccc601acde2a5cf7d8956049b',
@@ -22,11 +22,15 @@ const deps={
  'src/security/core-native-verifier-server.ts':'78ffdc36ff6728ae8880b10db21d2fc5bf225394',
  'src/security/core-native-mtls-fetch.ts':'d824def6dd40ad2973d4d21a07c2425e2d09a0cb',
  'src/security/core-native-verifier-service.ts':'2dcc44d341dd0c98e3ed099ed910fcbb5b42ced5',
- 'src/security/postgres-core-approval-ledger.ts':'048889b8f87f58fc11958f7babe3615dd962dbc9',
- 'src/agent/postgres-broker-dispatch-authority.ts':'ff74fe72ceb312849642c8dba2d6f4afc68621c8',
+ 'src/security/postgres-core-approval-ledger.ts':'13c1cf64080548e1d1ace9f8aeb84c5fefb4053e',
+ 'src/agent/postgres-broker-dispatch-authority.ts':'bd20c41dc1f08329e937ca7463cfa1e92eca3ee7',
  'src/agent/protected-postgres-dispatch-pool.ts':'65d65241171c71b436a5e7606a77aeb9d0fcb0cc',
  'sql/core-broker-dispatch-authority.sql':'a120585a92d7ab41bb2d1a3aaf5c0bc31f9ca74b',
- 'sql/core-broker-dispatch-credentials.sql':'4cd511f8246025c7293202070527c66710b80a62'
+ 'sql/core-broker-dispatch-credentials.sql':'4cd511f8246025c7293202070527c66710b80a62',
+ 'src/agent/protected-native-completion-reader.ts':'b6f6c298ee0863064942fa4d8dbb4847b22965d6',
+ 'src/agent/broker-external-dispatch-fence.ts':'95f96ce8160c84d743557f38c638261c08bfc363',
+ 'sql/core-broker-native-completion.sql':'a70fc4ec2311e073b099e9168a9bcdc6859234cc',
+ 'sql/core-broker-dispatch-credential-fence.sql':'6c847b5386312a2550318f68792822feb5a93192'
 };
 const lane=process.argv[2],tests=lane==='windows'?windows:lane==='postgres'?postgres:null;
 if(!tests||process.platform!==(lane==='windows'?'win32':'linux')||process.env.GITHUB_ACTIONS!=='true'||

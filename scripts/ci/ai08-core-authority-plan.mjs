@@ -14,7 +14,8 @@ export const WINDOWS_PLAN=Object.freeze({
  'test/ai03/protected-dispatch-credential-recheck.test.ts':Object.freeze(['e0d3ecdc465a0ccf2ddecc0f54ad6fc29a313592',1]),
  'test/ai03/protected-dispatch-mtls-client.test.ts':Object.freeze(['987af4c60fd0a93e718e63b842ac5c6950d1c50f',4]),
  'test/ai03/protected-dispatch-native-installation-readback.test.ts':Object.freeze(['61ef1709f0b2e88f8fd8efcd2ba9032e4429d468',1]),
- 'test/ai03/protected-dispatch-service.test.ts':Object.freeze(['7f022cd93e3f79bfcb5e3455828b46a3b117332b',3])
+ 'test/ai03/protected-dispatch-service.test.ts':Object.freeze(['ced75a452a4e062672f710f56e6c182613fe29bc',6]),
+ 'test/ai03/protected-native-completion-reader.test.ts':Object.freeze(['2810fc94aef1d7e29d1d02858580861d7c2b033e',2])
 });
 export const COMPOSITION_TOP_LEVEL=Object.freeze([
  'signed native client requires protected issuer pin and session-bound one-use receipt',

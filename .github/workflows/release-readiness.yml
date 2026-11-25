@@ -22,6 +22,11 @@ on:
       - "test/hub-boot-protected-state-gate.test.ts"
       - "test/hub-boot-shared-ancestor-trust.test.ts"
       - "test/hub-boot-uninstall-task-absence.test.ts"
+      - "test/hub-boot-staged-activation.test.ts"
+      - "test/hub-boot-machine-startup-admission.test.ts"
+      - "src/security/windows-machine-startup-admission.ts"
+      - "test/hub-boot-hidden-task-visibility.test.ts"
+      - "test/windows-unattended-reboot-readiness.test.ts"
       - "test/windows-dpapi-shell-trust.test.ts"
       - "scripts/ci/assert-tap-summary.mjs"
       - "test/windows-dpapi-secret.test.ts"
@@ -171,13 +176,49 @@ jobs:
             'test/hub-boot-uninstall-task-absence.test.ts':'00457b3720774254d62b0cc378286e17bcbd30f2',
             'test/windows-dpapi-shell-trust.test.ts':'638804ff36f66555d220bb0757ce189354703775',
           };
+          // #1327 c614956a: staged activation and coordinated-recovery denial
+          // change the fixture contract. Select a complete pinned profile; never
+          // silently substitute individual current blobs into the older profiles.
+          const stagedReviewed = {
+            'test/hub-boot-status-legacy-user.test.ts':'800ca3e6bc6b892c26f102ec7f250754cc1372f3',
+            'test/hub-boot-task-shell-trust.test.ts':'ce31e6c39b63647c5bb11e579262690694829b12',
+            'test/hub-boot-root-boundary.test.ts':'b3d168159456820b5b7e8f8c3b06695732b537b4',
+            'test/hub-boot-handoff-transaction.test.ts':'0d9cccd65c58dffd19ce532dd978f22efb2e670d',
+            'test/hub-boot-startup-trigger-integrity.test.ts':'61062ecab51d2852c750cccd03fae79f7b45286a',
+            'test/hub-boot-protected-state-gate.test.ts':'40994c7a1178b20946b4432c7ff2716f5a074dd1',
+            'test/hub-boot-shared-ancestor-trust.test.ts':'7fb4ee2bc47fcc6543b70e0441bb795f7e8759b8',
+            'test/hub-boot-uninstall-task-absence.test.ts':'9612d67e0e3042d0c07aa9f8b054203496adbc35',
+            'test/windows-dpapi-shell-trust.test.ts':'638804ff36f66555d220bb0757ce189354703775',
+            'test/hub-boot-staged-activation.test.ts':'8fd5be6b05550dfe16d8d5f3c24c6a2a072f2933',
+            'test/hub-boot-hidden-task-visibility.test.ts':'29bdbe9b57f3889b4ff444c72d747e816545ed2c',
+            'test/windows-unattended-reboot-readiness.test.ts':'291b663e099f78bc6391a429b7aa53b1b278f217',
+          };
+          const canonicalReviewed={...stagedReviewed,'test/hub-boot-machine-startup-admission.test.ts':'559e004dc097972f00dd6c87503e7ccc70b130dd'};
+          const hasStaged=tracked.has('test/hub-boot-staged-activation.test.ts');
+          const hasCanonical=tracked.has('test/hub-boot-machine-startup-admission.test.ts');
+          if(hasCanonical&&!hasStaged)throw Error('WINDOWS_FIXTURE_CANONICAL_PROFILE_INCOMPLETE');
+          const canonicalMinimums={
+            'test/hub-boot-status-legacy-user.test.ts':1,
+            'test/hub-boot-task-shell-trust.test.ts':5,
+            'test/hub-boot-root-boundary.test.ts':11,
+            'test/hub-boot-handoff-transaction.test.ts':5,
+            'test/hub-boot-startup-trigger-integrity.test.ts':6,
+            'test/hub-boot-protected-state-gate.test.ts':3,
+            'test/hub-boot-shared-ancestor-trust.test.ts':5,
+            'test/hub-boot-uninstall-task-absence.test.ts':2,
+            'test/windows-dpapi-shell-trust.test.ts':4,
+            'test/hub-boot-staged-activation.test.ts':9,
+            'test/hub-boot-hidden-task-visibility.test.ts':5,
+            'test/windows-unattended-reboot-readiness.test.ts':7,
+            'test/hub-boot-machine-startup-admission.test.ts':5,
+          };
           const profileReviewed=hasStartup?startupReviewed:baselineReviewed;
           for(const file of Object.keys(sharedReviewed)){
             if(Object.hasOwn(profileReviewed,file))throw Error('WINDOWS_FIXTURE_DUPLICATE_REVIEW_PATH: '+file);
           }
-          const reviewed={...profileReviewed,...sharedReviewed};
-          const reviewProfile=hasStartup?'AI01_STARTUP_REVIEW_EBEADC0A':'BASELINE_B04BF428';
-          const reviewExtension='STATE_ACL_UNINSTALL_DPAPI_D2696376';
+          const reviewed=hasCanonical?canonicalReviewed:hasStaged?stagedReviewed:{...profileReviewed,...sharedReviewed};
+          const reviewProfile=hasCanonical?'AI01_CANONICAL_STARTUP_ADMISSION_23563DAB':hasStaged?'AI01_STAGED_ACTIVATION_C614956A':hasStartup?'AI01_STARTUP_REVIEW_EBEADC0A':'BASELINE_B04BF428';
+          const reviewExtension=hasCanonical?'FAIL_CLOSED_STARTUP_AUTHORITY_23563DAB':hasStaged?'COORDINATED_RECOVERY_DENIAL_C614956A':'STATE_ACL_UNINSTALL_DPAPI_D2696376';
           const check=(file,blob)=>{
             const bytes=readFileSync(file);
             const actual=createHash('sha1').update('blob '+bytes.length+'\0').update(bytes).digest('hex');
@@ -210,7 +251,9 @@ jobs:
               })+'\n');
               throw Error('WINDOWS_FIXTURE_EXECUTION_FAILED: '+file);
             }
-            const counts=assertTapSummary(r.stdout);
+            const minimum=hasStaged?canonicalMinimums[file]:1;
+            if(!Number.isSafeInteger(minimum)||minimum<1)throw Error('WINDOWS_FIXTURE_MINIMUM_REQUIRED: '+file);
+            const counts=assertTapSummary(r.stdout,minimum);
             files.push({path:file,gitBlobSha:blob,result:'PASS',elapsedMs,timeoutMs,...counts});
           }
           const count=files.length;

@@ -18,17 +18,21 @@ import {REVIEWED_CROSS_OWNER_FIXTURES} from './windows-cross-owner-fixture-recei
 import {GROUPS} from './windows-installer-core-fixture-receipt.mjs';
 const deny=reason=>{throw Error('COMBINED_COVERAGE_'+reason)};
 const BOOT_WORKFLOW='.github/workflows/release-readiness.yml';
-const BOOT_BLOB='faf4d285e4dc6ce8da7a8de0afa2fa59c9a2907b';
+const BOOT_BLOB='599801e1190002b8618de4df54f319ca2a83f34d';
 export const BOOT_FIXTURES=Object.freeze({
   'test/hub-boot-status-legacy-user.test.ts':Object.freeze({blob:'800ca3e6bc6b892c26f102ec7f250754cc1372f3',minimum:1}),
   'test/hub-boot-task-shell-trust.test.ts':Object.freeze({blob:'ce31e6c39b63647c5bb11e579262690694829b12',minimum:5}),
-  'test/hub-boot-root-boundary.test.ts':Object.freeze({blob:'dee621f126f5b132cd0f25de8cb7469df244833c',minimum:11}),
-  'test/hub-boot-handoff-transaction.test.ts':Object.freeze({blob:'8ad2c05bfe6c08ceae3e15792d493099e44ec20d',minimum:5}),
+  'test/hub-boot-root-boundary.test.ts':Object.freeze({blob:'b3d168159456820b5b7e8f8c3b06695732b537b4',minimum:11}),
+  'test/hub-boot-handoff-transaction.test.ts':Object.freeze({blob:'0d9cccd65c58dffd19ce532dd978f22efb2e670d',minimum:5}),
   'test/hub-boot-startup-trigger-integrity.test.ts':Object.freeze({blob:'61062ecab51d2852c750cccd03fae79f7b45286a',minimum:6}),
   'test/hub-boot-protected-state-gate.test.ts':Object.freeze({blob:'40994c7a1178b20946b4432c7ff2716f5a074dd1',minimum:3}),
-  'test/hub-boot-shared-ancestor-trust.test.ts':Object.freeze({blob:'5ef2a796bd617c10130ad44ebd88bed22f6f2466',minimum:5}),
-  'test/hub-boot-uninstall-task-absence.test.ts':Object.freeze({blob:'00457b3720774254d62b0cc378286e17bcbd30f2',minimum:2}),
+  'test/hub-boot-shared-ancestor-trust.test.ts':Object.freeze({blob:'7fb4ee2bc47fcc6543b70e0441bb795f7e8759b8',minimum:5}),
+  'test/hub-boot-uninstall-task-absence.test.ts':Object.freeze({blob:'9612d67e0e3042d0c07aa9f8b054203496adbc35',minimum:2}),
   'test/windows-dpapi-shell-trust.test.ts':Object.freeze({blob:'638804ff36f66555d220bb0757ce189354703775',minimum:4}),
+  'test/hub-boot-staged-activation.test.ts':Object.freeze({blob:'8fd5be6b05550dfe16d8d5f3c24c6a2a072f2933',minimum:9}),
+  'test/hub-boot-hidden-task-visibility.test.ts':Object.freeze({blob:'29bdbe9b57f3889b4ff444c72d747e816545ed2c',minimum:5}),
+  'test/windows-unattended-reboot-readiness.test.ts':Object.freeze({blob:'291b663e099f78bc6391a429b7aa53b1b278f217',minimum:7}),
+  'test/hub-boot-machine-startup-admission.test.ts':Object.freeze({blob:'559e004dc097972f00dd6c87503e7ccc70b130dd',minimum:5}),
 });
 const asPins=map=>Object.entries(map).map(([p,v])=>({path:p,gitBlobSha:v.blob,minimum:v.minimum}));
 const lane=(target,id,scope,schemaVersion,files,script,args=['--json'],timeoutMs=1800000)=>

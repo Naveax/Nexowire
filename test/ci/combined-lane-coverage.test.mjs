@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {readTestInventory} from '../../scripts/ci/test-inventory.mjs';
 import {reconcileLaneCoverage} from '../../scripts/ci/test-execution-coverage.mjs';
-import {reviewedLanes,extractReviewedBootSource,reconcileDirectory} from '../../scripts/ci/combined-lane-coverage.mjs';
+import {reviewedLanes,extractReviewedBootSource,reconcileDirectory,BOOT_FIXTURES} from '../../scripts/ci/combined-lane-coverage.mjs';
 import {CORE_FIXTURES,INSTALLER_FIXTURES,RUNTIME_FIXTURES,validateGroupSource,reconcileGroupResult} from '../../scripts/ci/windows-installer-core-fixture-receipt.mjs';
 const root=process.cwd();
 test('actual repository inventory admits all independent policies but no missing receipt becomes PASS',()=>{
@@ -61,4 +61,10 @@ test('runtime scope has nine exact files and 37 minimum cases, no silent signed-
     const skip=['TAP version 13','1..'+n,'# tests '+n,'# pass '+(n-1),'# fail 0','# cancelled 0','# skipped 1','# todo 0',''].join('\n');
     assert.throws(()=>reconcileGroupResult('runtime',file,{status:0,stdout:skip}));
   }
+});
+
+test('canonical boot policy requires thirteen exact files and 68 cases',()=>{
+  assert.equal(Object.keys(BOOT_FIXTURES).length,13);
+  assert.equal(Object.values(BOOT_FIXTURES).reduce((n,p)=>n+p.minimum,0),68);
+  assert.equal(BOOT_FIXTURES['test/hub-boot-machine-startup-admission.test.ts'].minimum,5);
 });
