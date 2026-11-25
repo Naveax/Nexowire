@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {generateKeyPairSync,randomUUID,verify} from 'node:crypto';
+import {createHash,generateKeyPairSync,randomUUID,sign,verify} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {mkdtemp,rm,writeFile} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
@@ -452,5 +452,56 @@ test('real PostgreSQL: protected credential fence serializes revoke and admissio
       [second.requestId])).rows[0];
     assert.equal(stored.credential_sha256,replacement.credentialSha256);
     assert.equal(stored.certificate_sha256,replacement.certificateSha256);
+  }finally{await f.close();}
+});
+
+test('real PostgreSQL native completion: committed release requires independent terminal evidence; revoke reconciles without caller release',integration,async()=>{
+  const f=await fixture({permitMs:5000});
+  try{
+    const observer=generateKeyPairSync('ed25519');
+    await f.pool.query(await readFile(new URL('../sql/core-broker-native-completion.sql',import.meta.url),'utf8'));
+    await f.pool.query('GRANT SELECT ON core_dispatch.native_completion_policy,core_dispatch.native_effect_completions TO nexowire_dispatch_runtime');
+    const pin=createHash('sha256').update(observer.publicKey.export({type:'spki',format:'der'})).digest('hex');
+    await f.pool.query('INSERT INTO core_dispatch.native_completion_policy VALUES($1,$2)',[f.ids.authorityId,pin]);
+    const authority=f.create({requireNativeCompletion:true,nativeCompletion:{
+      observerPublicKeyPem:observer.publicKey.export({type:'spki',format:'pem'}).toString(),
+      evidenceByCapability:{'windows.service.control':'NATIVE_OPERATION_TERMINAL'}}});
+    const reserve=async()=>{
+      const request=f.request(),commitNonce='b'.repeat(64);
+      const p=decoded(await authority.beginIfCurrent(request,f.broker,nonce()));
+      const dispatchId=String(p.dispatchId);
+      await authority.commitIfCurrent(request,f.broker,dispatchId,commitNonce);
+      return {request,dispatchId,brokerId:f.ids.brokerId,commitNonce};
+    };
+    const append=async(c:Awaited<ReturnType<typeof reserve>>)=>{
+      // Explicit software-key fixture only. Tests durable DB ordering and
+      // signature binding, not a real OS operation or native signer.
+      const value={version:1,kind:'core_native_effect_completion_v1',authorityId:f.ids.authorityId,
+        dispatchId:c.dispatchId,brokerId:c.brokerId,commitNonce:c.commitNonce,request:c.request,
+        outcome:'TERMINAL_DRAINED',evidenceKind:'NATIVE_OPERATION_TERMINAL',
+        evidenceSha256:'d'.repeat(64),completedAtMs:Date.now()};
+      const bytes=Buffer.from(JSON.stringify(value));
+      await f.pool.query('INSERT INTO core_dispatch.native_effect_completions VALUES($1,$2,$3,$4,$5,$6)',
+        [c.request.requestId,f.ids.authorityId,c.dispatchId,c.commitNonce,bytes.toString('base64url'),
+          sign(null,bytes,observer.privateKey).toString('base64url')]);
+    };
+    const first=await reserve();
+    const release={request:first.request,dispatchId:first.dispatchId,brokerId:first.brokerId};
+    await assert.rejects(authority.release(release),denied('DISPATCH_STORE_NATIVE_COMPLETION_REQUIRED'));
+    await assert.rejects(f.servicePool.query("UPDATE core_dispatch.claims SET state='RELEASED' WHERE request_id=$1",
+      [first.request.requestId]),/DISPATCH_NATIVE_COMPLETION_REQUIRED/);
+    await assert.rejects(f.servicePool.query('INSERT INTO core_dispatch.native_completion_policy VALUES($1,$2)',
+      [randomUUID(),pin]),/permission denied/i);
+    await append(first);
+    await authority.release(release);
+    const second=await reserve();
+    await append(second);
+    const revoked=decoded(await authority.revokeAndDrain(f.revoke(),'c'.repeat(64)));
+    assert.equal(revoked.drained,true);
+    const stored=await f.pool.query('SELECT state FROM core_dispatch.claims WHERE request_id IN ($1,$2)',
+      [first.request.requestId,second.request.requestId]);
+    assert.equal(stored.rows.length,2);assert.ok(stored.rows.every(x=>x.state==='RELEASED'));
+    await assert.rejects(f.pool.query('DELETE FROM core_dispatch.native_effect_completions WHERE request_id=$1',
+      [first.request.requestId]),/DISPATCH_NATIVE_COMPLETION_HISTORY_IMMUTABLE/);
   }finally{await f.close();}
 });
