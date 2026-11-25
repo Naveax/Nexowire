@@ -50,6 +50,7 @@
     "src/security/windows-dpapi.ts#spawnSync": 1,
     "src/security/windows-local-listener-owner.ts#spawnSync": 1,
     "src/security/windows-machine-update-tree-trust.ts#spawnSync": 1,
+    "src/security/windows-protected-owner-issuer.ts#spawn": 1,
     "src/security/windows-privileged-runtime-trust.ts#spawnSync": 1,
     "src/security/windows-programdata-acl.ts#spawnSync": 3,
     "src/update/auto-update.ts#spawn": 1,

@@ -204,3 +204,11 @@ test('real native launcher rejects malformed and impossible-session requests wit
   assert.equal(result.stdout,'');
   assert.match(result.stderr,/CORE_OWNER_LAUNCH_DENIED:(SYSTEM_SESSION_ZERO_REQUIRED|OWNER_BINDING_UNAVAILABLE)/);
 });
+
+test('native owner readback rejects malformed nonce without UI',{
+  skip:process.platform!=='win32'?'Windows-only read-only observation negative':false,timeout:10000
+},()=>{
+  const exe=fileURLToPath(new URL('../native/windows-core-owner-launcher.exe',import.meta.url));
+  const result=spawnSync(exe,['--observe-owner','bad'],{encoding:'utf8',timeout:5000,windowsHide:true});
+  assert.equal(result.status,64,String(result.error??result.stderr));assert.equal(result.stdout,'');
+});

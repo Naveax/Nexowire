@@ -1,0 +1,9 @@
+# AI-03 / #402 native launch sink review
+
+Source basis: #1314 HEAD 6f289ac10904d5d05e91b63adca7c7eede2bfb3a. CI 45574201273 job 139067961872 failed the launch inventory before npm test. Typecheck passed.
+
+One new direct callsite is recorded: src/security/windows-protected-owner-issuer.ts#spawn, count 1. The original capture SHA and every other entry remain unchanged. Audit implementation and failure behavior remain unchanged. The inventory is not authorization, signature attestation or physical acceptance.
+
+Reviewed purpose: the separately installed protected owner issuer invokes only the pinned native owner launcher, using fixed argument constructors for the existing WebAuthn owner ceremony and a read-only nonce-bound WTS observation. No shell, arbitrary executable, dynamic script, remote command or privileged effect route is introduced. Protected ProgramData path/ACL, artifact SHA and Authenticode verification are required at startup; the file hash is rechecked around the held child launch. Native code checks SYSTEM session zero, actual local owner token, and for the ceremony, child DACL, PID-bound pipe, Job membership and exit/drain. The observation neither starts the helper nor asserts human approval. The PostgreSQL ledger still independently verifies owner scope, signed assertions and provenance. Existing restrictions and CORE hard stop remain.
+
+Residual risks: signed installer and actual SYSTEM composition must be provisioned independently; same-privilege malicious administrators and protected install replacement are outside this source-only boundary. The readback does not attest a distinct boot/logon epoch by itself; that epoch and the enrollment key/credential remain independently provisioned. No production effect or OS-wide drain is authorized. Native MSVC build and physical owner ceremony remain unaccepted. AI-03 source review, not independent security approval.
