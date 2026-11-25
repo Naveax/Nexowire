@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
@@ -53,6 +54,7 @@ async function simulate({ dashboardStatus = 200, pairingStatus = 403, pairingBod
     if (url === '/api/v1/me/dashboard') {
       return { ok: dashboardStatus === 200, status: dashboardStatus };
     }
+    if(url.startsWith('/api/v1/me/mutations/status?'))return {status:404,ok:false,json:async()=>({error:'MUTATION_NOT_FOUND'})};
     if (url === '/api/v1/pairing') {
       if (pairingError) throw pairingError;
       return { ok: pairingStatus >= 200 && pairingStatus < 300,
@@ -65,8 +67,11 @@ async function simulate({ dashboardStatus = 200, pairingStatus = 403, pairingBod
     querySelectorAll: () => tabs,
     querySelector: () => element(),
   };
+  const storage=new Map();
   runInNewContext(source, {
-    document, window: { location }, navigator: { userAgent: 'Windows', clipboard: { writeText: async () => {} } },
+    TextEncoder,crypto:{subtle:{digest:async(_algorithm,input)=>createHash('sha256').update(input).digest()}},
+    localStorage:{getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,value)},
+    document, window: { location }, navigator: { userAgent: 'Windows', locks:{request:async(_key,_options,callback)=>callback({})},clipboard: { writeText: async () => {} } },
     fetch, URL, URLSearchParams, AbortSignal, console,
   }, { filename: 'read-only-web-connect-fixture.js', timeout: 5000 });
   await new Promise((resolve) => setImmediate(resolve));
