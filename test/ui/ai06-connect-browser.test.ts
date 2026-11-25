@@ -92,6 +92,8 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
   let dashboardMode=false;
   let coreEnabled=true;
   let enrollmentPending=false;
+  let coreRevision=7;
+  const mutationReceipts=new Map<string,unknown>();
   let remoteAuthorizationState:'ACTIVE'|'REVOKED'='ACTIVE';
   let remoteAuthorizationEpoch=7;
   let remoteObservedAtMs:number|null=null;
@@ -111,6 +113,12 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
       res.end(JSON.stringify({resource:'https://fixture.invalid/mcp',authorization_servers:['http://'+req.headers.host]}));
       return;
     }
+    if(req.method==='GET'&&route==='/api/v1/me/mutations/status'){
+      const id=new URL(req.url??'/','http://127.0.0.1').searchParams.get('mutationId')??'';
+      const receipt=mutationReceipts.get(id);
+      res.writeHead(receipt?200:404,{'content-type':'application/json'});
+      res.end(JSON.stringify(receipt??{error:'MUTATION_NOT_FOUND'}));return;
+    }
     if(req.method==='GET'&&route==='/api/v1/me/dashboard'){
       res.writeHead(200,{'content-type':'application/json'});
       if(dashboardMode){
@@ -120,7 +128,7 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
             id:deviceId,name:'Fixture device',platform:'win32',online:true,accessMode:'full',
             privilegeMode:'broker',adminBridgeReady:true,agentVersion:'1.0.8',
             rootMode:{active:false,expiresAt:null},bridgePreference:{desiredMode:'auto',applied:false},
-            persistentMaintenance:{enabled:coreEnabled,active:false},
+            persistentMaintenance:{enabled:coreEnabled,active:false},coreMutationRevision:coreRevision,
             coreRevocation:{version:1,source:'D1_REMOTE_AUTHORIZATION',
               remoteAuthorization:{state:remoteAuthorizationState,authorizationEpoch:remoteAuthorizationEpoch,
                 observedAtMs:remoteObservedAtMs??Date.now()},
@@ -150,22 +158,23 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
       req.setEncoding('utf8');
       req.on('data',(chunk:string)=>{raw+=chunk;if(raw.length>4096)req.destroy()});
       req.on('end',async()=>{
-        let body:{deviceId?:string;enabled?:boolean};
+        let body:{deviceId?:string;enabled?:boolean;expectedRevision?:number};
         try{body=JSON.parse(raw)}catch{res.writeHead(400);res.end();return}
         const confirm=req.headers['x-nexowire-confirm'];
         const mutationId=req.headers['x-nexowire-mutation-id'];
         coreMutationIds.push(typeof mutationId==='string'?mutationId:'');
         corePosts.push({route,body,confirm:typeof confirm==='string'?confirm:undefined});
-        if(body.deviceId!==deviceId){res.writeHead(400);res.end();return}
+        if(body.deviceId!==deviceId||typeof mutationId!=='string'||body.expectedRevision!==coreRevision){res.writeHead(409);res.end();return}
         if(route.endsWith('/core-enrollment-request')){
           await consentResponseGate;
           res.writeHead(503,{'content-type':'application/json'});
           res.end(JSON.stringify({error:sentinel}));return;
         }
         if(body.enabled!==false){res.writeHead(400);res.end();return}
-        coreEnabled=false;enrollmentPending=false;
+        coreEnabled=false;enrollmentPending=false;coreRevision++;
+        mutationReceipts.set(mutationId,{mutationId,deviceId,kind:'core-disable',state:'APPLIED',expectedRevision:body.expectedRevision});
         res.writeHead(200,{'content-type':'application/json'});
-        res.end(JSON.stringify({deviceId,persistentMaintenance:{enabled:false,active:false,updatedAt:new Date().toISOString()}}));
+        res.end(JSON.stringify({deviceId,mutationId,persistentMaintenance:{enabled:false,active:false,updatedAt:new Date().toISOString()}}));
       });return;
     }
     res.writeHead(404);res.end();
@@ -433,7 +442,7 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
   await until('dashboard uncertain readback',coreCopy,value=>value.includes('sonucu belirsiz'));
   assert.equal(corePosts.length,1);
   assert.deepEqual(corePosts[0],{route:'/api/v1/me/devices/core-enrollment-request',
-    body:{deviceId},confirm:'core-enrollment-request-v1'});
+    body:{deviceId,expectedRevision:7},confirm:'core-enrollment-request-v1'});
   assert.equal(await evaluate<boolean>('document.querySelector(".core-enrollment-retry").hidden'),true);
   assert.equal(await evaluate<boolean>('document.querySelector(".core-enrollment-retry").disabled'),true);
   assert.equal(await evaluate<boolean>('document.body.innerText.includes('+JSON.stringify(sentinel)+')'),false);
@@ -453,13 +462,19 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
   await until('unchanged GET preserves uncertain state',coreCopy,value=>value.includes('sonucu belirsiz'));
   assert.equal(corePosts.length,1);
   // The later owner-bound backend GET reports the request recorded.
-  enrollmentPending=true;
+  enrollmentPending=true;coreRevision=8;
+  await activate('.core-readback');
+  await until('boolean alone is not receipt',coreCopy,value=>value.includes('sonucu belirsiz'));
+  assert.equal(await fenceCount(),1);
+  mutationReceipts.set(coreMutationIds[0]!,{mutationId:coreMutationIds[0],deviceId,
+    kind:'core-consent',state:'APPLIED',expectedRevision:7});
   await activate('.core-readback');
   await until('pending readback',coreCopy,value=>value.includes('sunucuda kayıtlı'));
   assert.match(await coreCopy(),/teslimi.*doğrulanmadı/);
   assert.equal(await evaluate<boolean>('document.querySelector(".core-enrollment-retry").hidden'),true);
   assert.equal(await evaluate<boolean>('document.querySelector(".core-toggle").disabled'),false);
-  assert.equal(await fenceCount(),0,'matching recorded-request GET reconciles marker');
+  assert.equal(await fenceCount(),0,'exact terminal receipt and newer revision reconcile marker');
+  assert.match(await coreCopy(),/APPLIED \(yalnız veritabanı yazımı\)/);
   // Second tab still has the original card. Its locked fresh GET must deny the
   // stale consent even after another tab reconciles the marker.
   await secondEvaluate('document.querySelector(".core-enrollment-retry").dispatchEvent(new Event("click"))');
@@ -469,11 +484,13 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
   await activate('.core-toggle');
   await until('dashboard preference OFF readback',coreCopy,value=>value.includes('hesap tercihini kapalı bildiriyor'));
   assert.equal(corePosts.length,2);
-  assert.deepEqual(corePosts[1],{route:'/api/v1/me/devices/core-preference',body:{deviceId,enabled:false},confirm:undefined});
+  assert.deepEqual(corePosts[1],{route:'/api/v1/me/devices/core-preference',body:{deviceId,enabled:false,expectedRevision:8},confirm:undefined});
   assert.equal(coreMutationIds.length,2);
   assert.ok(coreMutationIds.every(id=>/^core-v1:[0-9a-f-]{36}$/.test(id)));
   assert.notEqual(coreMutationIds[0],coreMutationIds[1]);
   assert.match(await coreCopy(),/yerel STOP.*kanıtı değildir/);
+  assert.equal(await fenceCount(),0);
+  assert.match(await coreCopy(),/APPLIED \(yalnız veritabanı yazımı\)/);
   assert.equal(await evaluate<string>('document.querySelector(".core-shortcut").textContent'),'CORE');
   // Exact AI-03 #1330 v1 shape. Preference OFF does not imply remote revoke.
   assert.match(await coreCopy(),/ACTIVE \(epoch 7\)/);
