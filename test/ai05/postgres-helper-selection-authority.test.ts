@@ -7,6 +7,7 @@ import {DatabaseSync} from 'node:sqlite';
 import os from 'node:os';
 import path from 'node:path';
 import {bindHelperRollbackGuard} from '../../src/security/protected-helper-rollback-guard.js';
+import {composeHelperSelectionRevokeDrain} from '../../src/security/protected-helper-services-startup.js';
 import {Pool} from 'pg';
 import {createBoundHelperRuntimeAuthority} from '../../src/installer/protected-helper-entrypoints.js';
 import {withVerifiedTransferHelper,assertSelectedTransferHelper} from '../../src/agent/protected-transfer-startup.js';
@@ -55,7 +56,7 @@ test('durable independent helper selection excludes runtime/deployment, preserve
   };
   const approvedStateSha256=await readDigest();
   const rollbackPhases:string[]=[];
-  const verifyEvidence=createSignedHelperSelectionEvidenceVerifier(bindHelperRollbackGuard({
+  const nativeEvidence=bindHelperRollbackGuard({
     observerPublicKeyPem:observer.publicKey.export({type:'spki',format:'pem'}).toString(),
     async requestProof(challenge,v){
       assert.deepEqual(v.scope,scope);
@@ -77,7 +78,8 @@ test('durable independent helper selection excludes runtime/deployment, preserve
         approvedStateSha256,currentStateSha256,writerFenced:true,unknownOperations,recoveryPending:false,priorHelperCompatible:true,observedAt,expiresAt:observedAt+3000});
       return {payload,proof:sign(null,Buffer.from(payload,'utf8'),rollbackObserver.privateKey).toString('base64url')};
     },
-  }));
+  });
+  const verifyEvidence=createSignedHelperSelectionEvidenceVerifier(nativeEvidence);
   function backend(){
     const pool=new Pool({...common,user:'helper_fixture_runtime'});pools.push(pool);
     return new PostgresHelperSelectionAuthority({pool:pool as unknown as DispatchStorePool,scope,verifyEvidence,
@@ -218,12 +220,35 @@ test('durable independent helper selection excludes runtime/deployment, preserve
   await assert.rejects(first.beginRuntime(randomUUID()),/NOT_SELECTED/);
   const again=await runTransferHelperLifecycle(req('clean-install',current,a,'inert fixture A'),provider,store);current=again.selection;
   const pending=await first.beginRuntime(randomUUID());
-  await admin.query('BEGIN');
+  const revoke={deviceId:scope.deviceId,ownerId:scope.ownerId,deviceEpoch:scope.deviceEpoch,sessionEpoch:scope.sessionEpoch,
+    expectedGeneration:scope.generation,signedOwnerApproval:'fixture-only-owner-approval'};
+  const drainPool=new Pool({...common,user:'helper_fixture_runtime'});pools.push(drainPool);
+  let existingDrained=true;
+  const drain=composeHelperSelectionRevokeDrain({pool:drainPool as unknown as DispatchStorePool,scope,nativeEvidence,
+    async verifyExistingNativeDrain(){return existingDrained;}});
+  assert.equal(await drain(revoke),false,'ACTIVE grant is not a revoke fence');
+  // Commit the revoke admission fence first, as the real CORE service does.
+  const fence=await admin.connect();
   try{
-    await admin.query('SELECT authority_id FROM core_dispatch.authorities WHERE authority_id=$1 FOR UPDATE',[scope.authorityId]);
-    await admin.query("UPDATE core_dispatch.grants SET state='REVOKED' WHERE authority_id=$1 AND device_id=$2",[scope.authorityId,scope.deviceId]);
-    await admin.query('COMMIT');
-  }catch(e){await admin.query('ROLLBACK');throw e;}
+    await fence.query('BEGIN');
+    await fence.query('SELECT authority_id FROM core_dispatch.authorities WHERE authority_id=$1 FOR UPDATE',[scope.authorityId]);
+    await fence.query("UPDATE core_dispatch.grants SET state='REVOKING',generation=generation+1,core_enabled=false,root_expires_ms=NULL WHERE authority_id=$1 AND device_id=$2",[scope.authorityId,scope.deviceId]);
+    await fence.query('COMMIT');
+  }catch(e){await fence.query('ROLLBACK');throw e;}finally{fence.release();}
+  // Hold the actual shared lock while the read-only drain observer queries a
+  // different restricted connection. It must never reacquire this lock.
+  const finish=await admin.connect();
+  try{
+    await finish.query('BEGIN');
+    await finish.query('SELECT authority_id FROM core_dispatch.authorities WHERE authority_id=$1 FOR UPDATE',[scope.authorityId]);
+    allowRelease=false;assert.equal(await drain(revoke),false);
+    allowRelease=true;existingDrained=false;assert.equal(await drain(revoke),false);
+    existingDrained=true;assert.equal(await drain({...revoke,expectedGeneration:scope.generation+1}),false);
+    assert.equal(await drain(revoke),true);
+    assert.equal((await finish.query('SELECT state FROM helper_selection.leases WHERE id=$1',[pending.id])).rows[0].state,'ACTIVE');
+    await finish.query("UPDATE core_dispatch.grants SET state='REVOKED' WHERE authority_id=$1 AND device_id=$2",[scope.authorityId,scope.deviceId]);
+    await finish.query('COMMIT');
+  }catch(e){await finish.query('ROLLBACK');throw e;}finally{finish.release();}
   await assert.rejects(second.read(pending.id),/GRANT_FENCED/);
   await assert.rejects(second.release(pending.id),/GRANT_FENCED/);
   assert.equal((await admin.query('SELECT state FROM helper_selection.leases WHERE id=$1',[pending.id])).rows[0].state,'ACTIVE');

@@ -12,6 +12,7 @@ on:
       - 'test/ai05/protected-helper-startup-rollback.test.ts'
       - 'src/installer/protected-helper-entrypoints.ts'
       - 'src/security/protected-helper-rollback-guard.ts'
+      - 'src/security/protected-helper-services-startup.ts'
       - 'test/ai05/helper-selection-tls-fixture.ts'
       - 'test/ai05/postgres-helper-selection-authority.test.ts'
 permissions:
