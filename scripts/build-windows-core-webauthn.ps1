@@ -19,3 +19,16 @@ if ($LASTEXITCODE -ne 0 -or !(Test-Path -LiteralPath $output -PathType Leaf)) {
   throw 'Native WebAuthn component build failed.'
 }
 Write-Output 'WebAuthn component built; unsigned, uninstalled, no credential or CORE authority.'
+
+# Build the fixed-purpose service launcher alongside the assertion helper.
+$launcherSource = Join-Path $root 'native\windows-core-owner-launcher.c'
+$launcherOutput = Join-Path $root 'native\windows-core-owner-launcher.exe'
+$launcherObject = Join-Path $root 'native\windows-core-owner-launcher.obj'
+$command = '"' + $vcvars + '" >nul && cl.exe /nologo /std:c11 /O2 /W4 /WX /utf-8 /Fo:"' +
+  $launcherObject + '" /Fe:"' + $launcherOutput + '" "' + $launcherSource +
+  '" /link /SUBSYSTEM:CONSOLE kernel32.lib advapi32.lib wtsapi32.lib bcrypt.lib wintrust.lib crypt32.lib'
+& cmd.exe /d /s /c $command
+if ($LASTEXITCODE -ne 0 -or !(Test-Path -LiteralPath $launcherOutput -PathType Leaf)) {
+  throw 'Native owner ceremony launcher build failed.'
+}
+Write-Output 'Owner ceremony launcher built; unsigned, uninstalled, no service or CORE authority.'
