@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createHash,generateKeyPairSync,sign,X509Certificate} from 'node:crypto';
+import {dashboardMutationFixture} from './ai03/dashboard-mutation-d1-fixture.js';
+import {createHash,generateKeyPairSync,randomUUID,sign,X509Certificate} from 'node:crypto';
 import {mkdtempSync,readFileSync,rmSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
@@ -59,8 +60,7 @@ function enrollment(
     operator.privateKey).toString('base64url');
   return e;
 }
-async function ownerDevice(){
-  const store=new MemoryControlPlaneStore();
+async function ownerDevice(store:import('../src/product/control-plane-store.js').ControlPlaneStore=new MemoryControlPlaneStore()){
   const service=new ControlPlaneService(store,{now:()=>new Date(instant)});
   const identity={accountId:ownerId,role:'user' as const};
   await service.ensureAccount({id:identity.accountId});
@@ -73,8 +73,9 @@ async function ownerDevice(){
   return {service,store,identity,challenge,device,deviceCredential};
 }
 
-test('signed owner WSS receipt + paired device token cannot spoof CORE HTTP session or Windows elevation',async()=>{
-  const {service,identity,challenge,device,deviceCredential}=await ownerDevice();
+test('signed owner WSS receipt + paired device token cannot spoof CORE HTTP session or Windows elevation',async t=>{
+  const f=dashboardMutationFixture();t.after(()=>f.close());
+  const {service,identity,challenge,device,deviceCredential}=await ownerDevice(f.store);
   await service.setDeviceAccessMode(identity,device.id,'full');
   await service.setDevicePresence(device.id,true,new Date(instant).toISOString(),{
     privilegeMode:'broker',adminBridgeReady:true,
@@ -83,6 +84,7 @@ test('signed owner WSS receipt + paired device token cannot spoof CORE HTTP sess
   assert.equal(verifySignedOwnerPublicWssEnrollment(receipt,state(device.id))
     .expectedHostname,'edge.example.com');
   const handler=createControlPlaneHttpHandler(service,{
+    coreConsoleAuthority:f.authority,
     // Independent synthetic bearer authority. Claims in headers/body are
     // NEVER an identity source. An on-wire signed receipt is NOT a login.
     authenticate:async request=>{
@@ -95,15 +97,17 @@ test('signed owner WSS receipt + paired device token cannot spoof CORE HTTP sess
     },
   });
   const route='https://control.example.com/api/v1/me/devices/core-preference';
+  const mutationId='core-v1:'+randomUUID();
+  const expectedRevision=await f.store.dashboardMutations.revision(device.id,identity.accountId);
   const request=(token:string)=>new Request(route,{
     method:'POST',
     headers:{
       'content-type':'application/json','authorization':'Bearer '+token,
-      'x-nexowire-confirm':'core-preference-v1',
+      'x-nexowire-confirm':'core-preference-v1','x-nexowire-mutation-id':mutationId,
       'x-claimed-owner-account':ownerId,
     },
     body:JSON.stringify({
-      deviceId:device.id,enabled:true,confirmation:'CORE UNLIMITED',
+      deviceId:device.id,enabled:true,confirmation:'CORE UNLIMITED',expectedRevision,
       // An attacker-controlled UI flag or signed WSS response is not
       // evidence of a privileged access token.
       active:true,privilegeMode:'broker',signedWssReceipt:receipt,
@@ -124,10 +128,8 @@ test('signed owner WSS receipt + paired device token cannot spoof CORE HTTP sess
   assert.equal(data.persistentMaintenance.enabled,true);
   assert.equal(data.persistentMaintenance.active,false);
   const replayed=await handler(request('qa-owner-session'));
-  assert.equal(replayed.status,200);
-  assert.equal((await replayed.json() as {
-    persistentMaintenance:{active:boolean}
-  }).persistentMaintenance.active,false);
+  assert.equal(replayed.status,409);
+  assert.deepEqual(await replayed.json(),{error:'DASHBOARD_MUTATION_ALREADY_APPLIED'});
   // A persisted CORE UI request cannot become an elevated Windows token.
   assert.equal((await service.dashboard(identity)).devices[0]
     ?.persistentMaintenance.active,false);
