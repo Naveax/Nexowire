@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS dashboard_mutation_claims (
  payload_sha256 TEXT NOT NULL CHECK(length(payload_sha256)=64),
  execution_nonce TEXT NOT NULL UNIQUE,
  expected_revision INTEGER,
- state TEXT NOT NULL CHECK(state IN ('PENDING','APPLIED')),
+ state TEXT NOT NULL CHECK(state IN ('PENDING','APPLIED','DENIED')),
  created_at TEXT NOT NULL,
  CHECK((kind='pairing' AND expected_revision IS NULL) OR
        (kind<>'pairing' AND expected_revision IS NOT NULL))
