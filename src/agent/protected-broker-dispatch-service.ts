@@ -64,6 +64,8 @@ export interface ProtectedBrokerDispatchServiceOptions {
   readonly readProtectedBroker:AuthorityOptions['readProtectedBroker'];
   readonly verifyOwnerRevocation:AuthorityOptions['verifyOwnerRevocation'];
   readonly verifyNativeDrain:AuthorityOptions['verifyNativeDrain'];
+  /** Required for any production reservation/commit; absent policy denies. */
+  readonly nativeCompletion?:AuthorityOptions['nativeCompletion'];
   readonly permitMs?:number;readonly drainTimeoutMs?:number;
 }
 
@@ -74,7 +76,7 @@ export interface ProtectedBrokerDispatchServiceOptions {
 export async function startProtectedBrokerDispatchService(config:ProtectedBrokerDispatchServiceOptions):
   Promise<Readonly<{address:string;port:number;physicalAcceptance:'NOT_PROVEN';close:()=>Promise<void>}>>{
   const {host,port,authorityId,privateKeyPem,database,tls,credentials,verifyProvenance,
-    readProtectedBroker,verifyOwnerRevocation,verifyNativeDrain,permitMs,drainTimeoutMs}=config;
+    readProtectedBroker,verifyOwnerRevocation,verifyNativeDrain,nativeCompletion,permitMs,drainTimeoutMs}=config;
   if(typeof host!=='string'||isIP(host)===0||!Number.isInteger(port)||port<0||port>65535||
     !uuid.safeParse(authorityId).success||typeof verifyProvenance!=='function'||
     typeof readProtectedBroker!=='function'||typeof verifyOwnerRevocation!=='function'||
@@ -104,7 +106,8 @@ export async function startProtectedBrokerDispatchService(config:ProtectedBroker
   try{
     const authority=new PostgresBrokerDispatchAuthority({pool:db.pool,authorityId,
       privateKeyPem,verifyProvenance,readProtectedBroker,verifyOwnerRevocation,
-      verifyNativeDrain,permitMs,drainTimeoutMs,requireCredentialFence:true});
+      verifyNativeDrain,permitMs,drainTimeoutMs,requireCredentialFence:true,
+      requireNativeCompletion:true,nativeCompletion});
     const handler=createBrokerDispatchAuthorityHandler({authorityId,publicKeyPem,
       authority,authenticateBroker,requireMutualTls:true,
       readProtectedBroker:(_principal,operation)=>readProtectedBroker(operation),
