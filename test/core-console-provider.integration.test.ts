@@ -225,7 +225,7 @@ test('an enrollment retry during idle readiness loss cannot discard the existing
   }finally{runtime?.provider.close();f.db.close();}
 });
 
-test('an enrollment retry with pending work still revokes and drains before any new approval',{timeout:10000},async()=>{
+test('an enrollment retry with pending work revokes but cannot renew without independent native drain',{timeout:10000},async()=>{
   const f=fixture();let runtime:Awaited<ReturnType<typeof enable>>|undefined;
   let entered!:()=>void,release!:()=>void,revokeStarted!:()=>void;
   const arrived=new Promise<void>(resolve=>{entered=resolve;});
@@ -242,10 +242,12 @@ test('an enrollment retry with pending work still revokes and drains before any 
     renewal=runtime.controller.enroll(new AbortController().signal)
       .then(()=>{settled=true;return {accepted:true};},()=>{settled=true;return {accepted:false};});
     await revocation;
-    assert.equal(await f.store.stopped(),true);assert.equal(settled,false);
-    assert.equal(f.consents(),1);
-    release();await assert.rejects(pending);pending=undefined;
     assert.equal((await renewal).accepted,false);renewal=undefined;
+    assert.equal(await f.store.stopped(),true);assert.equal(settled,true);
+    assert.equal(f.consents(),1);
+    assert.ok(f.profile().pendingDispatch,'remote ACK must not erase an admitted native intent');
+    release();await assert.rejects(pending);pending=undefined;
+    assert.ok(f.profile().pendingDispatch,'settled JS work is not independent drain');
     assert.equal(f.consents(),1);assert.equal(f.effects(),1);
     assert.equal((await runtime.controller.status('full')).active,false);
   }finally{release();await pending?.catch(()=>{});await renewal;runtime?.provider.close();f.db.close();}
@@ -289,6 +291,8 @@ test('an idle stale provider cannot mistake another provider pending effect for 
     await backgroundTick(stale.provider);
     assert.equal(await f.store.stopped(),true,
       'fresh persisted pending-dispatch evidence must force STOP, not idle pause');
+    assert.equal(f.profile().pendingDispatch?.requestId,id,
+      'a stale provider must not erase another pending request during remote revoke');
     release();await assert.rejects(pending);pending=undefined;
     f.db.exec('UPDATE devices SET admin_bridge_ready=1');
     await assert.rejects(input(owner.controller,id));
@@ -484,21 +488,35 @@ test('authority endpoint requires current paired credential and binds HTTPS resp
   }finally{f.db.close();}
 });
 
-test('a new local consent drains old native work before clearing persistent STOP',async()=>{
-  const f=fixture();try{
-    const {controller}=await enable(f);let release!:()=>void;
-    const gate=new Promise<void>(resolve=>{release=resolve;});f.native(async()=>gate);
-    const old=input(controller).catch(e=>e);
-    for(let i=0;i<50&&f.effects()===0;i++)await new Promise<void>(r=>setImmediate(r));
-    assert.equal(f.effects(),1);await controller.revoke();
-    let enrolled=false;
-    const renewed=controller.enroll(new AbortController().signal).then(result=>{enrolled=result;});
-    for(let i=0;i<10;i++)await new Promise<void>(r=>setImmediate(r));
-    assert.equal(enrolled,false);assert.equal(await f.store.stopped(),true);
-    release();await old;await renewed;
-    assert.equal(enrolled,true);assert.equal(await f.store.stopped(),false);
-    assert.equal((await controller.status('full')).active,true);
-  }finally{f.db.close();}
+test('remote revoke ACK and settled native callback cannot clear unresolved STOP across restart',async t=>{
+  const f=fixture();t.after(()=>f.db.close());
+  const runtime=await enable(f);let release!:()=>void,entered!:()=>void;
+  const arrived=new Promise<void>(resolve=>{entered=resolve;});
+  const gate=new Promise<void>(resolve=>{release=resolve;});
+  f.native(async()=>{entered();await gate;});
+  const id=randomUUID(),old=input(runtime.controller,id).then(()=>null,error=>error);
+  try{
+    await arrived;
+    const marker=f.profile().pendingDispatch;assert.ok(marker);assert.equal(marker.requestId,id);
+    await runtime.controller.revoke();
+    assert.equal(await f.store.stopped(),true);
+    assert.deepEqual(f.profile().pendingDispatch,marker);
+    await assert.rejects(runtime.controller.enroll(new AbortController().signal),/CORE_NATIVE_DRAIN_UNVERIFIED/);
+    release();assert.ok(await old);
+    assert.deepEqual(f.profile().pendingDispatch,marker);
+    assert.equal(f.consents(),1);assert.equal(f.effects(),1);
+    runtime.controller.close();
+    const restarted=await f.make();
+    try{
+      assert.equal((await restarted.controller.status('full')).active,false);
+      await assert.rejects(restarted.controller.enroll(new AbortController().signal),/CORE_NATIVE_DRAIN_UNVERIFIED/);
+      await assert.rejects(input(restarted.controller,id));
+      await assert.rejects(input(restarted.controller));
+      assert.equal(await f.store.stopped(),true);
+      assert.deepEqual(f.profile().pendingDispatch,marker);
+      assert.equal(f.consents(),1);assert.equal(f.effects(),1);
+    }finally{restarted.controller.close();}
+  }finally{release();await old;runtime.controller.close();}
 });
 
 test('signed status reports reject nonce replay and stop claiming ACTIVE when stale or revoked',async()=>{
