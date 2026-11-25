@@ -52,6 +52,7 @@ async function render(dashboard:unknown,options:{
   dashboardResponse?:()=>Promise<Response>;
   browser?:ReturnType<typeof pairingBrowser>;
   localState?:string;
+  mutationStatus?:(id:string)=>Promise<Response>;
 }={}) {
   const ids=new Map<string,FakeElement>();
   const get=(id:string)=>{if(!ids.has(id))ids.set(id,new FakeElement());return ids.get(id)!};
@@ -76,6 +77,10 @@ async function render(dashboard:unknown,options:{
       replace:()=>{throw Error('fixture navigation blocked')}}},
     fetch:async(path:string,init?:RequestInit)=>{
       if(path==='/api/v1/me/dashboard')return options.dashboardResponse?.()??Response.json(dashboard);
+      if(path.startsWith('/api/v1/me/mutations/status?')){
+        const id=new URL(path,'https://fixture.invalid').searchParams.get('mutationId')!;
+        return options.mutationStatus?.(id)??Response.json({error:'MUTATION_NOT_FOUND'},{status:404});
+      }
       if(path==='/api/v1/pairing'){
         postCount++;
         mutationIds.push(new Headers(init?.headers).get('X-Nexowire-Mutation-Id')??'');
@@ -252,4 +257,27 @@ test('AI-06 pairing: unavailable durable storage prevents POST',async()=>{
   await f.get('approve').handlers.click!();
   assert.equal(f.postCount(),0);
   assert.equal(f.get('approve').disabled,true);
+});
+
+test('AI-06 pairing mutation status: exact APPLIED blocks other profile without claiming connection',async()=>{
+  const d=dashboard({active:false});
+  const a=await render(d);
+  await a.get('approve').handlers.click!();
+  const id=a.mutationIds[0]!;
+  for(const state of ['APPLIED','PENDING','DENIED']){
+    const b=await render(d,{mutationStatus:async()=>Response.json({
+      mutationId:id,deviceId,kind:'pairing',state,expectedRevision:null})});
+    assert.equal(b.get('approve').disabled,true);
+    assert.equal(b.postCount(),0);
+    assert.match(b.get('error-message').textContent,new RegExp(state));
+    assert.doesNotMatch(b.get('status-title').textContent,/Bağlandı|CORE AÇIK/);
+  }
+  for(const status of [()=>Response.json({error:'NOT_FOUND'},{status:404}),
+    ()=>Response.json({mutationId:id,deviceId:'foreign',kind:'pairing',state:'APPLIED',expectedRevision:null}),
+    ()=>Response.json({error:'unavailable'},{status:503})]){
+    const b=await render(d,{mutationStatus:async()=>status()});
+    assert.equal(b.get('approve').disabled,true);
+    assert.equal(b.postCount(),0);
+    assert.doesNotMatch(b.get('error-message').textContent,/APPLIED/);
+  }
 });
