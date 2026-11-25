@@ -5,14 +5,14 @@ import {runInNewContext} from 'node:vm';
 import {randomUUID} from 'node:crypto';
 
 const source=readFileSync('web/app.js','utf8');
-const start=source.indexOf('function coreEnrollmentEligible(');
+const start=source.indexOf('function validCoreRevision(');
 const end=source.indexOf('async function setDeviceBridgePreference(',start);
 assert.ok(start>=0&&end>start,'actual CORE action implementation');
 
 function device(overrides:Record<string,unknown>={}){
   return {id:'fixture-owner-device',platform:'win32',online:true,accessMode:'full',
     privilegeMode:'broker',adminBridgeReady:true,bridgePreference:{desiredMode:'auto'},
-    persistentMaintenance:{enabled:true,active:false},
+    persistentMaintenance:{enabled:true,active:false},coreMutationRevision:7,
     physicalConsole:{deviceReady:true,localEnrolled:false,enrollmentRequested:false,active:false,observedAtMs:null},
     ...overrides};
 }
@@ -39,7 +39,7 @@ function sharedBrowser(){
   }}};
   return {records,localStorage,navigator};
 }
-function fixture(initial:Device,handler:()=>Promise<Response>,shared=sharedBrowser()){
+function fixture(initial:Device,handler:(init:RequestInit)=>Promise<Response>,shared=sharedBrowser()){
   const nodes=new Map<string,Element>();
   const row={querySelector:(selector:string)=>{
     if(!nodes.has(selector))nodes.set(selector,new Element());
@@ -48,12 +48,16 @@ function fixture(initial:Device,handler:()=>Promise<Response>,shared=sharedBrows
   const posts:{path:string;init:RequestInit}[]=[];
   let reads=0;
   let server=snapshot([initial]);
+  const receipts=new Map<string,unknown>();
   const timers:(()=>void)[]=[];
   const ctx=runInNewContext('const coreOperations=new Map();let currentSnapshot=null;\n'+
     source.slice(start,end)+'\n({setSnapshot:value=>currentSnapshot=value,coreOperations,coreEnrollmentEligible,coreReadbackMessage,reconcileCoreReadback,coreOperationAllows,performCoreAction,captureCoreFences,coreOperationFor,coreRemoteReadback,renderCoreReadbackCopy})',{
       AbortSignal,crypto:{randomUUID},navigator:shared.navigator,localStorage:shared.localStorage,
       setTimeout:(callback:()=>void)=>{timers.push(callback)},
-      fetch:async(path:string,init:RequestInit)=>{if(init.method!=='POST')return Response.json(server);posts.push({path,init});return handler()},
+      fetch:async(path:string,init:RequestInit)=>{if(path.startsWith('/api/v1/me/mutations/status?')){
+        const id=new URL(path,'https://fixture.invalid').searchParams.get('mutationId')!;
+        return receipts.has(id)?Response.json(receipts.get(id)):Response.json({error:'MUTATION_NOT_FOUND'},{status:404});
+      }if(init.method!=='POST')return Response.json(server);posts.push({path,init});return handler(init)},
       load:async()=>{reads++},
     }) as {
       setSnapshot(value:ReturnType<typeof snapshot>):void;
@@ -66,10 +70,16 @@ function fixture(initial:Device,handler:()=>Promise<Response>,shared=sharedBrows
       captureCoreFences():Map<string,string>;
       coreOperationFor(id:string):unknown;
       coreOperationAllows(id:string,kind:string):boolean;
-      performCoreAction(id:string,kind:string,row:unknown):Promise<void>;
+      performCoreAction(id:string,kind:string,row:unknown,renderedRevision?:number):Promise<void>;
     };
   ctx.setSnapshot(snapshot([initial]));
   return {...ctx,row,posts,reads:()=>reads,shared,timers,
+    receipt(state:string,overrides:Record<string,unknown>={},kind='consent'){
+      const record=[...shared.records.values()].map(raw=>JSON.parse(raw)).find(value=>value.kind===kind);
+      assert.ok(record,'fixture must have actual persisted intent');
+      const id='core-v1:'+record.id;
+      receipts.set(id,{mutationId:id,deviceId:record.deviceId,kind:'core-'+record.kind,state,expectedRevision:record.expectedRevision,...overrides});
+    },
     setSnapshot(value:ReturnType<typeof snapshot>){server=value;ctx.setSnapshot(value)},
     setServer(value:ReturnType<typeof snapshot>){server=value},
     reconcileCoreReadback(value:ReturnType<typeof snapshot>,captured=ctx.captureCoreFences()){return ctx.reconcileCoreReadback(value,captured)},
@@ -84,7 +94,7 @@ test('AI-06 readback: consent is eligible only for explicit current backend read
     device({online:false}),device({platform:'linux'}),device({accessMode:'safe'}),
     device({privilegeMode:'direct'}),device({adminBridgeReady:false}),
     device({bridgePreference:{desiredMode:'off'}}),device({bridgePreference:undefined}),
-    device({persistentMaintenance:{enabled:false}}),device({physicalConsole:undefined}),
+    device({persistentMaintenance:{enabled:false}}),device({physicalConsole:undefined}),device({coreMutationRevision:null}),device({coreMutationRevision:0}),
     device({physicalConsole:{deviceReady:true,localEnrolled:false}}),
     device({physicalConsole:{deviceReady:false,localEnrolled:false,enrollmentRequested:false}}),
     device({physicalConsole:{deviceReady:true,localEnrolled:false,enrollmentRequested:true}}),
@@ -106,8 +116,8 @@ test('AI-06 readback: same-device in-flight guard and stale/foreign readback can
   await f.performCoreAction(d.id,'disable',f.row);
   assert.equal(f.posts.length,1);
   assert.equal(f.posts[0]?.path,'/api/v1/me/devices/core-enrollment-request');
-  assert.deepEqual(JSON.parse(String(f.posts[0]?.init.body)),{deviceId:d.id});
-  const requested=device({physicalConsole:{deviceReady:true,localEnrolled:false,enrollmentRequested:true}});
+  assert.deepEqual(JSON.parse(String(f.posts[0]?.init.body)),{deviceId:d.id,expectedRevision:7});
+  const requested=device({coreMutationRevision:8,physicalConsole:{deviceReady:true,localEnrolled:false,enrollmentRequested:true}});
   await f.reconcileCoreReadback(snapshot([requested]));
   assert.equal(f.coreOperations.get(d.id)?.inFlight,true);
   release(Response.json({error:'PRIVATE_SENTINEL'},{status:503}));await first;
@@ -118,6 +128,14 @@ test('AI-06 readback: same-device in-flight guard and stale/foreign readback can
   assert.equal(f.coreOperationAllows(d.id,'consent'),false);
   await f.performCoreAction(d.id,'consent',f.row);
   assert.equal(f.posts.length,1);
+  await f.reconcileCoreReadback(snapshot([requested]));
+  assert.equal(f.coreOperationAllows(d.id,'consent'),false,'pending boolean is not a terminal receipt');
+  f.receipt('PENDING');await f.reconcileCoreReadback(snapshot([requested]));
+  assert.equal(f.coreOperationAllows(d.id,'consent'),false);
+  f.receipt('APPLIED',{expectedRevision:6});await f.reconcileCoreReadback(snapshot([requested]));
+  assert.equal(f.coreOperationAllows(d.id,'consent'),false);
+  f.receipt('APPLIED');await f.reconcileCoreReadback(snapshot([d]));
+  assert.equal(f.coreOperationAllows(d.id,'consent'),false,'older dashboard does not settle APPLIED');
   await f.reconcileCoreReadback(snapshot([requested]));f.setSnapshot(snapshot([requested]));
   assert.equal(f.coreOperations.has(d.id),false);
   await f.performCoreAction(d.id,'consent',f.row);
@@ -127,7 +145,7 @@ test('AI-06 readback: same-device in-flight guard and stale/foreign readback can
 
 test('AI-06 readback: consent response alone is not delivery or native approval',async()=>{
   const d=device();
-  const f=fixture(d,async()=>Response.json({deviceId:d.id,enrollmentRequested:true,active:false}));
+  const f=fixture(d,async init=>Response.json({deviceId:d.id,enrollmentRequested:true,active:false,mutationId:new Headers(init.headers).get('X-Nexowire-Mutation-Id')}));
   await f.performCoreAction(d.id,'consent',f.row);
   assert.equal(f.coreOperations.get(d.id)?.acknowledged,true);
   await f.reconcileCoreReadback(snapshot([d]));
@@ -144,19 +162,26 @@ test('AI-06 readback: ambiguous enable may persist preference; explicit OFF can 
     return Response.json({deviceId:d.id,persistentMaintenance:{enabled:false,active:false,updatedAt:'fixture'}})});
   await f.performCoreAction(d.id,'enable',f.row);
   assert.equal(f.coreOperations.get(d.id)?.acknowledged,false);
-  const enabled=device();
+  const enabled=device({coreMutationRevision:8});
   await f.reconcileCoreReadback(snapshot([enabled]));f.setSnapshot(snapshot([enabled]));
   assert.equal(f.coreOperationAllows(d.id,'consent'),false);
   assert.equal(f.coreOperationAllows(d.id,'disable'),true);
   await f.performCoreAction(d.id,'disable',f.row);
   assert.equal(f.posts.length,2);
-  assert.deepEqual(JSON.parse(String(f.posts[1]?.init.body)),{deviceId:d.id,enabled:false});
+  assert.deepEqual(JSON.parse(String(f.posts[1]?.init.body)),{deviceId:d.id,enabled:false,expectedRevision:8});
+  assert.equal(f.shared.records.size,2,'OFF preserves unresolved enable identity');
   await f.reconcileCoreReadback(snapshot([enabled]));
   assert.equal(f.coreOperationAllows(d.id,'disable'),false);
   assert.equal(f.coreOperationAllows(d.id,'enable'),false);
-  await f.reconcileCoreReadback(snapshot([d]));
+  const offDevice=device({coreMutationRevision:9,persistentMaintenance:{enabled:false,active:false}});
+  f.receipt('APPLIED',{},'disable');
+  await f.reconcileCoreReadback(snapshot([offDevice]));
+  assert.equal(f.shared.records.size,1,'original unresolved enable is retained');
+  f.receipt('APPLIED',{},'enable');
+  await f.reconcileCoreReadback(snapshot([offDevice]));
+  assert.equal(f.shared.records.size,0);
   assert.equal(f.coreOperations.has(d.id),false);
-  const off=f.coreReadbackMessage(d);
+  const off=f.coreReadbackMessage(offDevice);
   assert.match(off,/hesap tercihini kapalı bildiriyor/);
   assert.match(off,/yerel STOP.*kanıtı değildir/);
   assert.doesNotMatch(off,/STOP başarılı|CORE FİZİKSEL AÇIK/);
@@ -218,7 +243,10 @@ test('AI-06 cross-tab/reload: shared uncertainty survives lost ACK and stale car
   assert.equal(reloaded.posts.length,0);
   await reloaded.reconcileCoreReadback(snapshot([d]));
   assert.equal(reloaded.coreOperationAllows(d.id,'consent'),false);
-  const requested=device({physicalConsole:{deviceReady:true,localEnrolled:false,enrollmentRequested:true,active:false}});
+  const requested=device({coreMutationRevision:8,physicalConsole:{deviceReady:true,localEnrolled:false,enrollmentRequested:true,active:false}});
+  await reloaded.reconcileCoreReadback(snapshot([requested]));
+  assert.equal(shared.records.size,1,'matching dashboard alone is not a receipt');
+  reloaded.receipt('APPLIED');
   await reloaded.reconcileCoreReadback(snapshot([requested]));
   assert.equal(shared.records.size,0);
   // The old second tab still has its original eligible UI snapshot.
@@ -232,7 +260,7 @@ test('AI-06 cross-tab/reload: old GET cannot clear later operation and corrupt s
   const f=fixture(d,async()=>Response.json({error:'UNKNOWN'},{status:503}),shared);
   const captured=f.captureCoreFences();
   await f.performCoreAction(d.id,'consent',f.row);
-  const requested=device({physicalConsole:{deviceReady:true,localEnrolled:false,enrollmentRequested:true,active:false}});
+  const requested=device({coreMutationRevision:8,physicalConsole:{deviceReady:true,localEnrolled:false,enrollmentRequested:true,active:false}});
   await f.reconcileCoreReadback(snapshot([requested]),captured);
   assert.equal(shared.records.size,1);
   const key=[...shared.records.keys()][0]!;
@@ -316,4 +344,36 @@ test('AI-06 AI-03 contract v1: expired status clears existing copy, not newer ac
   const previous=element.textContent;
   f.timers.shift()!();
   assert.equal(element.textContent,previous,'old detached account callback must not update new account');
+});
+
+test('AI-06 CAS: stale card and changed preflight revision do not silently upgrade the intent',async()=>{
+  const d=device(),f=fixture(d,async()=>Response.json({}));
+  f.setServer(snapshot([device({coreMutationRevision:8})]));
+  await f.performCoreAction(d.id,'consent',f.row);
+  assert.equal(f.posts.length,0);
+  f.setSnapshot(snapshot([device({coreMutationRevision:8})]));
+  await f.performCoreAction(d.id,'consent',f.row,7);
+  assert.equal(f.posts.length,0);
+  await f.performCoreAction(d.id,'consent',f.row,8);
+  assert.equal(f.posts.length,1);
+  assert.equal(JSON.parse(String(f.posts[0]!.init.body)).expectedRevision,8);
+});
+test('AI-06 CAS: exact DENIED settles conflict without changing preference or asserting native effect',async()=>{
+  const d=device(),f=fixture(d,async()=>Response.json({error:'DASHBOARD_MUTATION_REVISION_OR_STATE_CONFLICT'},{status:409}));
+  await f.performCoreAction(d.id,'consent',f.row);
+  const newer=device({coreMutationRevision:8});
+  f.receipt('DENIED',{deviceId:'different-device'});
+  await f.reconcileCoreReadback(snapshot([newer]));
+  assert.equal(f.shared.records.size,1);
+  f.receipt('DENIED',{kind:'core-enable'});
+  await f.reconcileCoreReadback(snapshot([newer]));
+  assert.equal(f.shared.records.size,1);
+  f.receipt('DENIED');
+  await f.reconcileCoreReadback(snapshot([newer]));
+  assert.equal(f.shared.records.size,0);
+  assert.equal(f.posts.length,1,'no automatic retry');
+  const element=new Element(),view=snapshot([newer]);
+  f.setSnapshot(view);f.renderCoreReadbackCopy(element,newer,view);
+  assert.match(element.textContent,/D1 işlem kaydı: DENIED/);
+  assert.doesNotMatch(element.textContent,/CORE FİZİKSEL AÇIK|STOP başarılı/);
 });
