@@ -73,7 +73,9 @@ test('hosted Windows compiles reviewed C# helper without signing or executing it
   const q=(v:string)=>"'"+v.replaceAll("'","''")+"'";
   const probe=spawnSync(ps,['-NoLogo','-NoProfile','-NonInteractive','-Command',[
     "$ErrorActionPreference='Stop'",
-    "$s=Get-AuthenticodeSignature -LiteralPath "+q(compiler),
+    "$env:PSModulePath="+q(path.join(win,'System32','WindowsPowerShell','v1.0','Modules')),
+    "Import-Module -Name "+q(path.join(win,'System32','WindowsPowerShell','v1.0','Modules','Microsoft.PowerShell.Security','Microsoft.PowerShell.Security.psd1'))+" -ErrorAction Stop",
+    "$s=Microsoft.PowerShell.Security\\Get-AuthenticodeSignature -LiteralPath "+q(compiler),
     "if($s.Status -ne 'Valid' -or $null -eq $s.SignerCertificate){throw 'FIXTURE_COMPILER_UNSIGNED'}",
     "$h=[Security.Cryptography.SHA256]::Create()",
     "try{[BitConverter]::ToString($h.ComputeHash($s.SignerCertificate.RawData)).Replace('-','').ToLowerInvariant()}finally{$h.Dispose()}",
