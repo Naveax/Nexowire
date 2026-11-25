@@ -69,7 +69,7 @@ export function createBrokerDispatchAuthorityHandler(config:{
     operation:BrokerDispatchRequest)=>Promise<ProtectedBrokerEvidence|undefined>;
   verifyOwnerRevocation:(request:DispatchRevokeRequest)=>Promise<boolean>;
   now?:()=>number;
-}):(req:IncomingMessage,res:ServerResponse)=>void {
+}):(req:IncomingMessage,res:ServerResponse)=>Promise<void> {
   if(!id.safeParse(config.authorityId).success||!config.authority||
      typeof config.authority.beginIfCurrent!=='function'||
      typeof config.authority.commitIfCurrent!=='function'||
@@ -144,7 +144,7 @@ export function createBrokerDispatchAuthorityHandler(config:{
     return decoded.raw;
   };
   return (req,res)=>{
-    void (async()=>{
+    return (async()=>{
       // Do not allow an accidental plaintext listener or forwarded TLS claim.
       const socket=req.socket as TLSSocket;
       if(!socket.encrypted){respond(res,403,{error:'denied'});return}
@@ -234,12 +234,13 @@ export function createBrokerDispatchAuthorityHandler(config:{
       }
       const broker=Object.freeze(observed.data);
       if(!await stillCurrent()){respond(res,403,{error:'denied'});return}
+      const credential=peer?Object.freeze({credentialSha256:createHash('sha256').update(auth[1]!,'utf8').digest('hex'),certificateSha256:peer.certificateSha256}):undefined;
       if(action==='begin'){
-        const receipt=await authority.beginIfCurrent(op,broker,input.challengeNonce);
+        const receipt=await authority.beginIfCurrent(op,broker,input.challengeNonce,credential);
         respond(res,200,checkedPermit(receipt,op,broker,input.challengeNonce,'begin'));
       }else{
         const dispatchId=(input as z.infer<typeof commit>).dispatchId;
-        const receipt=await authority.commitIfCurrent(op,broker,dispatchId,input.challengeNonce);
+        const receipt=await authority.commitIfCurrent(op,broker,dispatchId,input.challengeNonce,credential);
         respond(res,200,checkedPermit(receipt,op,broker,input.challengeNonce,'commit',dispatchId));
       }
     })().catch(()=>respond(res,503,{error:'unavailable'}));
