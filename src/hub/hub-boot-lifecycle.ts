@@ -1052,7 +1052,7 @@ export async function installHubBootLifecycle(
         // An unexpectedly enabled task might already have run. Treat that
         // as an uncertain SYSTEM activation rather than a pre-start failure.
         "try {",hubBootStagedActivationGuard,
-        "} catch { $systemStartAttempted=$true; throw }",
+        "} catch { $systemStartAttempted = $true; throw }",
         // The user's task can be replaced or change state between the
         // pre-registration preflight and this post-registration readback.
         // Never stop a different or newly Running task on stale evidence.
@@ -1082,7 +1082,7 @@ export async function installHubBootLifecycle(
         hubBootRollbackTaskOwnershipGuard,
         hubBootStartupSettingsProbe,
         "try {",hubBootStagedActivationGuard,
-        "} catch { $systemStartAttempted=$true; throw }",
+        "} catch { $systemStartAttempted = $true; throw }",
         "$quiescedLegacyState=if($userTask){[string]$userTask.State}else{'NotInstalled'}",
         "if(($expectedLegacyState -eq 'NotInstalled' -and $quiescedLegacyState -cne 'NotInstalled') -or ($expectedLegacyState -ne 'NotInstalled' -and $quiescedLegacyState -cne 'Disabled')){throw 'HUB_USER_TASK_STATE_RACE'}",
         "$systemStartAttempted=$true",
