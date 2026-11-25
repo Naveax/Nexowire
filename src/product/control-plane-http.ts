@@ -274,6 +274,11 @@ export function createControlPlaneHttpHandler(
         if(options.coreConsoleAuthority?.deviceStatus){
           for(const device of dashboard.devices){
             device.physicalConsole=await options.coreConsoleAuthority.deviceStatus(device.id,identity.accountId);
+            // A native readback may span an owner/revoke/consent transition.
+            // Do not issue a revision from before that transition.
+            if(device.coreMutationRevision!=null&&
+              await service.confirmDashboardMutationRevision(identity,device.id)!==device.coreMutationRevision)
+              device.coreMutationRevision=null;
           }
         }
         return json(200,dashboard);
