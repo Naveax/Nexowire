@@ -88,6 +88,9 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
   let dashboardMode=false;
   let coreEnabled=true;
   let enrollmentPending=false;
+  let remoteAuthorizationState:'ACTIVE'|'REVOKED'='ACTIVE';
+  let remoteAuthorizationEpoch=7;
+  let remoteObservedAtMs:number|null=null;
   let releaseConsent!:()=>void;
   const consentResponseGate=new Promise<void>(resolve=>{releaseConsent=resolve});
   const corePosts:{route:string;body:unknown;confirm:string|undefined}[]=[];
@@ -114,6 +117,10 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
             privilegeMode:'broker',adminBridgeReady:true,agentVersion:'1.0.8',
             rootMode:{active:false,expiresAt:null},bridgePreference:{desiredMode:'auto',applied:false},
             persistentMaintenance:{enabled:coreEnabled,active:false},
+            coreRevocation:{version:1,source:'D1_REMOTE_AUTHORIZATION',
+              remoteAuthorization:{state:remoteAuthorizationState,authorizationEpoch:remoteAuthorizationEpoch,
+                observedAtMs:remoteObservedAtMs??Date.now()},
+              localStop:'UNKNOWN',pendingRevoke:'UNKNOWN',nativeDrain:'UNKNOWN',effectReadback:'UNKNOWN',nativeEvidence:'NOT_AVAILABLE'},
             physicalConsole:{active:false,localEnrolled:false,deviceReady:true,
               enrollmentRequested:enrollmentPending,observedAtMs:null},
           }]}));return;
@@ -432,5 +439,19 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
   assert.deepEqual(corePosts[1],{route:'/api/v1/me/devices/core-preference',body:{deviceId,enabled:false},confirm:undefined});
   assert.match(await coreCopy(),/yerel STOP.*kanıtı değildir/);
   assert.equal(await evaluate<string>('document.querySelector(".core-shortcut").textContent'),'CORE');
+  // Exact AI-03 #1330 v1 shape. Preference OFF does not imply remote revoke.
+  assert.match(await coreCopy(),/ACTIVE \(epoch 7\)/);
+  remoteAuthorizationState='REVOKED';remoteAuthorizationEpoch=8;
+  await activate('.core-readback');
+  await until('D1 remote revoke readback',coreCopy,value=>value.includes('REVOKED (epoch 8)'));
+  assert.match(await coreCopy(),/yerel STOP veya drain kanıtı değildir/);
+  assert.equal(corePosts.length,2,'readback must not dispatch a remote mutation');
+  // A near-expiry backend observation must expire on the already rendered card.
+  remoteObservedAtMs=Date.now()-14000;
+  await activate('.core-readback');
+  await until('D1 readback expired',coreCopy,value=>value.includes('Uzaktan yetki kaydı: UNKNOWN'));
+  assert.doesNotMatch(await coreCopy(),/REVOKED \(epoch/);
+  assert.equal(corePosts.length,2);
+  t.diagnostic('AI-03 v1 real Chromium: D1 ACTIVE/REVOKED epoch, expired UNKNOWN, no local STOP or drain proof');
   t.diagnostic('Dashboard real Chromium: cross-tab and reload no replay, stale-card preflight GET, one consent POST, one explicit OFF POST, no native STOP assertion');
 });
