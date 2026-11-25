@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {validateWindowsOwnerLauncherPins,windowsOwnerLauncherArguments,createWindowsProtectedOwnerAssertionLauncher,
-  parseNativeOwnerObservation,matchNativeOwnerObservation}
+  parseNativeOwnerObservation,matchNativeOwnerObservation,readStableProvisionedWindowsOwner}
   from '../../src/security/windows-protected-owner-issuer.js';
 
 const pins={launcherPath:'C:\\ProgramData\\Nexowire\\CoreOwner\\windows-core-owner-launcher.exe',
@@ -47,4 +47,62 @@ test('independent WTS observation is nonce-bound and cannot claim human approval
   for(const bad of [{...raw,humanApproval:true},{...raw,coreAuthority:true},{...raw,windowsSessionId:0},
     {...raw,nonce:'e'.repeat(64)},{...raw,windowsLogonLuid:'0'.repeat(16)}])
     assert.throws(()=>parseNativeOwnerObservation(bad,nonce));
+});
+
+test('provisioned owner readback brackets the actual observation with two independent directory reads',async()=>{
+  const nonce='f'.repeat(64),observation=parseNativeOwnerObservation({
+    version:1,kind:'core_owner_wts_observation_v1',nonce,
+    windowsUserSid:owner.binding.windowsUserSid,windowsSessionId:owner.binding.windowsSessionId,
+    windowsLogonLuid:owner.binding.windowsLogonLuid,humanApproval:false,coreAuthority:false,
+  },nonce);
+  const calls:string[]=[];
+  const result=await readStableProvisionedWindowsOwner(async()=>{
+    calls.push('directory');return structuredClone(owner);
+  },async()=>{calls.push('WTS');return observation;},new AbortController().signal);
+  assert.deepEqual(calls,['directory','WTS','directory']);
+  assert.deepEqual(result,owner);
+  assert.ok(Object.isFrozen(result));assert.ok(Object.isFrozen(result.binding));
+  for(const changed of [
+    {...owner,issuerSpkiSha256:'0'.repeat(64)},
+    {...owner,rpId:'changed.fixture.invalid'},
+    {...owner,credentialId:'AQ'},
+    ...[
+      {ownerAccountId:'owner-fixture-0002'},{deviceId:'device-fixture-0002'},
+      {installationId:randomUUID()},{enrollmentId:randomUUID()},
+      {ownerEpoch:2},{grantGeneration:2},{revokeEpoch:1},
+      {windowsUserSid:'S-1-5-21-101-202-303-1002'},
+      {windowsSessionId:3},{windowsLogonLuid:'000000000000b101'},
+      {windowsLogonSessionEpoch:randomUUID()}
+    ].map(binding=>({...owner,binding:{...owner.binding,...binding}}))
+  ]){
+    let reads=0;
+    await assert.rejects(readStableProvisionedWindowsOwner(async()=>++reads===1?owner:changed,
+      async()=>observation,new AbortController().signal),/CORE_OWNER_LAUNCHER_OWNER_READBACK_MISMATCH/);
+    assert.equal(reads,2);
+  }
+  await assert.rejects(readStableProvisionedWindowsOwner(async()=>owner,
+    async()=>({...observation,windowsSessionId:3}),new AbortController().signal),
+    /CORE_OWNER_LAUNCHER_OWNER_READBACK_MISMATCH/);
+  await assert.rejects(readStableProvisionedWindowsOwner(async()=>({...owner,credentialId:'AB'}),
+    async()=>observation,new AbortController().signal),
+    /CORE_OWNER_LAUNCHER_OWNER_READBACK_MISMATCH/);
+});
+test('owner directory readback never publishes a binding after cancellation or directory failure',async()=>{
+  const controller=new AbortController(),nonce='f'.repeat(64);
+  const observation=parseNativeOwnerObservation({
+    version:1,kind:'core_owner_wts_observation_v1',nonce,
+    windowsUserSid:owner.binding.windowsUserSid,windowsSessionId:owner.binding.windowsSessionId,
+    windowsLogonLuid:owner.binding.windowsLogonLuid,humanApproval:false,coreAuthority:false,
+  },nonce);
+  let reads=0;
+  await assert.rejects(readStableProvisionedWindowsOwner(async()=>{
+    reads++;return owner;
+  },async()=>{controller.abort();return observation;},controller.signal),{name:'AbortError'});
+  assert.equal(reads,1);
+  reads=0;
+  await assert.rejects(readStableProvisionedWindowsOwner(async()=>{
+    if(++reads===2)throw Error('directory unavailable');
+    return owner;
+  },async()=>observation,new AbortController().signal),/directory unavailable/);
+  assert.equal(reads,2);
 });
