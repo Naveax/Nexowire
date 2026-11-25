@@ -4,7 +4,7 @@ import type {HelperEvidenceChallenge,SignedHelperEvidenceConfig} from './signed-
 import {createPostgresHelperSelectionService} from './protected-helper-selection-service.js';
 import type {ReviewedSqliteRollbackRuntime} from '../../scripts/ai02-signed-sqlite-rollback-review.js';
 import type {HelperPin} from '../installer/protected-transfer-helper-lifecycle.js';
-const DOMAIN='nexowire.helper-rollback-guard.v1';
+const DOMAIN='nexowire.helper-rollback-guard.v2';
 const isHash=(v:unknown):v is string=>typeof v==='string'&&v.length===64&&/^[a-f0-9]{64}$/.test(v);
 const exact=(v:unknown,k:readonly string[]):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===k.length&&k.every(x=>Object.hasOwn(v,x));
 export interface ApprovedHelperRollbackReview {
@@ -58,10 +58,13 @@ export function bindHelperRollbackGuard(native:SignedHelperEvidenceConfig,guard:
          !Number.isSafeInteger(v.observedAt)||!Number.isSafeInteger(v.expiresAt)||now<started||v.observedAt<started||
          v.observedAt>now||v.expiresAt<=now||v.expiresAt-v.observedAt>5000)throw Error('HELPER_ROLLBACK_GUARD_DENIED');
       const checked=v.sqliteReview;
-      if(!exact(checked,['manifestSha256','sourceCommit','releaseSequence','schemaVersion','treeSha256','sqliteRecords','releaseAnchorAdvanced','productionRollbackAuthorized'])||
+      if(!exact(checked,['manifestSha256','sourceCommit','releaseSequence','schemaVersion','treeSha256','sqliteRecords','succeeded','failed','unknown','inProgress','releaseAnchorAdvanced','productionRollbackAuthorized'])||
          checked.manifestSha256!==review.runtime.manifestSha256||checked.sourceCommit!==review.runtime.sourceCommit||
          checked.releaseSequence!==review.runtime.releaseSequence||checked.schemaVersion!==review.runtime.schemaVersion||
          checked.treeSha256!==review.sqliteTreeSha256||checked.sqliteRecords!==review.sqliteRecords||
+         typeof checked.succeeded!=='number'||!Number.isSafeInteger(checked.succeeded)||checked.succeeded<0||
+         typeof checked.failed!=='number'||!Number.isSafeInteger(checked.failed)||checked.failed<0||
+         checked.succeeded+checked.failed!==review.sqliteRecords||checked.unknown!==0||checked.inProgress!==0||
          checked.releaseAnchorAdvanced!==false||checked.productionRollbackAuthorized!==false)throw Error('HELPER_ROLLBACK_GUARD_DENIED');
       return nativeReply;
     }finally{if(timer)clearTimeout(timer);}

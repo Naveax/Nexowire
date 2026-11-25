@@ -75,9 +75,9 @@ test('durable independent helper selection excludes runtime/deployment, preserve
       const currentStateSha256=await readDigest();
       const unknownOperations=JSON.parse(await readFile(path.join(dataRoot,'receipt.json'),'utf8')).status==='UNKNOWN';
       const observedAt=Date.now();
-      const payload=JSON.stringify({domain:'nexowire.helper-rollback-guard.v1',nonce:challenge.nonce,requestSha256:challenge.requestSha256,phase:challenge.phase,
+      const payload=JSON.stringify({domain:'nexowire.helper-rollback-guard.v2',nonce:challenge.nonce,requestSha256:challenge.requestSha256,phase:challenge.phase,
         approvedStateSha256,currentStateSha256,writerFenced:true,unknownOperations,recoveryPending:false,priorHelperCompatible:true,
-        sqliteReview:{manifestSha256:reviewedRuntime.manifestSha256,sourceCommit:reviewedRuntime.sourceCommit,releaseSequence:2,schemaVersion:1,treeSha256:currentStateSha256,sqliteRecords:1,releaseAnchorAdvanced:false,productionRollbackAuthorized:false},observedAt,expiresAt:observedAt+3000});
+        sqliteReview:{manifestSha256:reviewedRuntime.manifestSha256,sourceCommit:reviewedRuntime.sourceCommit,releaseSequence:2,schemaVersion:1,treeSha256:currentStateSha256,sqliteRecords:1,succeeded:1,failed:0,unknown:unknownOperations?1:0,inProgress:0,releaseAnchorAdvanced:false,productionRollbackAuthorized:false},observedAt,expiresAt:observedAt+3000});
       return {payload,proof:sign(null,Buffer.from(payload,'utf8'),rollbackObserver.privateKey).toString('base64url')};
     },
   });
