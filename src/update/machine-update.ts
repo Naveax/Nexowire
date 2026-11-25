@@ -4,6 +4,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { assertMachineUpdateTreeProtectedBeforeWrite } from '../security/windows-machine-update-tree-trust.js';
 import { assertWindowsPrivilegedRuntimeTrusted } from '../security/windows-privileged-runtime-trust.js';
+import {assertOnlineMachineCutoverAdmission} from '../security/windows-machine-startup-admission.js';
 
 const REPOSITORY = 'Naveax/Nexowire';
 const UPDATE_SYSTEM32='C:\\Windows\\System32';
@@ -697,6 +698,10 @@ export async function scheduleOfficialMachineUpdate(
     throw new Error('Machine update requires Windows.');
   }
   const input = validateInput(rawInput);
+  // #1352's v1 fence cannot prove already-installed guard support or issue
+  // a live forward-only permit. Do not stage a cutover before that external
+  // authority is provisioned; never try to bootstrap it via a legacy launcher.
+  assertOnlineMachineCutoverAdmission();
   // Never stage or recursively change ACLs under a user-writable root.
   assertMachineUpdateTreeProtectedBeforeWrite();
   // A persisted failed activation transaction is not a new update request.
