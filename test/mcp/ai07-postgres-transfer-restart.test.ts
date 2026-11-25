@@ -11,6 +11,13 @@ import {finalTransferSigningBytes} from '../../src/agent/native-transfer-publish
 import type {DispatchStorePool} from '../../src/agent/postgres-broker-dispatch-authority.js';
 import type {LargeTransferBinding,LargeTransferIntent,LargeTransferFinalReceipt} from '../../src/mcp/durable-large-transfer.js';
 
+import {createTransferRuntimeLeaseAuthority,withVerifiedTransferHelper} from '../../src/agent/protected-transfer-startup.js';
+import {PostgresHelperSelectionAuthority,type HelperAuthorityScope} from '../../src/security/postgres-helper-selection-authority.js';
+import {createProtectedHelperSelectionServer,ProtectedHelperSelectionClient} from '../../src/security/protected-helper-selection-transport.js';
+import {createSignedHelperSelectionEvidenceVerifier,helperEvidenceRequiredFacts} from '../../src/security/signed-helper-selection-evidence.js';
+import {createHelperSelectionTlsFixture} from '../ai05/helper-selection-tls-fixture.js';
+import type {TransferHelperArtifactStore} from '../../src/installer/protected-transfer-helper-lifecycle.js';
+
 const requested=process.env.NEXOWIRE_PG_TRANSFER_RESTART_INTEGRATION==='1';
 const sha=(v:string)=>createHash('sha256').update(v).digest('hex');
 const docker=promisify(execFile);
@@ -134,9 +141,56 @@ test('PostgreSQL crash restart preserves original UNKNOWN claim, epoch and signe
   assert.deepEqual(ledger,[{request_id:p.requestId,state:'APPLIED'},{request_id:pub.requestId,state:'APPLIED'}]);
   nativeDrained=false;assert.equal(await drain()({ownerId,deviceId:targetDeviceId}),false);
   nativeDrained=true;assert.equal(await drain()({ownerId,deviceId:targetDeviceId}),true);
-  await admin.query("UPDATE core_dispatch.grants SET state='REVOKING',generation=2 WHERE authority_id=$1 AND device_id=$2",[authorityId,targetDeviceId]);
-  await assert.rejects(a.assertGrant(b),/TRANSFER_PG_GRANT_REVOKED/);
-  await assert.rejects(a.claimNativeEffect(b,next,pub),/TRANSFER_PG_GRANT_REVOKED/);
+  // Compose the reviewed selection ledger/client with the AI07 startup
+  // adapter on the SAME recovered authority database. No production certs.
+  await admin.query(await readFile(new URL('../../sql/helper-selection-authority.sql',import.meta.url),'utf8'));
+  await admin.query("CREATE ROLE ai07_selection_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS PASSWORD 'ci-only-not-a-production-credential'");
+  await admin.query("GRANT USAGE ON SCHEMA core_dispatch,helper_selection TO ai07_selection_runtime; GRANT SELECT ON core_dispatch.authorities,core_dispatch.grants,helper_selection.selections,helper_selection.leases TO ai07_selection_runtime; GRANT UPDATE(max_seen_ms) ON core_dispatch.authorities TO ai07_selection_runtime; GRANT INSERT ON helper_selection.leases TO ai07_selection_runtime; GRANT UPDATE(state,committed_revision) ON helper_selection.leases TO ai07_selection_runtime; GRANT UPDATE(revision,sha256,signer_sha256) ON helper_selection.selections TO ai07_selection_runtime");
+  const brokerId=String((await admin.query('SELECT broker_id FROM core_dispatch.grants WHERE authority_id=$1 AND device_id=$2',[authorityId,targetDeviceId])).rows[0].broker_id);
+  const selectionScope:HelperAuthorityScope={authorityId,deviceId:targetDeviceId,ownerId,deviceEpoch:dstEpoch,sessionEpoch:dstSession,ownerEpoch:1,generation:1,brokerId};
+  const selected={revision:randomUUID(),pin:{sha256:'a'.repeat(64),signerSha256:'b'.repeat(64)}};
+  await admin.query('INSERT INTO helper_selection.selections(authority_id,device_id,owner_id,device_epoch,session_epoch,owner_epoch,generation,broker_id,revision,sha256,signer_sha256) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',[authorityId,targetDeviceId,ownerId,dstEpoch,dstSession,1,1,brokerId,selected.revision,selected.pin.sha256,selected.pin.signerSha256]);
+  const selectionPool=connect('ai07_selection_runtime');
+  const observer=generateKeyPairSync('ed25519');
+  const evidence=createSignedHelperSelectionEvidenceVerifier({
+    observerPublicKeyPem:observer.publicKey.export({type:'spki',format:'pem'}).toString(),
+    async requestProof(challenge,v){
+      assert.deepEqual(v.scope,selectionScope);
+      const observedAt=Date.now();
+      const payload=JSON.stringify({...challenge,accepted:true,facts:helperEvidenceRequiredFacts(v.phase),observedAt,expiresAt:observedAt+3000});
+      return {payload,proof:sign(null,Buffer.from(payload),observer.privateKey).toString('base64url')};
+    },
+  });
+  const backend=new PostgresHelperSelectionAuthority({pool:selectionPool as DispatchStorePool,scope:selectionScope,verifyEvidence:evidence,verifyProvenance:async()=>({verified:true,authorityId,validUntil:Date.now()+30000})});
+  const tls=createHelperSelectionTlsFixture();
+  const token='r'.repeat(43);
+  const server=createProtectedHelperSelectionServer({tls:{key:tls.server.key,cert:tls.server.cert,ca:tls.ca},scope:selectionScope,authorityPrivateKeyPem:tls.privateKey,backend,
+    async resolvePrincipal(cert,credential){return cert===tls.runtime.certSha256&&credential===token?{scope:selectionScope,role:'runtime'}:undefined;}});
+  t.after(async()=>{try{server.closeAllConnections();if(server.listening)await new Promise<void>((resolve,reject)=>server.close(e=>e?reject(e):resolve()));}finally{tls.close();}});
+  await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',()=>resolve());});
+  const address=server.address();assert(address&&typeof address==='object');
+  const client=new ProtectedHelperSelectionClient({endpoint:'https://127.0.0.1:'+address.port+'/v1/helper-selection',scope:selectionScope,role:'runtime',certificatePem:tls.runtime.cert,keyPem:tls.runtime.key,serverCaPem:tls.ca,serverSpkiSha256:tls.server.spkiSha256,authorityPublicKeyPem:tls.publicKey,credential:async()=>token});
+  const helper=createTransferRuntimeLeaseAuthority(client,250);
+  const artifactStore:TransferHelperArtifactStore={async verifyInstalled(pin){assert.deepEqual(pin,selected.pin);},async stage(){throw Error('unexpected stage');}};
+  await assert.rejects(withVerifiedTransferHelper(helper,artifactStore,async(binding,scope)=>{
+    assert.equal(binding.revision,selected.revision);
+    await scope.assertActive();
+    await assert.rejects(backend.beginRuntime(randomUUID()),/HELPER_LEASE_OCCUPIED/);
+    // Revoke is ordered through the same grant used by both transfer and selection.
+    await admin.query("UPDATE core_dispatch.grants SET state='REVOKING',generation=2 WHERE authority_id=$1 AND device_id=$2",[authorityId,targetDeviceId]);
+    await new Promise<void>((resolve,reject)=>{
+      const timer=setTimeout(()=>reject(Error('selection revoke watchdog did not abort')),10000);
+      const stopped=()=>{clearTimeout(timer);resolve();};
+      if(scope.signal.aborted)stopped();else scope.signal.addEventListener('abort',stopped,{once:true});
+    });
+    await assert.rejects(scope.assertActive(),/LEASE_RELEASED/);
+    await assert.rejects(a.assertGrant(b),/TRANSFER_PG_GRANT_REVOKED/);
+    await assert.rejects(a.claimNativeEffect(b,next,pub),/TRANSFER_PG_GRANT_REVOKED/);
+    throw Error('fixture runtime fenced by revoke');
+  }),/fixture runtime fenced by revoke/);
+  const retained=(await admin.query('SELECT state FROM helper_selection.leases WHERE authority_id=$1 AND device_id=$2',[authorityId,targetDeviceId])).rows;
+  assert.deepEqual(retained,[{state:'ACTIVE'}],'revoked runtime lease remains reserved until independent reconciliation');
+  t.diagnostic('Recovered transfer authority and real pinned selection mTLS: revoke stops live selection witness; original lease retained');
   // Native observations/provenance in this fixture are synthetic. The DB,
   // transaction, process death, durable recovery and receipt are real.
 });
