@@ -1,0 +1,56 @@
+name: AI-01 isolated Windows Job v6 diagnostic
+# This branch-scoped diagnostic is not a replacement for required CI or
+# provenance/coverage checks. Do not carry it into production fan-in.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - native/windows-job-owner.c
+      - src/agent/windows-job-owner.ts
+      - test/windows-job-managed-lifecycle.test.ts
+      - .github/workflows/ai01-managed-job-v6-diagnostic.yml
+permissions:
+  contents: read
+jobs:
+  isolated-windows-job:
+    if: github.head_ref == 'agent/nx-01-managed-job-v6-compat-20261125' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: windows-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
+    env:
+      NEXOWIRE_CORE_APPROVAL_MODE: native
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - name: Exact source and canonical native compilation
+        shell: pwsh
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if ($env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or $env:RUNNER_OS -ne 'Windows') { throw 'DISPOSABLE_WINDOWS_RUNNER_REQUIRED' }
+          if ((git rev-parse HEAD) -cne $env:EXPECTED_SHA) { throw 'EXACT_HEAD_REQUIRED' }
+          git rev-parse HEAD
+          git hash-object native/windows-job-owner.c
+          ./scripts/build-windows-job-owner.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'NATIVE_BUILD_FAILED' }
+          $actual=(Get-FileHash -LiteralPath native/windows-job-owner.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expected=[IO.File]::ReadAllText((Join-Path (Get-Location) 'native/windows-job-owner.sha256')).Trim()
+          if ($actual -cne $expected) { throw 'NATIVE_HELPER_DIGEST_MISMATCH' }
+          Write-Output ('NATIVE_HELPER_SHA256='+$actual)
+          Write-Output 'NATIVE_BUILD_PASS'
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Existing and v6 native Job acceptance
+        shell: pwsh
+        run: |
+          node --test --import tsx --test-concurrency=1 test/windows-job-owner.test.ts test/windows-job-helper-trust.test.ts test/windows-job-helper-acl-publisher.test.ts test/windows-job-attestation-spoof.test.ts test/windows-job-duplicate-handle-risk.test.ts test/windows-job-breakaway.test.ts test/windows-job-hostile-nested.test.ts test/windows-job-named-handle-caveat.test.ts test/windows-job-capacity-128.test.ts test/process-manager-tree-cleanup.test.ts test/process-manager.test.ts test/native-agent-task-job-ownership.test.ts test/windows-job-managed-lifecycle.test.ts test/hub-boot-machine-startup-admission.test.ts
+          if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_JOB_ACCEPTANCE_FAILED' }

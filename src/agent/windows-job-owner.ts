@@ -297,3 +297,13 @@ export async function requestWindowsJobStop(launch: WindowsJobLaunch): Promise<'
   if(launch.closed())return 'unconfirmed';
   return launch.requestStop();
 }
+
+/** Historical scheduled Agent launchers use NWJOB3 arguments and do not
+ * have the v6 suspended-root release/pipe/identity handshake. New task
+ * registration or explicit activation is denied until the existing task
+ * launcher is independently migrated and accepted. A legacy receipt is
+ * historical ownership information, not a v6 activation grant. */
+export function assertScheduledAgentJobMigrationAdmission():void {
+  throw new WindowsJobOwnerError('NATIVE_AGENT_TASK_JOB_PROTOCOL_MIGRATION_REQUIRED',
+    'NATIVE_AGENT_TASK_JOB_PROTOCOL_MIGRATION_REQUIRED: NWJOB3 scheduled admission is not v6.');
+}

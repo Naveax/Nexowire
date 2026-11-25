@@ -4,6 +4,7 @@ import {promises as fs} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {buildNativeAgentLauncher,WINDOWS_NATIVE_AGENT_TASK_SETTINGS} from './native-agent-lifecycle.js';
+import {assertScheduledAgentJobMigrationAdmission} from './windows-job-owner.js';
 import {isWindowsProcessElevated} from './privileged-broker.js';
 import {hubBootLifecycleStatus} from '../hub/hub-boot-lifecycle.js';
 import {assertNoPrivilegedNodeStartupFlags,assertWindowsPrivilegedRuntimeTrusted,validatePrivilegedRuntimePaths} from '../security/windows-privileged-runtime-trust.js';
@@ -322,6 +323,8 @@ async function assertSafeStageCleanup(plan:SystemAgentPreloginPlan):Promise<void
 /** Register only the own exact SYSTEM AtStartup task. No user-Agent handoff or
  * reboot occurs here. A verified SYSTEM Hub boot task is a prerequisite. */
 export async function installStagedSystemAgentPrelogin():Promise<SystemAgentPreloginStatus>{
+  // Do not register a SYSTEM task whose existing launcher lacks the v6 gate.
+  assertScheduledAgentJobMigrationAdmission();
   const plan=planSystemAgentPrelogin(process.execPath,process.argv[1]??'');
   ensureRuntime(plan);
   await verifyHelper(plan);

@@ -2,7 +2,7 @@
 // No native process is resumed unless its Job assignment is proven.
 #define WIN32_LEAN_AND_MEAN
 #ifndef _WIN32_WINNT
-#define _WIN32_WINNT 0x0601
+#define _WIN32_WINNT 0x0A00
 #endif
 #include <windows.h>
 #include <shellapi.h>
@@ -13,6 +13,12 @@
 #include <string.h>
 #include <aclapi.h>
 #include <sddl.h>
+
+// Win10+ documented PROC_THREAD_ATTRIBUTE_JOB_LIST attribute. Older SDKs
+// may omit its name; an OS rejecting the attribute must fail closed.
+#ifndef PROC_THREAD_ATTRIBUTE_JOB_LIST
+#define PROC_THREAD_ATTRIBUTE_JOB_LIST ((DWORD_PTR)0x0002000D)
+#endif
 
 // The Job handle is not safe in a medium-integrity same-logon guardian:
 // any peer that opens the guardian with PROCESS_DUP_HANDLE can retain it
@@ -267,7 +273,7 @@ done:
   return trusted;
 }
 
-static BOOL create_managed_root(wchar_t *cmd,const wchar_t *cwd,PROCESS_INFORMATION *pi){
+static BOOL create_managed_root(HANDLE job,wchar_t *cmd,const wchar_t *cwd,PROCESS_INFORMATION *pi){
   STARTUPINFOEXW info={0};
   info.StartupInfo.cb=sizeof(info);
   info.StartupInfo.dwFlags=STARTF_USESTDHANDLES;
@@ -286,14 +292,19 @@ static BOOL create_managed_root(wchar_t *cmd,const wchar_t *cwd,PROCESS_INFORMAT
   info.StartupInfo.hStdInput=pipes[0];
   info.StartupInfo.hStdOutput=pipes[1];
   info.StartupInfo.hStdError=pipes[2];
-  (void)InitializeProcThreadAttributeList(NULL,1,0,&bytes);
+  (void)InitializeProcThreadAttributeList(NULL,2,0,&bytes);
   if(!bytes)goto cleanup;
   info.lpAttributeList=(LPPROC_THREAD_ATTRIBUTE_LIST)HeapAlloc(GetProcessHeap(),0,bytes);
   if(!info.lpAttributeList)goto cleanup;
-  if(!InitializeProcThreadAttributeList(info.lpAttributeList,1,0,&bytes))goto cleanup;
+  if(!InitializeProcThreadAttributeList(info.lpAttributeList,2,0,&bytes))goto cleanup;
   ready=TRUE;
   if(!UpdateProcThreadAttribute(info.lpAttributeList,0,PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
        pipes,sizeof(pipes),NULL,NULL))goto cleanup;
+  // Assign the exact Job as part of process creation. A guardian crash
+  // between CreateProcess and a later AssignProcessToJobObject must not
+  // leave an unowned suspended root. No legacy fallback on unsupported OS.
+  if(!UpdateProcThreadAttribute(info.lpAttributeList,0,PROC_THREAD_ATTRIBUTE_JOB_LIST,
+       &job,sizeof(job),NULL,NULL))goto cleanup;
   // Inherited session/desktop is NOT a private desktop attestation.
   created=CreateProcessW(NULL,cmd,NULL,NULL,TRUE,
     CREATE_SUSPENDED|CREATE_NO_WINDOW|EXTENDED_STARTUPINFO_PRESENT,NULL,cwd,&info.StartupInfo,pi);
@@ -324,7 +335,7 @@ static BOOL terminate_and_observe_empty(HANDLE job,DWORD reason){
   return FALSE;
 }
 
-static BOOL publish_managed_terminal(const wchar_t *file,DWORD pid,
+static BOOL publish_managed_terminal(HANDLE output,DWORD pid,
     unsigned long long ticks,DWORD reason,DWORD rootExit){
   // Exclusive, flushed result. No result means UNKNOWN even if guardian
   // exited. This local result is not externally authenticated.
@@ -333,12 +344,10 @@ static BOOL publish_managed_terminal(const wchar_t *file,DWORD pid,
     (unsigned long)pid,ticks,(unsigned long)GetCurrentProcessId(),
     (unsigned long)reason,(unsigned long)rootExit);
   if(size<=0||(size_t)size>=sizeof(message))return FALSE;
-  HANDLE output=CreateFileW(file,GENERIC_WRITE,0,NULL,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,NULL);
-  if(output==INVALID_HANDLE_VALUE)return FALSE;
+  if(!output || output==INVALID_HANDLE_VALUE)return FALSE;
   DWORD written=0;
   BOOL result=WriteFile(output,message,(DWORD)size,&written,NULL) &&
     written==(DWORD)size && FlushFileBuffers(output);
-  CloseHandle(output);
   return result;
 }
 
@@ -351,6 +360,14 @@ int main(void){
     if(!enforce_guardian_isolation())return 79;
     fwprintf(stdout,L"NX_GUARDIAN_HIGH_DACL_PROVISIONAL\\n");
     return 0;
+  }
+  // NWJOB3 scheduled launchers lack the independent release handshake.
+  // Never silently run that historical argv under a v5/v6 helper.
+  if(argv && argc>=9 && !wcscmp(argv[1],L"--status") &&
+     !wcscmp(argv[3],L"--cwd") && !wcscmp(argv[5],L"--parent") &&
+     !wcscmp(argv[7],L"--")){
+    fwprintf(stderr,L"NEXOWIRE_WINJOB_ERROR legacy_nwjob3_release_handshake_required\n");
+    return 64;
   }
   if(!argv || argc<11 || wcscmp(argv[1],L"--status") ||
      wcscmp(argv[3],L"--cwd") || wcscmp(argv[5],L"--parent") ||
@@ -417,6 +434,11 @@ int main(void){
   // A same-HIGH attacker can still duplicate and retain this handle.
   HANDLE job=CreateJobObjectW(NULL,NULL);
   if(!job){diagnostic(L"create_job");free(cmd);return managed ? 512 : 70;}
+  DWORD jobHandleFlags=0;
+  if(!GetHandleInformation(job,&jobHandleFlags) || (jobHandleFlags&HANDLE_FLAG_INHERIT)){
+    diagnostic(L"job_handle_inheritance_unverified");
+    CloseHandle(job);free(cmd);return managed ? 512 : 70;
+  }
   JOBOBJECT_EXTENDED_LIMIT_INFORMATION limit={0};
   limit.BasicLimitInformation.LimitFlags=JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
   if(!SetInformationJobObject(job,JobObjectExtendedLimitInformation,
@@ -430,12 +452,12 @@ int main(void){
   si.hStdError=GetStdHandle(STD_ERROR_HANDLE);
   PROCESS_INFORMATION pi={0};
   // Inherited stdout/stderr/stdin are Node's pipes to this helper.
-  BOOL created=managed ? create_managed_root(cmd,cwd,&pi) :
+  BOOL created=managed ? create_managed_root(job,cmd,cwd,&pi) :
     CreateProcessW(NULL,cmd,NULL,NULL,TRUE,
       CREATE_SUSPENDED|CREATE_NO_WINDOW,NULL,cwd,&si,&pi);
   free(cmd);
   if(!created){diagnostic(L"create_process");CloseHandle(job);return managed ? 512 : 70;}
-  if(!AssignProcessToJobObject(job,pi.hProcess)){
+  if(!managed && !AssignProcessToJobObject(job,pi.hProcess)){
     diagnostic(L"assign_job");
     TerminateProcess(pi.hProcess,71);
     CloseHandle(pi.hThread);CloseHandle(pi.hProcess);CloseHandle(job);
@@ -444,6 +466,10 @@ int main(void){
   BOOL inside=FALSE;
   if(!IsProcessInJob(pi.hProcess,job,&inside)||!inside){
     diagnostic(L"verify_job");
+    // Membership could not be proven. The exact root HANDLE is still
+    // suspended; terminate it as well as any members of the owned Job.
+    (void)TerminateProcess(pi.hProcess,72);
+    (void)WaitForSingleObject(pi.hProcess,5000);
     TerminateJobObject(job,72);
     CloseHandle(pi.hThread);CloseHandle(pi.hProcess);CloseHandle(job);
     return managed ? 512 : 72;
@@ -533,9 +559,29 @@ int main(void){
     if(parent)CloseHandle(parent);
     return managed ? 512 : 79;
   }
+  // Reserve the terminal record before any root effect. Hold the same
+  // exclusive HANDLE until completion: a root cannot substitute a path
+  // or precreate the record during execution under ordinary file sharing.
+  // This remains local evidence, not protection against equal-HIGH/SeDebug.
+  HANDLE terminalFile=INVALID_HANDLE_VALUE;
+  if(managed){
+    terminalFile=CreateFileW(terminalPath,GENERIC_WRITE,0,NULL,CREATE_NEW,
+      FILE_ATTRIBUTE_NORMAL|FILE_FLAG_OPEN_REPARSE_POINT,NULL);
+    BY_HANDLE_FILE_INFORMATION observed={0};
+    if(terminalFile==INVALID_HANDLE_VALUE ||
+       !GetFileInformationByHandle(terminalFile,&observed) ||
+       (observed.dwFileAttributes&(FILE_ATTRIBUTE_REPARSE_POINT|FILE_ATTRIBUTE_DIRECTORY))){
+      if(terminalFile!=INVALID_HANDLE_VALUE)CloseHandle(terminalFile);
+      (void)terminate_and_observe_empty(job,76);
+      CloseHandle(pi.hThread);CloseHandle(pi.hProcess);CloseHandle(job);
+      if(parent)CloseHandle(parent);
+      return 512;
+    }
+  }
   if((parent && WaitForSingleObject(parent,0)!=WAIT_TIMEOUT) ||
      (managed && cancellation_pending(cancelPath)) || ResumeThread(pi.hThread)!=1){
     diagnostic(L"resume");
+    if(terminalFile!=INVALID_HANDLE_VALUE)CloseHandle(terminalFile);
     TerminateJobObject(job,76);
     CloseHandle(pi.hThread);CloseHandle(pi.hProcess);CloseHandle(job);
     return managed ? 512 : 76;
@@ -571,7 +617,8 @@ int main(void){
   BOOL terminal=empty && WaitForSingleObject(pi.hProcess,0)==WAIT_OBJECT_0 &&
     GetExitCodeProcess(pi.hProcess,&result);
   if(managed && terminal)
-    terminal=publish_managed_terminal(terminalPath,pi.dwProcessId,ticks,reason,result);
+    terminal=publish_managed_terminal(terminalFile,pi.dwProcessId,ticks,reason,result);
+  if(terminalFile!=INVALID_HANDLE_VALUE)CloseHandle(terminalFile);
   CloseHandle(pi.hProcess);
   CloseHandle(job);
   if(parent)CloseHandle(parent);
