@@ -354,7 +354,14 @@ test('CORE enrollment retry updates only un-enrolled devices and cannot requeue 
     const pending=await f.authority.deviceStatus(deviceId,owner);
     assert.equal(pending.localEnrolled,false);
     assert.equal(pending.enrollmentRequested,true);
-    await f.authority.requestEnrollment(deviceId,owner); // an initial stalled request is retryable
+    const changes=()=>f.db.prepare('SELECT total_changes() n').get()?.n;
+    const beforeRetry=changes();
+    await f.authority.requestEnrollment(deviceId,owner); // existing pending request is a read-only acknowledgement
+    assert.equal(changes(),beforeRetry,'pending acknowledgement must not rewrite the request');
+    f.db.exec('UPDATE devices SET online=0');
+    await assert.rejects(f.authority.requestEnrollment(deviceId,owner),/CORE_DEVICE_NOT_READY/);
+    f.db.exec('UPDATE devices SET online=1');
+    await assert.rejects(f.authority.requestEnrollment(deviceId,'foreign-owner'),/CORE_DEVICE_NOT_READY/);
     await enable(f);
     const enrolled=await f.authority.deviceStatus(deviceId,owner);
     assert.equal(enrolled.localEnrolled,true);

@@ -276,9 +276,18 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
       WHERE enrollment_id IS NULL AND enrollment_requested=0 AND device_id IN(SELECT c.device_id ${JOIN}
         WHERE d.id=? AND d.owner_account_id=? AND ${READY})`)
       .bind(deviceId,ownerAccountId).run();
-    if(result.success===false||result.meta?.changes!==1){
-      const current=await this.deviceStatus(deviceId,ownerAccountId);
-      if(current.localEnrolled)throw new Error('CORE_ALREADY_ENROLLED');
+    if(result.success===false)throw new Error('CORE_DEVICE_NOT_READY');
+    if(result.meta?.changes!==1){
+      // Existing internal callers may observe the already-pending request.
+      // An exact, owner-scoped READY row is required; this is a read-only
+      // no-op, not another UPDATE or a second request for local consent.
+      const current=await this.db.prepare(`SELECT c.enrollment_id,c.enrollment_requested,
+        CASE WHEN ${READY} THEN 1 ELSE 0 END device_ready
+        ${JOIN} WHERE d.id=? AND d.owner_account_id=?`)
+        .bind(deviceId,ownerAccountId).first<{enrollment_id:string|null;enrollment_requested:number;device_ready:number}>();
+      if(current?.enrollment_id)throw new Error('CORE_ALREADY_ENROLLED');
+      if(result.meta?.changes===0&&current?.enrollment_id===null&&
+        current.enrollment_requested===1&&current.device_ready===1)return;
       throw new Error('CORE_DEVICE_NOT_READY');
     }
   }
