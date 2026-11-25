@@ -24,8 +24,9 @@ test('local protected drain fences new work, waits original callback and never c
   await ready;
   await assert.rejects(drain.wait(10),/DRAIN_UNKNOWN/);
   await assert.rejects(drain.run(async()=>{}),/RUNTIME_STOPPED/);
-  resume();await effect;await drain.wait();
-  drain.markUnknown();await assert.rejects(drain.wait(),/DRAIN_UNKNOWN/);
+  resume();await effect;await assert.rejects(drain.wait(),/DRAIN_UNKNOWN/);
+  const clean=new ProtectedRuntimeDrain();await clean.run(async()=>{});await clean.wait();
+  clean.markUnknown();await assert.rejects(clean.wait(),/DRAIN_UNKNOWN/);
 });
 test('verified clean return requests one independent RELEASE; denial and UNKNOWN cannot be retried or released',async()=>{
   const pin={sha256:'a'.repeat(64),signerSha256:'b'.repeat(64)};
