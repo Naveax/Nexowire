@@ -52,9 +52,14 @@ export function composeHelperSelectionRevokeDrain(config:{
     if(!uuid.safeParse(req?.deviceId).success||!uuid.safeParse(req?.ownerId).success||
        !uuid.safeParse(req?.deviceEpoch).success||!uuid.safeParse(req?.sessionEpoch).success||
        !Number.isSafeInteger(req.expectedGeneration)||req.expectedGeneration<1||req.expectedGeneration>=Number.MAX_SAFE_INTEGER)return false;
-    let db:DispatchStoreConnection|undefined;
+    let db:DispatchStoreConnection|undefined,opened=false,destroy=false;
     try{
       db=await pool.connect();
+      // Bound read-only SQL on a separate connection. The existing CORE
+      // transaction holds the authority lock; these queries never lock rows.
+      await db.query('BEGIN READ ONLY');opened=true;
+      await db.query("SET LOCAL statement_timeout='2000ms'");
+      await db.query("SET LOCAL lock_timeout='1000ms'");
       const args=[scope.authorityId,req.deviceId];
       const grant=(await db.query('SELECT * FROM core_dispatch.grants WHERE authority_id=$1 AND device_id=$2',args)).rows[0];
       if(!grant||grant.state!=='REVOKING'||grant.owner_id!==req.ownerId||grant.device_epoch!==req.deviceEpoch||
@@ -73,11 +78,20 @@ export function composeHelperSelectionRevokeDrain(config:{
       if(slots.length>1)return false;
       if(slots[0]){
         const active=lease(slots[0],current);
-        if(!await verify(Object.freeze({phase:'RELEASE',scope,lease:active,selection:current})))return false;
+        const [helperDrained,coreDrained]=await Promise.all([
+          verify(Object.freeze({phase:'RELEASE',scope,lease:active,selection:current})),
+          bounded(()=>existing(req),3500),
+        ]);
+        return helperDrained===true&&coreDrained===true;
       }
       return await bounded(()=>existing(req),3500)===true;
-    }catch{return false;}
-    finally{db?.release();}
+    }catch{destroy=true;return false;}
+    finally{
+      if(db){
+        if(opened&&!destroy)try{await db.query('ROLLBACK');}catch{destroy=true;}
+        db.release(destroy);
+      }
+    }
   };
 }
 type SelectionConfig=Parameters<typeof createRollbackGuardedHelperSelectionService>[0];
