@@ -6,7 +6,7 @@ import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {
   MACHINE_STARTUP_ADMISSION_PS,MACHINE_STARTUP_EVIDENCE_PS,
-  assertOnlineMachineCutoverAdmission,
+  assertOnlineMachineCutoverAdmission,assertNewSystemHubCutoverAdmission,
 } from '../src/security/windows-machine-startup-admission.js';
 
 test('online cutover admission is denied without an independent installed guard and forward authority',()=>{
@@ -14,6 +14,8 @@ test('online cutover admission is denied without an independent installed guard 
   for(const fake of [undefined,true,{guarded:true,forwardAuthorized:true},
     {phase:'COMMITTED',targetRoot:'C:\\ProgramData\\Nexowire\\versions\\1.0.9-123456789abc'}]){
     assert.throws(()=>attempt(fake),/MACHINE_UPDATE_CANONICAL_STARTUP_AUTHORITY_REQUIRED/);
+    const migrate=assertNewSystemHubCutoverAdmission as (proof?:unknown)=>void;
+    assert.throws(()=>migrate(fake),/AI04_SIGNED_SQLITE_RECOVERY_AUTHORITY_REQUIRED/);
   }
 });
 
@@ -41,11 +43,19 @@ test('canonical Hub and Broker both check the same guard before process launch a
     assert.ok(builder.indexOf('MACHINE_STARTUP_ADMISSION_PS,')<builder.indexOf(launch));
   }
   const install=hub.slice(hub.indexOf('export async function installHubBootLifecycle('));
+  assert.ok(install.indexOf('assertNewSystemHubCutoverAdmission();')>=0);
+  assert.ok(install.indexOf('assertNewSystemHubCutoverAdmission();')<install.indexOf('assertElevated();'));
   assert.ok(install.indexOf('assertMachineStartupStateReadOnly();')>=0);
   assert.ok(install.indexOf('assertMachineStartupStateReadOnly();')<install.indexOf('readProtectedSecretFile('));
   const brokerInstall=broker.slice(broker.indexOf('export async function installPrivilegedBrokerTask('));
   assert.ok(brokerInstall.indexOf('assertMachineStartupStateReadOnly();')>=0);
   assert.ok(brokerInstall.indexOf('assertMachineStartupStateReadOnly();')<brokerInstall.indexOf('await loadOrCreatePrivilegedBrokerToken('));
+  const startFiles=broker.slice(broker.indexOf('async function verifyBrokerTaskStartFiles('),broker.indexOf('export async function startPrivilegedBrokerTask('));
+  assert.match(startFiles,/assertMachineStartupStateReadOnly\(\);/);
+  const mode=broker.slice(broker.indexOf('export async function reconcilePrivilegedBrokerMode('));
+  assert.match(mode,/if \(mode !== 'off'\) \{\s*await verifyBrokerTaskStartFiles\(options\);/);
+  const stop=broker.slice(broker.indexOf('export async function stopPrivilegedBrokerTask('),broker.indexOf('export type PrivilegedBrokerDesiredMode'));
+  assert.doesNotMatch(stop,/assertMachineStartupStateReadOnly|verifyBrokerTaskStartFiles/);
   const schedule=update.slice(update.indexOf('export async function scheduleOfficialMachineUpdate('));
   const deny=schedule.indexOf('assertOnlineMachineCutoverAdmission();');
   for(const effect of ['assertMachineUpdateTreeProtectedBeforeWrite();','await extractVerifiedRuntime(input)','await fs.mkdir','await fs.writeFile','const child = spawn(']){
