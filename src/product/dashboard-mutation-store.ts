@@ -10,7 +10,7 @@ export interface DashboardMutationIntent {
 }
 export interface DashboardMutationStatus {
   mutationId:string;deviceId:string;kind:DashboardMutationKind;
-  state:'PENDING'|'APPLIED';expectedRevision:number|null;
+  state:'PENDING'|'APPLIED'|'DENIED';expectedRevision:number|null;
 }
 /** Header is an identity only, not authentication or authority. */
 export function validDashboardMutationId(id:unknown,kind?:DashboardMutationKind):id is string{
@@ -53,7 +53,7 @@ export class D1DashboardMutationStore {
   async read(mutationId:string,ownerAccountId:string):Promise<DashboardMutationStatus|null>{
     const row=await this.db.prepare(`SELECT mutation_id,device_id,kind,state,expected_revision FROM dashboard_mutation_claims
       WHERE mutation_id=? AND owner_account_id=?`).bind(mutationId,ownerAccountId).first<{
-      mutation_id:string;device_id:string;kind:DashboardMutationKind;state:'PENDING'|'APPLIED';expected_revision:number|null}>();
+      mutation_id:string;device_id:string;kind:DashboardMutationKind;state:'PENDING'|'APPLIED'|'DENIED';expected_revision:number|null}>();
     return row?{mutationId:row.mutation_id,deviceId:row.device_id,kind:row.kind,state:row.state,expectedRevision:row.expected_revision}:null;
   }
   private async conflict(i:DashboardMutationIntent):Promise<never>{
@@ -62,7 +62,7 @@ export class D1DashboardMutationStore {
       .bind(i.mutationId,i.ownerAccountId).first<Record<string,unknown>>();
     // No foreign-owner identity oracle, payload or stored token is exposed.
     if(row&&row.payload_sha256===i.payloadSha256&&row.device_id===i.deviceId&&row.kind===i.kind&&row.expected_revision===i.expectedRevision)
-      throw Error(row.state==='APPLIED'?'DASHBOARD_MUTATION_ALREADY_APPLIED':'DASHBOARD_MUTATION_OUTCOME_UNKNOWN');
+      throw Error(row.state==='APPLIED'?'DASHBOARD_MUTATION_ALREADY_APPLIED':row.state==='DENIED'?'DASHBOARD_MUTATION_REVISION_OR_STATE_CONFLICT':'DASHBOARD_MUTATION_OUTCOME_UNKNOWN');
     throw Error('DASHBOARD_MUTATION_CONFLICT');
   }
   private bindClaim(i:DashboardMutationIntent,nonce:string){
@@ -125,10 +125,16 @@ export class D1DashboardMutationStore {
       ?'EXISTS(SELECT 1 FROM device_core_console_authority WHERE device_id=? AND enrollment_requested=1 AND enrollment_id IS NULL)'
       :'EXISTS(SELECT 1 FROM device_maintenance_preferences WHERE device_id=? AND owner_account_id=? AND enabled=? AND updated_at=?)';
     const terminalArgs=i.kind==='core-consent'?[i.deviceId]:[i.deviceId,i.ownerAccountId,i.kind==='core-enable'?1:0,i.createdAt];
-    const result=await this.db.batch([claim,write,this.settle(i,nonce,
+    // Stale/semantic duplicate attempts by the current owner receive a
+    // terminal tombstone too; a guessed future revision cannot become a retry.
+    const denied=this.db.prepare(`INSERT INTO dashboard_mutation_claims(${columns})
+      SELECT ?,?,?,?,?,?,?,'DENIED',? WHERE EXISTS(SELECT 1 FROM devices d JOIN accounts a ON a.id=d.owner_account_id
+        WHERE d.id=? AND d.owner_account_id=?)
+      ON CONFLICT(mutation_id) DO NOTHING`).bind(...this.bindClaim(i,nonce),i.deviceId,i.ownerAccountId);
+    const result=await this.db.batch([claim,denied,write,this.settle(i,nonce,
       terminal+' AND EXISTS(SELECT 1 FROM dashboard_core_revisions WHERE device_id=? AND revision>?)',
       [...terminalArgs,i.deviceId,i.expectedRevision])]);
     if(!changed(result[0]))return this.conflict(i);
-    if(!changed(result[1])||!changed(result[2]))throw Error('DASHBOARD_MUTATION_OUTCOME_UNKNOWN');
+    if(changed(result[1])||!changed(result[2])||!changed(result[3]))throw Error('DASHBOARD_MUTATION_OUTCOME_UNKNOWN');
   }
 }
