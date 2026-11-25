@@ -97,7 +97,7 @@ async function launch(c:Readonly<WindowsOwnerLauncherPins>,args:readonly string[
     let settled=false,finished=false;let timer:ReturnType<typeof setTimeout>|undefined;
     const cleanup=()=>{clearTimeout(timer);signal.removeEventListener('abort',abort);};
     const fail=()=>{if(!settled){settled=true;reject(Error('CORE_OWNER_LAUNCHER_OUTCOME_UNKNOWN'));}};
-    const abort=()=>{invalid=true;if(!finished)child.kill();fail();};
+    const abort=()=>{invalid=true;if(!finished){try{child.kill();}catch{/* Keep outcome unknown. */}}};
     timer=setTimeout(abort,100000);
     signal.addEventListener('abort',abort,{once:true});
     if(signal.aborted)abort();
@@ -129,9 +129,10 @@ export async function createWindowsProtectedOwnerAssertionLauncher(pins:WindowsO
   auditPaths(c.launcherPath,helper);
   await exactFile(c.launcherPath,c.launcherSha256);await signature(c.launcherPath,c.launcherSignerSha256);
   await exactFile(helper,c.helperSha256);await signature(helper,c.helperSignerSha256);
-  let busy=false;
+  let busy=false,unknown=false;
   return Object.freeze({
     async runBoundAssertion(input:Ceremony,signal:AbortSignal){
+      if(unknown)deny('PRIOR_OUTCOME_UNKNOWN');
       if(busy)deny('BUSY');
       const args=windowsOwnerLauncherArguments(input,c);
       signal.throwIfAborted();busy=true;
@@ -144,6 +145,10 @@ export async function createWindowsProtectedOwnerAssertionLauncher(pins:WindowsO
         const raw=await launch(c,args,signal);
         await exactFile(c.launcherPath,c.launcherSha256);
         signal.throwIfAborted();return raw;
+      }catch(error){
+        // A child may have been terminated without independently observed
+        // Job drain. Never start another ceremony in this issuer incarnation.
+        unknown=true;throw error;
       }finally{busy=false;}
     }
   });
