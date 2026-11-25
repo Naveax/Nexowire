@@ -6,7 +6,7 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {setTimeout as delay} from 'node:timers/promises';
 import {Pool} from 'pg';
-import {PostgresProtectedTransferAuthority,type IndependentTransferObservation} from '../../src/security/postgres-protected-transfer-authority.js';
+import {PostgresProtectedTransferAuthority,composeTransferDrainObserver,type IndependentTransferObservation} from '../../src/security/postgres-protected-transfer-authority.js';
 import {finalTransferSigningBytes} from '../../src/agent/native-transfer-publisher.js';
 import type {DispatchStorePool} from '../../src/agent/postgres-broker-dispatch-authority.js';
 import type {LargeTransferBinding,LargeTransferIntent,LargeTransferFinalReceipt} from '../../src/mcp/durable-large-transfer.js';
@@ -48,9 +48,11 @@ test('PostgreSQL crash restart preserves original UNKNOWN claim, epoch and signe
   async function serverStart(){return String((await admin.query('SELECT pg_postmaster_start_time()::text AS started')).rows[0].started);}
   async function restart(){
     const before=await serverStart();
+    const cluster=String((await admin.query('SELECT system_identifier::text AS id FROM pg_control_system()')).rows[0].id);
     await close(service);await close(admin);
     await call(['kill','--signal','KILL',container]);
     assert.equal(await call(['inspect','--format','{{.State.Running}}',container]),'false');
+    assert.equal(await call(['inspect','--format','{{.State.ExitCode}}',container]),'137');
     const stopped=connect('nexowire_dispatch_ci');
     try{await assert.rejects(stopped.query('SELECT 1'));}finally{await close(stopped);}
     const oldPort=port;
@@ -78,6 +80,7 @@ test('PostgreSQL crash restart preserves original UNKNOWN claim, epoch and signe
     }
     assert(after,'PostgreSQL must be reachable after crash recovery: '+lastError);
     assert.notEqual(after,before,'a different real PostgreSQL postmaster must serve the second connection');
+    assert.equal(String((await admin.query('SELECT system_identifier::text AS id FROM pg_control_system()')).rows[0].id),cluster,'restart must reopen the original PostgreSQL cluster');
     assert.equal((await admin.query('SELECT pg_is_in_recovery() AS recovery')).rows[0].recovery,false);
     t.diagnostic('Real PostgreSQL postmaster changed: '+before+' -> '+after);
   }
@@ -98,6 +101,8 @@ test('PostgreSQL crash restart preserves original UNKNOWN claim, epoch and signe
   const id=randomUUID(),targetPath=targetRoot+'\\restart.bin';
   const b:LargeTransferBinding={id,ownerId,projectId,sourceDeviceId,targetDeviceId,sourcePath:sourceRoot+'\\input.bin',targetPath,stagePath:targetPath+'.nexowire-upload-'+id+'.part',size:3,sha256:sha('abc')};
   let a=authority();
+  let nativeDrained=true;
+  const drain=()=>composeTransferDrainObserver({authorityId,pool:service as DispatchStorePool,verifyNativeDrain:async()=>nativeDrained});
   const l=await a.acquire(b,0);
   const p:LargeTransferIntent={kind:'write',requestId:randomUUID(),epoch:l.epoch,offset:0,length:3,sha256:b.sha256,dispatched:true};
   const claim=await a.claimNativeEffect(b,l,p);
@@ -107,6 +112,8 @@ test('PostgreSQL crash restart preserves original UNKNOWN claim, epoch and signe
   assert.equal(Number(persisted.epoch),l.epoch);assert.equal(Number(persisted.confirmed_offset),0);assert.equal(persisted.pending_id,p.requestId);
   const original=(await admin.query('SELECT claim_id,state FROM transfer_authority.claims WHERE request_id=$1',[p.requestId])).rows[0];
   assert.equal(original.claim_id,claim.claimId);assert.equal(original.state,'UNKNOWN');
+  assert.equal(await drain()({ownerId,deviceId:sourceDeviceId}),false);
+  assert.equal(await drain()({ownerId,deviceId:targetDeviceId}),false);
   await assert.rejects(a.claimNativeEffect(b,l,p),/TRANSFER_PG_MUTATION_UNRESOLVED/);
   await assert.rejects(a.acquire(b,l.epoch),/TRANSFER_PG_NATIVE_DRAIN_UNVERIFIED/);
   assert.equal(Number((await admin.query('SELECT epoch FROM transfer_authority.jobs WHERE id=$1',[id])).rows[0].epoch),l.epoch);
@@ -125,6 +132,11 @@ test('PostgreSQL crash restart preserves original UNKNOWN claim, epoch and signe
   await assert.rejects(a.claimNativeEffect(b,next,pub),/TRANSFER_PG_JOB_FENCED/);
   const ledger=(await admin.query('SELECT request_id,state FROM transfer_authority.claims WHERE job_id=$1 ORDER BY epoch',[id])).rows;
   assert.deepEqual(ledger,[{request_id:p.requestId,state:'APPLIED'},{request_id:pub.requestId,state:'APPLIED'}]);
+  nativeDrained=false;assert.equal(await drain()({ownerId,deviceId:targetDeviceId}),false);
+  nativeDrained=true;assert.equal(await drain()({ownerId,deviceId:targetDeviceId}),true);
+  await admin.query("UPDATE core_dispatch.grants SET state='REVOKING',generation=2 WHERE authority_id=$1 AND device_id=$2",[authorityId,targetDeviceId]);
+  await assert.rejects(a.assertGrant(b),/TRANSFER_PG_GRANT_REVOKED/);
+  await assert.rejects(a.claimNativeEffect(b,next,pub),/TRANSFER_PG_GRANT_REVOKED/);
   // Native observations/provenance in this fixture are synthetic. The DB,
   // transaction, process death, durable recovery and receipt are real.
 });
