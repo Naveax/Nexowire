@@ -138,12 +138,17 @@ export async function createWindowsProtectedOwnerAssertionLauncher(pins:WindowsO
       if(unknown||busy) return deny('PRIOR_OUTCOME_UNKNOWN_OR_BUSY');
       const nonce=randomBytes(32).toString('hex'),started=process.hrtime.bigint();
       signal.throwIfAborted();
-      await exactFile(c.launcherPath,c.launcherSha256);
-      const raw=await launch(c,['--observe-owner',nonce],signal,1200);
-      await exactFile(c.launcherPath,c.launcherSha256);
-      signal.throwIfAborted();
-      if(process.hrtime.bigint()-started>=1800000000n)deny('READBACK_STALE');
-      return parseNativeOwnerObservation(raw,nonce);
+      // Serialize the read-only child with ceremony launches. A second
+      // observation or ceremony must not enter during the artifact awaits.
+      busy=true;
+      try{
+        await exactFile(c.launcherPath,c.launcherSha256);
+        const raw=await launch(c,['--observe-owner',nonce],signal,1200);
+        await exactFile(c.launcherPath,c.launcherSha256);
+        signal.throwIfAborted();
+        if(process.hrtime.bigint()-started>=1800000000n)deny('READBACK_STALE');
+        return parseNativeOwnerObservation(raw,nonce);
+      }finally{busy=false;}
     },
     async runBoundAssertion(input:Ceremony,signal:AbortSignal){
       if(unknown)deny('PRIOR_OUTCOME_UNKNOWN');
@@ -190,6 +195,37 @@ export function matchNativeOwnerObservation(observation:NativeOwnerObservation,b
   return observation.windowsUserSid===binding.windowsUserSid&&
     observation.windowsSessionId===binding.windowsSessionId&&observation.windowsLogonLuid===binding.windowsLogonLuid;
 }
+/** Read-only consistency check for the independent directory/OS join.
+ * A parsed fixture is not a production witness. Neither the caller's
+ * expected binding nor an untrusted assertion supplies directory identity. */
+export async function readStableProvisionedWindowsOwner(
+  readProvisionedOwner:(signal:AbortSignal)=>Promise<unknown>,
+  observeOwner:(signal:AbortSignal)=>Promise<NativeOwnerObservation>,
+  signal:AbortSignal){
+  const started=process.hrtime.bigint();
+  const check=()=>{
+    signal.throwIfAborted();
+    if(process.hrtime.bigint()-started>=1800000000n)deny('READBACK_STALE');
+  };
+  check();
+  const before=provisionedSchema.parse(await readProvisionedOwner(signal));
+  check();
+  const observed=await observeOwner(signal);
+  check();
+  const after=provisionedSchema.parse(await readProvisionedOwner(signal));
+  check();
+  if(!sameBinding(before.binding,after.binding)||
+    before.issuerSpkiSha256!==after.issuerSpkiSha256||
+    before.rpId!==after.rpId||before.credentialId!==after.credentialId||
+    !matchNativeOwnerObservation(observed,before.binding))
+    deny('OWNER_READBACK_MISMATCH');
+  const credential=Buffer.from(after.credentialId,'base64url');
+  if(credential.length<1||credential.length>1024||
+    credential.toString('base64url')!==after.credentialId)
+    deny('OWNER_READBACK_MISMATCH');
+  return Object.freeze({...after,binding:Object.freeze(after.binding)});
+}
+
 /** Explicit startup composition, not the Agent or off-host verifier process.
  * No default service registration; current owner directory and ledger remain
  * independently provisioned. The Windows helper's raw assertion is verified
@@ -202,14 +238,8 @@ export async function createWindowsProtectedOwnerIssuer(config:
     readProvisionedOwner:(signal:AbortSignal)=>Promise<unknown>}){
   const launcher=await createWindowsProtectedOwnerAssertionLauncher(config.pins);
   const readProvisioned=config.readProvisionedOwner;
-  const current=async(signal:AbortSignal)=>{
-    signal.throwIfAborted();
-    const provisioned=provisionedSchema.parse(await readProvisioned(signal));
-    const observed=await launcher.observeOwner(signal);
-    signal.throwIfAborted();
-    if(!matchNativeOwnerObservation(observed,provisioned.binding))deny('OWNER_READBACK_MISMATCH');
-    return Object.freeze({...provisioned,binding:Object.freeze(provisioned.binding)});
-  };
+  const current=(signal:AbortSignal)=>
+    readStableProvisionedWindowsOwner(readProvisioned,launcher.observeOwner,signal);
   const ledger=new PostgresCoreApprovalLedger({...config.ledger,
     async readProtectedNativeBinding(expected,signal):Promise<CoreApprovalNativeReadback|null>{
       try{
