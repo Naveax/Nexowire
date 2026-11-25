@@ -158,7 +158,56 @@ static BOOL wait_empty(HANDLE job,ULONGLONG until){
   do{if(job_empty(job))return TRUE;Sleep(20);}while(GetTickCount64()<until);return FALSE;
 }
 static int denied(const char *reason){fprintf(stderr,"CORE_OWNER_LAUNCH_DENIED:%s\n",reason);return 77;}
+/* Separate read-only WTS observation. No expected SID or session from the
+ * caller is echoed as evidence, no helper is started, no human approval.
+ * WTSInfoEx unlock flag is supported on our Windows 10+ target. */
+static BOOL console_unlocked(DWORD session){
+  LPWSTR raw=NULL;DWORD bytes=0;BOOL ok=FALSE;
+  if(!local_console(session)||!WTSQuerySessionInformationW(WTS_CURRENT_SERVER_HANDLE,session,WTSInfoEx,&raw,&bytes))return FALSE;
+  if(raw&&bytes>=sizeof(WTSINFOEXW)){
+    const WTSINFOEXW *info=(const WTSINFOEXW *)raw;
+    if(info->Level==1){
+      const WTSINFOEX_LEVEL1_W *level=&info->Data.WTSInfoExLevel1;
+      ok=level->SessionId==session&&level->SessionState==WTSActive&&level->SessionFlags==WTS_SESSIONSTATE_UNLOCK;
+    }
+  }
+  if(raw)WTSFreeMemory(raw);return ok;
+}
+static int observe_owner(const wchar_t *nonce){
+  BYTE nonceBytes[32];if(!hex(nonce,nonceBytes,32))return 64;
+  if(!system_primary())return denied("SYSTEM_SESSION_ZERO_REQUIRED");
+  DWORD session=WTSGetActiveConsoleSessionId(),n=0;
+  HANDLE first=NULL,second=NULL;LPWSTR sid=NULL;
+  TOKEN_STATISTICS stats={0};
+  union {TOKEN_USER align;BYTE data[sizeof(TOKEN_USER)+SECURITY_MAX_SID_SIZE];} user={0};
+  BOOL ok=FALSE;
+  if(!session||session==0xffffffffUL||!console_unlocked(session)||
+    !WTSQueryUserToken(session,&first)||
+    !GetTokenInformation(first,TokenUser,user.data,sizeof(user.data),&n)||
+    !GetTokenInformation(first,TokenStatistics,&stats,sizeof(stats),&n)||
+    !IsValidSid(((TOKEN_USER *)user.data)->User.Sid))goto done;
+  PSID expected=((TOKEN_USER *)user.data)->User.Sid;
+  if(!owner_token(first,expected,session,stats.AuthenticationId)||
+    !ConvertSidToStringSidW(expected,&sid)||
+    !WTSQueryUserToken(session,&second)||
+    !owner_token(second,expected,session,stats.AuthenticationId)||
+    !console_unlocked(session))goto done;
+  ok=TRUE;
+done:
+  if(ok){
+    printf("{\"version\":1,\"kind\":\"core_owner_wts_observation_v1\",\"nonce\":\"%ls\","
+      "\"windowsUserSid\":\"%ls\",\"windowsSessionId\":%lu,\"windowsLogonLuid\":\"%08lx%08lx\","
+      "\"humanApproval\":false,\"coreAuthority\":false}\n",nonce,sid,(unsigned long)session,
+      (unsigned long)stats.AuthenticationId.HighPart,(unsigned long)stats.AuthenticationId.LowPart);
+    if(fflush(stdout)!=0)ok=FALSE;
+  }
+  if(sid)LocalFree(sid);
+  if(second)CloseHandle(second);
+  if(first)CloseHandle(first);
+  return ok?0:denied("OWNER_READBACK_UNAVAILABLE");
+}
 int wmain(int argc,wchar_t **argv){
+  if(argc==3&&!wcscmp(argv[1],L"--observe-owner"))return observe_owner(argv[2]);
   /* Args: RP, challenge, credential, SID, WTS session, logon LUID,
    * independently provisioned helper file and signer SHA-256. Never a path. */
   BYTE challenge[32],artifactHash[32],signerHash[32],nonce[32];
