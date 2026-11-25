@@ -678,11 +678,60 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
       assert.deepEqual(receipts.sort(),['APPLIED','DENIED']);
       assert.equal(f.db.prepare('SELECT enrollment_requested FROM device_core_console_authority WHERE device_id=?').get(actualId)?.enrollment_requested,1);
       assert.equal(f.db.prepare('SELECT enrollment_id FROM device_core_console_authority WHERE device_id=?').get(actualId)?.enrollment_id,null);
-      for(const evalFn of [evaluate,profile.evaluate]){
-        await until('exact terminal CORE receipt',()=>copy(evalFn),v=>/D1 işlem kaydı: (APPLIED|DENIED)/.test(v));
-        assert.match(await copy(evalFn),/yerel STOP.*doğrulanmadı/);
-        assert.doesNotMatch(await copy(evalFn),/CORE FİZİKSEL AÇIK|STOP başarılı/);
-        assert.equal(await evalFn<boolean>('document.querySelector(".core-enrollment-retry").disabled'),true);
+      // Each profile must display its OWN terminal ledger receipt. A committed
+      // preference/consent request is not a physical enrollment or STOP witness.
+      // Check both real HTTP readbacks, not just an equivalent-looking UI string.
+      const profiles=[
+        {evaluate,handler:first,status:500,state:'APPLIED'},
+        {evaluate:profile.evaluate,handler:secondHandler,status:409,state:'DENIED'},
+      ] as const;
+      for(const view of profiles){
+        const post=consentPosts.find(p=>p.status===view.status);
+        assert.ok(post);
+        const receiptResponse=await view.handler(new Request(
+          'https://control.test/api/v1/me/mutations/status?mutationId='+encodeURIComponent(post.id)));
+        assert.equal(receiptResponse.status,200);
+        assert.deepEqual(await receiptResponse.json(),{
+          mutationId:post.id,deviceId:actualId,kind:'core-consent',state:view.state,expectedRevision:before});
+        const response=await view.handler(new Request('https://control.test/api/v1/me/dashboard'));
+        assert.equal(response.status,200);
+        const dashboard=await response.json() as Awaited<ReturnType<ControlPlaneService['dashboard']>>;
+        assert.equal(dashboard.accountId,owner.accountId);
+        const devices=dashboard.devices.filter(d=>d.id===actualId);
+        assert.equal(devices.length,1);
+        const actual=devices[0]!;
+        assert.equal(actual.coreMutationRevision,
+          Number(f.db.prepare('SELECT revision FROM dashboard_core_revisions WHERE device_id=?').get(actualId)?.revision));
+        assert.ok(actual.coreMutationRevision!==null&&actual.coreMutationRevision!==undefined&&actual.coreMutationRevision>before);
+        assert.equal(actual.persistentMaintenance?.enabled,true);
+        assert.equal(actual.persistentMaintenance?.active,false);
+        assert.equal(actual.physicalConsole?.enrollmentRequested,true);
+        assert.equal(actual.physicalConsole?.localEnrolled,false);
+        assert.equal(actual.physicalConsole?.active,false);
+        const revocation=actual.coreRevocation;
+        assert.ok(revocation);
+        assert.equal(revocation.version,1);
+        assert.equal(revocation.source,'D1_REMOTE_AUTHORIZATION');
+        assert.equal(revocation.remoteAuthorization.state,'ACTIVE');
+        assert.ok(Number.isSafeInteger(revocation.remoteAuthorization.authorizationEpoch));
+        assert.equal(revocation.localStop,'UNKNOWN');
+        assert.equal(revocation.pendingRevoke,'UNKNOWN');
+        assert.equal(revocation.nativeDrain,'UNKNOWN');
+        assert.equal(revocation.effectReadback,'UNKNOWN');
+        assert.equal(revocation.nativeEvidence,'NOT_AVAILABLE');
+        // V1 has no independent pendingDispatch witness. Do not turn consent
+        // or an ACTIVE/REVOKED D1 row into evidence of native dispatch/drain.
+        const receiptCopy=view.state==='APPLIED'
+          ? 'D1 işlem kaydı: APPLIED (yalnız veritabanı yazımı).'
+          : 'D1 işlem kaydı: DENIED (işlem kabul edilmedi).';
+        const message=await until('exact terminal CORE receipt '+view.state,()=>copy(view.evaluate),v=>v.includes(receiptCopy));
+        assert.ok(message.includes(receiptCopy));
+        assert.ok(message.includes('CORE onay isteği sunucuda kayıtlı; cihaza teslimi ve ilk yerel onay doğrulanmadı.'));
+        assert.ok(message.includes('Fiziksel STOP için cihazdaki Nexowire CORE → KAPAT seçeneğini kullan; yerel iptal ve işlem durması burada doğrulanmadı.'));
+        assert.ok(message.includes('Sunucu D1 uzaktan yetki kaydı: ACTIVE (epoch '+revocation.remoteAuthorization.authorizationEpoch+').'));
+        assert.ok(message.includes('Bu, yürütme izni, fiziksel CORE, yerel STOP veya drain kanıtı değildir.'));
+        assert.doesNotMatch(message,/CORE FİZİKSEL AÇIK|STOP başarılı/);
+        assert.equal(await view.evaluate<boolean>('document.querySelector(".core-enrollment-retry").disabled'),true);
       }
       assert.equal(actualPosts.filter(p=>p.route===consentRoute).length,2);
       combined.diagnostic('Actual production HTTP + migrated SQLite D1 + two independent Chromium contexts: one pairing challenge, two distinct CORE UUIDs, one APPLIED/one DENIED; no native effect');
