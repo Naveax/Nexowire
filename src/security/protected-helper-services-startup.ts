@@ -1,10 +1,9 @@
-import {isIP} from 'node:net';
 import * as z from 'zod';
 import {createProtectedPostgresDispatchPool} from '../agent/protected-postgres-dispatch-pool.js';
 import type {DispatchStorePool,DispatchStoreConnection} from '../agent/postgres-broker-dispatch-authority.js';
 import type {DispatchRevokeRequest} from '../agent/broker-external-dispatch-fence.js';
 import {startProtectedTransferAndCoreServices,type ProtectedTransferServicesStartup} from './protected-transfer-services-startup.js';
-import {createRollbackGuardedHelperSelectionService} from './protected-helper-rollback-guard.js';
+import {bindHelperRollbackGuard,type HelperRollbackGuardConfig} from './protected-helper-rollback-guard.js';
 import {createSignedHelperSelectionEvidenceVerifier,type SignedHelperEvidenceConfig} from './signed-helper-selection-evidence.js';
 import type {HelperAuthorityScope,HelperLease} from './postgres-helper-selection-authority.js';
 import type {HelperSelection} from '../installer/protected-transfer-helper-lifecycle.js';
@@ -94,36 +93,24 @@ export function composeHelperSelectionRevokeDrain(config:{
     }
   };
 }
-type SelectionConfig=Parameters<typeof createRollbackGuardedHelperSelectionService>[0];
-export interface ProtectedHelperTransferServicesStartup {
-  transferAndCore:ProtectedTransferServicesStartup;
-  selection:SelectionConfig;
-  selectionHost:string;
-  selectionPort:number;
-}
-/** Explicit three-listener off-host startup; all use the same independent DB
- * and authority, separate credential roles are permitted. No migration or
- * issuer generation. Startup failures close every opened listener/pool. */
+export type ProtectedHelperTransferServicesStartup=ProtectedTransferServicesStartup&{rollbackGuard:HelperRollbackGuardConfig};
+/** AI-07 owns all three listeners and cleanup. Add the independent guard
+ * and read-only helper drain, never create a second selection listener. */
 export async function startProtectedHelperTransferAndCoreServices(config:ProtectedHelperTransferServicesStartup){
-  const existing=config?.transferAndCore,selection=config?.selection;
-  const scope=selection?.authority?.scope,db=selection?.database;
-  if(!existing?.core||!existing.transfer||!scope||!db||!existing.startupScope||
-     scope.authorityId!==existing.core.authorityId||scope.authorityId!==existing.transfer.authority.authorityId||
-     scope.deviceId!==existing.startupScope.targetDeviceId||scope.ownerId!==existing.startupScope.ownerId||
-     ![existing.core.database,existing.transfer.database].every(other=>other&&other.host===db.host&&other.port===db.port&&other.database===db.database&&other.caPem===db.caPem)||
-     typeof config.selectionHost!=='string'||isIP(config.selectionHost)===0||
-     !Number.isInteger(config.selectionPort)||config.selectionPort<1||config.selectionPort>65535||
-     config.selectionPort===existing.core.port||config.selectionPort===existing.transferPort)
+  const selection=config?.selection,scope=selection?.authority?.scope,db=selection?.database;
+  if(!scope||!db||!config.core||!config.transfer||!config.startupScope||
+     scope.authorityId!==config.core.authorityId||scope.deviceId!==config.startupScope.targetDeviceId||scope.ownerId!==config.startupScope.ownerId||
+     ![config.core.database,config.transfer.database].every(other=>other&&other.host===db.host&&other.port===db.port&&other.database===db.database&&other.caPem===db.caPem)||
+     typeof config.verifyTransferRuntimeDrain!=='function')
     throw Error('HELPER_SHARED_AUTHORITY_STARTUP_REQUIRED');
+  const nativeEvidence=bindHelperRollbackGuard(selection.nativeEvidence,config.rollbackGuard);
   const readPool=createProtectedPostgresDispatchPool(db);
-  let helper:ReturnType<typeof createRollbackGuardedHelperSelectionService>|undefined;
   let combined:Awaited<ReturnType<typeof startProtectedTransferAndCoreServices>>|undefined;
   let closing:Promise<void>|undefined;
-  const close=()=>closing??=(async()=>{try{await helper?.close();}finally{try{await combined?.close();}finally{await readPool.close();}}})();
+  const close=()=>closing??=(async()=>{try{await combined?.close();}finally{await readPool.close();}})();
   try{
-    // Read-only startup prerequisite. No lease acquisition or selection mutation.
     const provenance=await selection.authority.verifyProvenance();
-    if(provenance.verified!==true||provenance.authorityId!==scope.authorityId||
+    if(!provenance||provenance.verified!==true||provenance.authorityId!==scope.authorityId||
        !Number.isSafeInteger(provenance.validUntil)||provenance.validUntil<=Date.now())throw Error('HELPER_STARTUP_PROVENANCE_UNVERIFIED');
     const connection=await readPool.pool.connect();
     try{
@@ -134,19 +121,9 @@ export async function startProtectedHelperTransferAndCoreServices(config:Protect
         throw Error('HELPER_STARTUP_SCOPE_UNVERIFIED');
       selected(row);
     }finally{connection.release();}
-    helper=createRollbackGuardedHelperSelectionService(selection);
-    const verifyNativeDrain=composeHelperSelectionRevokeDrain({pool:readPool.pool,scope,nativeEvidence:selection.nativeEvidence,
-      verifyExistingNativeDrain:existing.core.verifyNativeDrain});
-    combined=await startProtectedTransferAndCoreServices({...existing,core:{...existing.core,verifyNativeDrain}});
-    const server=helper.server;
-    await new Promise<void>((resolve,reject)=>{
-      const failed=()=>reject(Error('HELPER_SELECTION_LISTEN_FAILED'));
-      server.once('error',failed);
-      server.listen({host:config.selectionHost,port:config.selectionPort,exclusive:true},()=>{server.off('error',failed);resolve();});
-    });
-    server.on('error',()=>{void close().catch(()=>{});});
-    const address=server.address();
-    if(!address||typeof address==='string')throw Error('HELPER_SELECTION_LISTEN_FAILED');
-    return Object.freeze({...combined,selectionAddress:address.address,selectionPort:address.port,close});
+    const verifyTransferRuntimeDrain=composeHelperSelectionRevokeDrain({pool:readPool.pool,scope,nativeEvidence,
+      verifyExistingNativeDrain:config.verifyTransferRuntimeDrain});
+    combined=await startProtectedTransferAndCoreServices({...config,selection:{...selection,nativeEvidence},verifyTransferRuntimeDrain});
+    return Object.freeze({...combined,close});
   }catch(error){await close().catch(()=>{});throw error;}
 }

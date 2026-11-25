@@ -467,7 +467,9 @@ export async function runNativeAgent(
   trustedCoreConsentProvider?: NativeCoreConsentAuthority,
   trustedNativeTransferPublisher?: NativeTransferPublisher,
   trustedNativeTransferDeviceId?: string,
+  trustedTransferLifetime?: AbortSignal,
 ): Promise<never> {
+  if(trustedTransferLifetime?.aborted)throw Error('TRANSFER_HELPER_RUNTIME_LEASE_RELEASED');
   const preloginBootstrap=getWindowsPreloginAgentMode(env);
   if(preloginBootstrap){
     // No user-writable code, owner DPAPI, identity creation, or journal I/O
@@ -541,7 +543,7 @@ export async function runNativeAgent(
         authorityId:casAuthorityId,epoch:casEpoch,deviceId:identity.id})
     : undefined;
   const nativeTransferEnabled=Boolean(!preloginBootstrap&&remoteCas&&trustedNativeMutationProvider&&
-    trustedNativeTransferPublisher&&env.NEXOWIRE_AGENT_REQUIRE_ATOMIC_EFFECT_ADMISSION==='1');
+    trustedNativeTransferPublisher&&!trustedTransferLifetime?.aborted&&env.NEXOWIRE_AGENT_REQUIRE_ATOMIC_EFFECT_ADMISSION==='1');
   const advertisedCapabilities = filterWindowsPreloginCapabilities(
     await capabilitiesForAgent(process.platform,env),preloginBootstrap,
   );
@@ -639,6 +641,8 @@ export async function runNativeAgent(
   };
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
+  trustedTransferLifetime?.addEventListener('abort',stop,{once:true});
+  if(trustedTransferLifetime?.aborted)stop();
 
   while (!stopped) {
     const hubUrl = hubEndpoints[endpointIndex]!;
@@ -652,6 +656,9 @@ export async function runNativeAgent(
 
     await new Promise<void>((resolve) => {
       const requestLifetime = new AbortController();
+      const fenceRequest=()=>requestLifetime.abort();
+      trustedTransferLifetime?.addEventListener('abort',fenceRequest,{once:true});
+      if(trustedTransferLifetime?.aborted)fenceRequest();
       let heartbeatTimer: NodeJS.Timeout | undefined;
       let lastPongAt = Date.now();
       let settled = false;
@@ -659,6 +666,7 @@ export async function runNativeAgent(
         if (settled) return;
         settled = true;
         requestLifetime.abort();
+        trustedTransferLifetime?.removeEventListener('abort',fenceRequest);
         revokePhysicalConsoleGrant();
         if (heartbeatTimer) clearInterval(heartbeatTimer);
         resolve();
@@ -710,6 +718,7 @@ export async function runNativeAgent(
         if (!greeted) return;
 
         socket.on('message', async (raw) => {
+          if(stopped||trustedTransferLifetime?.aborted)return;
           // Seal the exact incoming bytes before any authorization await.
           const exactRequestFrame = raw.toString();
           let decoded: unknown;
@@ -739,7 +748,7 @@ export async function runNativeAgent(
                   error:{code:'AGENT_PRELOGIN_CAPABILITY_UNAVAILABLE',
                     message:'The pre-login transport accepts only bounded machine status. Sign in for owner capabilities.'},
                 }
-              : nativeTransferRequest&&(!nativeTransferEnabled||request.data.accessMode!=='full')
+              : nativeTransferRequest&&(!nativeTransferEnabled||trustedTransferLifetime?.aborted||request.data.accessMode!=='full')
                 ? {type:'response',requestId:request.data.requestId,ok:false,
                    error:{code:'NATIVE_TRANSFER_AUTHORITY_REQUIRED',message:'Protected Native transfer admission unavailable.'}}
               : await requestCache.run(
@@ -989,5 +998,10 @@ export async function runNativeAgent(
     }
   }
 
+  trustedTransferLifetime?.removeEventListener('abort',stop);
+  if(trustedTransferLifetime?.aborted){
+    try{await processes.shutdown();}finally{operationJournal.close();await singletonLock?.close();}
+    throw Error('TRANSFER_HELPER_RUNTIME_LEASE_RELEASED');
+  }
   process.exit(0);
 }

@@ -9,8 +9,7 @@ import path from 'node:path';
 import {bindHelperRollbackGuard} from '../../src/security/protected-helper-rollback-guard.js';
 import {composeHelperSelectionRevokeDrain} from '../../src/security/protected-helper-services-startup.js';
 import {Pool} from 'pg';
-import {createBoundHelperRuntimeAuthority} from '../../src/installer/protected-helper-entrypoints.js';
-import {withVerifiedTransferHelper,assertSelectedTransferHelper} from '../../src/agent/protected-transfer-startup.js';
+import {createTransferRuntimeLeaseAuthority,withVerifiedTransferHelper,assertSelectedTransferHelper} from '../../src/agent/protected-transfer-startup.js';
 import {createProtectedHelperSelectionServer,ProtectedHelperSelectionClient} from '../../src/security/protected-helper-selection-transport.js';
 import {createHelperSelectionTlsFixture} from './helper-selection-tls-fixture.js';
 import {PostgresHelperSelectionAuthority,createHelperSelectionLeaseProvider,type HelperAuthorityEvidenceRequest,type HelperAuthorityScope,type HelperSelectionLeaseTransport} from '../../src/security/postgres-helper-selection-authority.js';
@@ -56,6 +55,8 @@ test('durable independent helper selection excludes runtime/deployment, preserve
   };
   const approvedStateSha256=await readDigest();
   const rollbackPhases:string[]=[];
+  const reviewedRuntime={manifestSha256:'5'.repeat(64),sourceCommit:'6'.repeat(40),releaseSequence:2,reader:'sqlite-only' as const,schemaVersion:1 as const};
+  const approved={runtime:reviewedRuntime,helperPin:a,approvedStateSha256,sqliteTreeSha256:approvedStateSha256,sqliteRecords:1};
   const nativeEvidence=bindHelperRollbackGuard({
     observerPublicKeyPem:observer.publicKey.export({type:'spki',format:'pem'}).toString(),
     async requestProof(challenge,v){
@@ -66,7 +67,7 @@ test('durable independent helper selection excludes runtime/deployment, preserve
       return {payload,proof:sign(null,Buffer.from(payload,'utf8'),observer.privateKey).toString('base64url')};
     },
   },{
-    observerPublicKeyPem:rollbackObserver.publicKey.export({type:'spki',format:'pem'}).toString(),
+    observerPublicKeyPem:rollbackObserver.publicKey.export({type:'spki',format:'pem'}).toString(),approved,
     async requestProof(challenge,v){
       // Test-only independent signer, observes real disposable SQLite/WAL/SHM
       // and identity/receipt bytes. Never asserts production native drain.
@@ -75,7 +76,8 @@ test('durable independent helper selection excludes runtime/deployment, preserve
       const unknownOperations=JSON.parse(await readFile(path.join(dataRoot,'receipt.json'),'utf8')).status==='UNKNOWN';
       const observedAt=Date.now();
       const payload=JSON.stringify({domain:'nexowire.helper-rollback-guard.v1',nonce:challenge.nonce,requestSha256:challenge.requestSha256,phase:challenge.phase,
-        approvedStateSha256,currentStateSha256,writerFenced:true,unknownOperations,recoveryPending:false,priorHelperCompatible:true,observedAt,expiresAt:observedAt+3000});
+        approvedStateSha256,currentStateSha256,writerFenced:true,unknownOperations,recoveryPending:false,priorHelperCompatible:true,
+        sqliteReview:{manifestSha256:reviewedRuntime.manifestSha256,sourceCommit:reviewedRuntime.sourceCommit,releaseSequence:2,schemaVersion:1,treeSha256:currentStateSha256,sqliteRecords:1,releaseAnchorAdvanced:false,productionRollbackAuthorized:false},observedAt,expiresAt:observedAt+3000});
       return {payload,proof:sign(null,Buffer.from(payload,'utf8'),rollbackObserver.privateKey).toString('base64url')};
     },
   });
@@ -117,8 +119,9 @@ test('durable independent helper selection excludes runtime/deployment, preserve
   const installed=await runTransferHelperLifecycle(install,provider,store);
   current=installed.selection;assert.deepEqual(current.pin,a);
   await assert.rejects(first.beginDeployment(install),/STALE|REPLAY/);
-  const authority=createBoundHelperRuntimeAuthority({publisher:{deviceId:scope.deviceId},tls:{role:'native',authorityId:scope.authorityId,scope:{targetDeviceId:scope.deviceId,ownerId:scope.ownerId}}} as Parameters<typeof createBoundHelperRuntimeAuthority>[0],runtimeConfig);
-  await withVerifiedTransferHelper(authority,store,async binding=>{
+  const authority=createTransferRuntimeLeaseAuthority(new ProtectedHelperSelectionClient(runtimeConfig));
+  await withVerifiedTransferHelper(authority,store,async (binding,scope)=>{
+    await scope.assertActive();
     assert.equal(binding.revision,current.revision);
     assert.equal(binding.flushHelperSha256,a.sha256);
     await assertSelectedTransferHelper(authority,binding);

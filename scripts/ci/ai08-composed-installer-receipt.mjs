@@ -6,12 +6,12 @@ import {assertTapSummary} from './assert-tap-summary.mjs';
 import {readTestInventory} from './test-inventory.mjs';
 const tests={
  'test/ai05/protected-transfer-helper-lifecycle.test.ts':['bf56b8102ad4f3642cb784072668a21d68066693',15],
- 'test/ai05/transfer-flush-artifact.test.ts':['904bfd0fd2ca88f0d27471ba54ba9444a64e3823',4]
+ 'test/ai05/transfer-flush-artifact.test.ts':['fe6591365f963c790ab99148807efde82231ed6b',4]
 };
 const pins={
  '.gitattributes':'c039ea0d6cdd0a0551d278dc728c257973164c5b',
  'src/installer/protected-transfer-helper-lifecycle.ts':'84f9cce7ee56744308e81b8f838d87f54fb8eba7',
- 'src/agent/protected-transfer-startup.ts':'0d9077b2e1608c9a5bbf8e7faff31c7c7d739e01',
+ 'src/agent/protected-transfer-startup.ts':'76ca0caa424020f18aff4a22af63d92be3e89191',
  'src/security/windows-programdata-acl.ts':'55d5814efd87f66e3ff553b415c42f37e23fce12',
  'src/security/windows-privileged-runtime-trust.ts':'2eb3029f9790cd7b94aa7bf87711a2296e3d3df3',
  'native/windows-transfer-volume-flush.cs':'7a62bf6c027544dfceb14f3ca939d7d76eb2ced9',
