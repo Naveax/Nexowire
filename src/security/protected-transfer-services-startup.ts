@@ -1,11 +1,13 @@
 import {isIP} from 'node:net';
 import {createPostgresProtectedTransferService} from './protected-transfer-service.js';
-import {createPostgresHelperSelectionService} from './protected-helper-selection-service.js';
+import {createRollbackGuardedHelperSelectionService} from './protected-helper-rollback-guard.js';
+import {composeHelperSelectionRevokeDrain} from './protected-helper-revoke-drain.js';
+import {createProtectedPostgresDispatchPool} from '../agent/protected-postgres-dispatch-pool.js';
 import {startProtectedBrokerDispatchService,type ProtectedBrokerDispatchServiceOptions} from '../agent/protected-broker-dispatch-service.js';
 import type {LargeTransferScope} from '../mcp/durable-large-transfer.js';
 
 type TransferConfig=Parameters<typeof createPostgresProtectedTransferService>[0];
-type SelectionConfig=Parameters<typeof createPostgresHelperSelectionService>[0];
+type SelectionConfig=Parameters<typeof createRollbackGuardedHelperSelectionService>[0];
 type Database=TransferConfig['database'];
 type RevokeRequest=Parameters<ProtectedBrokerDispatchServiceOptions['verifyNativeDrain']>[0];
 export interface ProtectedTransferServicesStartup {
@@ -52,11 +54,12 @@ export async function startProtectedTransferAndCoreServices(config:ProtectedTran
     new Set([core.port,transferPort,selectionPort]).size!==3)
     throw Error('TRANSFER_CORE_SHARED_AUTHORITY_STARTUP_REQUIRED');
   const service=createPostgresProtectedTransferService(transfer);
-  let helper:ReturnType<typeof createPostgresHelperSelectionService>|undefined;
+  let helper:ReturnType<typeof createRollbackGuardedHelperSelectionService>|undefined;
+  let helperReadPool:ReturnType<typeof createProtectedPostgresDispatchPool>|undefined;
   let coreService:Awaited<ReturnType<typeof startProtectedBrokerDispatchService>>|undefined;
   let closing:Promise<void>|undefined;
   const close=()=>closing??=(async()=>{
-    try{await coreService?.close();}finally{try{await helper?.close();}finally{await service.close();}}
+    try{await coreService?.close();}finally{try{await helper?.close();}finally{try{await helperReadPool?.close();}finally{await service.close();}}}
   })();
   try{
     if(await transfer.server.verifyIndependentProvenance()!==true)throw Error('TRANSFER_AUTHORITY_PROVENANCE_UNVERIFIED');
@@ -64,11 +67,13 @@ export async function startProtectedTransferAndCoreServices(config:ProtectedTran
     if(!p||p.verified!==true||p.authorityId!==scope.authorityId||!Number.isSafeInteger(p.validUntil)||p.validUntil<=Date.now())
       throw Error('HELPER_AUTHORITY_PROVENANCE_UNVERIFIED');
     await service.backend.assertGrant(startupScope);
-    helper=createPostgresHelperSelectionService(selection);
+    helper=createRollbackGuardedHelperSelectionService(selection);
+    helperReadPool=createProtectedPostgresDispatchPool(selection.database);
+    const helperDrain=composeHelperSelectionRevokeDrain({pool:helperReadPool.pool,scope,nativeEvidence:selection.nativeEvidence,
+      verifyExistingNativeDrain:async request=>await core.verifyNativeDrain(request)===true&&await config.verifyTransferRuntimeDrain(request)===true});
     coreService=await startProtectedBrokerDispatchService({...core,
       verifyNativeDrain:request=>service.composeDrain(async bound=>
-        bound.ownerId===request.ownerId&&bound.deviceId===request.deviceId&&
-        await core.verifyNativeDrain(request)===true&&await config.verifyTransferRuntimeDrain(request)===true)(request),
+        bound.ownerId===request.ownerId&&bound.deviceId===request.deviceId&&await helperDrain(request)===true)(request),
     });
     if(await transfer.server.verifyIndependentProvenance()!==true)throw Error('TRANSFER_AUTHORITY_PROVENANCE_UNVERIFIED');
     const transferAddress=await listen(service.server,transferHost,transferPort);
