@@ -25,9 +25,32 @@ export class AgentJournalWalError extends Error {
 // This is not a positive corruption finding, nor proof of a live owner.
 export class AgentJournalWalUnstableError extends Error {
   readonly code='AGENT_JOURNAL_WAL_UNSTABLE';
-  constructor(){
-    super('SQLite WAL-index snapshot remained unstable; mutation dispatch denied.');
+  constructor(reason?:'EAGAIN'|'EINTR'|'EBUSY'){
+    super(reason===undefined?
+      'SQLite WAL-index snapshot remained unstable; mutation dispatch denied.':
+      'SQLite WAL final pathname readback remained unstable ('+reason+'); mutation dispatch denied.');
     this.name='AgentJournalWalUnstableError';
+  }
+}
+
+// Keep only a fixed, redacted errno classification. Raw filesystem error
+// messages and paths must not escape through startup diagnostics.
+function readbackReason(error:unknown):
+  'ENOENT'|'ENOTDIR'|'EAGAIN'|'EINTR'|'EBUSY'|'EACCES'|'EPERM'|
+  'EIO'|'EMFILE'|'ENFILE'|'UNKNOWN'{
+  const code=(error as NodeJS.ErrnoException|null)?.code;
+  switch(code){
+    case 'ENOENT':case 'ENOTDIR':case 'EAGAIN':case 'EINTR':case 'EBUSY':
+    case 'EACCES':case 'EPERM':case 'EIO':case 'EMFILE':case 'ENFILE':
+      return code;
+    default:return 'UNKNOWN';
+  }
+}
+class AgentJournalWalReadbackError extends Error{
+  readonly code='AGENT_JOURNAL_UNAVAILABLE';
+  constructor(reason:ReturnType<typeof readbackReason>){
+    super('SQLite WAL pathname readback unavailable ('+reason+'); mutation dispatch denied.');
+    this.name='AgentJournalWalReadbackError';
   }
 }
 
@@ -78,9 +101,21 @@ function assertSnapshotMetadata(current:FileSnapshot,opened:FileSnapshot,
   }
 }
 async function assertStablePath(file:string,opened:FileSnapshot,
-  retryIndexTimestamp=false):Promise<void>{
+  retryIndexTimestamp=false,retryWalReadback=false):Promise<void>{
   let current;
-  try{current=await fs.lstat(file)}catch{fail();}
+  try{current=await fs.lstat(file)}catch(error){
+    const reason=readbackReason(error);
+    // Observed path loss remains a contradiction, not a fresh clean start.
+    if(reason==='ENOENT'||reason==='ENOTDIR')throw new AgentJournalWalError(
+      'SQLite WAL/SHM pathname disappeared during validation ('+reason+'); mutation dispatch denied.');
+    // Only the final ordinary-WAL readback with a retained index and WAL
+    // witness may restart a full scan on a transient syscall failure.
+    if(retryWalReadback&&(reason==='EAGAIN'||reason==='EINTR'||reason==='EBUSY'))
+      throw new AgentJournalWalUnstableError(reason);
+    // Permission/resource/unknown failures are not positive checksum or
+    // structure contradictions, and are never owner-liveness evidence.
+    throw new AgentJournalWalReadbackError(reason);
+  }
   if(!current.isFile()||current.isSymbolicLink())fail();
   assertSnapshotMetadata(current,opened,retryIndexTimestamp);
 }
@@ -320,7 +355,7 @@ export async function verifyAgentJournalWal(dbFile:string):Promise<void>{
     try{await verifyAgentJournalWalOnce(dbFile,state);return;}
     catch(error){
       const wait=backoff[attempt];
-      if(!(error instanceof AgentJournalWalUnstableError)||wait===undefined)throw error;
+      if(!(error instanceof AgentJournalWalUnstableError)||!state.anchor||wait===undefined)throw error;
       await delay(wait);
     }
   }
@@ -486,7 +521,7 @@ async function verifyAgentJournalWalOnce(dbFile:string,state:RetryState):Promise
         currentFrames,lastCommitPages,digest,{state,wal:{file:opened,
           header,currentFrames,commitPages:lastCommitPages,digest},
           priorClaimsVerified:priorClaims.length>0&&unmatchedClaims.size===0});
-      await assertStablePath(walFile,opened);
+      await assertStablePath(walFile,opened,false,Boolean(state.anchor));
     }
   }finally{
     await handle.close();
