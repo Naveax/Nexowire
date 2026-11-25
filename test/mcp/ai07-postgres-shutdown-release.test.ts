@@ -5,13 +5,11 @@ import {readFile} from 'node:fs/promises';
 import {Pool} from 'pg';
 import {actualAgentStop} from '../fixtures/ai07-protected-agent-stop.js';
 import {createHelperSelectionTlsFixture} from '../ai05/helper-selection-tls-fixture.js';
-import {createTransferRuntimeLeaseAuthority,withVerifiedTransferHelper} from '../../src/agent/protected-transfer-startup.js';
 import {bindTransferClaimDrainEvidence} from '../../src/security/protected-transfer-service.js';
 import {PostgresHelperSelectionAuthority,type HelperAuthorityScope} from '../../src/security/postgres-helper-selection-authority.js';
-import {createProtectedHelperSelectionServer,ProtectedHelperSelectionClient} from '../../src/security/protected-helper-selection-transport.js';
+import {createProtectedHelperSelectionServer} from '../../src/security/protected-helper-selection-transport.js';
 import {createSignedHelperSelectionEvidenceVerifier,helperEvidenceRequiredFacts} from '../../src/security/signed-helper-selection-evidence.js';
 import {PostgresProtectedTransferAuthority} from '../../src/security/postgres-protected-transfer-authority.js';
-import type {TransferHelperArtifactStore} from '../../src/installer/protected-transfer-helper-lifecycle.js';
 import type {DispatchStorePool} from '../../src/agent/postgres-broker-dispatch-authority.js';
 import type {LargeTransferBinding,LargeTransferIntent} from '../../src/mcp/durable-large-transfer.js';
 
@@ -52,6 +50,8 @@ test('real Agent clean stop reaches signed mTLS RELEASE; denied observer and UNK
     const transfer=new PostgresProtectedTransferAuthority({authorityId,pool:transferPool as unknown as DispatchStorePool,verifyProvenance:provenance,observeNativeIntent:async()=>undefined,readNativeReceipt:async()=>undefined});
     const observer=generateKeyPairSync('ed25519');
     let childReturned=false,releaseProofs=0,originalLeaseId:string|undefined,claimId:string|undefined;
+    let returned!:()=>void;
+    const localReturn=new Promise<void>(resolve=>{returned=resolve;});
     const evidence=bindTransferClaimDrainEvidence(transferPool as unknown as DispatchStorePool,authorityId,{
       observerPublicKeyPem:observer.publicKey.export({type:'spki',format:'pem'}).toString(),
       async requestProof(challenge,request){
@@ -60,9 +60,12 @@ test('real Agent clean stop reaches signed mTLS RELEASE; denied observer and UNK
         if(request.phase==='RELEASE'){
           releaseProofs++;
           assert.equal(request.lease.id,originalLeaseId);
-          assert(childReturned,'no release proof before the actual child returned');
+          let timer:ReturnType<typeof setTimeout>|undefined;
+          try{await Promise.race([localReturn,new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(Error('local return not observed')),1000);})]);}
+          finally{if(timer)clearTimeout(timer);}
+          assert(childReturned,'no release proof before the actual Agent returned');
         }
-        const accepted=request.phase!=='RELEASE'||mode==='clean';
+        const accepted=request.phase!=='RELEASE'||mode!=='observer-denied';
         const observedAt=Date.now();
         const payload=JSON.stringify({...challenge,accepted,facts:helperEvidenceRequiredFacts(request.phase),observedAt,expiresAt:observedAt+2000});
         return {payload,proof:sign(null,Buffer.from(payload),observer.privateKey).toString('base64url')};
@@ -75,11 +78,13 @@ test('real Agent clean stop reaches signed mTLS RELEASE; denied observer and UNK
     try{
       await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',()=>resolve());});
       const addr=server.address();assert(addr&&typeof addr==='object');
-      const client=new ProtectedHelperSelectionClient({endpoint:'https://127.0.0.1:'+addr.port+'/v1/helper-selection',scope,role:'runtime',certificatePem:tls.runtime.cert,keyPem:tls.runtime.key,serverCaPem:tls.ca,serverSpkiSha256:tls.server.spkiSha256,authorityPublicKeyPem:tls.publicKey,credential:async()=>token});
-      const provider=createTransferRuntimeLeaseAuthority(client,30000);
-      const store:TransferHelperArtifactStore={async verifyInstalled(p){assert.deepEqual(p,pin);},async stage(){throw Error('unexpected stage');}};
-      const run=()=>withVerifiedTransferHelper(provider,store,async(binding,leaseScope)=>{
-        assert.equal(binding.revision,revision);
+      await actualAgentStop(t,'stop',deviceId,{
+        tls:{endpoint:'https://127.0.0.1:'+addr.port+'/v1/helper-selection',scope,role:'runtime',
+          certificatePem:tls.runtime.cert,keyPem:tls.runtime.key,serverCaPem:tls.ca,serverSpkiSha256:tls.server.spkiSha256,authorityPublicKeyPem:tls.publicKey},
+        credential:token,pin,expectRelease:mode==='clean',
+        onLocalReturn(){childReturned=true;returned();},
+        async beforeStop(){
+          assert(originalLeaseId,'the running Agent must hold the original runtime lease');
         if(mode==='unknown'||mode==='active'){
           const id=randomUUID(),targetPath=targetRoot+'\\shutdown.bin';
           const b:LargeTransferBinding={id,ownerId,projectId:'fixture',sourceDeviceId,targetDeviceId:deviceId,sourcePath:sourceRoot+'\\input.bin',targetPath,stagePath:targetPath+'.nexowire-upload-'+id+'.part',size:3,sha256:digest('abc')};
@@ -88,16 +93,12 @@ test('real Agent clean stop reaches signed mTLS RELEASE; denied observer and UNK
           const claim=await transfer.claimNativeEffect(b,l,p);claimId=claim.claimId;
           if(mode==='unknown')await transfer.settleNativeEffect(b,l,p,claim,'unknown');
         }
-        await actualAgentStop(t,'stop',deviceId);
-        childReturned=true;
-        await leaseScope.assertActive();
+        },
       });
-      if(mode==='clean')await run();else await assert.rejects(run(),/HELPER_SELECTION_TRANSPORT_UNKNOWN/);
       assert(originalLeaseId);
       const leaseRows=(await admin.query('SELECT id,state FROM helper_selection.leases WHERE authority_id=$1 AND device_id=$2',[authorityId,deviceId])).rows;
       assert.deepEqual(leaseRows,[{id:originalLeaseId,state:mode==='clean'?'RELEASED':'ACTIVE'}]);
       assert.equal(releaseProofs,mode==='clean'||mode==='observer-denied'?1:0,'unresolved claims must block before requesting RELEASE proof');
-      await assert.rejects(provider.withActiveSelection(async()=>{}),/SCOPE_RETIRED/);
       if(mode!=='clean')await assert.rejects(backend.beginRuntime(randomUUID()),/HELPER_LEASE_OCCUPIED/);
       if(claimId){
         const rows=(await admin.query('SELECT claim_id,state FROM transfer_authority.claims WHERE claim_id=$1',[claimId])).rows;
