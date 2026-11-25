@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { createContext, runInContext } from 'node:vm';
 
 // This is a deterministic DOM stub, not a browser or an auth/pairing integration test.
@@ -99,14 +100,18 @@ async function boot(options: {
   const requests: Array<{ path: string; method: string }> = [];
   const navigations: string[] = [];
   const origin = 'https://control.fixture.invalid';
+  const storage=new Map<string,string>();
   const context = createContext({
-    URL, URLSearchParams, AbortSignal,
+    URL, URLSearchParams, AbortSignal, TextEncoder,
+    crypto:{subtle:{digest:async(_algorithm:string,input:Uint8Array)=>createHash('sha256').update(input).digest()}},
+    localStorage:{getItem:(key:string)=>storage.get(key)??null,setItem:(key:string,value:string)=>storage.set(key,value)},
     document: {
       getElementById: el,
       querySelectorAll: () => tabs,
       querySelector: () => label,
     },
     navigator: {
+      locks:{request:async(_key:string,_options:unknown,callback:(lock:object)=>unknown)=>callback({})},
       userAgent: 'Windows NT 10.0; Win64; x64',
       clipboard: { writeText: async () => {} },
     },
