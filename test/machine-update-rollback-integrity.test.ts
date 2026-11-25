@@ -39,8 +39,9 @@ function run(scriptText:string){
 test('a failed rollback has its own status, never successfully rolled_back',()=>{
   assert.match(script,/rollback_failed/);
   assert.match(script,/LAUNCHER_RESTORE:/);
-  assert.match(script,/HUB_RESTART:/);
-  assert.match(script,/BROKER_RESTART:/);
+  assert.match(rollback,/MACHINE_UPDATE_SIGNED_SQLITE_ROLLBACK_AUTHORITY_REQUIRED/);
+  assert.doesNotMatch(rollback,/Start-ScheduledTask|Wait-Service/);
+  assert.ok(rollback.indexOf('MACHINE_UPDATE_SIGNED_SQLITE_ROLLBACK_AUTHORITY_REQUIRED')<rollback.indexOf('try{Restore}'));
   assert.match(script,/Get-FileHash -LiteralPath \$entry\.Value -Algorithm SHA256/);
   assert.match(script,/MACHINE_UPDATE_LAUNCHER_RESTORE_MISMATCH/);
   assert.match(script,/Write-Status 'rolled_back' \$message/);
@@ -48,64 +49,37 @@ test('a failed rollback has its own status, never successfully rolled_back',()=>
 });
 
 const scenarios=[
-  {name:'clean restoration has rolled_back status',stopFail:'',startFail:'',restoreFail:false,status:'rolled_back',code:1},
-  {name:'launcher restoration failure reports rollback_failed',stopFail:'',startFail:'',restoreFail:true,status:'rollback_failed',code:2},
-  {name:'Hub restart failure reports rollback_failed',stopFail:'',startFail:'hub',restoreFail:false,status:'rollback_failed',code:2},
-  {name:'Broker restart failure reports rollback_failed',stopFail:'',startFail:'broker',restoreFail:false,status:'rollback_failed',code:2},
-  {name:'failed stop and restore both reported',stopFail:'broker',startFail:'hub',restoreFail:true,status:'rollback_failed',code:2},
+  {name:'healthy prior runtime cannot substitute for signed rollback authority',stopFail:''},
+  {name:'Hub stop denied preserves recovery evidence and refuses restart',stopFail:'hub'},
+  {name:'Broker stop denied preserves recovery evidence and refuses restart',stopFail:'broker'},
+  {name:'failed cutover never restores an unverified launcher',stopFail:''},
+  {name:'unknown cutover state cannot become rolled_back',stopFail:'broker'},
 ]as const;
-
 for(const s of scenarios){
   test(s.name,{skip:!win},()=>{
     const scriptText=[
       "$ErrorActionPreference='Stop'",
       "$BootTask='Nexowire Hub Boot'",
       "$BrokerTask='Nexowire Privileged Broker'",
-      '$hasBoot=$true',
-      '$hasBroker=$true',
-      '$backups=@{}',
-      // Model a cutover that reached the real stop/start boundary; no OS tasks are touched.
-      '$cutoverStarted=$true',
-      "$BootLauncher='C:\\Nexowire-QA\\synthetic-hub.ps1'",
-      "$BrokerLauncher='C:\\Nexowire-QA\\synthetic-broker.ps1'",
-      "$priorRoot='C:\\ProgramData\\Nexowire\\versions\\1.0.4-aabbccddeeff'",
-      '$previousRoots=@{}',
-      '$previousRoots[$BootLauncher]=$priorRoot',
-      '$previousRoots[$BrokerLauncher]=$priorRoot',
+      '$hasBoot=$true','$hasBroker=$true','$cutoverStarted=$true',
       '$stopFail='+JSON.stringify(s.stopFail),
-      '$startFail='+JSON.stringify(s.startFail),
-      '$restoreFail='+String(s.restoreFail?'$true':'$false'),
-      'function Stop-ScheduledTask {',
-      '  [CmdletBinding()]',
-      '  param([string]$TaskName)',
+      'function Stop-ScheduledTask {[CmdletBinding()]param([string]$TaskName)',
       "  if(($stopFail -eq 'broker' -and $TaskName -eq $BrokerTask) -or ($stopFail -eq 'hub' -and $TaskName -eq $BootTask)){throw 'STOP_SYNTHETIC_FAILURE'}",
       '}',
-      'function Start-ScheduledTask {',
-      '  [CmdletBinding()]',
-      '  param([string]$TaskName)',
-      "  if(($startFail -eq 'broker' -and $TaskName -eq $BrokerTask) -or ($startFail -eq 'hub' -and $TaskName -eq $BootTask)){throw 'START_SYNTHETIC_FAILURE'}",
-      '}',
-      'function Restore {if($restoreFail){throw "RESTORE_SYNTHETIC_FAILURE"}}',
-      'function Wait-Service {',
-      '  [CmdletBinding()]',
-      '  param([int]$port,[string]$needle,[int]$seconds,[string]$runtimeRoot)',
-      '  if($runtimeRoot -cne $priorRoot){throw "UNEXPECTED_ROLLBACK_RUNTIME_ROOT"}',
-      '  if($port -ne 43110 -and $port -ne 43112){throw "UNEXPECTED_ROLLBACK_PORT"}',
-      '  return $true',
-      '}',
-      'function Start-Sleep {param([int]$Seconds)}',
+      'function Start-ScheduledTask {throw "UNAUTHORIZED_START"}',
+      'function Restore {throw "UNAUTHORIZED_RESTORE"}',
+      'function Wait-Service {throw "UNAUTHORIZED_HEALTH_AS_PERMISSION"}',
       'function Write-Status {param([string]$state,[string]$message);[Console]::WriteLine("STATUS="+$state+";"+$message)}',
       "try {throw 'ORIGINAL_UPDATE_FAILURE'",
       rollback,
     ].join('\r\n');
     const output=run(scriptText);
-    assert.equal(output.status,s.code,`PowerShell child: ${String(output.error)}\n${output.stderr}\n${output.stdout}`);
-    assert.match(output.stdout,new RegExp('STATUS='+s.status+';'));
+    assert.equal(output.status,2,output.stderr+'\n'+output.stdout);
+    assert.match(output.stdout,/STATUS=rollback_failed;/);
     assert.match(output.stdout,/ORIGINAL_UPDATE_FAILURE/);
+    assert.match(output.stdout,/MACHINE_UPDATE_SIGNED_SQLITE_ROLLBACK_AUTHORITY_REQUIRED/);
+    assert.doesNotMatch(output.stdout,/UNAUTHORIZED_(START|RESTORE|HEALTH)|STATUS=rolled_back/);
     if(s.stopFail)assert.match(output.stdout,/STOP_SYNTHETIC_FAILURE/);
-    if(s.startFail)assert.match(output.stdout,/START_SYNTHETIC_FAILURE/);
-    if(s.restoreFail)assert.match(output.stdout,/RESTORE_SYNTHETIC_FAILURE/);
-    if(s.status==='rolled_back')assert.doesNotMatch(output.stdout,/rollback_failed/);
   });
 }
 
