@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
+import {mkdtempSync,readFileSync,writeFileSync,existsSync,rmSync} from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {renderMachineCutoverScript} from '../src/update/machine-update.js';
 
 // Test child only: preserve Windows profile/TEMP, not a production launcher.
@@ -19,19 +22,23 @@ const script=renderMachineCutoverScript({
 const start=script.indexOf('Start-Sleep -Seconds 3');
 assert.ok(start>0,'missing cutover execution block');
 const actualTail=script.slice(start);
+const fenceFunctions=script.slice(script.indexOf('function Get-ActivationTask('),script.indexOf('function Wait-Service('));
+assert.ok(fenceFunctions.includes('function Clear-ActivationFence'));
+const q=(s:string)=>"'"+s.replaceAll("'","''")+"'";
 
 test('cutover boundary precedes first stop; legacy rollback never restarts tasks',()=>{
   const plan=script.indexOf('  Assert-CutoverPlan');
   const hubPatch=script.indexOf('  if($hasBoot){Patch-Launcher');
   const brokerPatch=script.indexOf('  if($hasBroker){Patch-Launcher');
   const cutover=script.indexOf('  $cutoverStarted=$true');
-  const stop=script.indexOf('  if($hasBoot){Stop-ScheduledTask');
-  assert.ok(plan>=0&&plan<cutover&&cutover<stop&&stop<hubPatch&&hubPatch<brokerPatch);
-  assert.match(script,/if\(\$cutoverStarted -and \$hasBoot\)\{try\{Stop-ScheduledTask/);
-  assert.match(script,/if\(\$cutoverStarted -and \$hasBroker\)\{try\{Stop-ScheduledTask/);
+  const disable=script.indexOf('  if($hasBroker){Disable-ActivationTask');
+  const stop=script.indexOf('Stop-ScheduledTask -TaskName $BootTask',cutover);
+  assert.ok(plan>=0&&plan<cutover&&cutover<disable&&disable<stop&&stop<hubPatch&&hubPatch<brokerPatch);
+  assert.match(script,/if\(\$hasBoot\)\{try\{Disable-ActivationTask/);
+  assert.match(script,/if\(\$hasBroker\)\{try\{Disable-ActivationTask/);
   const fallback=script.slice(script.lastIndexOf('\r\n} catch {\r\n'));
   assert.match(fallback,/MACHINE_UPDATE_SIGNED_SQLITE_ROLLBACK_AUTHORITY_REQUIRED/);
-  assert.doesNotMatch(fallback,/Start-ScheduledTask|Wait-Service/);
+  assert.doesNotMatch(fallback,/Start-ScheduledTask|Wait-Service|Enable-ForwardActivation|Clear-ActivationFence/);
   assert.match(script,/if\(\$rollbackErrors.Count -gt 0\)/);
   assert.match(script,/\$previousRoots\[\$file\]=\$oldRoot/);
 
@@ -40,7 +47,7 @@ test('cutover boundary precedes first stop; legacy rollback never restarts tasks
 
 type Scenario ={
   name:string;
-  failPhase:'plan'|'secondPatch'|'health'|'none';
+  failPhase:'plan'|'secondPatch'|'health'|'none'|'disable'|'readback'|'identity'|'existing'|'alreadyDisabled'|'enable'|'stateReadback';
   restoreFails?:boolean;
   expectedStatus:'rolled_back'|'rollback_failed'|'succeeded';
   restoredListenerFails?:boolean;
@@ -48,6 +55,10 @@ type Scenario ={
   expectedStarts:number;
   expectedRestores:number;
   expectedExit:number;
+  expectedEnabled?:number;
+  expectedPatches?:number;
+  expectedFence?:boolean;
+  expectedMessage?:RegExp;
 };
 const cases:Scenario[]=[
   {name:'preflight failure leaves both running tasks untouched',
@@ -61,11 +72,23 @@ const cases:Scenario[]=[
   {name:'prior listener health cannot authorize a stale runtime restart',
    failPhase:'health',restoredListenerFails:true,expectedStatus:'rollback_failed',expectedStops:4,expectedStarts:1,expectedRestores:0,expectedExit:2},
   {name:'successful cutover starts both planned tasks and claims success',
-   failPhase:'none',expectedStatus:'succeeded',expectedStops:2,expectedStarts:2,expectedRestores:0,expectedExit:0},
+   failPhase:'none',expectedStatus:'succeeded',expectedStops:2,expectedStarts:2,expectedRestores:0,expectedExit:0,expectedEnabled:2,expectedPatches:2,expectedFence:false},
+  {name:'disable denial never patches or enables a launcher and retains recovery marker',failPhase:'disable',expectedStatus:'rollback_failed',expectedStops:1,expectedStarts:0,expectedRestores:0,expectedExit:2,expectedEnabled:1,expectedPatches:0,expectedFence:true,expectedMessage:/BROKER_ACTIVATION_FENCE_UNVERIFIED/},
+  {name:'false disabled readback never patches a launcher',failPhase:'readback',expectedStatus:'rollback_failed',expectedStops:1,expectedStarts:0,expectedRestores:0,expectedExit:2,expectedEnabled:1,expectedPatches:0,expectedFence:true,expectedMessage:/BROKER_ACTIVATION_FENCE_UNVERIFIED/},
+  {name:'disabled bit without Disabled scheduler state refuses all launcher mutation',failPhase:'stateReadback',expectedStatus:'rollback_failed',expectedStops:4,expectedStarts:0,expectedRestores:0,expectedExit:2,expectedEnabled:0,expectedPatches:0,expectedFence:true,expectedMessage:/BROKER_ACTIVATION_FENCE_UNVERIFIED/},
+  {name:'existing durable fence refuses even a new forward update',failPhase:'existing',expectedStatus:'rollback_failed',expectedStops:0,expectedStarts:0,expectedRestores:0,expectedExit:2,expectedEnabled:2,expectedPatches:0,expectedFence:true,expectedMessage:/SIGNED_SQLITE_ROLLBACK_AUTHORITY_REQUIRED/},
+  {name:'previously disabled task cannot be reactivated by ordinary update',failPhase:'alreadyDisabled',expectedStatus:'rollback_failed',expectedStops:0,expectedStarts:0,expectedRestores:0,expectedExit:2,expectedEnabled:1,expectedPatches:0,expectedFence:false,expectedMessage:/SIGNED_SQLITE_ROLLBACK_AUTHORITY_REQUIRED/},
+  {name:'changed task owner is not stopped or activated',failPhase:'identity',expectedStatus:'rollback_failed',expectedStops:1,expectedStarts:0,expectedRestores:0,expectedExit:2,expectedEnabled:1,expectedPatches:0,expectedFence:true,expectedMessage:/ACTIVATION_IDENTITY_CHANGED/},
+  {name:'failed forward enable re-disables both tasks without old runtime restart',failPhase:'enable',expectedStatus:'rollback_failed',expectedStops:4,expectedStarts:0,expectedRestores:0,expectedExit:2,expectedEnabled:0,expectedPatches:2,expectedFence:true,expectedMessage:/SIGNED_SQLITE_ROLLBACK_AUTHORITY_REQUIRED/},
 ];
 
 for(const scenario of cases){
   test(scenario.name,{skip:process.platform!=='win32'},()=>{
+    const root=mkdtempSync(path.join(os.tmpdir(),'nx-machine-fence-'));
+    const marker=path.join(root,'machine-activation-fence.json');
+    const sentinel='previous independently unresolved recovery';
+    if(scenario.failPhase==='existing')writeFileSync(marker,sentinel);
+    try {
     const source=[
       "$ErrorActionPreference='Stop'",
       '[Console]::Error.WriteLine("AI05_PS_STARTED")',
@@ -80,6 +103,14 @@ for(const scenario of cases){
       '$script:patches=0',
       '$script:restores=0',
       '$script:previousRoots=@{}',
+      '$ActivationFence='+q(marker),
+      "$NewRoot='C:\\ProgramData\\Nexowire\\versions\\1.0.5-012345abcdef'",
+      "$BuildId='1.0.5-012345abcdef'",
+      '$fenceIdentities=@{}','$forwardHashes=@{}','$fenceOwned=$false','$recoveryRequired=$false','$fenceHash=$null','$cutoverStarted=$false',
+      '$failPhase='+q(scenario.failPhase),
+      '$tasks=@{}',
+      "foreach($n in @($BootTask,$BrokerTask)){$tasks[$n]=[pscustomobject]@{TaskName=$n;TaskPath='\\';Principal=[pscustomobject]@{UserId=('owner-'+$n)};Settings=[pscustomobject]@{Enabled=$true};State='Ready'}}",
+      "if($failPhase -eq 'alreadyDisabled'){$tasks[$BootTask].Settings.Enabled=$false;$tasks[$BootTask].State='Disabled'}",
       'function Start-Sleep {param([int]$Seconds)}',
       'function Task-Exists {param([string]$name) return $true}',
       'function Assert-CutoverPlan {',
@@ -89,22 +120,43 @@ for(const scenario of cases){
         scenario.failPhase==='secondPatch'?
         " if($script:patches -eq 2){throw 'BROKER_PATCH_FAILED'}":''
       )+'}',
-      'function Stop-ScheduledTask {param([string]$TaskName,[string]$ErrorAction) $script:stops++}',
-      'function Start-ScheduledTask {param([string]$TaskName,[string]$ErrorAction) $script:starts++}',
+      'function Assert-TaskIdentity {param([string]$name,[string]$launcher,[bool]$mustBeSystem,[switch]$ReturnTask) if($ReturnTask){return $tasks[$name]}}',
+      'function Disable-ScheduledTask {param([string]$TaskName,[string]$TaskPath,[string]$ErrorAction)',
+      " if($TaskPath -cne '\\'){throw 'FOREIGN_PATH'}",
+      " if($TaskName -eq $BrokerTask -and $failPhase -eq 'disable'){throw 'DENIED_DISABLE'}",
+      " if($TaskName -eq $BrokerTask -and $failPhase -eq 'readback'){return}",
+      " $tasks[$TaskName].Settings.Enabled=$false;$tasks[$TaskName].State='Disabled'",
+      " if($TaskName -eq $BrokerTask -and $failPhase -eq 'stateReadback'){$tasks[$TaskName].State='Ready'}",
+      " if($TaskName -eq $BootTask -and $failPhase -eq 'identity'){$tasks[$BrokerTask].Principal.UserId='replacement-owner'}",
+      '}',
+      'function Enable-ScheduledTask {param([string]$TaskName,[string]$TaskPath,[string]$ErrorAction)',
+      " if($TaskPath -cne '\\' -or $script:patches -ne 2){throw 'UNSAFE_ENABLE'}",
+      " if($failPhase -eq 'enable'){throw 'DENIED_ENABLE'}",
+      " $tasks[$TaskName].Settings.Enabled=$true;$tasks[$TaskName].State='Ready'",
+      '}',
+      'function Stop-ScheduledTask {param([string]$TaskName,[string]$TaskPath,[string]$ErrorAction) if($TaskPath -cne "\\" -or $tasks[$TaskName].Settings.Enabled){throw "UNSAFE_STOP"};$script:stops++}',
+      'function Start-ScheduledTask {param([string]$TaskName,[string]$TaskPath,[string]$ErrorAction) if($TaskPath -cne "\\" -or -not $tasks[$TaskName].Settings.Enabled -or $script:patches -ne 2){throw "UNSAFE_START"};$script:starts++}',
+      fenceFunctions,
+      // File hash/readback is exercised separately with actual files; the
+      // full cutover fixture models the scheduler and launcher patch effects.
+      'function Read-ForwardLauncherHash {param([string]$file) if($script:patches -lt 1){throw "UNPATCHED"};return "fixture-forward-hash"}',
       'function Restore { $script:restores++;'+(scenario.restoreFails?"throw 'RESTORE_FAILED'":'')+'}',
       'function Wait-Service {param([int]$port,[string]$needle,[int]$seconds,[string]$runtimeRoot) if($runtimeRoot){return '+(scenario.restoredListenerFails?'$false':'$true')+'}; return '+(
         scenario.failPhase==='health'?'$false':'$true'
       )+'}',
       'function Write-Status {param([string]$state,[string]$message)',
-      '  [pscustomobject]@{state=$state;message=$message;stops=$script:stops;starts=$script:starts;patches=$script:patches;restores=$script:restores}|ConvertTo-Json -Compress',
+      '  [pscustomobject]@{state=$state;message=$message;stops=$script:stops;starts=$script:starts;patches=$script:patches;restores=$script:restores;enabled=@($tasks.Values|Where-Object{$_.Settings.Enabled}).Count}|ConvertTo-Json -Compress',
       '}',
       '[Console]::Error.WriteLine("AI05_PS_CUTOVER_FIXTURE_ENTERED")',
       actualTail,
     ].join('\r\n');
+    // Use a disposable script file instead of exceeding the Windows
+    // command-line limit as the production helper body grows.
+    const fixtureScript=path.join(root,'cutover-fixture.ps1');
+    writeFileSync(fixtureScript,'\ufeff'+source,'utf8');
     const started=performance.now();
     const child=spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
-      ['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',
-        Buffer.from(source,'utf16le').toString('base64')],{
+      ['-NoLogo','-NoProfile','-NonInteractive','-File',fixtureScript],{
         cwd:'C:\\Windows\\System32',
         // PowerShell 5.1 needs the real profile/temp environment, just as
         // the passing rollback-integrity fixture does. Restrict PATH and modules.
@@ -119,12 +171,24 @@ for(const scenario of cases){
     const records=child.stdout.trim().split(/\r?\n/).filter(Boolean);
     assert.equal(records.length,1,child.stdout);
     const result=JSON.parse(records[0] ?? '') as {
-      state:string;message:string;stops:number;starts:number;patches:number;restores:number;
+      state:string;message:string;stops:number;starts:number;patches:number;restores:number;enabled:number;
     };
     assert.equal(result.state,scenario.expectedStatus);
     assert.equal(result.stops,scenario.expectedStops);
     assert.equal(result.starts,scenario.expectedStarts);
     assert.equal(result.restores,scenario.expectedRestores);
     if(scenario.failPhase==='secondPatch'||scenario.failPhase==='health')assert.match(result.message,/MACHINE_UPDATE_SIGNED_SQLITE_ROLLBACK_AUTHORITY_REQUIRED/);
+    if(scenario.expectedMessage)assert.match(result.message,scenario.expectedMessage);
+    const changed=scenario.failPhase==='secondPatch'||scenario.failPhase==='health';
+    assert.equal(result.enabled,scenario.expectedEnabled??(changed?0:2));
+    assert.equal(existsSync(marker),scenario.expectedFence??changed);
+    if(scenario.expectedPatches!==undefined)assert.equal(result.patches,scenario.expectedPatches);
+    if(scenario.failPhase==='existing')assert.equal(readFileSync(marker,'utf8'),sentinel);
+    else if(existsSync(marker)){
+      const persisted=JSON.parse(readFileSync(marker,'utf8'));
+      assert.equal(persisted.buildId,'1.0.5-012345abcdef');
+      assert.equal(Object.keys(persisted.principals).length,2);
+    }
+    }finally{rmSync(root,{recursive:true,force:true});}
   });
 }

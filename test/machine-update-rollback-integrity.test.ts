@@ -62,11 +62,18 @@ for(const s of scenarios){
       "$BootTask='Nexowire Hub Boot'",
       "$BrokerTask='Nexowire Privileged Broker'",
       '$hasBoot=$true','$hasBroker=$true','$cutoverStarted=$true',
+      '$fenceOwned=$true','$recoveryRequired=$false',
+      "$BootLauncher='fixture-boot'","$BrokerLauncher='fixture-broker'",
+      'function Disable-ActivationTask {param([string]$name,[string]$launcher,[bool]$system)}',
+      'function Assert-ActivationTask {param([string]$name,[string]$launcher,[bool]$system)}',
+      'function Assert-ActivationDisabled {param([string]$name,[string]$launcher,[bool]$system)}',
       '$stopFail='+JSON.stringify(s.stopFail),
-      'function Stop-ScheduledTask {[CmdletBinding()]param([string]$TaskName)',
+      'function Stop-ScheduledTask {[CmdletBinding()]param([string]$TaskName,[string]$TaskPath)',
       "  if(($stopFail -eq 'broker' -and $TaskName -eq $BrokerTask) -or ($stopFail -eq 'hub' -and $TaskName -eq $BootTask)){throw 'STOP_SYNTHETIC_FAILURE'}",
       '}',
       'function Start-ScheduledTask {throw "UNAUTHORIZED_START"}',
+      'function Enable-ForwardActivation {throw "UNAUTHORIZED_ENABLE"}',
+      'function Clear-ActivationFence {throw "UNAUTHORIZED_CLEAR"}',
       'function Restore {throw "UNAUTHORIZED_RESTORE"}',
       'function Wait-Service {throw "UNAUTHORIZED_HEALTH_AS_PERMISSION"}',
       'function Write-Status {param([string]$state,[string]$message);[Console]::WriteLine("STATUS="+$state+";"+$message)}',
@@ -78,7 +85,7 @@ for(const s of scenarios){
     assert.match(output.stdout,/STATUS=rollback_failed;/);
     assert.match(output.stdout,/ORIGINAL_UPDATE_FAILURE/);
     assert.match(output.stdout,/MACHINE_UPDATE_SIGNED_SQLITE_ROLLBACK_AUTHORITY_REQUIRED/);
-    assert.doesNotMatch(output.stdout,/UNAUTHORIZED_(START|RESTORE|HEALTH)|STATUS=rolled_back/);
+    assert.doesNotMatch(output.stdout,/UNAUTHORIZED_(START|RESTORE|HEALTH|ENABLE|CLEAR)|STATUS=rolled_back/);
     if(s.stopFail)assert.match(output.stdout,/STOP_SYNTHETIC_FAILURE/);
   });
 }

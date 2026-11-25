@@ -10,6 +10,7 @@ on:
       - 'test/machine-update-preflight-no-task-bounce.test.ts'
       - 'test/machine-update-task-plan-fail-closed.test.ts'
       - 'test/machine-update.test.ts'
+      - 'test/ai05/persistent-scheduler-activation-fence.test.ts'
 permissions:
   contents: read
 jobs:
@@ -44,5 +45,5 @@ jobs:
           test "$RUNNER_ENVIRONMENT" = github-hosted
           test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
           tap="$RUNNER_TEMP/ai05-machine-rollback.tap"
-          node --test --test-reporter=tap --test-concurrency=1 --import tsx test/machine-update-rollback-integrity.test.ts test/machine-update-rollback-listener-identity.test.ts test/machine-update-preflight-no-task-bounce.test.ts test/machine-update-task-plan-fail-closed.test.ts test/machine-update.test.ts | tee "$tap"
-          node --input-type=module -e 'import {readFileSync} from "node:fs"; import {assertTapSummary} from "./scripts/ci/assert-tap-summary.mjs"; const counts=assertTapSummary(readFileSync(process.argv[1],"utf8"),30); if(counts.tests!==30)throw Error("EXACT_COUNT_MISMATCH"); console.log(JSON.stringify(counts));' "$tap"
+          node --test --test-reporter=tap --test-concurrency=1 --import tsx test/machine-update-rollback-integrity.test.ts test/machine-update-rollback-listener-identity.test.ts test/machine-update-preflight-no-task-bounce.test.ts test/machine-update-task-plan-fail-closed.test.ts test/machine-update.test.ts test/ai05/persistent-scheduler-activation-fence.test.ts | tee "$tap"
+          node --input-type=module -e 'import {readFileSync} from "node:fs"; import {assertTapSummary} from "./scripts/ci/assert-tap-summary.mjs"; const counts=assertTapSummary(readFileSync(process.argv[1],"utf8"),40); if(counts.tests!==40)throw Error("EXACT_COUNT_MISMATCH"); console.log(JSON.stringify(counts));' "$tap"
