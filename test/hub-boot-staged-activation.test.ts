@@ -1,11 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {readFileSync,mkdtempSync,writeFileSync,rmSync} from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import ts from 'typescript';
 import {spawnSync} from 'node:child_process';
 import {
   assessWindowsUnattendedRebootReadiness,
   hubBootStartupSettingsProbe,hubBootStagedActivationGuard,
   hubBootUserTaskVisibilityProbe,hubBootUserTaskAbsenceGuard,
+  hubBootTaskVisibilityProbe,hubBootInstallTaskAbsenceGuard,
+  hubBootRegisteredTaskIdentityGuard,hubBootRollbackTaskOwnershipGuard,
 } from '../src/hub/hub-boot-lifecycle.js';
 
 const source=readFileSync(new URL('../src/hub/hub-boot-lifecycle.ts',import.meta.url),'utf8');
@@ -153,4 +158,80 @@ test('reboot topology needs explicit enabled-state evidence and never implies re
   }
   assert.equal(assessWindowsUnattendedRebootReadiness(valid).remoteRebootAccepted,false);
   assert.match(source,/\$_\.Enabled -is \[bool\]/);
+});
+
+
+test('automatic rollback requires an unchanged disabled legacy task after mutation attempt',{
+  skip:!win,
+},()=>{
+  const line=install.split('\n').find(l=>l.includes("HUB_USER_TASK_ROLLBACK_STATE_UNVERIFIED"));
+  assert.ok(line);
+  const guard=JSON.parse(line.trim().replace(/,$/,'')) as string;
+  for(const [state,restore,allowed] of [
+    ['Disabled',true,true],['Ready',true,false],['Running',true,false],
+    ['Missing',true,false],['Running',false,true],['Missing',false,true],
+  ] as const){
+    const result=runPS([
+      "$ErrorActionPreference='Stop'",
+      "$restoreLegacyState=$"+(restore?'true':'false'),
+      state==='Missing'?'$userTask=$null':"$userTask=[pscustomobject]@{State='"+state+"'}",
+      'try {',guard,"'ALLOWED'",
+      "}catch{if($_.Exception.Message -cne 'HUB_USER_TASK_ROLLBACK_STATE_UNVERIFIED'){throw};'DENIED'}",
+    ].join('\n'));
+    assert.equal(result,allowed?'ALLOWED':'DENIED',state);
+  }
+});
+
+test('exact generated handoff and rollback scripts parse in PowerShell and fit the Windows command line',{
+  skip:!win,
+},(t)=>{
+  const substitutions:Record<string,string>={
+    hubBootTaskVisibilityProbe,hubBootInstallTaskAbsenceGuard,
+    hubBootUserTaskVisibilityProbe,hubBootUserTaskAbsenceGuard,
+    hubBootRegisteredTaskIdentityGuard,hubBootRollbackTaskOwnershipGuard,
+    hubBootStartupSettingsProbe,hubBootStagedActivationGuard,
+    "'$marker='+psLiteral(installMarker)":"$marker='fixture-marker'",
+    "'$expectedLegacyState='+psLiteral(taskPreflight.legacyState)":"$expectedLegacyState='Disabled'",
+    "'$port='+String(port)":"$port=43110",
+    "'$restoreLegacyState='+(disposition==='rollback-boot-and-legacy'?'$true':'$false')":"$restoreLegacyState=$true",
+  };
+  const root=mkdtempSync(path.join(os.tmpdir(),'nx-ai01-parse-only-'));
+  t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const phases=[
+    ['handoff','handoffReceipt=HubBootHandoffReceiptSchema.parse(await runPowerShellJson<unknown>('],
+    ['rollback','await runPowerShellJson<{ ok: true }>'],
+  ] as const;
+  for(const [label,anchor] of phases){
+    const offset=install.indexOf(anchor,label==='rollback'?install.indexOf('let taskRollbackFailure'):0);
+    assert.ok(offset>=0,label);
+    const begin=install.indexOf('[',offset);
+    const end=install.indexOf("].join('\\n')",begin);
+    assert.ok(begin>offset&&end>begin,label);
+    const ast=ts.createSourceFile('fixture.ts','const commands='+install.slice(begin,end+1)+';',
+      ts.ScriptTarget.ESNext,true);
+    const statement=ast.statements[0];
+    assert.ok(statement&&ts.isVariableStatement(statement));
+    const initializer=statement.declarationList.declarations[0]?.initializer;
+    assert.ok(initializer&&ts.isArrayLiteralExpression(initializer));
+    const script=initializer.elements.map(el=>{
+      if(ts.isStringLiteralLike(el))return el.text;
+      const raw=el.getText(ast);
+      const value=substitutions[raw];
+      assert.notEqual(value,undefined,'Unreviewed generated expression: '+raw);
+      return value;
+    }).join('\n');
+    // Conservative upper bound: every slash and quote may require escaping,
+    // plus overhead for the fixed executable, arguments and synthetic paths.
+    const upper=script.length+(script.match(/[\\"]/g)??[]).length+512;
+    assert.ok(upper<32767,label+' command-line upper bound '+upper);
+    const file=path.join(root,label+'.ps1');
+    writeFileSync(file,script,'utf8');
+    const quoted="'"+file.replaceAll("'","''")+"'";
+    const result=JSON.parse(runPS([
+      "$ErrorActionPreference='Stop'","$tokens=$null;$errors=$null",
+      "$null=[System.Management.Automation.Language.Parser]::ParseFile("+quoted+",[ref]$tokens,[ref]$errors)",
+      '[pscustomobject]@{count=@($errors).Count;messages=@($errors|ForEach-Object {$_.Message})}|ConvertTo-Json -Compress',
+    ].join('\n')));
+    assert.equal(result.count,0,label+': '+JSON.stringify(result.messages));
+  }
 });
