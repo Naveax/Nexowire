@@ -8,6 +8,7 @@
 #include <windows.h>
 #include <wtsapi32.h>
 #include <sddl.h>
+#include <aclapi.h>
 #include <bcrypt.h>
 #include <wintrust.h>
 #include <softpub.h>
@@ -132,6 +133,23 @@ static BOOL signature(HANDLE f,const wchar_t *file,const BYTE expected[32]){
   }
   data.dwStateAction=WTD_STATEACTION_CLOSE;(void)WinVerifyTrust(NULL,&action,&data);return ok;
 }
+/* Do not permit medium-integrity peers to open the newly created helper
+ * or its suspended thread for injection or handle duplication. Explicit
+ * SYSTEM owner and protected DACL are verified from held kernel handles. */
+static BOOL system_only_object(HANDLE object){
+  PSID owner=NULL;PACL dacl=NULL;PSECURITY_DESCRIPTOR sd=NULL;BOOL ok=FALSE;
+  DWORD err=GetSecurityInfo(object,SE_KERNEL_OBJECT,OWNER_SECURITY_INFORMATION|DACL_SECURITY_INFORMATION,
+    &owner,NULL,&dacl,NULL,&sd);
+  if(err==ERROR_SUCCESS&&owner&&IsWellKnownSid(owner,WinLocalSystemSid)&&dacl&&IsValidAcl(dacl)&&dacl->AceCount==1){
+    void *raw=NULL;SECURITY_DESCRIPTOR_CONTROL ctl=0;DWORD revision=0;
+    if(GetSecurityDescriptorControl(sd,&ctl,&revision)&&(ctl&SE_DACL_PROTECTED)&&GetAce(dacl,0,&raw)&&raw){
+      ACCESS_ALLOWED_ACE *ace=(ACCESS_ALLOWED_ACE *)raw;
+      if(ace->Header.AceType==ACCESS_ALLOWED_ACE_TYPE&&!ace->Header.AceFlags&&
+        IsWellKnownSid((PSID)&ace->SidStart,WinLocalSystemSid))ok=TRUE;
+    }
+  }
+  if(sd)LocalFree(sd);return ok;
+}
 static BOOL job_empty(HANDLE job){
   JOBOBJECT_BASIC_ACCOUNTING_INFORMATION a={0};
   return QueryInformationJobObject(job,JobObjectBasicAccountingInformation,&a,sizeof(a),NULL)&&a.ActiveProcesses==0;
@@ -151,8 +169,14 @@ int wmain(int argc,wchar_t **argv){
     !hex(argv[8],artifactHash,32)||!hex(argv[9],signerHash,32))return 64;
   if(!system_primary())return denied("SYSTEM_SESSION_ZERO_REQUIRED");
   if(!ConvertStringSidToSidW(argv[5],&sid))return 64;
+  LPWSTR canonicalSid=NULL;
+  if(!ConvertSidToStringSidW(sid,&canonicalSid)||wcscmp(canonicalSid,argv[5])){
+    if(canonicalSid)LocalFree(canonicalSid);LocalFree(sid);return 64;
+  }
+  LocalFree(canonicalSid);
   HANDLE owner=NULL,current=NULL,file=INVALID_HANDLE_VALUE,job=NULL,pipe=INVALID_HANDLE_VALUE,event=NULL,childToken=NULL;
-  PSECURITY_DESCRIPTOR descriptor=NULL;PROCESS_INFORMATION child={0};BOOL drained=FALSE,success=FALSE;
+  PSECURITY_DESCRIPTOR descriptor=NULL,childDescriptor=NULL;PROCESS_INFORMATION child={0};BOOL drained=FALSE,success=FALSE;
+  OVERLAPPED ov={0};BOOL pending=FALSE;
   const char *reason="OWNER_BINDING_UNAVAILABLE";
   wchar_t helper[MAX_PATH]={0},pipeName[128]={0},sddl[400]={0},command[4096]={0};
   char output[8193]={0};DWORD used=0;
@@ -166,23 +190,25 @@ int wmain(int argc,wchar_t **argv){
   BY_HANDLE_FILE_INFORMATION fi={0};
   if(file==INVALID_HANDLE_VALUE||!GetFileInformationByHandle(file,&fi)||
     fi.nNumberOfLinks!=1||(fi.dwFileAttributes&(FILE_ATTRIBUTE_REPARSE_POINT|FILE_ATTRIBUTE_DIRECTORY))||
-    !sha256_file(file,artifactHash)||!signature(file,helper,signerHash))goto done;
+    !sha256_file(file,artifactHash))goto done;
+  LARGE_INTEGER start={0};if(!SetFilePointerEx(file,start,NULL,FILE_BEGIN)||!signature(file,helper,signerHash))goto done;
   reason="PIPE_SETUP";
   if(BCryptGenRandom(NULL,nonce,sizeof(nonce),BCRYPT_USE_SYSTEM_PREFERRED_RNG)!=0)goto done;
   wchar_t nameHex[65]={0};const wchar_t alphabet[]=L"0123456789abcdef";
   for(size_t i=0;i<sizeof(nonce);i++){nameHex[i*2]=alphabet[nonce[i]>>4];nameHex[i*2+1]=alphabet[nonce[i]&15];}
   if(swprintf_s(pipeName,128,L"\\\\.\\pipe\\Nexowire.CoreOwnerAssertion.%ls",nameHex)<0||
-    swprintf_s(sddl,400,L"D:P(A;;GA;;;SY)(A;;GW;;;%ls)",argv[5])<0||
+    swprintf_s(sddl,400,L"D:P(A;;GA;;;SY)(A;;0x00100002;;;%ls)",argv[5])<0||
     !ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl,SDDL_REVISION_1,&descriptor,NULL))goto done;
   SECURITY_ATTRIBUTES sa={sizeof(sa),descriptor,FALSE};
   pipe=CreateNamedPipeW(pipeName,PIPE_ACCESS_INBOUND|FILE_FLAG_OVERLAPPED|FILE_FLAG_FIRST_PIPE_INSTANCE,
     PIPE_TYPE_BYTE|PIPE_READMODE_BYTE|PIPE_WAIT|PIPE_REJECT_REMOTE_CLIENTS,1,8192,8192,0,&sa);
   if(pipe==INVALID_HANDLE_VALUE)goto done;
   event=CreateEventW(NULL,TRUE,FALSE,NULL);if(!event)goto done;
-  OVERLAPPED ov={0};ov.hEvent=event;
+  ov.hEvent=event;
   BOOL connected=ConnectNamedPipe(pipe,&ov);DWORD err=connected?ERROR_SUCCESS:GetLastError();
   if(!connected&&err==ERROR_PIPE_CONNECTED){connected=TRUE;SetEvent(event);}
   else if(!connected&&err!=ERROR_IO_PENDING)goto done;
+  else if(!connected)pending=TRUE;
   reason="JOB_SETUP";
   job=CreateJobObjectW(NULL,NULL);if(!job)goto done;
   JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits={0};
@@ -196,21 +222,25 @@ int wmain(int argc,wchar_t **argv){
   STARTUPINFOW si={0};si.cb=sizeof(si);wchar_t desktop[]=L"winsta0\\default";si.lpDesktop=desktop;
   wchar_t environment[]=L"PATH=C:\\Windows\\System32;C:\\Windows\0SystemRoot=C:\\Windows\0windir=C:\\Windows\0";
   reason="CHILD_CREATE";
+  if(!ConvertStringSecurityDescriptorToSecurityDescriptorW(L"O:SYG:SYD:P(A;;GA;;;SY)",SDDL_REVISION_1,&childDescriptor,NULL))goto done;
+  SECURITY_ATTRIBUTES childSa={sizeof(childSa),childDescriptor,FALSE};
   /* bInheritHandles=FALSE is essential across Windows sessions. */
-  if(!CreateProcessAsUserW(owner,helper,command,NULL,NULL,FALSE,
+  if(!CreateProcessAsUserW(owner,helper,command,&childSa,&childSa,FALSE,
     CREATE_SUSPENDED|CREATE_UNICODE_ENVIRONMENT|CREATE_NO_WINDOW,environment,L"C:\\Windows\\System32",&si,&child))goto done;
   reason="CHILD_BINDING";
   BOOL inside=FALSE;wchar_t image[MAX_PATH]={0};DWORD imageLength=MAX_PATH;
   if(!AssignProcessToJobObject(job,child.hProcess)||!IsProcessInJob(child.hProcess,job,&inside)||!inside||
     !QueryFullProcessImageNameW(child.hProcess,0,image,&imageLength)||_wcsicmp(image,helper)||
-    !OpenProcessToken(child.hProcess,TOKEN_QUERY,&childToken)||!owner_token(childToken,sid,session,logon))goto done;
+    !OpenProcessToken(child.hProcess,TOKEN_QUERY,&childToken)||!owner_token(childToken,sid,session,logon)||
+    !system_only_object(child.hProcess)||!system_only_object(child.hThread))goto done;
   if(ResumeThread(child.hThread)==(DWORD)-1)goto done;
   ULONGLONG until=GetTickCount64()+95000;
   reason="PIPE_CLIENT_UNVERIFIED";
   if(!connected){
     HANDLE waits[2]={event,child.hProcess};
     if(WaitForMultipleObjects(2,waits,FALSE,5000)!=WAIT_OBJECT_0)goto done;
-    DWORD transferred=0;if(!GetOverlappedResult(pipe,&ov,&transferred,FALSE))goto done;
+    DWORD transferred=0;BOOL completed=GetOverlappedResult(pipe,&ov,&transferred,FALSE);pending=FALSE;
+    if(!completed)goto done;
   }
   ULONG pid=0;if(!GetNamedPipeClientProcessId(pipe,&pid)||pid!=child.dwProcessId||
     WaitForSingleObject(child.hProcess,0)!=WAIT_TIMEOUT)goto done;
@@ -222,11 +252,11 @@ int wmain(int argc,wchar_t **argv){
       err=GetLastError();
       if(err==ERROR_BROKEN_PIPE)break;
       if(err!=ERROR_IO_PENDING)goto done;
+      pending=TRUE;
       ULONGLONG now=GetTickCount64();
       if(now>=until||WaitForSingleObject(event,(DWORD)(until-now))!=WAIT_OBJECT_0)goto done;
-      if(!GetOverlappedResult(pipe,&ov,&got,FALSE)){
-        if(GetLastError()==ERROR_BROKEN_PIPE)break;goto done;
-      }
+      BOOL completed=GetOverlappedResult(pipe,&ov,&got,FALSE);pending=FALSE;
+      if(!completed){if(GetLastError()==ERROR_BROKEN_PIPE)break;goto done;}
     }
     if(!got)break;used+=got;if(used>=sizeof(output)-1)goto done;
   }
@@ -249,7 +279,14 @@ done:
   }
   if(pipe!=INVALID_HANDLE_VALUE){
     /* OVERLAPPED storage remains alive through cancellation completion. */
-    if(!CancelIoEx(pipe,NULL)&&GetLastError()!=ERROR_NOT_FOUND)success=FALSE;
+    if(pending){
+      if(!CancelIoEx(pipe,&ov)&&GetLastError()!=ERROR_NOT_FOUND)success=FALSE;
+      if(WaitForSingleObject(event,2000)!=WAIT_OBJECT_0){
+        /* Process termination tears down the kernel I/O and all held handles. */
+        ExitProcess(77);
+      }
+      DWORD ignored=0;(void)GetOverlappedResult(pipe,&ov,&ignored,FALSE);
+    }
     CloseHandle(pipe);
   }
   if(event)CloseHandle(event);
@@ -261,6 +298,7 @@ done:
   if(owner)CloseHandle(owner);
   if(current)CloseHandle(current);
   if(descriptor)LocalFree(descriptor);
+  if(childDescriptor)LocalFree(childDescriptor);
   if(sid)LocalFree(sid);
   if(!success)return denied(reason);
   if(fwrite(output,1,used,stdout)!=(size_t)used||fflush(stdout)!=0)return 77;
