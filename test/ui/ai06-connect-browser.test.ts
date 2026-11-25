@@ -70,7 +70,7 @@ async function until<T>(label:string,read:()=>Promise<T>,accept:(value:T)=>boole
 
 test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pairing', {
   skip:enabled?false:'Linux Chromium CI or NEXOWIRE_AI06_BROWSER opt-in required',
-  timeout:150_000,
+  timeout:180_000,
 },async t=>{
   const browser=[process.env.NEXOWIRE_AI06_BROWSER,process.env.CHROME_BIN,'/usr/bin/google-chrome',
     '/usr/bin/google-chrome-stable','/usr/bin/chromium','/usr/bin/chromium-browser']
@@ -79,10 +79,21 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
   const files=new Map([
     ['/connect.html',{mime:'text/html; charset=utf-8',body:readFileSync('web/connect.html')}],
     ['/connect.js',{mime:'text/javascript; charset=utf-8',body:readFileSync('web/connect.js')}],
+    ['/index.html',{mime:'text/html; charset=utf-8',body:readFileSync('web/index.html')}],
+    ['/app.js',{mime:'text/javascript; charset=utf-8',body:readFileSync('web/app.js')}],
     ['/styles.css',{mime:'text/css; charset=utf-8',body:readFileSync('web/styles.css')}],
   ]);
   let requests=0;
   let offline=false;
+  let dashboardMode=false;
+  let coreEnabled=true;
+  let enrollmentPending=false;
+  let remoteAuthorizationState:'ACTIVE'|'REVOKED'='ACTIVE';
+  let remoteAuthorizationEpoch=7;
+  let remoteObservedAtMs:number|null=null;
+  let releaseConsent!:()=>void;
+  const consentResponseGate=new Promise<void>(resolve=>{releaseConsent=resolve});
+  const corePosts:{route:string;body:unknown;confirm:string|undefined}[]=[];
   const server=createServer((req,res)=>{
     const route=new URL(req.url??'/','http://127.0.0.1').pathname;
     res.setHeader('Cache-Control','no-store');
@@ -98,6 +109,22 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
     }
     if(req.method==='GET'&&route==='/api/v1/me/dashboard'){
       res.writeHead(200,{'content-type':'application/json'});
+      if(dashboardMode){
+        res.end(JSON.stringify({accountId:'fixture-owner',displayName:'Fixture owner',planId:'free',
+          billingMode:'free',usage:{usedCredits:0,monthlyCredits:1000,prepaidCredits:null},
+          folders:[],autoSelectDevices:false,devices:[{
+            id:deviceId,name:'Fixture device',platform:'win32',online:true,accessMode:'full',
+            privilegeMode:'broker',adminBridgeReady:true,agentVersion:'1.0.8',
+            rootMode:{active:false,expiresAt:null},bridgePreference:{desiredMode:'auto',applied:false},
+            persistentMaintenance:{enabled:coreEnabled,active:false},
+            coreRevocation:{version:1,source:'D1_REMOTE_AUTHORIZATION',
+              remoteAuthorization:{state:remoteAuthorizationState,authorizationEpoch:remoteAuthorizationEpoch,
+                observedAtMs:remoteObservedAtMs??Date.now()},
+              localStop:'UNKNOWN',pendingRevoke:'UNKNOWN',nativeDrain:'UNKNOWN',effectReadback:'UNKNOWN',nativeEvidence:'NOT_AVAILABLE'},
+            physicalConsole:{active:false,localEnrolled:false,deviceReady:true,
+              enrollmentRequested:enrollmentPending,observedAtMs:null},
+          }]}));return;
+      }
       res.end(JSON.stringify({corePhysicalStatusVerifierInstalled:true,devices:[{
         id:deviceId,platform:'win32',online:!offline,accessMode:'full',
         privilegeMode:'broker',adminBridgeReady:true,persistentMaintenance:{enabled:true},
@@ -109,12 +136,37 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
       res.writeHead(503,{'content-type':'application/json'});
       res.end(JSON.stringify({error:sentinel}));return;
     }
+    if(req.method==='POST'&&dashboardMode&&
+        (route==='/api/v1/me/devices/core-enrollment-request'||route==='/api/v1/me/devices/core-preference')){
+      let raw='';
+      req.setEncoding('utf8');
+      req.on('data',(chunk:string)=>{raw+=chunk;if(raw.length>4096)req.destroy()});
+      req.on('end',async()=>{
+        let body:{deviceId?:string;enabled?:boolean};
+        try{body=JSON.parse(raw)}catch{res.writeHead(400);res.end();return}
+        const confirm=req.headers['x-nexowire-confirm'];
+        corePosts.push({route,body,confirm:typeof confirm==='string'?confirm:undefined});
+        if(body.deviceId!==deviceId){res.writeHead(400);res.end();return}
+        if(route.endsWith('/core-enrollment-request')){
+          await consentResponseGate;
+          res.writeHead(503,{'content-type':'application/json'});
+          res.end(JSON.stringify({error:sentinel}));return;
+        }
+        if(body.enabled!==false){res.writeHead(400);res.end();return}
+        coreEnabled=false;enrollmentPending=false;
+        res.writeHead(200,{'content-type':'application/json'});
+        res.end(JSON.stringify({deviceId,persistentMaintenance:{enabled:false,active:false,updatedAt:new Date().toISOString()}}));
+      });return;
+    }
     res.writeHead(404);res.end();
   });
   const root=await mkdtemp(join(tmpdir(),'nw-ai06-chromium-'));
   let ws:WebSocket|undefined;
+  let secondWs:WebSocket|undefined;
   let child:ReturnType<typeof spawn>|undefined;
   t.after(async()=>{
+    releaseConsent();
+    if(secondWs){secondWs.terminate();secondWs=undefined}
     if(ws){ws.terminate();ws=undefined}
     if(child&&child.exitCode===null&&child.signalCode===null){
       child.kill('SIGTERM');
@@ -298,4 +350,108 @@ test('AI-06 real Chromium: connect UI layout, keyboard, media and uncertain pair
   await until('offline dashboard ready',()=>evaluate<string>('document.querySelector("#status-title").textContent'),value=>value==='Eşleştirmeye hazır');
   assert.equal(await evaluate<string>('document.querySelector("#core-status-code").textContent'),'UNKNOWN');
   assert.equal(requests,1);
+
+  // Exercise the actual dashboard UI against the production-shaped contract,
+  // not a separate sample HTML or a claimed native Windows effect.
+  dashboardMode=true;
+  await send('Emulation.setDeviceMetricsOverride',{width:768,height:850,deviceScaleFactor:1,mobile:false});
+  await nav(origin+'/index.html');
+  const coreCopy=()=>evaluate<string>('document.querySelector(".core-copy")?.textContent??""');
+  await until('dashboard CORE eligible',coreCopy,value=>value.includes('ilk yerel onay henüz yok'));
+  assert.equal(await evaluate<boolean>('isSecureContext&&typeof navigator.locks?.request==="function"'),true);
+  // Real second Chromium target in the same browser profile/origin, with a
+  // separately loaded JS module and intentionally stale eligible dashboard.
+  const secondTarget=await send<{targetId:string}>('Target.createTarget',{url:origin+'/index.html'});
+  const secondUrl=await until('second page CDP',async()=>{
+    const response=await fetch('http://127.0.0.1:'+port+'/json/list',{signal:AbortSignal.timeout(2000)});
+    const pages=await response.json() as Array<{id:string;webSocketDebuggerUrl?:string}>;
+    return pages.find(page=>page.id===secondTarget.targetId)?.webSocketDebuggerUrl??'';
+  },value=>value.startsWith('ws://127.0.0.1:'));
+  secondWs=new WebSocket(secondUrl);
+  await new Promise<void>((resolve,reject)=>{secondWs!.once('open',resolve);secondWs!.once('error',reject)});
+  const secondSend=cdp(secondWs);
+  const secondEvaluate=async<T>(expression:string):Promise<T>=>{
+    const response=await secondSend<{result:{value?:T};exceptionDetails?:unknown}>(
+      'Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});
+    assert.equal(response.exceptionDetails,undefined,'second tab evaluation failed');
+    return response.result.value as T;
+  };
+  const secondCopy=()=>secondEvaluate<string>('document.querySelector(".core-copy")?.textContent??""');
+  await until('second tab eligible',secondCopy,value=>value.includes('ilk yerel onay henüz yok'));
+  await send('Page.bringToFront');
+  const activate=async(selector:string)=>{
+    await evaluate('document.querySelector('+JSON.stringify(selector)+').focus()');
+    assert.equal(await evaluate<boolean>('document.activeElement.matches('+JSON.stringify(selector)+')'),true);
+    await key('Enter','Enter',13);
+  };
+  await activate('.core-shortcut');
+  assert.equal(await evaluate<boolean>('document.querySelector(".core-enrollment-retry").hidden'),false);
+  await activate('.core-enrollment-retry');
+  await until('dashboard consent POST',async()=>corePosts.length,value=>value>=1);
+  // The first POST has crossed the HTTP boundary and its response is held.
+  // A separately loaded tab cannot submit an old eligible card.
+  const fenceCount=()=>evaluate<number>('Object.keys(localStorage).filter(k=>k.startsWith("nexowire-core-uncertain-v1:")).length');
+  assert.equal(await fenceCount(),1,'durable marker exists before POST ACK');
+  await secondEvaluate('document.querySelector(".core-enrollment-retry").dispatchEvent(new Event("click"))');
+  await delay(150);
+  assert.equal(corePosts.length,1,'cross-tab attempt must not create another POST');
+  releaseConsent();
+  await until('dashboard uncertain readback',coreCopy,value=>value.includes('sonucu belirsiz'));
+  assert.equal(corePosts.length,1);
+  assert.deepEqual(corePosts[0],{route:'/api/v1/me/devices/core-enrollment-request',
+    body:{deviceId},confirm:'core-enrollment-request-v1'});
+  assert.equal(await evaluate<boolean>('document.querySelector(".core-enrollment-retry").hidden'),true);
+  assert.equal(await evaluate<boolean>('document.querySelector(".core-enrollment-retry").disabled'),true);
+  assert.equal(await evaluate<boolean>('document.body.innerText.includes('+JSON.stringify(sentinel)+')'),false);
+  // Reload destroys the original module/Map; the same-origin marker survives.
+  await evaluate('globalThis.__ai06BeforeReload=true');
+  await send('Page.reload',{ignoreCache:true});
+  await until('new document after reload',()=>evaluate<boolean>('!globalThis.__ai06BeforeReload&&document.readyState==="complete"'),Boolean);
+  await until('reload retains uncertain CORE',coreCopy,value=>value.includes('sonucu belirsiz'));
+  assert.equal(await fenceCount(),1);
+  assert.equal(await evaluate<boolean>('document.querySelector(".core-enrollment-retry").disabled'),true);
+  await evaluate('document.querySelector(".core-enrollment-retry").dispatchEvent(new Event("click"))');
+  await delay(100);
+  assert.equal(corePosts.length,1);
+  await activate('.core-shortcut');
+  // Refreshing an unchanged dashboard is not proof of non-execution.
+  await activate('.core-readback');
+  await until('unchanged GET preserves uncertain state',coreCopy,value=>value.includes('sonucu belirsiz'));
+  assert.equal(corePosts.length,1);
+  // The later owner-bound backend GET reports the request recorded.
+  enrollmentPending=true;
+  await activate('.core-readback');
+  await until('pending readback',coreCopy,value=>value.includes('sunucuda kayıtlı'));
+  assert.match(await coreCopy(),/teslimi.*doğrulanmadı/);
+  assert.equal(await evaluate<boolean>('document.querySelector(".core-enrollment-retry").hidden'),true);
+  assert.equal(await evaluate<boolean>('document.querySelector(".core-toggle").disabled'),false);
+  assert.equal(await fenceCount(),0,'matching recorded-request GET reconciles marker');
+  // Second tab still has the original card. Its locked fresh GET must deny the
+  // stale consent even after another tab reconciles the marker.
+  await secondEvaluate('document.querySelector(".core-enrollment-retry").dispatchEvent(new Event("click"))');
+  await until('stale second tab receives pending GET',secondCopy,value=>value.includes('sunucuda kayıtlı'));
+  assert.equal(corePosts.length,1);
+  secondWs.terminate();secondWs=undefined;
+  await send('Target.closeTarget',{targetId:secondTarget.targetId});
+  await activate('.core-toggle');
+  await until('dashboard preference OFF readback',coreCopy,value=>value.includes('hesap tercihini kapalı bildiriyor'));
+  assert.equal(corePosts.length,2);
+  assert.deepEqual(corePosts[1],{route:'/api/v1/me/devices/core-preference',body:{deviceId,enabled:false},confirm:undefined});
+  assert.match(await coreCopy(),/yerel STOP.*kanıtı değildir/);
+  assert.equal(await evaluate<string>('document.querySelector(".core-shortcut").textContent'),'CORE');
+  // Exact AI-03 #1330 v1 shape. Preference OFF does not imply remote revoke.
+  assert.match(await coreCopy(),/ACTIVE \(epoch 7\)/);
+  remoteAuthorizationState='REVOKED';remoteAuthorizationEpoch=8;
+  await activate('.core-readback');
+  await until('D1 remote revoke readback',coreCopy,value=>value.includes('REVOKED (epoch 8)'));
+  assert.match(await coreCopy(),/yerel STOP veya drain kanıtı değildir/);
+  assert.equal(corePosts.length,2,'readback must not dispatch a remote mutation');
+  // A near-expiry backend observation must expire on the already rendered card.
+  remoteObservedAtMs=Date.now()-14000;
+  await activate('.core-readback');
+  await until('D1 readback expired',coreCopy,value=>value.includes('Uzaktan yetki kaydı: UNKNOWN'));
+  assert.doesNotMatch(await coreCopy(),/REVOKED \(epoch/);
+  assert.equal(corePosts.length,2);
+  t.diagnostic('AI-03 v1 real Chromium: D1 ACTIVE/REVOKED epoch, expired UNKNOWN, no local STOP or drain proof');
+  t.diagnostic('Dashboard real Chromium: cross-tab and reload no replay, stale-card preflight GET, one consent POST, one explicit OFF POST, no native STOP assertion');
 });
