@@ -15,6 +15,7 @@ class Element {
   readonly attributes:Record<string,string>={};
   addEventListener(name:string,fn:(event?:unknown)=>unknown){this.handlers[name]=fn}
   setAttribute(name:string,value:string){this.attributes[name]=value}
+  removeAttribute(name:string){delete this.attributes[name]}
   focus(){this.focused=true}select(){this.selected=true}
   closest(_selector:string){return this.row??this}
   row?:Element;
