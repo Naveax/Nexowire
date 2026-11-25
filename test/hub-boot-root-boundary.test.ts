@@ -52,18 +52,14 @@ test('Hub Boot install checks task identity before reading DPAPI and rechecks be
     'rollback also checks task identity before removing it');
 });
 
-test('Hub Boot uninstall refuses foreign tasks before stop, unregister or restoring user Hub',()=>{
+test('standalone Hub Boot uninstall rejects caller-selected names and cannot mutate any task',()=>{
   const src=readFileSync(new URL('../src/hub/hub-boot-lifecycle.ts',import.meta.url),'utf8');
   const begin=src.indexOf('export async function uninstallHubBootLifecycle(');
-  const end=src.indexOf('export async function runHubBootLifecycleCommand(',begin);
+  const end=src.indexOf('export interface WindowsRebootAgentTaskEvidence',begin);
   const uninstall=src.slice(begin,end);
-  const names=uninstall.indexOf('assertCanonicalHubBootTaskNames(options)');
-  const guard=uninstall.indexOf('hubBootRegisteredTaskIdentityGuard');
-  const stop=uninstall.indexOf('Stop-ScheduledTask -TaskName $boot');
-  const unregister=uninstall.indexOf('Unregister-ScheduledTask -TaskName $boot');
-  const user=uninstall.indexOf('Enable-ScheduledTask -TaskName $user');
-  assert.ok(names>=0 && names<guard && guard<stop && stop<unregister && unregister<user);
-  assert.match(uninstall,/Get-ScheduledTask -TaskName \$boot -TaskPath/);
+  assert.match(uninstall,/assertCanonicalHubBootTaskNames\(options\)/);
+  assert.match(uninstall,/HUB_BOOT_UNINSTALL_COORDINATED_RECOVERY_REQUIRED/);
+  assert.doesNotMatch(uninstall,/(?:Stop|Start|Enable|Disable|Register|Unregister)-ScheduledTask|runPowerShellJson/);
 });
 
 test('Hub Boot status reports installed only for canonical verified Task Scheduler identity',()=>{
@@ -166,32 +162,27 @@ test('Hub Boot installer never overwrites an existing SYSTEM task and limits rol
   assert.match(install,/HUB_BOOT_EXISTING_ROOT_INSTALL_DENIED/);
 });
 
-test('Hub Boot uninstall checks private parent ACL before task changes and again before deleting files',()=>{
+test('standalone Hub Boot uninstall preserves protected files for coordinated recovery',()=>{
   const src=readFileSync(new URL('../src/hub/hub-boot-lifecycle.ts',import.meta.url),'utf8');
   const begin=src.indexOf('export async function uninstallHubBootLifecycle(');
-  const end=src.indexOf('export async function runHubBootLifecycleCommand(',begin);
+  const end=src.indexOf('export interface WindowsRebootAgentTaskEvidence',begin);
   const uninstall=src.slice(begin,end);
-  const parent=uninstall.indexOf('const parent=path.win32.dirname(p.root)');
-  const firstAcl=uninstall.indexOf('verifyWindowsPrivateAcl(parent)');
-  const firstTree=uninstall.indexOf('await assertHubBootRootSafeToRemove(p.root)');
-  const task=uninstall.indexOf('await runPowerShellJson<');
-  const finalAcl=uninstall.indexOf('verifyWindowsPrivateAcl(parent)',firstAcl+1);
-  const finalTree=uninstall.indexOf('await assertHubBootRootSafeToRemove(p.root)',firstTree+1);
-  const remove=uninstall.indexOf('await fs.rm(p.root');
-  assert.ok(parent>=0 && parent<firstAcl && firstAcl<firstTree);
-  assert.ok(firstTree<task && task<finalAcl && finalAcl<finalTree && finalTree<remove);
-  assert.match(uninstall,/verifyWindowsPrivateAcl\(parent\)/);
-  assert.match(uninstall,/await assertHubBootRootSafeToRemove\(p.root\)/);
+  assert.match(uninstall,/HUB_BOOT_UNINSTALL_COORDINATED_RECOVERY_REQUIRED/);
+  assert.doesNotMatch(uninstall,/fs\.|hardenProgramDataAcl|runPowerShellJson/);
 });
 
-test('Hub Boot uninstall validates only its flat protected files before task or recursive deletion',()=>{
+test('protected installation cleanup still rejects unknown or linked files',()=>{
   const src=readFileSync(new URL('../src/hub/hub-boot-lifecycle.ts',import.meta.url),'utf8');
-  const uninstall=src.indexOf('export async function uninstallHubBootLifecycle(');
-  const guard=src.indexOf('await assertHubBootRootSafeToRemove(p.root)',uninstall);
-  const task=src.indexOf('await runPowerShellJson<',uninstall);
-  const deletion=src.indexOf('await fs.rm(p.root',uninstall);
-  assert.ok(uninstall>=0 && guard>uninstall && task>guard && deletion>task);
+  const begin=src.indexOf('export async function installHubBootLifecycle(');
+  const end=src.indexOf('export async function uninstallHubBootLifecycle(',begin);
+  const install=src.slice(begin,end);
   assert.match(src,/if\(!item\.isFile\(\)\|\|item\.isSymbolicLink\(\)\|\|!allowed\.has\(item\.name\)\)/);
   assert.match(src,/HUB_BOOT_UNEXPECTED_REMOVAL_ENTRY/);
   assert.match(src,/HUB_BOOT_UNSAFE_REMOVAL_ROOT/);
+  for(const cleanup of ['} catch (stageError)', 'if(taskRollbackFailure===null)']){
+    const start=install.indexOf(cleanup);
+    const guard=install.indexOf('await assertHubBootRootSafeToRemove(p.root)',start);
+    const deletion=install.indexOf('await fs.rm(p.root',start);
+    assert.ok(start>=0&&guard>start&&deletion>guard);
+  }
 });

@@ -39,17 +39,11 @@ test('installation task rollback checks shared ancestor before removing protecte
   assert.ok(fallback>=0&&gate>fallback&&deletion>gate);
 });
 
-test('SYSTEM boot uninstall guards shared ancestor before task mutation and again before recursive deletion',()=>{
-  const canonical=uninstall.indexOf('assertProtectedHubBootRoot(p.root)');
-  const firstAncestor=uninstall.indexOf('verifyHubBootSharedAncestorTrust()',canonical);
-  const firstAcl=uninstall.indexOf('verifyWindowsPrivateAcl(parent)',firstAncestor);
-  const stopTask=uninstall.indexOf('Stop-ScheduledTask -TaskName $boot');
-  const recheck=uninstall.indexOf('Task Scheduler was operating. Recheck before recursive deletion.');
-  const finalAncestor=uninstall.indexOf('verifyHubBootSharedAncestorTrust()',recheck);
-  const finalAcl=uninstall.indexOf('verifyWindowsPrivateAcl(parent)',recheck);
-  const deleteRoot=uninstall.indexOf('await fs.rm(p.root',0);
-  assert.ok(canonical>=0&&canonical<firstAncestor&&firstAncestor<firstAcl&&firstAcl<stopTask);
-  assert.ok(recheck>stopTask&&finalAncestor>recheck&&finalAcl>finalAncestor&&deleteRoot>finalAcl);
+test('standalone SYSTEM boot uninstall cannot bypass the protected recovery authority',()=>{
+  const end=uninstall.indexOf('export interface WindowsRebootAgentTaskEvidence');
+  const direct=uninstall.slice(0,end);
+  assert.match(direct,/HUB_BOOT_UNINSTALL_COORDINATED_RECOVERY_REQUIRED/);
+  assert.doesNotMatch(direct,/fs\.|runPowerShellJson|(?:Stop|Start|Enable|Disable|Register|Unregister)-ScheduledTask/);
 });
 
 test('the shared ancestor verifier uses exact non-user-writable C:\\ and ProgramData paths',()=>{
