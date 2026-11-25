@@ -4,6 +4,7 @@ import {inspectOfflineSqliteStatus,assertOfflineSqliteNoUnresolvedOperations}
 import {captureLegacyHubStateSnapshotProof} from './ai04-state-snapshot-proof.js';
 import {reviewOfflineSignedSqliteRollback} from './ai02-signed-sqlite-rollback-review.js';
 import {assertDurableRollbackConfirmation} from './ai04-controlled-system-hub-cutover.js';
+import {captureOfflineRecoveryReceiptIdentity} from '../src/hub/offline-recovery-receipt-identity.js';
 
 type ReviewInput=Parameters<typeof reviewOfflineSignedSqliteRollback>[0];
 type ExpectedReceipt=Parameters<typeof assertDurableRollbackConfirmation>[1];
@@ -37,7 +38,7 @@ export async function collectOfflineRecoveryEvidence(input:ReviewInput&{
   const current=input.currentOfflineRoot,preserved=input.preservedOfflineRoot;
   const receipt=input.terminalReceipt?{
     bytes:Buffer.from(input.terminalReceipt.bytes),
-    expected:Object.freeze({...input.terminalReceipt.expected}),
+    expected:captureOfflineRecoveryReceiptIdentity(input.terminalReceipt.expected),
   }:undefined;
   if(purpose==='coordinated-uninstall-review'&&!receipt)fail('TERMINAL_RECEIPT_REQUIRED');
   if(receipt)assertDurableRollbackConfirmation(receipt.bytes,receipt.expected);

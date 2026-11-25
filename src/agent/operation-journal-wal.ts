@@ -25,9 +25,32 @@ export class AgentJournalWalError extends Error {
 // This is not a positive corruption finding, nor proof of a live owner.
 export class AgentJournalWalUnstableError extends Error {
   readonly code='AGENT_JOURNAL_WAL_UNSTABLE';
-  constructor(){
-    super('SQLite WAL-index snapshot remained unstable; mutation dispatch denied.');
+  constructor(reason?:'EAGAIN'|'EINTR'|'EBUSY'){
+    super(reason===undefined?
+      'SQLite WAL-index snapshot remained unstable; mutation dispatch denied.':
+      'SQLite WAL final pathname readback remained unstable ('+reason+'); mutation dispatch denied.');
     this.name='AgentJournalWalUnstableError';
+  }
+}
+
+// Keep only a fixed, redacted errno classification. Raw filesystem error
+// messages and paths must not escape through startup diagnostics.
+function readbackReason(error:unknown):
+  'ENOENT'|'ENOTDIR'|'EAGAIN'|'EINTR'|'EBUSY'|'EACCES'|'EPERM'|
+  'EIO'|'EMFILE'|'ENFILE'|'UNKNOWN'{
+  const code=(error as NodeJS.ErrnoException|null)?.code;
+  switch(code){
+    case 'ENOENT':case 'ENOTDIR':case 'EAGAIN':case 'EINTR':case 'EBUSY':
+    case 'EACCES':case 'EPERM':case 'EIO':case 'EMFILE':case 'ENFILE':
+      return code;
+    default:return 'UNKNOWN';
+  }
+}
+class AgentJournalWalReadbackError extends Error{
+  readonly code='AGENT_JOURNAL_UNAVAILABLE';
+  constructor(reason:ReturnType<typeof readbackReason>){
+    super('SQLite WAL pathname readback unavailable ('+reason+'); mutation dispatch denied.');
+    this.name='AgentJournalWalReadbackError';
   }
 }
 
@@ -78,9 +101,21 @@ function assertSnapshotMetadata(current:FileSnapshot,opened:FileSnapshot,
   }
 }
 async function assertStablePath(file:string,opened:FileSnapshot,
-  retryIndexTimestamp=false):Promise<void>{
+  retryIndexTimestamp=false,retryWalReadback=false):Promise<void>{
   let current;
-  try{current=await fs.lstat(file)}catch{fail();}
+  try{current=await fs.lstat(file)}catch(error){
+    const reason=readbackReason(error);
+    // Observed path loss remains a contradiction, not a fresh clean start.
+    if(reason==='ENOENT'||reason==='ENOTDIR')throw new AgentJournalWalError(
+      'SQLite WAL/SHM pathname disappeared during validation ('+reason+'); mutation dispatch denied.');
+    // Only the final ordinary-WAL readback with a retained index and WAL
+    // witness may restart a full scan on a transient syscall failure.
+    if(retryWalReadback&&(reason==='EAGAIN'||reason==='EINTR'||reason==='EBUSY'))
+      throw new AgentJournalWalUnstableError(reason);
+    // Permission/resource/unknown failures are not positive checksum or
+    // structure contradictions, and are never owner-liveness evidence.
+    throw new AgentJournalWalReadbackError(reason);
+  }
   if(!current.isFile()||current.isSymbolicLink())fail();
   assertSnapshotMetadata(current,opened,retryIndexTimestamp);
 }
@@ -91,7 +126,7 @@ type WalWitness={file:FileSnapshot;header:Buffer;currentFrames:number;
   commitPages:number;digest:Checksum};
 type RetryAnchor={wal:WalWitness;index:FileSnapshot;indexHeaders:Buffer};
 type RetryState={anchor?:RetryAnchor};
-type RetryRead={state:RetryState;wal:WalWitness};
+type RetryRead={state:RetryState;wal:WalWitness;priorClaimsVerified:boolean};
 
 // A stable index snapshot is corroboration, not a trusted rollback witness.
 // A complete WAL may legitimately outlive a missing/uninitialized index.
@@ -126,7 +161,19 @@ async function readIndexSnapshot(dbFile:string,strictShape:boolean,
     }
     const bytes=Buffer.alloc(136);
     await readExactly(handle,bytes,bytes.length,0);
-    if(anchor&&!bytes.subarray(0,96).equals(anchor.indexHeaders))fail();
+    if(anchor&&!bytes.subarray(0,96).equals(anchor.indexHeaders)){
+      // A lagging or split index may finish publishing the already durable
+      // commit while a reader releases its mapping. Byte equality is too
+      // strict for that transition, but never discard observed commit claims.
+      // Every valid old header must have been proved against its actual WAL
+      // commit frame during this full scan. Both new copies must coherently
+      // describe the exact same terminal WAL commit, not an older prefix.
+      if(!retry?.priorClaimsVerified||!coherentIndexHeader(bytes)||
+        !indexHeaderMatchesCommit(bytes.subarray(0,48),retry.wal.header,
+          retry.wal.currentFrames,retry.wal.commitPages,retry.wal.digest))fail();
+      // Preserve the stronger witness even if this attempt is also unstable.
+      anchor.indexHeaders=Buffer.from(bytes.subarray(0,96));
+    }
     if(retry&&!anchor){
       // Preserve both commit-header copies and the fully verified WAL.
       // Reader marks may legitimately move; commit evidence may not vanish.
@@ -152,6 +199,26 @@ function validIndexHeader(bytes:Buffer):boolean{
     (pageSize===0||(pageSize>=512&&pageSize<=65536&&
       (pageSize&(pageSize-1))===0))&&
     u32(40)===checksum.s0&&u32(44)===checksum.s1;
+}
+
+function indexU32(bytes:Buffer,at:number):number{
+  return endianness()==='BE'?bytes.readUInt32BE(at):bytes.readUInt32LE(at);
+}
+function indexHeaderSameGeneration(bytes:Buffer,walHeader:Buffer):boolean{
+  const nativeBig=endianness()==='BE';
+  const encodedPage=nativeBig?bytes.readUInt16BE(14):bytes.readUInt16LE(14);
+  const rawPage=walHeader.readUInt32BE(8);
+  const pageSize=rawPage===1?65536:rawPage;
+  return bytes.subarray(32,40).equals(walHeader.subarray(16,24))&&
+    encodedPage===(pageSize===65536?1:pageSize)&&
+    bytes[13]===Number(walHeader.readUInt32BE(0)===0x377f0683);
+}
+function indexHeaderMatchesCommit(bytes:Buffer,walHeader:Buffer,frames:number,
+  commitPages:number,digest:Checksum):boolean{
+  return commitPages>0&&validIndexHeader(bytes)&&
+    indexHeaderSameGeneration(bytes,walHeader)&&indexU32(bytes,16)===frames&&
+    indexU32(bytes,20)===commitPages&&indexU32(bytes,24)===digest.s0&&
+    indexU32(bytes,28)===digest.s1;
 }
 
 function coherentIndexHeader(bytes:Buffer):boolean{
@@ -288,7 +355,7 @@ export async function verifyAgentJournalWal(dbFile:string):Promise<void>{
     try{await verifyAgentJournalWalOnce(dbFile,state);return;}
     catch(error){
       const wait=backoff[attempt];
-      if(!(error instanceof AgentJournalWalUnstableError)||wait===undefined)throw error;
+      if(!(error instanceof AgentJournalWalUnstableError)||!state.anchor||wait===undefined)throw error;
       await delay(wait);
     }
   }
@@ -364,6 +431,12 @@ async function verifyAgentJournalWalOnce(dbFile:string,state:RetryState):Promise
     }
     const frame=Buffer.allocUnsafe(frameBytes);
     let currentFrames=0,lastCommitPages=0;
+    // At most two anchored, checksummed header claims. Verify each against
+    // the actual committed prefix, not just the terminal frame count. Do
+    // not retain all frame digests or allocate memory proportional to WAL.
+    const priorClaims=anchor?[0,48].map(offset=>
+      anchor.indexHeaders.subarray(offset,offset+48)).filter(validIndexHeader):[];
+    const unmatchedClaims=new Set(priorClaims);
     let oldSalt:Buffer|undefined;
     let oldGenerationDistance=0;
     let reuseIndex:Awaited<ReturnType<typeof readReuseIndex>>|undefined;
@@ -398,6 +471,11 @@ async function verifyAgentJournalWalOnce(dbFile:string,state:RetryState):Promise
          frame.readUInt32BE(20)!==digest.s1)fail();
       currentFrames++;
       lastCommitPages=frame.readUInt32BE(4);
+      for(const claim of unmatchedClaims){
+        if(indexU32(claim,16)===currentFrames&&
+          indexHeaderMatchesCommit(claim,header,currentFrames,lastCommitPages,digest))
+          unmatchedClaims.delete(claim);
+      }
     }
     // A checksummed but uncommitted current-generation suffix may be ignored
     // during SQLite recovery. Do not silently discard possible reservation
@@ -441,8 +519,9 @@ async function verifyAgentJournalWalOnce(dbFile:string,state:RetryState):Promise
     }else{
       await rejectContradictoryCommitIndex(dbFile,header,pageSize,
         currentFrames,lastCommitPages,digest,{state,wal:{file:opened,
-          header,currentFrames,commitPages:lastCommitPages,digest}});
-      await assertStablePath(walFile,opened);
+          header,currentFrames,commitPages:lastCommitPages,digest},
+          priorClaimsVerified:priorClaims.length>0&&unmatchedClaims.size===0});
+      await assertStablePath(walFile,opened,false,Boolean(state.anchor));
     }
   }finally{
     await handle.close();
