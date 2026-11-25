@@ -62,6 +62,11 @@ export class PostgresHelperSelectionAuthority {
       deny('HELPER_AUTHORITY_CONFIGURATION_REQUIRED');
     this.c=Object.freeze({...config,scope:Object.freeze(scope.parse(config.scope))});
   }
+  /** Bind the authenticated server scope to the exact backend identity. */
+  matchesScope(input:HelperAuthorityScope):boolean {
+    const parsed=scope.safeParse(input);
+    return parsed.success&&JSON.stringify(parsed.data)===JSON.stringify(this.c.scope);
+  }
   private async trusted(){
     const p=await this.c.verifyProvenance();
     if(p?.verified!==true||p.authorityId!==this.c.scope.authorityId||!Number.isSafeInteger(p.validUntil)||p.validUntil<=Date.now())

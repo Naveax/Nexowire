@@ -138,6 +138,7 @@ export function createProtectedHelperSelectionServer(config:{
   if(!config.tls?.key||!config.tls.cert||!config.tls.ca||typeof config.resolvePrincipal!=='function'||
     !(config.backend instanceof PostgresHelperSelectionAuthority))return deny('HELPER_SELECTION_SERVER_CONFIG_INVALID');
   const bound=Object.freeze(scope.parse(config.scope)),signer=key(createPrivateKey(config.authorityPrivateKeyPem)),backend=config.backend;
+  if(!backend.matchesScope(bound))return deny('HELPER_SELECTION_BACKEND_SCOPE_MISMATCH');
   async function dispatch(w:Wire){
     const kind=w.role==='runtime'?'RUNTIME':'DEPLOYMENT';
     switch(w.action){

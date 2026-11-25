@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,generateKeyPairSync,sign} from 'node:crypto';
+import {createSignedHelperSelectionEvidenceVerifier,helperEvidenceRequiredFacts} from '../../src/security/signed-helper-selection-evidence.js';
 import {readFile} from 'node:fs/promises';
 import {Pool} from 'pg';
 import {createProtectedHelperSelectionServer,ProtectedHelperSelectionClient} from '../../src/security/protected-helper-selection-transport.js';
@@ -31,10 +32,19 @@ test('durable independent helper selection excludes runtime/deployment, preserve
   let current:HelperSelection={revision:randomUUID(),pin:null};
   await admin.query('INSERT INTO helper_selection.selections(authority_id,device_id,owner_id,device_epoch,session_epoch,owner_epoch,generation,broker_id,revision) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',[...values,current.revision]);
   let allowRelease=true,allowCommit=true;
-  const verifyEvidence=async(v:HelperAuthorityEvidenceRequest)=>{
-    assert.deepEqual(v.scope,scope);
-    return v.phase==='RELEASE'?allowRelease:v.phase==='COMMIT'?allowCommit:true;
-  };
+  // Explicit synthetic independent observer signs the real challenge.
+  // The verifier is production code; these generated keys are fixture-only.
+  const observer=generateKeyPairSync('ed25519');
+  const verifyEvidence=createSignedHelperSelectionEvidenceVerifier({
+    observerPublicKeyPem:observer.publicKey.export({type:'spki',format:'pem'}).toString(),
+    async requestProof(challenge,v){
+      assert.deepEqual(v.scope,scope);
+      const accepted=v.phase==='RELEASE'?allowRelease:v.phase==='COMMIT'?allowCommit:true;
+      const observedAt=Date.now();
+      const payload=JSON.stringify({...challenge,accepted,facts:helperEvidenceRequiredFacts(v.phase),observedAt,expiresAt:observedAt+3000});
+      return {payload,proof:sign(null,Buffer.from(payload,'utf8'),observer.privateKey).toString('base64url')};
+    },
+  });
   function backend(){
     const pool=new Pool({...common,user:'helper_fixture_runtime'});pools.push(pool);
     return new PostgresHelperSelectionAuthority({pool:pool as unknown as DispatchStorePool,scope,verifyEvidence,
@@ -43,6 +53,9 @@ test('durable independent helper selection excludes runtime/deployment, preserve
   const first=backend(),second=backend();
   const tls=createHelperSelectionTlsFixture();
   const runtimeToken='r'.repeat(43),deploymentToken='d'.repeat(43);
+  assert.throws(()=>createProtectedHelperSelectionServer({tls:{key:tls.server.key,cert:tls.server.cert,ca:tls.ca},
+    scope:{...scope,deviceId:randomUUID()},authorityPrivateKeyPem:tls.privateKey,backend:first,
+    async resolvePrincipal(){return undefined;}}),/BACKEND_SCOPE_MISMATCH/);
   const server=createProtectedHelperSelectionServer({tls:{key:tls.server.key,cert:tls.server.cert,ca:tls.ca},
     scope,authorityPrivateKeyPem:tls.privateKey,backend:first,
     async resolvePrincipal(cert,credential){
@@ -99,6 +112,33 @@ test('durable independent helper selection excludes runtime/deployment, preserve
   assert.deepEqual(current.pin,b);
   const rollback=await runTransferHelperLifecycle(req('rollback',current,a),provider,store);current=rollback.selection;
   assert.deepEqual(current.pin,a);assert.equal(stored.size,2);
+
+  // COMMIT actually persists in the independent PostgreSQL database, then
+  // the test adapter loses its acknowledgement. No second mutation.
+  const uncertain=req('upgrade',current,b,'inert fixture B');
+  const lease=await first.beginDeployment(uncertain);
+  const ackPool=new Pool({...common,user:'helper_fixture_runtime'});pools.push(ackPool);
+  let lostAck=false;
+  const lostPool:DispatchStorePool={async connect(){
+    const client=await ackPool.connect();
+    return {async query(sql,values=[]){
+      const result=await client.query(sql,values);
+      if(sql==='COMMIT'&&!lostAck){lostAck=true;throw Error('fixture lost commit acknowledgement');}
+      return {rows:result.rows as Record<string,unknown>[]};
+    },release(destroy=false){client.release(destroy);}};
+  }};
+  const lostBackend=new PostgresHelperSelectionAuthority({pool:lostPool,scope,verifyEvidence,
+    verifyProvenance:async()=>({verified:true,authorityId:scope.authorityId,validUntil:Date.now()+60000})});
+  await assert.rejects(lostBackend.commit(lease.id,uncertain),/TRANSACTION_UNKNOWN/);
+  assert.equal(lostAck,true);
+  const recovered=await second.read(lease.id);assert.notEqual(recovered.revision,current.revision);
+  assert.deepEqual(recovered.pin,b);current=recovered;
+  await assert.rejects(second.commit(lease.id,uncertain),/COMMIT_FENCED/);
+  await assert.rejects(second.beginRuntime(randomUUID()),/LEASE_OCCUPIED/);
+  allowRelease=false;await assert.rejects(second.release(lease.id),/EVIDENCE_DENIED/);
+  allowRelease=true;await second.release(lease.id);
+  assert.deepEqual(await admin.query('SELECT state,committed_revision FROM helper_selection.leases WHERE id=$1',[lease.id]).then(v=>v.rows[0]),
+    {state:'RELEASED',committed_revision:current.revision});
   const detachRequest=req('uninstall',current,null);
   const stale=await deploymentClient.beginDeployment(detachRequest);
   await assert.rejects(runtimeClient.read(stale.id),/TRANSPORT_UNKNOWN/);
