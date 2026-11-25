@@ -239,13 +239,14 @@ function coreEnrollmentEligible(device) {
   const physical = device?.physicalConsole;
   return device?.platform === 'win32' && device.online === true &&
     device.accessMode === 'full' && device.privilegeMode === 'broker' &&
-    device.adminBridgeReady === true && device.bridgePreference?.desiredMode !== 'off' &&
+    device.adminBridgeReady === true && ['auto','on'].includes(device.bridgePreference?.desiredMode) &&
     device.persistentMaintenance?.enabled === true &&
     physical?.deviceReady === true && physical.localEnrolled === false &&
-    physical.enrollmentRequested === false;
+    physical.enrollmentRequested === false && physical.active === false;
 }
 
 function coreActionDevice(deviceId) {
+  if(typeof currentSnapshot?.accountId !== 'string' || !currentSnapshot.accountId.trim())return null;
   const matches = (Array.isArray(currentSnapshot?.devices) ? currentSnapshot.devices : [])
     .filter(device => device?.id === deviceId);
   return matches.length === 1 ? matches[0] : null;
@@ -279,7 +280,8 @@ function coreReadbackMessage(device, operation) {
   const physical = device.physicalConsole;
   const stop = ' Fiziksel STOP için cihazdaki Nexowire CORE → KAPAT seçeneğini kullan; yerel iptal ve işlem durması burada doğrulanmadı.';
   if (operation?.inFlight) return 'CORE isteği işleniyor; yeni istek gönderme.' + stop;
-  if (operation) return 'CORE isteğinin sonucu belirsiz veya readback bekleniyor. Durumu yenile; aynı isteği yineleme.' + stop;
+  if (operation) return 'CORE isteğinin sonucu belirsiz veya sunucu durumunun yeniden doğrulanması bekleniyor. ' +
+    (operation.feedback ? operation.feedback + ' ' : '') + 'Durumu yenile; aynı isteği yineleme.' + stop;
   if (core?.enabled === false) return 'Sunucu CORE hesap tercihini kapalı bildiriyor. Bu, yerel STOP veya yürüyen işlemlerin durduğunun kanıtı değildir.' + stop;
   if (core?.enabled !== true) return 'CORE tercih durumu doğrulanamadı.' + stop;
   if (physical?.localEnrolled === true)
@@ -301,7 +303,7 @@ async function performCoreAction(deviceId, kind, row) {
   if (enabled && (device.persistentMaintenance?.enabled !== false ||
       device.platform !== 'win32' || device.online !== true || device.accessMode !== 'full' ||
       device.privilegeMode !== 'broker' || device.adminBridgeReady !== true ||
-      device.bridgePreference?.desiredMode === 'off')) return;
+      !['auto','on'].includes(device.bridgePreference?.desiredMode))) return;
   const input = row.querySelector('.core-phrase');
   const status = row.querySelector('.core-copy');
   if (enabled && input.value.trim() !== 'CORE UNLIMITED') {
@@ -309,7 +311,7 @@ async function performCoreAction(deviceId, kind, row) {
     input.focus();
     return;
   }
-  const operation = {kind, accountId:currentSnapshot.accountId, inFlight:true, acknowledged:false};
+  const operation = {kind, accountId:currentSnapshot.accountId, inFlight:true, acknowledged:false, feedback:''};
   coreOperations.set(deviceId, operation);
   for (const selector of ['.core-toggle','.core-approve','.core-enrollment-retry'])
     row.querySelector(selector).disabled = true;
@@ -332,10 +334,28 @@ async function performCoreAction(deviceId, kind, row) {
         ? result.enrollmentRequested === true && result.active === false
         : result.persistentMaintenance?.enabled === enabled &&
           result.persistentMaintenance?.active === false);
+      if(!operation.acknowledged)operation.feedback='Sunucu yanıtı doğrulanamadı.';
+    } else {
+      const body=await response.json().catch(()=>null);
+      const errors={
+        CORE_AUTHORITY_UNAVAILABLE:'CORE onay servisi kullanılamıyor.',
+        CORE_NATIVE_CONSENT_PROVIDER_UNAVAILABLE:'Bağımsız yerel onay sağlayıcısı kullanılamıyor.',
+        CORE_ALREADY_ENROLLED:'Sunucu yerel CORE kaydının mevcut olduğunu bildiriyor.',
+        CORE_DEVICE_NOT_READY:'Sunucu cihazın CORE için hazır olmadığını bildiriyor.',
+        CORE_REQUIRES_FULL_ONLINE_BROKER:'FULL, çevrimiçi cihaz ve hazır Broker gerekli.',
+        CORE_NOT_ENABLED:'Sunucu CORE tercihinin açık olmadığını bildiriyor.',
+        CORE_REQUIRES_OWNER_LOGIN:'Cihaz sahibi hesabı gerekli.',
+        DEVICE_NOT_FOUND:'Sunucu cihazı bu hesap için bulamadı.',
+        UNAUTHENTICATED:'Oturum doğrulanamadı.',
+      };
+      const reason=typeof body?.error==='string'&&Object.hasOwn(errors,body.error)?errors[body.error]:'';
+      const status=Number.isInteger(response.status)&&response.status>=400&&response.status<=599?response.status:null;
+      operation.feedback=(status?'HTTP '+status+'. ':'')+(reason||'Sunucu isteği doğrulayamadı.');
     }
   } catch {
     // A transport failure or malformed response may follow a durable write.
     // Do not echo upstream data or repeat the mutation.
+    operation.feedback='Bağlantı veya sunucu yanıtı doğrulanamadı.';
   } finally {
     operation.inFlight = false;
     // Discard stale dashboard presentation; a fresh GET is the only reconciliation.
