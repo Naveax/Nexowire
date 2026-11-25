@@ -1,6 +1,6 @@
-import {createHash,createPublicKey,verify,type KeyObject} from 'node:crypto';
+import {createHash,createPublicKey,randomBytes,verify,type KeyObject} from 'node:crypto';
 import * as z from 'zod';
-import type {BrokerDispatchRequest} from './broker-external-dispatch-fence.js';
+import type {BrokerDispatchRequest,DispatchRevokeRequest} from './broker-external-dispatch-fence.js';
 import type {DispatchStoreConnection} from './postgres-broker-dispatch-authority.js';
 
 const uuid=z.string().uuid(),sha=z.string().regex(/^[a-f0-9]{64}$/);
@@ -76,4 +76,53 @@ export class ProtectedNativeCompletionReader{
       [claim.authorityId,claim.request.requestId,claim.dispatchId,claim.commitNonce]);
     return result.rows.length===1&&this.verifyRecord(result.rows[0]?.payload,result.rows[0]?.signature,claim,now);
   }
+}
+
+/** Separate domain from individual effect completion. A signed receipt is
+ * meaningful only when the independently installed observer actually owns
+ * and verifies the OS containment/terminal boundaries. This reader has no
+ * signing key and never manufactures a receipt from a boolean or DB count. */
+const drainProof=z.strictObject({
+  version:z.literal(1),kind:z.literal('core_native_drain_readback_v1'),
+  authorityId:uuid,nonce:sha,ownerId:uuid,deviceId:uuid,deviceEpoch:uuid,sessionEpoch:uuid,
+  previousGeneration:positive,generation:positive,ownerApprovalSha256:sha,
+  permanentFence:z.literal(true),pendingNativeEffects:z.literal(0),
+  outcome:z.literal('TERMINAL_DRAINED'),evidenceSha256:sha,observedAtMs:positive
+});
+const drainEnvelope=z.strictObject({payload:z.string().min(1).max(16384),signature:z.string().length(86)});
+export type ProtectedNativeDrainReadback=(request:Readonly<DispatchRevokeRequest>,
+  nonce:string,signal:AbortSignal)=>Promise<unknown>;
+
+/** Pin the independent completion observer's key. Require a fresh signed
+ * nonce, exact revoked scope and authorization generation. No default
+ * observer, local signer or transport fallback is installed here. */
+export function createProtectedNativeDrainVerifier(config:{
+  authorityId:string;observerPublicKeyPem:string;readback:ProtectedNativeDrainReadback
+}){
+  const authorityId=uuid.parse(config.authorityId),key=createPublicKey(config.observerPublicKeyPem);
+  if(key.asymmetricKeyType!=='ed25519'||typeof config.readback!=='function')
+    throw Error('DISPATCH_NATIVE_DRAIN_OBSERVER_REQUIRED');
+  const read=config.readback;
+  return async(request:DispatchRevokeRequest,signal?:AbortSignal):Promise<boolean>=>{
+    const active=signal??new AbortController().signal;
+    const wanted=Object.freeze({...request});
+    const nonce=randomBytes(32).toString('hex'),started=Date.now(),startMono=process.hrtime.bigint();
+    try{
+      active.throwIfAborted();
+      if(!Number.isSafeInteger(wanted.expectedGeneration)||wanted.expectedGeneration<1||
+        wanted.expectedGeneration>=Number.MAX_SAFE_INTEGER)return false;
+      const raw=drainEnvelope.parse(await read(wanted,nonce,active));
+      active.throwIfAborted();
+      const bytes=b64(raw.payload,1,12288),sig=b64(raw.signature,64,64);
+      if(!bytes||!sig||!verify(null,bytes,key,sig))return false;
+      const proof=drainProof.parse(JSON.parse(bytes.toString('utf8'))),now=Date.now();
+      return !active.aborted&&process.hrtime.bigint()-startMono<5000000000n&&
+        now>=started&&now-started<5000&&proof.observedAtMs>=started&&proof.observedAtMs<=now&&
+        proof.authorityId===authorityId&&proof.nonce===nonce&&
+        proof.ownerId===wanted.ownerId&&proof.deviceId===wanted.deviceId&&
+        proof.deviceEpoch===wanted.deviceEpoch&&proof.sessionEpoch===wanted.sessionEpoch&&
+        proof.previousGeneration===wanted.expectedGeneration&&proof.generation===wanted.expectedGeneration+1&&
+        proof.ownerApprovalSha256===createHash('sha256').update(wanted.signedOwnerApproval,'utf8').digest('hex');
+    }catch{return false}
+  };
 }
