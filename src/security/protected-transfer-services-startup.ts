@@ -58,15 +58,26 @@ export async function startProtectedTransferAndCoreServices(config:ProtectedTran
     throw Error('TRANSFER_CORE_SHARED_AUTHORITY_STARTUP_REQUIRED');
   // Bind before any DB pool or listener exists. No raw selection fallback.
   const guardedEvidence=bindHelperRollbackGuard(selection.nativeEvidence,config.rollbackGuard);
+  if(!core.nativeCompletion)throw Error('TRANSFER_CORE_NATIVE_COMPLETION_POLICY_REQUIRED');
   const service=createPostgresProtectedTransferService(transfer);
   const nativeEvidence=service.bindSelectionEvidence(guardedEvidence);
   let readPool:ReturnType<typeof createProtectedPostgresDispatchPool>|undefined;
   let helper:ReturnType<typeof createPostgresHelperSelectionService>|undefined;
   let coreService:Awaited<ReturnType<typeof startProtectedBrokerDispatchService>>|undefined;
   let closing:Promise<void>|undefined;
-  const close=()=>closing??=(async()=>{
-    try{await coreService?.close();}finally{try{await helper?.close();}finally{try{await service.close();}finally{await readPool?.close();}}}
-  })();
+  const close=():Promise<void>=>{
+    if(closing)return closing;
+    const pending=(async()=>{
+      // CORE's #1340 work gate fences admission before waiting. Its
+      // outstanding native drain callback may still read these other pools.
+      // On timeout retain dependencies; never report successful shutdown.
+      await coreService?.close();
+      try{await helper?.close();}finally{try{await service.close();}finally{await readPool?.close();}}
+    })();
+    closing=pending;
+    void pending.catch(()=>{if(closing===pending)closing=undefined;});
+    return pending;
+  };
   try{
     if(await transfer.server.verifyIndependentProvenance()!==true)throw Error('TRANSFER_AUTHORITY_PROVENANCE_UNVERIFIED');
     const p=await selection.authority.verifyProvenance();
@@ -91,7 +102,8 @@ export async function startProtectedTransferAndCoreServices(config:ProtectedTran
     helper.server.on('error',()=>{void close().catch(()=>{});});
     return Object.freeze({transferAddress:transferAddress.address,transferPort:transferAddress.port,
       selectionAddress:helperAddress.address,selectionPort:helperAddress.port,
-      coreAddress:coreService.address,corePort:coreService.port,physicalAcceptance:'NOT_PROVEN' as const,close});
+      coreAddress:coreService.address,corePort:coreService.port,
+      reconcileRevoking:coreService.reconcileRevoking,physicalAcceptance:'NOT_PROVEN' as const,close});
   }catch(error){
     await close().catch(()=>{});
     throw error;
