@@ -10,6 +10,8 @@
 #include <webauthn.h>
 #include <wtsapi32.h>
 #include <sddl.h>
+#include <io.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <wchar.h>
@@ -153,7 +155,8 @@ static BOOL owner_token(PSID expected,DWORD session,LUID logon,TOKEN_STATISTICS 
 }
 int wmain(int argc,wchar_t **argv) {
   BOOL probe=argc==2&&wcscmp(argv[1],L"--probe")==0;
-  BOOL bound=argc==8&&wcscmp(argv[1],L"--assert-bound")==0;
+  BOOL pipeMode=argc==9&&wcscmp(argv[1],L"--assert-bound-pipe")==0;
+  BOOL bound=pipeMode||(argc==8&&wcscmp(argv[1],L"--assert-bound")==0);
   DWORD ownerSession=0;LUID ownerLogon={0};PSID ownerSid=NULL;TOKEN_STATISTICS before={0},after={0};
   BYTE challenge[32]={0},credentialBytes[1024]={0};size_t challengeSize=0,credentialSize=0;
   char rpAscii[254]={0},challenge64[44]={0},client[1024]={0};
@@ -170,6 +173,23 @@ int wmain(int argc,wchar_t **argv) {
     BOOL matches=owner_token(ownerSid,ownerSession,ownerLogon,&before);
     LocalFree(ownerSid);ownerSid=NULL;
     if(!matches)return unavailable("OWNER_TOKEN_BINDING_MISMATCH",E_ACCESSDENIED);
+  }
+  /* Cross-session handle inheritance is not supported. Only the fixed
+   * local owner-assertion pipe namespace may receive the bounded result.
+   * The SYSTEM launcher authenticates the connecting kernel process ID
+   * against its held child process handle; the pipe is not an authority. */
+  FILE *assertionOutput=stdout;
+  if(pipeMode){
+    const wchar_t prefix[]=L"\\\\.\\pipe\\Nexowire.CoreOwnerAssertion.";
+    size_t n=wcslen(prefix);BYTE id[32]={0};size_t idSize=0;
+    if(wcsncmp(argv[8],prefix,n)||!from_hex(argv[8]+n,id,32,32,&idSize))return 64;
+    HANDLE output=CreateFileW(argv[8],FILE_WRITE_DATA|SYNCHRONIZE,0,NULL,OPEN_EXISTING,
+      SECURITY_SQOS_PRESENT|SECURITY_IDENTIFICATION,NULL);
+    if(output==INVALID_HANDLE_VALUE)return 77;
+    int fd=_open_osfhandle((intptr_t)output,_O_WRONLY|_O_BINARY);
+    if(fd<0){CloseHandle(output);return 77;}
+    assertionOutput=_fdopen(fd,"wb");
+    if(!assertionOutput){_close(fd);return 77;}
   }
   HMODULE api=LoadLibraryExW(L"webauthn.dll",NULL,LOAD_LIBRARY_SEARCH_SYSTEM32);
   if(!api)return unavailable("WEBAUTHN_SYSTEM_API_UNAVAILABLE",HRESULT_FROM_WIN32(GetLastError()));
@@ -246,12 +266,15 @@ int wmain(int argc,wchar_t **argv) {
     !base64url(assertion->pbUserId,assertion->cbUserId,user64,sizeof(user64))){
     status=E_INVALIDARG;goto cleanup;
   }
-  printf("{\"version\":1,\"kind\":\"core_webauthn_assertion_v1\",\"credentialId\":\"%s\","
+  fprintf(assertionOutput,"{\"version\":1,\"kind\":\"core_webauthn_assertion_v1\",\"credentialId\":\"%s\","
     "\"clientDataJSON\":\"%s\",\"authenticatorData\":\"%s\",\"signature\":\"%s\",\"userHandle\":",
     credential64,client64,auth64,sig64);
-  if(assertion->cbUserId)printf("\"%s\"",user64);else printf("null");
-  printf(",\"coreAuthority\":false}\n");
+  if(assertion->cbUserId)fprintf(assertionOutput,"\"%s\"",user64);else fprintf(assertionOutput,"null");
+  fprintf(assertionOutput,",\"coreAuthority\":false}\n");
+  if(fflush(assertionOutput)!=0||ferror(assertionOutput))status=E_FAIL;
+  if(pipeMode){if(fclose(assertionOutput)!=0)status=E_FAIL;assertionOutput=NULL;}
 cleanup:
+  if(pipeMode&&assertionOutput)fclose(assertionOutput);
   if(context.done)SetEvent(context.done);
   if(timer){
     if(WaitForSingleObject(timer,2000)!=WAIT_OBJECT_0)ExitProcess(77);

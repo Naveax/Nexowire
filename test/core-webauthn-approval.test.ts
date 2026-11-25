@@ -179,3 +179,28 @@ test('real Windows API probe never opens approval UI or grants CORE',{
   assert.ok(Number.isInteger(raw.apiVersion)&&Number(raw.apiVersion)>0);
   t.diagnostic('OS_API_PRESENCE_ONLY; no assertion, credential creation or human interaction was attempted');
 });
+
+
+test('protected native launcher is fixed purpose, authenticates child and observes Job drain',()=>{
+  const source=readFileSync(new URL('../native/windows-core-owner-launcher.c',import.meta.url),'utf8');
+  for(const name of ['WTSQueryUserToken','CreateProcessAsUserW','GetNamedPipeClientProcessId',
+    'WinVerifyTrust','JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE','QueryInformationJobObject','system_only_object'])
+    assert.ok(source.includes(name),name);
+  assert.match(source,/CREATE_SUSPENDED\|CREATE_UNICODE_ENVIRONMENT\|CREATE_NO_WINDOW/);
+  assert.doesNotMatch(source,/\b(?:ShellExecute|AdjustTokenPrivileges|SwitchDesktop|SendInput)\w*\s*\(/);
+});
+test('real native launcher rejects malformed and impossible-session requests without UI',{
+  skip:process.platform!=='win32'?'Windows-only native launcher negative; no physical ceremony':false,timeout:20000
+},()=>{
+  const exe=fileURLToPath(new URL('../native/windows-core-owner-launcher.exe',import.meta.url));
+  const bad=spawnSync(exe,['--ceremony'],{encoding:'utf8',timeout:5000,windowsHide:true});
+  assert.equal(bad.status,64,String(bad.error??bad.stderr));assert.equal(bad.stdout,'');
+  // Session 4294967294 cannot be an active hosted console owner. Even if
+  // CI happens to run as SYSTEM the native owner binding denies before launch.
+  const result=spawnSync(exe,['--ceremony','core.fixture.invalid','a'.repeat(64),'00',
+    'S-1-5-18','4294967294','0000000000000001','b'.repeat(64),'c'.repeat(64)],
+    {encoding:'utf8',timeout:5000,windowsHide:true});
+  assert.equal(result.status,77,String(result.error??result.stderr));
+  assert.equal(result.stdout,'');
+  assert.match(result.stderr,/CORE_OWNER_LAUNCH_DENIED:(SYSTEM_SESSION_ZERO_REQUIRED|OWNER_BINDING_UNAVAILABLE)/);
+});
