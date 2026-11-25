@@ -21,7 +21,7 @@ const pins={
  'scripts/Build-Nexowire-TransferFlushArtifact.ps1':'bece860ec43b79eeb7542f01b0cd531f024f50a5',
  'scripts/ci/ai05-protected-helper-fixture.mjs':'b501bb91a8b7fca1ba8a6cb050715a1187813a5c',
  'scripts/ci/ai05-protected-helper-fixture.ps1':'cbad1e0433724f37422b0ae83285e9947c5cf7c7',
- 'scripts/ci/ai05-test-signed-native-helper.ps1':'7362223ac095b9860862917862cf7c5869b541d0',
+ 'scripts/ci/ai05-test-signed-native-helper.ps1':'2b09947a256d50e3436c8e94388229986c6ecb12',
  'scripts/ai02-signed-sqlite-rollback-review.ts':'0be381cafd8c99fbb99e1bb082752b0f0a563bbe',
  'scripts/ai05-signed-sqlite-helper-review.ts':'bc74bfd70cdc6c92c88f992aa2c12775e1c527c1',
  'src/security/protected-helper-rollback-guard.ts':'bb298c736a74951807427595a0990b16def2061b',

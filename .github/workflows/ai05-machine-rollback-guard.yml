@@ -4,6 +4,7 @@ on:
     paths:
       - '.github/workflows/ai05-machine-rollback-guard.yml'
       - 'src/update/machine-update.ts'
+      - 'scripts/ci/ai05-powershell-fixture-probe.mjs'
       - 'test/machine-update-rollback-integrity.test.ts'
       - 'test/machine-update-rollback-listener-identity.test.ts'
       - 'test/machine-update-preflight-no-task-bounce.test.ts'
@@ -31,6 +32,8 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run typecheck
+      - name: Diagnose original and corrected PowerShell child environment
+        run: node scripts/ci/ai05-powershell-fixture-probe.mjs
       - name: Exact Windows no-restart and normal forward cutover fixtures
         shell: bash
         env:

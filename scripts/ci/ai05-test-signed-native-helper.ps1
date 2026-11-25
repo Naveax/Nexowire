@@ -7,14 +7,14 @@ if($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_ENVIRONMENT -cne 'github-host
 }
 $phaseLog=$env:AI05_NATIVE_PHASE_LOG
 if([string]::IsNullOrWhiteSpace($phaseLog) -or -not [IO.Path]::IsPathRooted($phaseLog) -or
-   (Split-Path -Leaf $phaseLog) -cne 'test-signed-native.phases.log' -or -not [IO.File]::Exists($phaseLog)){
+   [IO.Path]::GetFileName($phaseLog) -cne 'test-signed-native.phases.log' -or -not [IO.File]::Exists($phaseLog)){
   throw 'AI05_NATIVE_PHASE_LOG_REQUIRED'
 }
 function Phase([string]$name){
   [IO.File]::AppendAllText($phaseLog,([DateTime]::UtcNow.ToString('o')+' '+$name+[Environment]::NewLine),[Text.Encoding]::ASCII)
 }
 Phase 'ENTERED'
-$principal=New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+$principal=[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
 if(-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){throw 'AI05_TEST_SIGNING_ADMIN_REQUIRED'}
 $modules='C:\Windows\System32\WindowsPowerShell\v1.0\Modules'
 $env:PSModulePath=$modules
@@ -44,6 +44,7 @@ $root=Split-Path -Parent $build.artifactPath
 $leaf=Split-Path -Leaf $root
 if($leaf -cnotmatch '^Nexowire-TransferFlush-Build-[0-9a-f]{32}$' -or (Get-Item -LiteralPath $root).Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'AI05_TEST_BUILD_ROOT_UNTRUSTED'}
 $certs=New-Object 'System.Collections.Generic.List[System.Security.Cryptography.X509Certificates.X509Certificate2]'
+$trustEntries=New-Object 'System.Collections.Generic.List[object]'
 $files=@($build.artifactPath,(Join-Path $root 'windows-transfer-volume-flush-upgrade.exe'))
 $success=$false
 try{
@@ -66,8 +67,15 @@ try{
       try{
         $store.Open('ReadWrite')
         if(@($store.Certificates.Find('FindByThumbprint',$cert.Thumbprint,$false)).Count -ne 0){throw 'AI05_TEST_CERT_COLLISION'}
-        $store.Add($cert)
-        if(@($store.Certificates.Find('FindByThumbprint',$cert.Thumbprint,$false)).Count -ne 1){throw 'AI05_TEST_TRUST_MISSING'}
+        # Store only the public DER certificate, not a key-bearing context.
+        $publicCert=[Security.Cryptography.X509Certificates.X509Certificate2]::new([byte[]]$cert.RawData)
+        try{
+          if($publicCert.HasPrivateKey){throw 'AI05_TEST_PUBLIC_CERT_HAS_KEY'}
+          # Track before the mutation so an ambiguous Add is cleaned up too.
+          $trustEntries.Add([pscustomobject]@{Name=$name;RawData=[byte[]]$publicCert.RawData;Thumbprint=$publicCert.Thumbprint})
+          $store.Add($publicCert)
+          if(@($store.Certificates.Find('FindByThumbprint',$publicCert.Thumbprint,$false)).Count -ne 1){throw 'AI05_TEST_TRUST_MISSING'}
+        }finally{$publicCert.Dispose()}
       }finally{$store.Close()}
       Phase ("TEST_TRUST_END_"+$index+"_"+$name)
     }
@@ -90,26 +98,33 @@ try{
 }finally{
   Phase 'CLEANUP_BEGIN'
   $cleanupFailed=$false
+  foreach($entry in $trustEntries){
+    Phase ('CLEANUP_TEST_TRUST_BEGIN_'+$entry.Name)
+    $store=[Security.Cryptography.X509Certificates.X509Store]::new($entry.Name,'LocalMachine')
+    $publicCert=[Security.Cryptography.X509Certificates.X509Certificate2]::new([byte[]]$entry.RawData)
+    try{
+      $store.Open('ReadWrite')
+      $store.Remove($publicCert)
+      if(@($store.Certificates.Find('FindByThumbprint',$entry.Thumbprint,$false)).Count -ne 0){$cleanupFailed=$true}
+    }catch{$cleanupFailed=$true}finally{$store.Close();$publicCert.Dispose()}
+    Phase ('CLEANUP_TEST_TRUST_END_'+$entry.Name)
+  }
   foreach($cert in $certs){
-    foreach($name in @('Root','TrustedPublisher')){
-      $store=[Security.Cryptography.X509Certificates.X509Store]::new($name,'LocalMachine')
-      try{
-        $store.Open('ReadWrite')
-        $store.Remove($cert)
-        if(@($store.Certificates.Find('FindByThumbprint',$cert.Thumbprint,$false)).Count -ne 0){$cleanupFailed=$true}
-      }catch{$cleanupFailed=$true}finally{$store.Close()}
-    }
+    Phase 'CLEANUP_KEY_BEGIN'
     try{
       Remove-Item -LiteralPath ('Cert:\CurrentUser\My\'+$cert.Thumbprint) -DeleteKey -ErrorAction Stop
       if(Test-Path -LiteralPath ('Cert:\CurrentUser\My\'+$cert.Thumbprint)){$cleanupFailed=$true}
     }catch{$cleanupFailed=$true}
     $cert.Dispose()
+    Phase 'CLEANUP_KEY_END'
   }
+  Phase 'CLEANUP_BUILD_BEGIN'
   try{
     if((Get-Item -LiteralPath $root).Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'AI05_BUILD_CLEANUP_UNTRUSTED'}
     Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction Stop
     if(Test-Path -LiteralPath $root){$cleanupFailed=$true}
   }catch{$cleanupFailed=$true}
+  Phase 'CLEANUP_BUILD_END'
   if($cleanupFailed){Phase 'CLEANUP_FAILED';throw 'AI05_FIXTURE_TEST_SIGNING_CLEANUP_FAILED'}
   Phase 'CLEANUP_END'
 }
