@@ -233,7 +233,7 @@ test('T-002/T-003: uncertain pairing never replays after an in-flight duplicate 
 
   // A separately initiated fresh pairing is still supported, unlike replay
   // of a request whose earlier server result is UNKNOWN.
-  const fresh=await boot({search:pairingSearch(),
+  const fresh=await boot({search:pairingSearch({state:'new-fixture-local-session'}),
     pairing:async()=>Response.json({pairingId:'fixture-pair',token:'fixture-token'})});
   await fresh.el('approve').dispatch('click');
   assert.equal(fresh.navigations.length,1);
