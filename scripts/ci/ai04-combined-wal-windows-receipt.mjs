@@ -6,12 +6,12 @@ import path from 'node:path';
 import {assertTapSummary} from './assert-tap-summary.mjs';
 import {readTestInventory} from './test-inventory.mjs';
 const tests={
- 'test/agent/ai04-wal-snapshot-race.test.ts':['227dc73023421e702bc4ae653e07d89de3c4f487',12],
- 'test/agent/ai04-external-journal-owner.test.ts':['9d2daca025c666ab7be8b250481519f0bd1bffae',3],
+ 'test/agent/ai04-wal-snapshot-race.test.ts':['34e9624d19ea83bfd2b8d7ee21eae30f2c5eb0b5',12],
+ 'test/agent/ai04-external-journal-owner.test.ts':['ff40767f9f627db1c523e141a0168130aa4950a8',3],
  'test/agent/ai04-frameless-wal.test.ts':['235150296f55d11c4dfff3155b3783f667f41195',14],
  'test/native-agent-startup-diagnostic.test.ts':['4a9095dad4232313df8504071a1de1f557668a8c',10],
  'test/agent/ai04-wal-index-convergence.test.ts':['faadbc30f16ae270b462e01c34482e9365dfa1d6',7],
- 'test/agent/ai04-wal-path-readback.test.ts':['eab196e2de918475cfa686af15b80a00a3639dd4',8]
+ 'test/agent/ai04-wal-path-readback.test.ts':['61e5dde45f2add7fc7b75dd1b148c31ed788369d',8]
 };
 const dependencies={
  'src/agent/operation-journal.ts':'598882cf2a47c764a4e4d8b111228f60460fad1f',

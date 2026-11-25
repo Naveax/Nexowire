@@ -135,11 +135,19 @@ test('AI-04 pathname readback: real owner plus transient final failure stays IN_
       'import {AgentOperationJournal} from '+
         JSON.stringify(new URL('../../src/agent/operation-journal.ts',import.meta.url).href)+';',
       'const journal=new AgentOperationJournal(process.argv[1]);',
-      "try { await journal.begin(process.argv[2],'f'.repeat(64),'files.write'); process.send?.({ready:true}); }",
+      // The PID alone does not keep a SQLite handle alive: the -e module
+      // and its unreferenced bindings can be collected after evaluation.
+      // Root the actual owner for the entire disposable child lifetime.
+      'globalThis.__nwHeldJournalFixture=journal;',
+      'const announceReady=()=>setImmediate(()=>{',
+      '  globalThis.gc();',
+      '  setImmediate(()=>{globalThis.gc();process.send?.({ready:true});});',
+      '});',
+      "try { await journal.begin(process.argv[2],'f'.repeat(64),'files.write'); announceReady(); }",
       "catch(e){process.send?.({error:String(e)});process.exit(70);}",
       'setInterval(()=>{},1000);'
     ].join('\n');
-    const child=spawn(process.execPath,['--import','tsx','--input-type=module','-e',script,file,id],
+    const child=spawn(process.execPath,['--expose-gc','--import','tsx','--input-type=module','-e',script,file,id],
       {stdio:['ignore','ignore','pipe','ipc']});
     let exited=false,stderr='';
     child.stderr?.on('data',b=>{stderr=(stderr+String(b)).slice(-4000);});
@@ -152,6 +160,11 @@ test('AI-04 pathname readback: real owner plus transient final failure stays IN_
       child.once('close',()=>{clearTimeout(timeout);reject(Error('child closed: '+stderr));});
     });
     assert.deepEqual(ready,{ready:true});
+    // The ready message is emitted only after two GC cycles. Require a
+    // genuinely open WAL, not merely a still-running child PID.
+    assert.equal(child.exitCode,null);
+    assert.ok((await fs.stat(file+'-wal')).size>32,'live child must retain committed WAL after GC');
+    assert.ok((await fs.stat(file+'-shm')).size>=32768,'live child must retain WAL index after GC');
     const contender=new AgentOperationJournal(file);cleanup.push(()=>contender.close());
     const m=fault(t,file,'EAGAIN',1);
     try{await assert.rejects(contender.initialize(),{code:'AGENT_JOURNAL_IN_USE'});}
