@@ -467,7 +467,9 @@ export async function runNativeAgent(
   trustedCoreConsentProvider?: NativeCoreConsentAuthority,
   trustedNativeTransferPublisher?: NativeTransferPublisher,
   trustedNativeTransferDeviceId?: string,
+  trustedTransferLifetime?: AbortSignal,
 ): Promise<never> {
+  if(trustedTransferLifetime?.aborted)throw Error('TRANSFER_HELPER_RUNTIME_LEASE_RELEASED');
   const preloginBootstrap=getWindowsPreloginAgentMode(env);
   if(preloginBootstrap){
     // No user-writable code, owner DPAPI, identity creation, or journal I/O
@@ -541,7 +543,7 @@ export async function runNativeAgent(
         authorityId:casAuthorityId,epoch:casEpoch,deviceId:identity.id})
     : undefined;
   const nativeTransferEnabled=Boolean(!preloginBootstrap&&remoteCas&&trustedNativeMutationProvider&&
-    trustedNativeTransferPublisher&&env.NEXOWIRE_AGENT_REQUIRE_ATOMIC_EFFECT_ADMISSION==='1');
+    trustedNativeTransferPublisher&&!trustedTransferLifetime?.aborted&&env.NEXOWIRE_AGENT_REQUIRE_ATOMIC_EFFECT_ADMISSION==='1');
   const advertisedCapabilities = filterWindowsPreloginCapabilities(
     await capabilitiesForAgent(process.platform,env),preloginBootstrap,
   );
@@ -639,6 +641,8 @@ export async function runNativeAgent(
   };
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
+  trustedTransferLifetime?.addEventListener('abort',stop,{once:true});
+  if(trustedTransferLifetime?.aborted)stop();
 
   while (!stopped) {
     const hubUrl = hubEndpoints[endpointIndex]!;
@@ -952,6 +956,7 @@ export async function runNativeAgent(
       ...(closeCode !== undefined ? {wsCloseCode: closeCode} : {}),
       ...(transportErrorCode ? {errorCode: transportErrorCode} : {}),
     });
+    if (stopped)break;
     if (!retry.retryable) {
       stopped = true;
       shutdown.abort();
@@ -989,5 +994,10 @@ export async function runNativeAgent(
     }
   }
 
+  trustedTransferLifetime?.removeEventListener('abort',stop);
+  if(trustedTransferLifetime?.aborted){
+    try{await processes.shutdown();}finally{operationJournal.close();await singletonLock?.close();}
+    throw Error('TRANSFER_HELPER_RUNTIME_LEASE_RELEASED');
+  }
   process.exit(0);
 }
