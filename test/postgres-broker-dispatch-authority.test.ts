@@ -505,3 +505,22 @@ test('real PostgreSQL native completion: committed release requires independent 
       [first.request.requestId]),/DISPATCH_NATIVE_COMPLETION_HISTORY_IMMUTABLE/);
   }finally{await f.close();}
 });
+
+test('real PostgreSQL native drain deadline: stalled observer never yields revoked receipt',integration,async()=>{
+  const f=await fixture({drainTimeoutMs:1500});
+  try{
+    let entered=false,aborted=false;
+    const authority=f.create({verifyNativeDrain:async(_request,signal)=>{
+      entered=true;
+      return new Promise<boolean>(resolve=>{
+        signal?.addEventListener('abort',()=>{aborted=true;resolve(true)},{once:true});
+      });
+    }});
+    await assert.rejects(authority.revokeAndDrain(f.revoke(),nonce()),denied('DISPATCH_STORE_DRAIN_UNKNOWN'));
+    assert.equal(entered,true);assert.equal(aborted,true);
+    const row=(await f.pool.query('SELECT state,core_enabled,generation FROM core_dispatch.grants WHERE authority_id=$1 AND device_id=$2',
+      [f.ids.authorityId,f.ids.deviceId])).rows[0];
+    assert.equal(row?.state,'REVOKING');assert.equal(row?.core_enabled,false);assert.equal(Number(row?.generation),8);
+    await assert.rejects(authority.beginIfCurrent(f.request(),f.broker,nonce()),denied('DISPATCH_STORE_GRANT_REVOKED'));
+  }finally{await f.close();}
+});
