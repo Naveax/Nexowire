@@ -163,7 +163,7 @@ static int denied(const char *reason){fprintf(stderr,"CORE_OWNER_LAUNCH_DENIED:%
  * WTSInfoEx unlock flag is supported on our Windows 10+ target. */
 static BOOL console_unlocked(DWORD session){
   LPWSTR raw=NULL;DWORD bytes=0;BOOL ok=FALSE;
-  if(!local_console(session)||!WTSQuerySessionInformationW(WTS_CURRENT_SERVER_HANDLE,session,WTSInfoEx,&raw,&bytes))return FALSE;
+  if(!local_console(session)||!WTSQuerySessionInformationW(WTS_CURRENT_SERVER_HANDLE,session,WTSSessionInfoEx,&raw,&bytes))return FALSE;
   if(raw&&bytes>=sizeof(WTSINFOEXW)){
     const WTSINFOEXW *info=(const WTSINFOEXW *)raw;
     if(info->Level==1){
@@ -230,7 +230,7 @@ int wmain(int argc,wchar_t **argv){
   const char *reason="OWNER_BINDING_UNAVAILABLE";
   wchar_t helper[MAX_PATH]={0},pipeName[128]={0},sddl[400]={0},command[4096]={0};
   char output[8193]={0};DWORD used=0;
-  if(!local_console(session)||!WTSQueryUserToken(session,&owner)||!owner_token(owner,sid,session,logon))goto done;
+  if(!console_unlocked(session)||!WTSQueryUserToken(session,&owner)||!owner_token(owner,sid,session,logon))goto done;
   reason="HELPER_ARTIFACT_UNVERIFIED";
   DWORD chars=GetModuleFileNameW(NULL,helper,MAX_PATH);
   if(!chars||chars>=MAX_PATH)goto done;
@@ -267,7 +267,7 @@ int wmain(int argc,wchar_t **argv){
   if(swprintf_s(command,4096,L"\"%ls\" --assert-bound-pipe %ls %ls %ls %ls %ls %ls %ls",
     helper,argv[2],argv[3],argv[4],argv[5],argv[6],argv[7],pipeName)<0)goto done;
   reason="OWNER_CHANGED_BEFORE_LAUNCH";
-  if(!local_console(session)||!WTSQueryUserToken(session,&current)||!owner_token(current,sid,session,logon))goto done;
+  if(!console_unlocked(session)||!WTSQueryUserToken(session,&current)||!owner_token(current,sid,session,logon))goto done;
   CloseHandle(current);current=NULL;
   STARTUPINFOEXW si={0};si.StartupInfo.cb=sizeof(si);wchar_t desktop[]=L"winsta0\\default";si.StartupInfo.lpDesktop=desktop;
   /* Windows 10 atomic job assignment: no suspended unowned child may survive
@@ -327,7 +327,7 @@ int wmain(int argc,wchar_t **argv){
     !GetExitCodeProcess(child.hProcess,&exitCode)||!wait_empty(job,until))goto done;
   drained=TRUE;
   reason="OWNER_CHANGED_OR_ASSERTION_DENIED";
-  if(exitCode!=0||!used||!local_console(session)||!WTSQueryUserToken(session,&current)||
+  if(exitCode!=0||!used||!console_unlocked(session)||!WTSQueryUserToken(session,&current)||
     !owner_token(current,sid,session,logon))goto done;
   success=TRUE;
 done:
