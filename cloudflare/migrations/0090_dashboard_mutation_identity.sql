@@ -62,3 +62,12 @@ CREATE TRIGGER IF NOT EXISTS dashboard_revision_bridge_update AFTER UPDATE ON de
  BEGIN UPDATE dashboard_core_revisions SET revision=revision+1 WHERE device_id=NEW.device_id; END;
 CREATE TRIGGER IF NOT EXISTS dashboard_revision_bridge_delete AFTER DELETE ON device_bridge_preferences BEGIN
  UPDATE dashboard_core_revisions SET revision=revision+1 WHERE device_id=OLD.device_id; END;
+
+CREATE TRIGGER IF NOT EXISTS dashboard_revision_remote_insert AFTER INSERT ON device_remote_authorization BEGIN
+ UPDATE dashboard_core_revisions SET revision=revision+1 WHERE device_id=NEW.device_id; END;
+CREATE TRIGGER IF NOT EXISTS dashboard_revision_remote_update AFTER UPDATE ON device_remote_authorization
+ WHEN OLD.authorization_epoch IS NOT NEW.authorization_epoch OR OLD.active IS NOT NEW.active OR
+ OLD.owner_account_id IS NOT NEW.owner_account_id
+ BEGIN UPDATE dashboard_core_revisions SET revision=revision+1 WHERE device_id=NEW.device_id; END;
+CREATE TRIGGER IF NOT EXISTS dashboard_revision_remote_delete AFTER DELETE ON device_remote_authorization BEGIN
+ UPDATE dashboard_core_revisions SET revision=revision+1 WHERE device_id=OLD.device_id; END;
