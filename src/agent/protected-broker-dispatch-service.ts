@@ -1,5 +1,6 @@
 import {createHash,createPublicKey,timingSafeEqual} from 'node:crypto';
 import {isIP} from 'node:net';
+import {createProtectedNativeDrainVerifier,type ProtectedNativeDrainReadback} from './protected-native-completion-reader.js';
 import type {DispatchClaim,DispatchRevokeRequest} from './broker-external-dispatch-fence.js';
 import * as z from 'zod';
 import {createProtectedPostgresDispatchPool} from './protected-postgres-dispatch-pool.js';
@@ -98,7 +99,10 @@ export interface ProtectedBrokerDispatchServiceOptions {
   readonly verifyProvenance:AuthorityOptions['verifyProvenance'];
   readonly readProtectedBroker:AuthorityOptions['readProtectedBroker'];
   readonly verifyOwnerRevocation:AuthorityOptions['verifyOwnerRevocation'];
+  /** Supplemental composition check (including transfer-runtime drain). */
   readonly verifyNativeDrain:AuthorityOptions['verifyNativeDrain'];
+  /** Independent native observer, mandatory in protected startup. No fixture fallback. */
+  readonly readNativeDrainProof?:ProtectedNativeDrainReadback;
   /** Required before a production listener opens; absent policy denies startup. */
   readonly nativeCompletion?:AuthorityOptions['nativeCompletion'];
   readonly permitMs?:number;readonly drainTimeoutMs?:number;
@@ -121,10 +125,12 @@ export async function startProtectedBrokerDispatchService(config:ProtectedBroker
   if(typeof host!=='string'||isIP(host)===0||!Number.isInteger(port)||port<0||port>65535||
     !uuid.safeParse(authorityId).success||typeof verifyProvenance!=='function'||
     typeof readProtectedBroker!=='function'||typeof verifyOwnerRevocation!=='function'||
-    typeof verifyNativeDrain!=='function'||!nativeCompletion||
+    typeof verifyNativeDrain!=='function'||typeof config.readNativeDrainProof!=='function'||!nativeCompletion||
     !Number.isSafeInteger(shutdownMs)||shutdownMs<100||shutdownMs>30000)
     throw Error('DISPATCH_SERVICE_CONFIGURATION_REQUIRED');
   const capabilities=Object.freeze(Object.keys(nativeCompletion.evidenceByCapability));
+  const verifySignedDrain=createProtectedNativeDrainVerifier({authorityId,
+    observerPublicKeyPem:nativeCompletion.observerPublicKeyPem,readback:config.readNativeDrainProof});
   const work=new ProtectedDispatchWorkGate(tls.maxActiveRequests??16);
   const authenticateBroker=createScopedDispatchBrokerResolver(credentials);
   const publicKey=createPublicKey(privateKeyPem);
@@ -166,7 +172,10 @@ export async function startProtectedBrokerDispatchService(config:ProtectedBroker
   try{
     const authority=new PostgresBrokerDispatchAuthority({pool:db.pool,authorityId,
       privateKeyPem,verifyProvenance,readProtectedBroker,verifyOwnerRevocation,
-      verifyNativeDrain,permitMs,drainTimeoutMs,requireCredentialFence:true,
+      verifyNativeDrain:async(request,signal)=>{
+        if(signal?.aborted||await verifyNativeDrain(request,signal)!==true||signal?.aborted)return false;
+        return verifySignedDrain(request,signal);
+      },permitMs,drainTimeoutMs,requireCredentialFence:true,
       requireNativeCompletion:true,nativeCompletion});
     await authority.assertNativeCompletionPolicy(capabilities);
     const handler=createBrokerDispatchAuthorityHandler({authorityId,publicKeyPem,
