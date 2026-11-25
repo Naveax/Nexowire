@@ -341,10 +341,13 @@ export class ControlPlaneService {
       folders: folders.map(({id, name}) => ({id, name})),
       autoSelectDevices,
       devices: await Promise.all(devices.map(async (device) => {
-        const [lease, maintenance, bridgePreference] = await Promise.all([
+        const [lease, maintenance, bridgePreference, remoteAuthorization] = await Promise.all([
           this.store.getRootModeLease(device.id),
           this.store.getDeviceMaintenancePreference(device.id),
           this.store.getDeviceBridgePreference(device.id),
+          // Read-only owner-scoped D1 snapshot. Failure must not infer revoked
+          // or claim local STOP/drain. Legacy stores report unknown.
+          Promise.resolve().then(()=>this.store.readRemoteAuthorizationStatus?.(device.id,account.id)??null).catch(()=>null),
         ]);
         const unexpiredLease =
           lease?.ownerAccountId === account.id &&
@@ -376,6 +379,12 @@ export class ControlPlaneService {
           // advertising effective elevated access from stale telemetry.
           active: false,
           updatedAt: maintenance?.ownerAccountId === account.id ? maintenance.updatedAt : null,
+        },
+        coreRevocation: {
+          version:1 as const,source:'D1_REMOTE_AUTHORIZATION' as const,
+          remoteAuthorization:remoteAuthorization??{state:'UNKNOWN' as const,authorizationEpoch:null,observedAtMs:null},
+          localStop:'UNKNOWN' as const,pendingRevoke:'UNKNOWN' as const,
+          nativeDrain:'UNKNOWN' as const,effectReadback:'UNKNOWN' as const,nativeEvidence:'NOT_AVAILABLE' as const,
         },
         bridgePreference: {
           desiredMode: bridgePreference?.ownerAccountId === account.id ? bridgePreference.desiredMode : 'auto',
