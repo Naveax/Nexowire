@@ -9,6 +9,7 @@ import { hardenWindowsProgramDataAcl, verifyWindowsPrivateAcl } from '../securit
 import { verifyWindowsStackOuterAncestorAcl } from '../security/windows-programdata-acl.js';
 import {assertWindowsLocalTcpListenerOwnedByPid} from '../security/windows-local-listener-owner.js';
 import {verifyProtectedSystemHubCutoverReadOnly} from './system-hub-state-cutover.js';
+import {MACHINE_STARTUP_ADMISSION_PS,assertMachineStartupStateReadOnly} from '../security/windows-machine-startup-admission.js';
 import {
   assertNoPrivilegedNodeStartupFlags,
   assertWindowsPrivilegedRuntimeTrusted,
@@ -340,6 +341,7 @@ export function buildHubBootLauncher(input: {
     "$env:ComSpec='C:\\Windows\\System32\\cmd.exe'",
     "$env:PATH='C:\\Windows\\System32;C:\\Windows;C:\\Windows\\System32\\WindowsPowerShell\\v1.0'",
     "$env:PSModulePath='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules'",
+    MACHINE_STARTUP_ADMISSION_PS,
   ];
   // The AtStartup task inherits MACHINE environment, not the elevated
   // install shell's isolated environment. Remove all ambient Nexowire
@@ -869,6 +871,8 @@ export async function installHubBootLifecycle(
   // rename or replace its parent. Check owner, write/delete/DACL rights and
   // reparse status before reading any user or machine DPAPI credentials.
   verifyWindowsPrivateAcl(path.win32.dirname(protectedBootRoot));
+  // Do not create/overwrite protected startup state during unresolved recovery.
+  assertMachineStartupStateReadOnly();
   // Fail before reading/writing protected DPAPI secrets or touching tasks:
   // a running legacy Stack would respawn its old Hub on the same port.
   await assertNoLegacyStackSupervisor(options.env ?? process.env);
