@@ -54,12 +54,13 @@ test('AI-06 readback: consent is eligible only for explicit current backend read
   for(const candidate of [
     device({online:false}),device({platform:'linux'}),device({accessMode:'safe'}),
     device({privilegeMode:'direct'}),device({adminBridgeReady:false}),
-    device({bridgePreference:{desiredMode:'off'}}),
+    device({bridgePreference:{desiredMode:'off'}}),device({bridgePreference:undefined}),
     device({persistentMaintenance:{enabled:false}}),device({physicalConsole:undefined}),
     device({physicalConsole:{deviceReady:true,localEnrolled:false}}),
     device({physicalConsole:{deviceReady:false,localEnrolled:false,enrollmentRequested:false}}),
     device({physicalConsole:{deviceReady:true,localEnrolled:false,enrollmentRequested:true}}),
     device({physicalConsole:{deviceReady:true,localEnrolled:true,enrollmentRequested:false}}),
+    device({physicalConsole:{deviceReady:true,localEnrolled:false,enrollmentRequested:false,active:true}}),
   ])assert.equal(f.coreEnrollmentEligible(candidate),false,JSON.stringify(candidate));
 });
 
@@ -145,4 +146,22 @@ test('AI-06 readback: malformed or wrong-device ACK does not confirm enable, dup
   f.setSnapshot(snapshot([d,d]));
   await f.performCoreAction(d.id,'enable',f.row);
   assert.equal(f.posts.length,0);
+});
+
+test('AI-06 readback: actual backend denial code is localized but no raw error or false cancellation is shown',async()=>{
+  const d=device();
+  for(const [error,expected] of [
+    ['CORE_NATIVE_CONSENT_PROVIDER_UNAVAILABLE',/Bağımsız yerel onay sağlayıcısı/],
+    ['CORE_ALREADY_ENROLLED',/yerel CORE kaydının mevcut/],
+    ['private token=fixture',/Sunucu isteği doğrulayamadı/],
+    ['__proto__',/Sunucu isteği doğrulayamadı/],
+  ] as const){
+    const f=fixture(d,async()=>Response.json({error},{status:500}));
+    await f.performCoreAction(d.id,'consent',f.row);
+    const message=f.coreReadbackMessage(d,f.coreOperations.get(d.id));
+    assert.match(message,/HTTP 500/);
+    assert.match(message,expected);
+    assert.doesNotMatch(message,/private token|__proto__|CORE_NATIVE_CONSENT_PROVIDER_UNAVAILABLE/);
+    assert.equal(f.coreOperationAllows(d.id,'consent'),false);
+  }
 });
