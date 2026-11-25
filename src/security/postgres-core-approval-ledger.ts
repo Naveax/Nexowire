@@ -10,7 +10,7 @@ import type {DispatchStoreConnection,DispatchStorePool}
 import type {IndependentProvenanceCheck} from '../agent/postgres-monotonic-witness.js';
 
 export const CoreApprovalBindingSchema=CoreWebAuthnIntentSchema.omit({challengeId:true,
-  rpId:true,credentialId:true,nonce:true,issuedAtMs:true,expiresAtMs:true});
+  rpId:true,credentialId:true,nonce:true,issuedAtMs:true,expiresAtMs:true,issuerSpkiSha256:true});
 export type CoreApprovalBinding=z.infer<typeof CoreApprovalBindingSchema>;
 /** Credential registration survives a fresh logon but never migrates to a
  * different owner/installation/enrollment/SID or owner epoch. The assertion
@@ -170,12 +170,12 @@ export class PostgresCoreApprovalLedger {
   }
   async issueChallenge(input:IssueInput):Promise<ReturnType<typeof prepareCoreWebAuthnChallenge>>{
     const original=Object.freeze(issueSchema.parse(input)),expected=binding(original);
-    await this.trusted(expected);
+    await this.trusted(expected,original.issuerSpkiSha256);
     return this.transaction(async tx=>{
       await this.current(tx,expected);await this.credential(tx,original);
       if((await tx.db.query('SELECT challenge_id FROM core_approval.challenges WHERE challenge_id=$1',
         [original.challengeId])).rows.length)fail('CHALLENGE_REPLAY');
-      await this.trusted(expected);await this.current(tx,expected);
+      await this.trusted(expected,original.issuerSpkiSha256);await this.current(tx,expected);
       const challenge=prepareCoreWebAuthnChallenge(original,await tx.now());
       const i=challenge.intent;
       await tx.db.query('INSERT INTO core_approval.challenges '+
@@ -191,7 +191,7 @@ export class PostgresCoreApprovalLedger {
       expected:{assertion:raw,intent:intentValue}}).expected as {assertion:unknown;intent:CoreWebAuthnIntent};
     const intent=Object.freeze(CoreWebAuthnIntentSchema.parse(original.intent)),expected=binding(intent);
     const started=Date.now(),ticks=process.hrtime.bigint();
-    await this.trusted(expected);
+    await this.trusted(expected,intent.issuerSpkiSha256);
     const receipt=await this.transaction(async tx=>{
       await this.current(tx,expected);const c=await this.credential(tx,intent);
       const row=(await tx.db.query('SELECT * FROM core_approval.challenges WHERE challenge_id=$1 FOR UPDATE',
@@ -204,7 +204,7 @@ export class PostgresCoreApprovalLedger {
       const previous=integer(c.signature_counter),verified=verifyCoreWebAuthnAssertion(original.assertion,intent,
         {credentialId:intent.credentialId,publicKeyPem:String(c.public_key_pem),
           userHandle:c.user_handle as string|null,previousSignatureCounter:previous},await tx.now());
-      await this.trusted(expected);await this.current(tx,expected);
+      await this.trusted(expected,intent.issuerSpkiSha256);await this.current(tx,expected);
       const time=await tx.now();
       if(time<intent.issuedAtMs||time>=intent.expiresAtMs)fail('CHALLENGE_EXPIRED');
       const r=this.receipt(verified,randomUUID(),time);
@@ -219,6 +219,7 @@ export class PostgresCoreApprovalLedger {
     // Independently read back the committed tombstone with CURRENT native and
     // DB binding. Revocation/readback failure after consume cannot undo it.
     const current=await this.readConsumed(receipt.receiptId,expected);
+    await this.trusted(expected,intent.issuerSpkiSha256);
     // A late or lost acknowledgement must never turn into an actionable receipt.
     // The durable tombstone is retained even when this final check denies it.
     const now=Date.now(),elapsed=process.hrtime.bigint()-ticks;
@@ -265,7 +266,7 @@ export class PostgresCoreApprovalLedger {
     const receipt=this.receipt(verified,receiptId,integer(row.consumed_ms,1));
     const proof=Object.freeze(CoreNativeProofSchema.parse({...binding(i),challengeId:i.challengeId,
       receiptId,approvedAtMs:receipt.consumedAtMs,consumed:true}));
-    return {receipt,proof};
+    return {receipt,proof,approvedIssuer:i.issuerSpkiSha256};
   }
   /** Second, independent one-use stage for the D1 enrollment verifier. Readback
    * of the first WebAuthn consume is deliberately NOT this authorization.
@@ -279,6 +280,10 @@ export class PostgresCoreApprovalLedger {
       const stored=await this.stored(tx,proof.receiptId,expected);
       if(!Object.keys(proof).every(k=>proof[k as keyof CoreNativeProof]===stored.proof[k as keyof CoreNativeProof]))
         fail('ENROLLMENT_PROOF_MISMATCH');
+      // Previously consumed receipts remain terminal even if the issuer changes.
+      if((await tx.db.query('SELECT receipt_id FROM core_approval.enrollment_consumptions WHERE receipt_id=$1',
+        [proof.receiptId])).rows.length)fail('ENROLLMENT_REPLAY');
+      if(stored.approvedIssuer!==issuer)fail('ENROLLMENT_ISSUER_NOT_IN_APPROVED_INTENT');
       await this.current(tx,expected);
       const time=await tx.now();
       if(time<proof.approvedAtMs||time-proof.approvedAtMs>=120000)fail('ENROLLMENT_PROOF_EXPIRED');
@@ -313,7 +318,7 @@ export class PostgresCoreApprovalLedger {
     z.string().uuid().parse(receiptId);const expected=binding(value);
     await this.trusted(expected);
     return this.transaction(async tx=>{
-      const {proof}=await this.stored(tx,receiptId,expected);
+      const {proof,approvedIssuer}=await this.stored(tx,receiptId,expected);
       const row=(await tx.db.query('SELECT authority_id,device_id,proof_sha256,issuer_spki_sha256,consumed_ms '+
         'FROM core_approval.enrollment_consumptions WHERE receipt_id=$1',[receiptId])).rows[0];
       // Narrow the untrusted DB column independently. A caller-selected or
@@ -329,6 +334,7 @@ export class PostgresCoreApprovalLedger {
       // Reconcile the durable issuer tombstone with a fresh independent native
       // readback. Native issuer rotation/revoke may deny but never undo consume.
       await this.trusted(expected,storedIssuer);await this.current(tx,expected);
+      if(approvedIssuer!==storedIssuer)fail('ENROLLMENT_ISSUER_NOT_IN_APPROVED_INTENT');
       return proof;
     });
   }

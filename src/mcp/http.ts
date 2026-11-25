@@ -16,7 +16,7 @@ import {
   hasDirectTls,
   mcpAuthTokens,
 } from '../config.js';
-import { attachAgentWebSocketServer } from '../hub/agent-websocket.js';
+import { attachAgentWebSocketServer, type AgentWebSocketServerOptions } from '../hub/agent-websocket.js';
 import { createControlPlaneAgentCredentialVerifier } from '../hub/control-plane-agent-auth.js';
 import { ControlPlaneMcpClient } from '../hub/control-plane-mcp-auth.js';
 import {
@@ -219,7 +219,13 @@ export async function runHttpServer(
   config: NexowireConfig,
   broker: AgentBroker,
   context: McpContext,
+  protectedAtomic?: {remoteAtomicMutationCoordinatorFactory:NonNullable<AgentWebSocketServerOptions['remoteAtomicMutationCoordinatorFactory']>},
 ): Promise<void> {
+  if(broker.isMandatoryAtomicMutationAuthorityEnabled() &&
+    (config.remoteAgentAuthOnly!==true || typeof protectedAtomic?.remoteAtomicMutationCoordinatorFactory!=='function'))
+    throw Error('PROTECTED_HUB_ATOMIC_FACTORY_REQUIRED');
+  if(protectedAtomic && !broker.isMandatoryAtomicMutationAuthorityEnabled())
+    throw Error('PROTECTED_HUB_ATOMIC_BROKER_REQUIRED');
   // Fail BEFORE listen / HTTP 101 when a remote-only Broker was created
   // without the mandatory V2-07 mutation authority. Old Broker builds
   // intentionally cannot publish Agent admission.
@@ -513,12 +519,6 @@ export async function runHttpServer(
       )
     : createHttpServer(app);
 
-  httpServer.listen(config.port, config.host, () => {
-    process.stderr.write(
-      `Nexowire hub listening on ${scheme}://${config.host}:${config.port}/mcp\n`,
-    );
-  });
-
   const wss = attachAgentWebSocketServer(
     httpServer,
     broker,
@@ -526,6 +526,7 @@ export async function runHttpServer(
     {
       credentialStore: context.credentials,
       remoteOnly:config.remoteAgentAuthOnly===true,
+      ...(protectedAtomic ? {remoteAtomicMutationCoordinatorFactory:protectedAtomic.remoteAtomicMutationCoordinatorFactory}:{}),
       ...(remoteAgentCredentialVerifier
         ? {
             remoteCredentialVerifier:
@@ -544,6 +545,12 @@ export async function runHttpServer(
         : {}),
     },
   );
+
+  httpServer.listen(config.port, config.host, () => {
+    process.stderr.write(
+      `Nexowire hub listening on ${scheme}://${config.host}:${config.port}/mcp\n`,
+    );
+  });
 
   const shutdown = async (): Promise<void> => {
     for (const client of wss.clients) client.close(1001, 'Server shutting down');

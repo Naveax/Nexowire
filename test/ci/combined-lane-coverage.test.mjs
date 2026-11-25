@@ -48,14 +48,14 @@ test('empty receipt directory is incomplete, not a green global CI claim',t=>{
   assert.equal(r.comprehensiveCoverage,false);
 });
 
-test('runtime scope has seven exact files and 27 minimum cases, no silent signed-host skip',()=>{
-  assert.equal(Object.keys(RUNTIME_FIXTURES).length,7);
-  assert.equal(Object.values(RUNTIME_FIXTURES).reduce((n,p)=>n+p.minimum,0),27);
+test('runtime scope has nine exact files and 35 minimum cases, no silent signed-host skip',()=>{
+  assert.equal(Object.keys(RUNTIME_FIXTURES).length,9);
+  assert.equal(Object.values(RUNTIME_FIXTURES).reduce((n,p)=>n+p.minimum,0),35);
   const lanes=reviewedLanes({platform:'win32',nodeVersion:'v24.22.3'});
   const runtime=lanes.find(l=>l.policy.id==='runtime');
   assert.equal(runtime.policy.scope,'REVIEWED_WINDOWS_SIGNED_RUNTIME_INSTALLER_ACL_FIXTURES_ONLY');
   assert.equal(runtime.policy.schemaVersion,2);
-  assert.equal(runtime.policy.files.length,7);
+  assert.equal(runtime.policy.files.length,9);
   for(const [file,pin] of Object.entries(RUNTIME_FIXTURES)){
     const n=pin.minimum;
     const skip=['TAP version 13','1..'+n,'# tests '+n,'# pass '+(n-1),'# fail 0','# cancelled 0','# skipped 1','# todo 0',''].join('\n');

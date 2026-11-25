@@ -9,6 +9,9 @@ const postgres={
  'test/ai08/core-credential-postgres-live.test.ts':['3763a40865c7b79435eb05f555138f826a1e1d69',5]
 };
 const deps={
+ 'src/agent/windows-core-consent-transport.ts':'bcf994f6d23bc139ce43b26dcb77f8e1fdaf9cab',
+ 'src/agent/windows-core-console-provider.ts':'2e305fbaefa8f3fdcbfe26d98aefc5e4564bd317',
+ 'src/security/core-webauthn-approval.ts':'4b66824edb04d0fea503012f83b70c068a8c5c14',
  'src/agent/broker-dispatch-authority-handler.ts':'172241587504a80f51d697888e0d1afac4a02a68',
  'src/agent/broker-dispatch-mtls-fetch.ts':'a5e8dc574a047095f77f7b9dec1278e30b3555a9',
  'src/agent/protected-broker-dispatch-service.ts':'e23d4c5c0b54ecc6a870f422a22eb6ca21dac8b3',
@@ -19,7 +22,7 @@ const deps={
  'src/security/core-native-verifier-server.ts':'78ffdc36ff6728ae8880b10db21d2fc5bf225394',
  'src/security/core-native-mtls-fetch.ts':'d824def6dd40ad2973d4d21a07c2425e2d09a0cb',
  'src/security/core-native-verifier-service.ts':'2dcc44d341dd0c98e3ed099ed910fcbb5b42ced5',
- 'src/security/postgres-core-approval-ledger.ts':'5cfa9d595409dfb11b55a8386d1a7a869e80c1da',
+ 'src/security/postgres-core-approval-ledger.ts':'048889b8f87f58fc11958f7babe3615dd962dbc9',
  'src/agent/postgres-broker-dispatch-authority.ts':'ff74fe72ceb312849642c8dba2d6f4afc68621c8',
  'src/agent/protected-postgres-dispatch-pool.ts':'65d65241171c71b436a5e7606a77aeb9d0fcb0cc',
  'sql/core-broker-dispatch-authority.sql':'a120585a92d7ab41bb2d1a3aaf5c0bc31f9ca74b',
