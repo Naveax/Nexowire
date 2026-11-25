@@ -298,7 +298,7 @@ export class PostgresBrokerDispatchAuthority implements ExternalBrokerDispatchAu
         [op.requestId])).rows[0];
       if(!claim||claim.authority_id!==this.authorityId||claim.dispatch_id!==dispatchId||
         claim.broker_id!==brokerId||!sameRequest(claim.request,op)||claim.state==='RELEASED')
-        fail('DISPATCH_STORE_RELEASE_SCOPE_OR_REPLAY');
+        return fail('DISPATCH_STORE_RELEASE_SCOPE_OR_REPLAY');
       if(claim.state==='COMMITTED'&&!await this.completionVerified(tx,claim,op))
         fail('DISPATCH_STORE_NATIVE_COMPLETION_REQUIRED');
       await tx.db.query("UPDATE core_dispatch.claims SET state='RELEASED' WHERE request_id=$1",[op.requestId]);
@@ -341,7 +341,7 @@ export class PostgresBrokerDispatchAuthority implements ExternalBrokerDispatchAu
             "AND state='COMMITTED' ORDER BY sequence LIMIT 32 FOR UPDATE",[this.authorityId,op.deviceId]);
           for(const claim of outstanding.rows){
             const requested=operation.safeParse(claim.request);
-            if(!requested.success)fail('DISPATCH_STORE_CORRUPT');
+            if(!requested.success)return fail('DISPATCH_STORE_CORRUPT');
             if(await this.completionVerified(tx,claim,requested.data))
               await tx.db.query("UPDATE core_dispatch.claims SET state='RELEASED' WHERE request_id=$1",[requested.data.requestId]);
           }
