@@ -24,15 +24,24 @@ test('PostgreSQL crash restart preserves original UNKNOWN claim, epoch and signe
   assert.equal(process.env.RUNNER_ENVIRONMENT,'github-hosted');
   const runId=process.env.GITHUB_RUN_ID??'',container=process.env.NEXOWIRE_PG_RESTART_CONTAINER??'';
   assert.match(runId,/^\d+$/);assert.match(container,/^[a-f0-9]{64}$/);
-  const port=Number(process.env.NEXOWIRE_PG_DISPATCH_TEST_PORT);
+  const initialPort=Number(process.env.NEXOWIRE_PG_DISPATCH_TEST_PORT);
+  let port=initialPort;
   assert(Number.isInteger(port)&&port>0&&port<65536);
   const call=async(args:string[])=>(await docker('docker',args,{timeout:15000,maxBuffer:16384})).stdout.trim();
   assert.equal(await call(['inspect','--format','{{index .Config.Labels "org.nexowire.ai07.restart-run"}}',container]),runId);
   assert.equal(await call(['inspect','--format','{{.Config.Image}}',container]),'postgres:18');
-  assert((await call(['port',container,'5432/tcp'])).split('\n').some(line=>line.endsWith(':'+port)));
-  const common={host:'127.0.0.1',port,database:'nexowire_dispatch_ci',password:'ci-only-not-a-production-credential',max:4,connectionTimeoutMillis:1000};
+  async function mappedPort(){
+    const mapping=await call(['port',container,'5432/tcp']);
+    const matches=mapping.split('\n').map(line=>/^(?:0\.0\.0\.0|127\.0\.0\.1):(\d+)$/.exec(line.trim())).filter(m=>m!==null);
+    assert.equal(matches.length,1,'one current IPv4 published port required');
+    const current=Number(matches[0]![1]);
+    assert(Number.isInteger(current)&&current>0&&current<65536);
+    return current;
+  }
+  assert.equal(await mappedPort(),initialPort);
+  const common={host:'127.0.0.1',database:'nexowire_dispatch_ci',password:'ci-only-not-a-production-credential',max:4,connectionTimeoutMillis:1000};
   const pools=new Set<Pool>();
-  function connect(user:string){const pool=new Pool({...common,user});pools.add(pool);return pool;}
+  function connect(user:string){const pool=new Pool({...common,port,user});pools.add(pool);return pool;}
   async function close(pool:Pool){if(pools.delete(pool))await pool.end();}
   t.after(async()=>{await Promise.all([...pools].map(close));});
   let admin=connect('nexowire_dispatch_ci'),service=connect('nexowire_transfer_runtime');
@@ -44,14 +53,30 @@ test('PostgreSQL crash restart preserves original UNKNOWN claim, epoch and signe
     assert.equal(await call(['inspect','--format','{{.State.Running}}',container]),'false');
     const stopped=connect('nexowire_dispatch_ci');
     try{await assert.rejects(stopped.query('SELECT 1'));}finally{await close(stopped);}
+    const oldPort=port;
     await call(['start',container]);
+    assert.equal(await call(['inspect','--format','{{.State.Running}}',container]),'true');
+    assert.equal(await call(['inspect','--format','{{index .Config.Labels "org.nexowire.ai07.restart-run"}}',container]),runId);
+    // Docker may reassign an ephemeral published port on container restart.
+    // Never reconnect to a stale runner port or a different container.
+    port=await mappedPort();
+    t.diagnostic('Published IPv4 port before/after restart: '+oldPort+' -> '+port);
     admin=connect('nexowire_dispatch_ci');service=connect('nexowire_transfer_runtime');
-    let after:string|undefined;
+    let after:string|undefined,lastError='no connection attempt';
     const deadline=Date.now()+30000;
     while(Date.now()<deadline){
-      try{after=await serverStart();break;}catch{await delay(250);}
+      try{after=await serverStart();break;}catch(error){
+        const e=error as NodeJS.ErrnoException;
+        lastError=String(e.code??e.name??'unknown')+': '+String(e.message??'unknown').slice(0,240);
+        await delay(250);
+      }
     }
-    assert(after,'PostgreSQL must be reachable after crash recovery');
+    if(!after){
+      let internal='unavailable';
+      try{internal=await call(['exec',container,'pg_isready','-h','127.0.0.1','-p','5432']);}catch{}
+      t.diagnostic('Container internal readiness: '+internal+'; host port='+port+'; last client error='+lastError);
+    }
+    assert(after,'PostgreSQL must be reachable after crash recovery: '+lastError);
     assert.notEqual(after,before,'a different real PostgreSQL postmaster must serve the second connection');
     assert.equal((await admin.query('SELECT pg_is_in_recovery() AS recovery')).rows[0].recovery,false);
     t.diagnostic('Real PostgreSQL postmaster changed: '+before+' -> '+after);
