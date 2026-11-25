@@ -449,7 +449,10 @@ async function performCoreAction(deviceId, kind, row) {
       refresh=true;
       try {
         const consent = kind === 'consent';
-        const headers = {Accept:'application/json','Content-Type':'application/json'};
+        // Correlation identity for the coordinated backend contract; legacy servers
+        // ignoring this header do not provide cross-profile idempotency.
+        const headers = {Accept:'application/json','Content-Type':'application/json',
+          'X-Nexowire-Mutation-Id':'core-v1:'+operation.id};
         if (consent) headers['X-Nexowire-Confirm'] = 'core-enrollment-request-v1';
         if (enabled) headers['X-Nexowire-Confirm'] = 'core-preference-v1';
         const response = await fetch(consent ? '/api/v1/me/devices/core-enrollment-request' :
