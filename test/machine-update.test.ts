@@ -4,7 +4,7 @@ import {
   renderMachineCutoverScript,
 } from '../src/update/machine-update.js';
 
-test('machine cutover updates only Nexowire machine launchers and rolls back on failed health', () => {
+test('machine cutover updates only Nexowire machine launchers and denies unsigned fallback', () => {
   const script = renderMachineCutoverScript({
     version: '1.0.5',
     buildId: '1.0.5-012345abcdef',
@@ -21,6 +21,7 @@ test('machine cutover updates only Nexowire machine launchers and rolls back on 
   assert.match(script, /\.update-rollback/);
   assert.match(script, /Restore/);
   assert.match(script, /rolled_back/);
+  assert.match(script, /MACHINE_UPDATE_SIGNED_SQLITE_ROLLBACK_AUTHORITY_REQUIRED/);
   assert.match(
     script,
     /C:\\ProgramData\\Nexowire\\versions\\1\.0\.5-012345abcdef/,

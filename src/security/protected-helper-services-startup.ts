@@ -1,9 +1,6 @@
 import * as z from 'zod';
-import {createProtectedPostgresDispatchPool} from '../agent/protected-postgres-dispatch-pool.js';
 import type {DispatchStorePool,DispatchStoreConnection} from '../agent/postgres-broker-dispatch-authority.js';
 import type {DispatchRevokeRequest} from '../agent/broker-external-dispatch-fence.js';
-import {startProtectedTransferAndCoreServices,type ProtectedTransferServicesStartup} from './protected-transfer-services-startup.js';
-import {bindHelperRollbackGuard,type HelperRollbackGuardConfig} from './protected-helper-rollback-guard.js';
 import {createSignedHelperSelectionEvidenceVerifier,type SignedHelperEvidenceConfig} from './signed-helper-selection-evidence.js';
 import type {HelperAuthorityScope,HelperLease} from './postgres-helper-selection-authority.js';
 import type {HelperSelection} from '../installer/protected-transfer-helper-lifecycle.js';
@@ -93,37 +90,25 @@ export function composeHelperSelectionRevokeDrain(config:{
     }
   };
 }
-export type ProtectedHelperTransferServicesStartup=ProtectedTransferServicesStartup&{rollbackGuard:HelperRollbackGuardConfig};
-/** AI-07 owns all three listeners and cleanup. Add the independent guard
- * and read-only helper drain, never create a second selection listener. */
-export async function startProtectedHelperTransferAndCoreServices(config:ProtectedHelperTransferServicesStartup){
-  const selection=config?.selection,scope=selection?.authority?.scope,db=selection?.database;
-  if(!scope||!db||!config.core||!config.transfer||!config.startupScope||
-     scope.authorityId!==config.core.authorityId||scope.deviceId!==config.startupScope.targetDeviceId||scope.ownerId!==config.startupScope.ownerId||
-     ![config.core.database,config.transfer.database].every(other=>other&&other.host===db.host&&other.port===db.port&&other.database===db.database&&other.caPem===db.caPem)||
-     typeof config.verifyTransferRuntimeDrain!=='function')
-    throw Error('HELPER_SHARED_AUTHORITY_STARTUP_REQUIRED');
-  const nativeEvidence=bindHelperRollbackGuard(selection.nativeEvidence,config.rollbackGuard);
-  const readPool=createProtectedPostgresDispatchPool(db);
-  let combined:Awaited<ReturnType<typeof startProtectedTransferAndCoreServices>>|undefined;
-  let closing:Promise<void>|undefined;
-  const close=()=>closing??=(async()=>{try{await combined?.close();}finally{await readPool.close();}})();
+/** Read-only exact selection preflight for the sole AI07 production
+ * launcher. Never enroll, restore, acquire a lease or change grant state. */
+export async function assertHelperSelectionStartup(pool:DispatchStorePool,input:HelperAuthorityScope){
+  const scope=Object.freeze(scopeSchema.parse(input));
+  const connection=await pool.connect();
+  let begun=false,destroy=false;
   try{
-    const provenance=await selection.authority.verifyProvenance();
-    if(!provenance||provenance.verified!==true||provenance.authorityId!==scope.authorityId||
-       !Number.isSafeInteger(provenance.validUntil)||provenance.validUntil<=Date.now())throw Error('HELPER_STARTUP_PROVENANCE_UNVERIFIED');
-    const connection=await readPool.pool.connect();
-    try{
-      const args=[scope.authorityId,scope.deviceId];
-      const grant=(await connection.query('SELECT * FROM core_dispatch.grants WHERE authority_id=$1 AND device_id=$2',args)).rows[0];
-      const row=(await connection.query('SELECT * FROM helper_selection.selections WHERE authority_id=$1 AND device_id=$2',args)).rows[0];
-      if(grant?.state!=='ACTIVE'||!exactSelectionIdentity(grant,scope)||!row||!exactSelectionIdentity(row,scope))
-        throw Error('HELPER_STARTUP_SCOPE_UNVERIFIED');
-      selected(row);
-    }finally{connection.release();}
-    const verifyTransferRuntimeDrain=composeHelperSelectionRevokeDrain({pool:readPool.pool,scope,nativeEvidence,
-      verifyExistingNativeDrain:config.verifyTransferRuntimeDrain});
-    combined=await startProtectedTransferAndCoreServices({...config,selection:{...selection,nativeEvidence},verifyTransferRuntimeDrain});
-    return Object.freeze({...combined,close});
-  }catch(error){await close().catch(()=>{});throw error;}
+    await connection.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');begun=true;
+    await connection.query("SET LOCAL statement_timeout='2000ms'");
+    await connection.query("SET LOCAL lock_timeout='1000ms'");
+    const args=[scope.authorityId,scope.deviceId];
+    const grant=(await connection.query('SELECT * FROM core_dispatch.grants WHERE authority_id=$1 AND device_id=$2',args)).rows[0];
+    const row=(await connection.query('SELECT * FROM helper_selection.selections WHERE authority_id=$1 AND device_id=$2',args)).rows[0];
+    if(grant?.state!=='ACTIVE'||!exactSelectionIdentity(grant,scope)||!row||!exactSelectionIdentity(row,scope))
+      throw Error('HELPER_STARTUP_SCOPE_UNVERIFIED');
+    selected(row);
+  }catch(error){destroy=true;throw error;}
+  finally{
+    if(begun&&!destroy)try{await connection.query('ROLLBACK');}catch{destroy=true;}
+    connection.release(destroy);
+  }
 }

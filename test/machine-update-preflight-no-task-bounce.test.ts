@@ -12,21 +12,21 @@ const start=script.indexOf('Start-Sleep -Seconds 3');
 assert.ok(start>0,'missing cutover execution block');
 const actualTail=script.slice(start);
 
-test('rollback only bounces tasks when the cutover phase has started',()=>{
+test('cutover boundary precedes first stop; legacy rollback never restarts tasks',()=>{
   const plan=script.indexOf('  Assert-CutoverPlan');
   const hubPatch=script.indexOf('  if($hasBoot){Patch-Launcher');
   const brokerPatch=script.indexOf('  if($hasBroker){Patch-Launcher');
   const cutover=script.indexOf('  $cutoverStarted=$true');
   const stop=script.indexOf('  if($hasBoot){Stop-ScheduledTask');
-  assert.ok(plan>=0&&plan<hubPatch&&hubPatch<brokerPatch&&brokerPatch<cutover&&cutover<stop);
+  assert.ok(plan>=0&&plan<cutover&&cutover<stop&&stop<hubPatch&&hubPatch<brokerPatch);
   assert.match(script,/if\(\$cutoverStarted -and \$hasBoot\)\{try\{Stop-ScheduledTask/);
   assert.match(script,/if\(\$cutoverStarted -and \$hasBroker\)\{try\{Stop-ScheduledTask/);
-  assert.match(script,/if\(\$cutoverStarted -and \$hasBoot\)\{try\{Start-ScheduledTask/);
-  assert.match(script,/if\(\$cutoverStarted -and \$hasBroker\)\{try\{Start-ScheduledTask/);
+  const fallback=script.slice(script.lastIndexOf('\r\n} catch {\r\n'));
+  assert.match(fallback,/MACHINE_UPDATE_SIGNED_SQLITE_ROLLBACK_AUTHORITY_REQUIRED/);
+  assert.doesNotMatch(fallback,/Start-ScheduledTask|Wait-Service/);
   assert.match(script,/if\(\$rollbackErrors.Count -gt 0\)/);
   assert.match(script,/\$previousRoots\[\$file\]=\$oldRoot/);
-  assert.match(script,/MACHINE_UPDATE_HUB_ROLLBACK_UNHEALTHY/);
-  assert.match(script,/MACHINE_UPDATE_BROKER_ROLLBACK_UNHEALTHY/);
+
   assert.match(script,/\$runtimeRoot=\$NewRoot/);
 });
 
@@ -44,14 +44,14 @@ type Scenario ={
 const cases:Scenario[]=[
   {name:'preflight failure leaves both running tasks untouched',
    failPhase:'plan',expectedStatus:'rolled_back',expectedStops:0,expectedStarts:0,expectedRestores:1,expectedExit:1},
-  {name:'second launcher patch failure restores first without bouncing either live task',
-   failPhase:'secondPatch',expectedStatus:'rolled_back',expectedStops:0,expectedStarts:0,expectedRestores:1,expectedExit:1},
-  {name:'failed recovery before task cutover reports rollback_failed without service disruption',
-   failPhase:'secondPatch',restoreFails:true,expectedStatus:'rollback_failed',expectedStops:0,expectedStarts:0,expectedRestores:1,expectedExit:2},
-  {name:'failed live cutover still stops and restarts both tasks during rollback',
-   failPhase:'health',expectedStatus:'rolled_back',expectedStops:4,expectedStarts:3,expectedRestores:1,expectedExit:1},
-  {name:'rollback fails when prior runtime never regains its listener',
-   failPhase:'health',restoredListenerFails:true,expectedStatus:'rollback_failed',expectedStops:4,expectedStarts:3,expectedRestores:1,expectedExit:2},
+  {name:'partial patch after stop retains evidence and denies fallback',
+   failPhase:'secondPatch',expectedStatus:'rollback_failed',expectedStops:4,expectedStarts:0,expectedRestores:0,expectedExit:2},
+  {name:'preflight cleanup failure reports rollback_failed without task bounce',
+   failPhase:'plan',restoreFails:true,expectedStatus:'rollback_failed',expectedStops:0,expectedStarts:0,expectedRestores:1,expectedExit:2},
+  {name:'failed live cutover stops tasks but never restarts previous runtime',
+   failPhase:'health',expectedStatus:'rollback_failed',expectedStops:4,expectedStarts:1,expectedRestores:0,expectedExit:2},
+  {name:'prior listener health cannot authorize a stale runtime restart',
+   failPhase:'health',restoredListenerFails:true,expectedStatus:'rollback_failed',expectedStops:4,expectedStarts:1,expectedRestores:0,expectedExit:2},
   {name:'successful cutover starts both planned tasks and claims success',
    failPhase:'none',expectedStatus:'succeeded',expectedStops:2,expectedStarts:2,expectedRestores:0,expectedExit:0},
 ];
@@ -110,5 +110,6 @@ for(const scenario of cases){
     assert.equal(result.stops,scenario.expectedStops);
     assert.equal(result.starts,scenario.expectedStarts);
     assert.equal(result.restores,scenario.expectedRestores);
+    if(scenario.failPhase==='secondPatch'||scenario.failPhase==='health')assert.match(result.message,/MACHINE_UPDATE_SIGNED_SQLITE_ROLLBACK_AUTHORITY_REQUIRED/);
   });
 }

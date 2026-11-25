@@ -542,12 +542,13 @@ export function renderMachineCutoverScript(input: {
     '$hasBroker=Task-Exists $BrokerTask',
     'try {',
     '  Assert-CutoverPlan',
+    // A failed stop or patch can leave an ambiguous writer/launcher state.
+    // Set the irreversible recovery boundary before the first task stop.
+    '  $cutoverStarted=$true',
+    '  if($hasBoot){Stop-ScheduledTask -TaskName $BootTask -ErrorAction Stop}',
+    '  if($hasBroker){Stop-ScheduledTask -TaskName $BrokerTask -ErrorAction Stop}',
     '  if($hasBoot){Patch-Launcher $BootLauncher}',
     '  if($hasBroker){Patch-Launcher $BrokerLauncher}',
-    '  # Only failures after this point may require stopping/restarting services.',
-    '  $cutoverStarted=$true',
-    '  if($hasBoot){Stop-ScheduledTask -TaskName $BootTask -ErrorAction SilentlyContinue}',
-    '  if($hasBroker){Stop-ScheduledTask -TaskName $BrokerTask -ErrorAction SilentlyContinue}',
     '  Start-Sleep -Seconds 1',
     '  if($hasBoot){Start-ScheduledTask -TaskName $BootTask; if(-not(Wait-Service 43110 \'cli\\.js"?\\s+http(?:\\s|$)\' 30)){throw \'Updated SYSTEM Hub did not bind 43110 from the new runtime\'}}',
     '  if($hasBroker){Start-ScheduledTask -TaskName $BrokerTask; if(-not(Wait-Service 43112 \'privileged-broker\\s+run(?:\\s|$)\' 20)){throw \'Updated Admin Bridge did not bind 43112 from the new runtime\'}}',
@@ -557,12 +558,17 @@ export function renderMachineCutoverScript(input: {
     '  $rollbackErrors=New-Object \'System.Collections.Generic.List[string]\'',
     '  if($cutoverStarted -and $hasBoot){try{Stop-ScheduledTask -TaskName $BootTask -ErrorAction Stop}catch{$rollbackErrors.Add("HUB_STOP: "+$_.Exception.Message)}}',
     '  if($cutoverStarted -and $hasBroker){try{Stop-ScheduledTask -TaskName $BrokerTask -ErrorAction Stop}catch{$rollbackErrors.Add("BROKER_STOP: "+$_.Exception.Message)}}',
+    // This legacy generated script has no independently provisioned signed
+    // SQLite rollback authorization or held launch identity. A source marker,
+    // restored launcher or healthy listener is not such authorization.
+    // Preserve both staged runtimes, launcher backups and state. Never restore
+    // old launchers or start either prior task after an ambiguous cutover.
+    '  if($cutoverStarted){',
+    '    $rollbackErrors.Add("MACHINE_UPDATE_SIGNED_SQLITE_ROLLBACK_AUTHORITY_REQUIRED")',
+    '    Write-Status \'rollback_failed\' ($message+"; "+($rollbackErrors -join "; "));exit 2',
+    '  }',
+    // Preflight failed before any task stop or launcher mutation.
     '  try{Restore}catch{$rollbackErrors.Add("LAUNCHER_RESTORE: "+$_.Exception.Message)}',
-    '  if($cutoverStarted -and $hasBoot){try{Start-ScheduledTask -TaskName $BootTask -ErrorAction Stop}catch{$rollbackErrors.Add("HUB_RESTART: "+$_.Exception.Message)}}',
-    '  if($cutoverStarted -and $hasBoot){try{if(-not $previousRoots.ContainsKey($BootLauncher) -or -not (Wait-Service 43110 \'cli\\.js"?\\s+http(?:\\s|$)\' 30 ([string]$previousRoots[$BootLauncher]))){throw "MACHINE_UPDATE_HUB_ROLLBACK_UNHEALTHY"}}catch{$rollbackErrors.Add("HUB_HEALTH: "+$_.Exception.Message)}}',
-    '  if($cutoverStarted){Start-Sleep -Seconds 2}',
-    '  if($cutoverStarted -and $hasBroker){try{Start-ScheduledTask -TaskName $BrokerTask -ErrorAction Stop}catch{$rollbackErrors.Add("BROKER_RESTART: "+$_.Exception.Message)}}',
-    '  if($cutoverStarted -and $hasBroker){try{if(-not $previousRoots.ContainsKey($BrokerLauncher) -or -not (Wait-Service 43112 \'privileged-broker\\s+run(?:\\s|$)\' 20 ([string]$previousRoots[$BrokerLauncher]))){throw "MACHINE_UPDATE_BROKER_ROLLBACK_UNHEALTHY"}}catch{$rollbackErrors.Add("BROKER_HEALTH: "+$_.Exception.Message)}}',
     '  if($rollbackErrors.Count -gt 0){Write-Status \'rollback_failed\' ($message+"; "+($rollbackErrors -join "; "));exit 2}',
     "  Write-Status 'rolled_back' $message",
     '  exit 1',

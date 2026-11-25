@@ -9,12 +9,13 @@ const script=renderMachineCutoverScript({version:'1.0.5',buildId:'1.0.5-012345ab
 const wait=script.split(/\r?\n/).find(x=>x.startsWith('function Wait-Service('));
 assert.ok(wait,'missing generated socket-owner process proof');
 
-test('restore health checks previous runtime instead of new update root',()=>{
+test('listener identity remains scoped, but cannot authorize legacy rollback',()=>{
  assert.match(wait,/\[string\]\$runtimeRoot=\$NewRoot/);
  assert.match(wait,/\$expectedExe=\[IO\.Path\]::Combine\(\$runtimeRoot,"runtime","node\.exe"\)/);
  assert.match(wait,/\$expectedCli=\[IO\.Path\]::Combine\(\$runtimeRoot,"app","dist","src","cli\.js"\)/);
- assert.match(script,/Wait-Service 43110 .* \(\[string\]\$previousRoots\[\$BootLauncher\]\)/);
- assert.match(script,/Wait-Service 43112 .* \(\[string\]\$previousRoots\[\$BrokerLauncher\]\)/);
+ const fallback=script.slice(script.lastIndexOf('\r\n} catch {\r\n'));
+ assert.match(fallback,/MACHINE_UPDATE_SIGNED_SQLITE_ROLLBACK_AUTHORITY_REQUIRED/);
+ assert.doesNotMatch(fallback,/Wait-Service|Start-ScheduledTask/);
 });
 
 const samples=[
