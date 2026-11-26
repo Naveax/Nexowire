@@ -23,9 +23,13 @@ function executableRunCommands(yaml: string): string[] {
   const commands: string[] = [];
   let blockIndent: number | null = null;
   let hereDocEnd: string | null = null;
+  let folded = false;
+  let foldedContentIndent: number | null = null;
+  let foldedGap = false;
+  let foldedAmbiguous = false;
   let pending = '';
   const flush = () => {
-    if (pending.trim()) commands.push(pending.trim());
+    if (!foldedAmbiguous && pending.trim()) commands.push(pending.trim());
     pending = '';
   };
   for (const line of yaml.split(/\r?\n/)) {
@@ -34,11 +38,19 @@ function executableRunCommands(yaml: string): string[] {
       flush();
       hereDocEnd = null;
       const value = (start[2] ?? '').trim();
+      folded = /^>[-+]?$/.test(value);
+      foldedContentIndent = null;
+      foldedGap = false;
+      foldedAmbiguous = false;
       blockIndent = /^[|>][-+]?$/.test(value) ? (start[1] ?? '').length : null;
       if (blockIndent === null && value) commands.push(value);
       continue;
     }
-    if (blockIndent === null || !line.trim()) continue;
+    if (blockIndent === null) continue;
+    if (!line.trim()) {
+      if (folded && pending) foldedGap = true;
+      continue;
+    }
     const indent = /^\s*/.exec(line)?.[0].length ?? 0;
     if (indent <= blockIndent) {
       flush();
@@ -47,6 +59,15 @@ function executableRunCommands(yaml: string): string[] {
       continue;
     }
     const code = line.trim();
+    // YAML folded scalars join consecutive equally indented lines with spaces.
+    // Refuse complex folding (blank lines or extra indentation) rather than
+    // inventing shell commands; literal blocks retain their line semantics.
+    if (folded) {
+      foldedContentIndent ??= indent;
+      if (foldedGap || indent !== foldedContentIndent || code.endsWith('\\')) foldedAmbiguous = true;
+      pending += (pending ? ' ' : '') + code;
+      continue;
+    }
     // Here-document bodies are shell input data, not executable test commands.
     if (hereDocEnd !== null) {
       if (code === hereDocEnd) hereDocEnd = null;
@@ -171,4 +192,19 @@ test('K19: a here-document printed in a YAML run block cannot spoof test executi
       `${yaml}\n    node --test --import tsx ${target}`), true,
       'a subsequent real command must still be discovered');
   }
+});
+
+
+test('K19: folded YAML joins test arguments without inventing commands', () => {
+  const target = targetFiles[0];
+  assert.equal(explicitlyListedInWorkflow(target,
+    `- run: >-\n    node --test --import tsx\n    ${target}`), true);
+  assert.equal(explicitlyListedInWorkflow(target,
+    `- run: >-\n    echo example\n    node --test --import tsx ${target}`), false);
+  assert.equal(explicitlyListedInWorkflow(target,
+    `- run: >-\n    node --test --import tsx # example\n    ${target}`), false);
+  assert.equal(explicitlyListedInWorkflow(target,
+    `- run: >-\n    node --test --import tsx\n\n    ${target}`), false);
+  assert.equal(explicitlyListedInWorkflow(target,
+    `- run: >-\n    node --test --import tsx\n      ${target}`), false);
 });
