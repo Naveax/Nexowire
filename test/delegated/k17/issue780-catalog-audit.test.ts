@@ -121,3 +121,19 @@ test('T-354: shipped skill catalogue contains no current path or support claim f
   assert.equal(result.directories, 45);
   assert.deepEqual(result.findings, []);
 });
+
+test('P013: quoted empty or delimiter-only platforms remain UNKNOWN after normalization', () => {
+  for (const raw of ['""', "''", ', ,', "\"\", ''"]) {
+    const source = markdown('offline-audit', raw, 'Runs on Windows.');
+    assert.deepEqual(parseSkillManifest(source).platforms, ['any']);
+    assert.deepEqual(auditManifestText('offline-audit', source).map((finding) => finding.code), [
+      'platform-unknown',
+    ]);
+  }
+  assert.deepEqual(auditManifestText('offline-audit', markdown('offline-audit', 'linux', 'Runs on Windows.')).map((finding) => finding.code), [
+    'unsupported-platform-claim',
+  ]);
+  const explicit = markdown('offline-audit', '"win32", ,', 'Runs on Windows.');
+  assert.deepEqual(parseSkillManifest(explicit).platforms, ['win32']);
+  assert.deepEqual(auditManifestText('offline-audit', explicit), []);
+});
