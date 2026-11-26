@@ -137,3 +137,20 @@ test('P013: quoted empty or delimiter-only platforms remain UNKNOWN after normal
   assert.deepEqual(parseSkillManifest(explicit).platforms, ['win32']);
   assert.deepEqual(auditManifestText('offline-audit', explicit), []);
 });
+
+test('P013: every platform in an explicit support list is checked, not only the first', () => {
+  const cases = [
+    ['Runs on Linux and Windows.', ['windows']],
+    ['Supports Linux, Windows, and macOS.', ['windows', 'macos']],
+    ['Available on Linux or macOS.', ['macos']],
+    ['Works on Linux/Windows.', ['windows']],
+    ['Runs on Linux and Windows. Supports Windows.', ['windows']],
+  ] as const;
+  for (const [description, missing] of cases) {
+    const findings = auditManifestText('offline-audit', markdown('offline-audit', 'linux', description));
+    assert.deepEqual(findings.map((f) => f.code), missing.map(() => 'unsupported-platform-claim'));
+    assert.deepEqual(findings.map((f) => f.detail.split(' claimed')[0]), [...missing]);
+  }
+  assert.deepEqual(auditManifestText('offline-audit', markdown('offline-audit', 'linux', 'Inspects Windows logs from Linux.')), []);
+  assert.deepEqual(auditManifestText('offline-audit', markdown('offline-audit', 'linux,win32,darwin', 'Supports Linux, Windows, and macOS.')), []);
+});
