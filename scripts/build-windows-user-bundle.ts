@@ -413,7 +413,7 @@ export function assertTrustedWindowsJobPublisher(
   const signTool = env.NEXOWIRE_WINDOWS_SIGNTOOL_PATH ?? '';
   if (!/^[a-f0-9]{64}$/.test(signerSha256) ||
       !/^[a-f0-9]{64}$/.test(artifactSha256) || !subject ||
-      !/^[A-Za-z]:\\\\/.test(signTool) ||
+      !/^[A-Za-z]:\\/.test(signTool) ||
       path.win32.normalize(signTool) !== signTool ||
       path.win32.basename(signTool).toLowerCase() !== 'signtool.exe') {
     fail('WINDOWS_JOB_SIGNED_RELEASE_POLICY_NOT_CONFIGURED');
