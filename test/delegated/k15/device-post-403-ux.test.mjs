@@ -59,3 +59,18 @@ test('D-095/#539: a transport failure is not mislabeled as another account devic
     return true;
   });
 });
+
+test('D-096/#539: JSON null 403 must not throw a raw TypeError or retarget a device', {
+  todo: !hasPost403Recovery && process.env.K15_STRICT_403 !== '1' &&
+    'owner dereferences result.error even when JSON parses to null',
+}, async () => {
+  const h = harness(403, null);
+  const pending = h.invoke();
+  assert.equal(h.requests.length, 1);
+  assert.equal(JSON.parse(h.requests[0].options.body).deviceId, 'other-account-machine');
+  await assert.rejects(pending, err => {
+    assert.notEqual(err.name, 'TypeError', 'null JSON is a valid parsed value, not an error object');
+    assert.match(err.message, /cihaz|yetki|izin|erişim|hesap|sahibi/i);
+    return true;
+  });
+});
