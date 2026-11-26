@@ -86,7 +86,8 @@ export function auditManifestText(directory: string, markdown: string): Catalogu
   }
 
   const description = unquote(fields.get('description') ?? '');
-  const claimed = [...description.matchAll(/\b(?:supports|runs on|works on|available on)\s+(windows|linux|macos)\b/gi)]
+  const claimed = [...description.matchAll(/\b(?:supports|runs on|works on|available on)\s+((?:windows|linux|macos)\b(?:\s*(?:,\s*(?:(?:and|or)\s+)?|(?:and|or)\s+|\/\s*)(?:windows|linux|macos)\b)*)/gi)]
+    .flatMap((match) => [...(match[1] ?? '').matchAll(/\b(windows|linux|macos)\b/gi)])
     .map((match) => (match[1] ?? '').toLowerCase());
   for (const claim of new Set(claimed)) {
     const expected = platformTerms[claim];
