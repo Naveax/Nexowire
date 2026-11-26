@@ -75,7 +75,8 @@ export function auditManifestText(directory: string, markdown: string): Catalogu
   // The runtime parser defaults omitted platforms to `any`. That is not
   // evidence of platform support; this diagnostic reports it as UNKNOWN.
   const platformsRaw = fields.get('platforms')?.trim() ?? '';
-  if (!platformsRaw) {
+  const platforms = new Set(platformsRaw.split(',').map(unquote).filter(Boolean));
+  if (platforms.size === 0) {
     findings.push({
       directory,
       code: 'platform-unknown',
@@ -84,7 +85,6 @@ export function auditManifestText(directory: string, markdown: string): Catalogu
     return findings;
   }
 
-  const platforms = new Set(platformsRaw.split(',').map(unquote));
   const description = unquote(fields.get('description') ?? '');
   const claimed = [...description.matchAll(/\b(?:supports|runs on|works on|available on)\s+(windows|linux|macos)\b/gi)]
     .map((match) => (match[1] ?? '').toLowerCase());
