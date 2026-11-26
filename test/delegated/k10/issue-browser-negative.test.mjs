@@ -204,3 +204,21 @@ test('#485: IDAT interrupted by ancillary chunk fails while contiguous split IDA
   assert.match(inspectPng(invalid, 1, 1).reason, /nonconsecutive PNG IDAT/);
   assert.equal(inspectPng(invalid, 1, 1).status, 'FAIL');
 });
+
+
+test('#539 R11 / #485: context creation failure is redacted FAIL, not an uncaught rejection', async (t) => {
+  const dir = disposable(t);
+  const stub = join(dir, 'context-fails.mjs');
+  writeFileSync(stub, `export const chromium = {launch: async () => ({
+    close: async () => {},
+    newContext: async () => { throw new Error('file:///fixture-private/context.json token=K10_CONTEXT_CANARY'); }
+  })};`);
+  const report = await captureLocalStaticViews({
+    outputDir: join(dir, 'output'), playwrightModule: pathToFileURL(stub).href,
+  });
+  assert.equal(report.status, 'FAIL');
+  assert.equal(report.scenarios.length, 9);
+  assert.ok(report.scenarios.every((s) => s.layout === 'FAIL' && s.screenshot === null));
+  assert.ok(report.scenarios.every((s) => s.keyboardFocus === 'NOT_RUN'));
+  assert.doesNotMatch(JSON.stringify(report), /fixture-private|context\.json|K10_CONTEXT_CANARY/);
+});
