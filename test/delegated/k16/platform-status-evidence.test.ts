@@ -200,3 +200,19 @@ test("#539 R17 W-675: incomplete WSL inventory rows cannot satisfy required evid
       "not_tested");
   }
 });
+
+
+test("#539 R17 W-675: malformed Linux blockdevices evidence must not crash or pass inventory", async () => {
+  for (const blockdevices of [{}, 42, "not-a-list"]) {
+    const { result, check } = await diagnose("linux", {
+      ...linux, volumes: ok(JSON.stringify({ blockdevices })),
+    });
+    assert.equal(check("volumes").required, false);
+    assert.equal(check("volumes").status, "unknown",
+      "non-array blockdevices is not valid disk inventory");
+    assert.equal(check("volumes").code, "INSUFFICIENT_EVIDENCE");
+    assert.equal(result.origin, "synthetic_fixture");
+    assert.equal(result.ready, true,
+      "optional malformed volume inventory must not erase independent mandatory readiness");
+  }
+});
