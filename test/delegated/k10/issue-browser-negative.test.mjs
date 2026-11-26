@@ -222,3 +222,39 @@ test('#539 R11 / #485: context creation failure is redacted FAIL, not an uncaugh
   assert.ok(report.scenarios.every((s) => s.keyboardFocus === 'NOT_RUN'));
   assert.doesNotMatch(JSON.stringify(report), /fixture-private|context\.json|K10_CONTEXT_CANARY/);
 });
+
+// Teardown failure must not be hidden behind otherwise valid synthetic PNGs.
+for (const failure of ['browser', 'context', 'none']) {
+  test(`#539 R11: ${failure} teardown result is explicit and redacted`, async (t) => {
+    const dir = disposable(t);
+    const stub = join(dir, 'cleanup-fails.mjs');
+    writeFileSync(stub, `import { writeFileSync } from 'node:fs';
+import { deflateSync } from 'node:zlib';
+${k10Crc32.toString()}
+${k10PngChunk.toString()}
+const failure = ${JSON.stringify(failure)};
+const close = async (kind) => {
+  if (failure === kind) throw new Error('file:///fixture-private/cleanup.json token=K10_CLEANUP_CANARY');
+};
+export const chromium = { launch: async () => ({
+  close: () => close('browser'),
+  newContext: async ({ viewport }) => ({
+    close: () => close('context'), route: async () => {},
+    newPage: async () => ({ goto: async () => {}, evaluate: async () => 'PASS',
+      screenshot: async ({path}) => {
+        const h = Buffer.alloc(13); h.writeUInt32BE(viewport.width); h.writeUInt32BE(viewport.height, 4); h[8]=8; h[9]=6;
+        writeFileSync(path, Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]), k10PngChunk('IHDR', h), k10PngChunk('IDAT', deflateSync(Buffer.alloc((viewport.width * 4 + 1) * viewport.height))), k10PngChunk('IEND', Buffer.alloc(0))]));
+      }
+    })
+  })
+}) };`);
+    const report = await captureLocalStaticViews({outputDir: join(dir, 'screenshots'), playwrightModule: pathToFileURL(stub).href});
+    assert.equal(report.status, failure === 'none' ? 'PARTIAL' : 'FAIL');
+    assert.equal(report.browserCleanup, failure === 'browser' ? 'FAIL' : 'PASS');
+    assert.equal(report.scenarios.length, 9);
+    assert.ok(report.scenarios.every((s) => s.png.status === 'PASS'));
+    assert.ok(report.scenarios.every((s) => s.contextCleanup === (failure === 'context' ? 'FAIL' : 'PASS')));
+    assert.doesNotMatch(JSON.stringify(report), /fixture-private|cleanup\.json|K10_CLEANUP_CANARY/);
+    assert.equal(report.authenticatedStates, 'NOT_RUN');
+  });
+}

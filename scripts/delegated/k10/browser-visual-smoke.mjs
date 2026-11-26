@@ -125,10 +125,15 @@ export async function captureLocalStaticViews({ outputDir, playwrightModule = 'p
     return { status: 'NOT_RUN', reason: 'Installed Chromium could not start (headless launch failed)', scenarios };
   }
   const webDir = resolve(dirname(fileURLToPath(import.meta.url)), '../../../web');
+  let browserCleanup = 'NOT_RUN';
+  const closeBrowser = async () => {
+    try { await browser.close(); browserCleanup = 'PASS'; }
+    catch { browserCleanup = 'FAIL'; }
+  };
   try { mkdirSync(outputDir, { recursive: true }); }
   catch {
-    await browser.close().catch(() => {});
-    return { status: 'NOT_RUN', reason: 'Screenshot output directory is unavailable', scenarios };
+    await closeBrowser();
+    return { status: 'NOT_RUN', reason: 'Screenshot output directory is unavailable', browserCleanup, scenarios };
   }
   try {
     for (const [name, spec] of Object.entries(PAGES)) {
@@ -157,15 +162,19 @@ export async function captureLocalStaticViews({ outputDir, playwrightModule = 'p
           candidate.layout = 'FAIL';
           candidate.error = 'Static page capture failed (details redacted)';
         } finally {
-          if (context) await context.close().catch(() => {});
+          if (context) {
+            try { await context.close(); candidate.contextCleanup = 'PASS'; }
+            catch { candidate.contextCleanup = 'FAIL'; }
+          }
         }
       }
     }
   } finally {
-    await browser.close().catch(() => {});
+    await closeBrowser();
   }
   return {
-    status: scenarios.some((item) => item.layout === 'FAIL' || item.overflow === 'FAIL') ? 'FAIL' : 'PARTIAL',
+    status: browserCleanup === 'FAIL' || scenarios.some((item) => item.layout === 'FAIL' || item.overflow === 'FAIL' || item.contextCleanup === 'FAIL') ? 'FAIL' : 'PARTIAL',
+    browserCleanup,
     kind: 'LOCAL_STATIC_FILE',
     network: 'HTTP_AND_HTTPS_BLOCKED',
     keyboardFocus: 'NOT_RUN',
