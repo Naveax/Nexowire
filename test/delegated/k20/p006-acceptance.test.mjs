@@ -70,6 +70,19 @@ test('W-695: explicit TAP not ok overrides forged green totals for dynamic and f
     'DYNAMIC_COUNT_VALID');
 });
 
+test('W-695: TAP bailout and optional test number or dash cannot be green', () => {
+  const input = { ...prior, runId: 42474379692 };
+  for (const line of ['not ok 1 assertion failed', 'not ok - assertion failed',
+    'not ok', '    Bail out! runner terminated']) {
+    const failed = 'TAP version 13\n' + line + '\n' + tap(1);
+    assert.equal(auditDynamicTapSummary(failed).verdict, 'RED_TAP', line);
+    assert.equal(auditFixedCountGate({ ...input, tap: failed }).verdict, 'ASSERTIONS_RED', line);
+  }
+  const good = 'TAP version 13\nok 1 - success\n# comment: not ok\n' + tap(1);
+  assert.equal(auditDynamicTapSummary(good).verdict, 'DYNAMIC_COUNT_VALID');
+  assert.equal(auditFixedCountGate({ ...input, tap: good }).assertionsGreen, true);
+});
+
 test('D-117: dynamic owner TAP count survives 41/48/50/52/55 drift while rejecting zero tests', () => {
   for (const n of [41,48,50,52,55]) {
     assert.equal(auditDynamicTapSummary(tap(n)).verdict,'DYNAMIC_COUNT_VALID');
