@@ -1,4 +1,6 @@
 import test from 'node:test';
+import {createHash,generateKeyPairSync,sign} from 'node:crypto';
+import {reviewScheduledAgentV6Evidence,scheduledAgentV6ForwardSigningBytes,scheduledAgentV6ReleaseSigningBytes,scheduledAgentV6ForwardEnvelopeSha256,type ScheduledAgentV6Forward,type ScheduledAgentV6Release,type ScheduledAgentV6ReviewInput} from '../src/agent/windows-scheduled-v6-evidence.js';
 import assert from 'node:assert/strict';
 import {readFileSync,existsSync,mkdtempSync,rmSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
@@ -241,4 +243,79 @@ test('prelogin installed identity review is explicitly non-authoritative and use
   assert.match(review,/handle\.stat\(\{bigint:true\}\)/);
   assert.match(review,/activationAuthorized:false,releaseAuthorized:false/);
   assert.doesNotMatch(review,/writeFile|spawn|Register-ScheduledTask|Enable-ScheduledTask/);
+});
+
+function bootBoundFixture(){
+  const fk=generateKeyPairSync('ed25519'),rk=generateKeyPairSync('ed25519');
+  const pin=(k:typeof fk)=>{const d=k.publicKey.export({format:'der',type:'spki'});
+    return {encoded:d.toString('base64'),hash:createHash('sha256').update(d).digest('hex')};};
+  const fp=pin(fk),rp=pin(rk),now=1795700000000;
+  const observed:ScheduledAgentV6ReviewInput['observed']={
+    deviceId:'11111111-1111-4111-8111-111111111111',
+    installationId:'22222222-2222-4222-8222-222222222222',
+    bootEpoch:'33333333-3333-4333-8333-333333333333',
+    attemptId:'44444444-4444-4444-8444-444444444444',
+    sourceCommit:'a'.repeat(40),fenceGeneration:3,fenceSha256:'b'.repeat(64),
+    taskName:'Nexowire Prelogin Agent',taskDefinitionSha256:'c'.repeat(64),
+    principalSid:'S-1-5-18',sessionId:0,runtimeManifestSha256:'d'.repeat(64),
+    launcherSha256:'e'.repeat(64),helperSha256:'f'.repeat(64),
+    launcherIdentity:'1:2:100:4:5',helperIdentity:'1:3:100:4:5',
+  };
+  const actual={rootPid:1000,rootCreationFiletime:'133900000000000001',
+    guardianPid:999,guardianCreationFiletime:'133900000000000000',sessionId:0};
+  const f:ScheduledAgentV6Forward={kind:'nexowire.scheduled-agent-v6.forward.v1',
+    binding:observed,issuedAtMs:now-1000,expiresAtMs:now+10000};
+  const forwardEnvelope={payload:f,signature:sign(null,scheduledAgentV6ForwardSigningBytes(f),fk.privateKey).toString('base64url')};
+  const release:ScheduledAgentV6Release={kind:'nexowire.scheduled-agent-v6.release.v1',binding:observed,assignment:actual,
+    forwardSha256:scheduledAgentV6ForwardEnvelopeSha256(forwardEnvelope),issuedAtMs:now-500,expiresAtMs:now+5000};
+  const signRelease=(payload:ScheduledAgentV6Release)=>({payload,signature:sign(null,
+    scheduledAgentV6ReleaseSigningBytes(payload),rk.privateKey).toString('base64url')});
+  const input:ScheduledAgentV6ReviewInput={observed,observedAssignment:actual,nowMs:now,
+    forwardEnvelope,releaseEnvelope:signRelease(release),forwardSpkiBase64:fp.encoded,forwardSpkiSha256:fp.hash,
+    releaseSpkiBase64:rp.encoded,releaseSpkiSha256:rp.hash};
+  return {input,release,signRelease,forwardEnvelope};
+}
+
+test('independent boot-bound forward and release signatures are reviewed but never grant activation',()=>{
+  const {input}=bootBoundFixture();
+  const result=reviewScheduledAgentV6Evidence(input);
+  assert.equal(result.signaturesVerified,true);
+  assert.equal(result.bindingMatched,true);
+  assert.equal(result.activationAuthorized,false);
+  assert.equal(result.releaseAuthorized,false);
+  assert.equal(result.consumed,false);
+});
+
+test('reboot, attempt replay, changed installed bytes, task identity or fence reject old signed evidence',()=>{
+  const {input}=bootBoundFixture();
+  const changes:Partial<ScheduledAgentV6ReviewInput['observed']>[]=[
+    {bootEpoch:'55555555-5555-4555-8555-555555555555'},
+    {attemptId:'55555555-5555-4555-8555-555555555555'},
+    {fenceGeneration:4},{fenceSha256:'9'.repeat(64)},
+    {taskDefinitionSha256:'9'.repeat(64)},{launcherSha256:'9'.repeat(64)},
+    {helperSha256:'9'.repeat(64)},{launcherIdentity:'1:9:100:4:5'},
+    {helperIdentity:'1:9:100:4:5'},{sessionId:1},{principalSid:'S-1-5-19'},
+  ];
+  for(const change of changes)assert.throws(()=>reviewScheduledAgentV6Evidence({
+    ...input,observed:{...input.observed,...change},
+  }),/BOOT_OR_BINDING_MISMATCH/);
+  assert.throws(()=>reviewScheduledAgentV6Evidence({...input,observedAssignment:{
+    ...input.observedAssignment,guardianPid:998,
+  }}),/ASSIGNMENT_MISMATCH/);
+});
+
+test('wrong key, swapped signature domain, stale lease and separately signed wrong forward chain fail closed',()=>{
+  const {input,release,signRelease,forwardEnvelope}=bootBoundFixture();
+  assert.throws(()=>reviewScheduledAgentV6Evidence({...input,
+    releaseSpkiSha256:input.forwardSpkiSha256,releaseSpkiBase64:input.forwardSpkiBase64,
+  }),/INDEPENDENT_SIGNERS_REQUIRED/);
+  assert.throws(()=>reviewScheduledAgentV6Evidence({...input,releaseSpkiSha256:'0'.repeat(64)}),/SIGNER_PIN_MISMATCH/);
+  assert.throws(()=>reviewScheduledAgentV6Evidence({...input,releaseEnvelope:{
+    payload:release,signature:forwardEnvelope.signature,
+  }}),/SIGNATURE_INVALID/);
+  assert.throws(()=>reviewScheduledAgentV6Evidence({...input,nowMs:release.expiresAtMs}),/EXPIRED_OR_FUTURE/);
+  assert.throws(()=>reviewScheduledAgentV6Evidence({...input,releaseEnvelope:signRelease({
+    ...release,forwardSha256:'0'.repeat(64),
+  })}),/FORWARD_CHAIN_MISMATCH/);
+  assert.throws(()=>reviewScheduledAgentV6Evidence({...input,releaseEnvelope:undefined}));
 });
