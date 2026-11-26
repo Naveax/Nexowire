@@ -330,8 +330,8 @@ function useLedgerFixture(t:TestContext){
   const {forwardSpkiBase64,releaseSpkiBase64,forwardSpkiSha256,releaseSpkiSha256}=f.input;
   const config={authorityId:randomUUID(),storeId:randomUUID(),pins:{
     forwardSpkiBase64,releaseSpkiBase64,forwardSpkiSha256,releaseSpkiSha256}};
-  let now=f.input.nowMs;
-  t.mock.method(Date,'now',()=>now);
+  let now=f.input.nowMs,clock:()=>number=()=>now;
+  t.mock.method(Date,'now',()=>clock());
   const open=()=>{const db=new DatabaseSync(file);connections.push(db);db.exec('PRAGMA synchronous=FULL');return db;};
   t.after(()=>{for(const db of connections)if(db.isOpen)db.close();rmSync(root,{recursive:true,force:true});});
   const db=open();
@@ -346,7 +346,7 @@ function useLedgerFixture(t:TestContext){
     const observed={...f.input.observed,...change};
     return {observed,forwardEnvelope:f.signForward({...f.forwardEnvelope.payload,binding:observed})};
   };
-  return {db,ledger,config,open,forward,releaseInput,alternate,setNow:(v:number)=>{now=v;},f};
+  return {db,ledger,config,open,forward,releaseInput,alternate,setNow:(v:number)=>{now=v;},setClock:(v:()=>number)=>{clock=v;},f};
 }
 
 test('independent disk ledger consumes forward then exact release once across connections and reopen',t=>{
@@ -391,4 +391,14 @@ test('unprovisioned memory, wrong store pins, outer transaction and relaxed dura
   try{assert.throws(()=>x.ledger.consumeForward(x.forward),/STORE_UNPROVISIONED/);}finally{x.db.exec('ROLLBACK');}
   x.db.exec('PRAGMA synchronous=NORMAL');
   assert.throws(()=>x.ledger.consumeForward(x.forward),/STORE_UNPROVISIONED/);
+});
+
+test('commit crossing the signed deadline keeps tombstone and returns no timely consumption acknowledgement',t=>{
+  const x=useLedgerFixture(t),now=x.f.input.nowMs;
+  let reads=0;
+  x.setClock(()=>++reads<=2?now:x.f.forwardEnvelope.payload.expiresAtMs);
+  assert.throws(()=>x.ledger.consumeForward(x.forward),/COMMITTED_CLOCK_OR_DEADLINE_UNKNOWN/);
+  assert.equal(x.db.prepare('SELECT state FROM scheduled_v6_uses').get()?.state,'FORWARD_CONSUMED');
+  x.setClock(()=>now);
+  assert.throws(()=>x.ledger.consumeForward(x.forward),/FENCE_REPLAY_OR_STALE/);
 });

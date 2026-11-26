@@ -68,6 +68,11 @@ export class ScheduledAgentV6UseLedger {
       if(Number(db.prepare('UPDATE main.scheduled_v6_metadata SET max_seen_ms=? WHERE singleton=1 AND max_seen_ms=?').run(after,last).changes)!==1)
         deny('CLOCK_CAS_FAILED');
       committing=true;db.exec('COMMIT');active=false;committing=false;
+      // A slow durable commit can cross the deadline. Keep the tombstone
+      // but never return even a consumption acknowledgement as timely.
+      const committedAt=Date.now();
+      if(!Number.isSafeInteger(committedAt)||committedAt<after||committedAt>=deadline)
+        deny('COMMITTED_CLOCK_OR_DEADLINE_UNKNOWN');
       return result;
     }catch(error){
       if(active&&db.isTransaction)try{db.exec('ROLLBACK');}catch{deny('TRANSACTION_UNKNOWN');}
