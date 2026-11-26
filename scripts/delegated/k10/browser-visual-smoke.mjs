@@ -3,8 +3,8 @@
  * Opt-in browser capture of local static files. Needs an already installed
  * Playwright package/browser. All HTTP(S) requests are blocked. No login/API.
  */
-import { mkdirSync, readFileSync } from 'node:fs';
-import { basename, dirname, join, resolve } from 'node:path';
+import { mkdirSync, readFileSync, realpathSync } from 'node:fs';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { inflateSync } from 'node:zlib';
 import { PAGES, VIEWPORTS } from './offline-web-smoke.mjs';
@@ -18,9 +18,10 @@ function crc32(buffer, start, end) {
   return (value ^ 0xffffffff) >>> 0;
 }
 
-export function inspectPng(path, width, height) {
+export function inspectPng(pathOrBytes, width, height) {
   let data;
-  try { data = readFileSync(path); } catch { return { status: 'FAIL', reason: 'PNG file not readable' }; }
+  try { data = Buffer.isBuffer(pathOrBytes) ? pathOrBytes : readFileSync(pathOrBytes); }
+  catch { return { status: 'FAIL', reason: 'PNG file not readable' }; }
   if (data.length > 24 * 1024 * 1024) return { status: 'FAIL', reason: 'PNG exceeds 24 MiB inspection limit' };
   const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
   if (data.length < 33 || !data.subarray(0, 8).equals(signature)) {
@@ -30,6 +31,8 @@ export function inspectPng(path, width, height) {
   let dimensions = null;
   let channels = 0;
   let sawIend = false;
+  let sawIdat = false;
+  let idatClosed = false;
   const compressed = [];
   while (offset + 12 <= data.length) {
     const length = data.readUInt32BE(offset);
@@ -39,6 +42,12 @@ export function inspectPng(path, width, height) {
     const expectedCrc = data.readUInt32BE(next - 4);
     if (crc32(data, offset + 4, next - 4) !== expectedCrc) return { status: 'FAIL', reason: `invalid ${type} CRC` };
     if (dimensions === null && type !== 'IHDR') return { status: 'FAIL', reason: 'IHDR must be first' };
+    if (!/^[A-Za-z]{4}$/.test(type)) return { status: 'FAIL', reason: 'invalid PNG chunk type' };
+    if (/^[A-Z]/.test(type) && !['IHDR', 'PLTE', 'IDAT', 'IEND'].includes(type)) {
+      return { status: 'FAIL', reason: 'unrecognized critical PNG chunk' };
+    }
+    if (type !== 'IDAT' && sawIdat) idatClosed = true;
+    if (type === 'PLTE' && sawIdat) return { status: 'FAIL', reason: 'PLTE follows IDAT' };
     if (type === 'IHDR') {
       if (dimensions || length !== 13) return { status: 'FAIL', reason: 'invalid or duplicated IHDR' };
       const actualWidth = data.readUInt32BE(offset + 8);
@@ -52,7 +61,11 @@ export function inspectPng(path, width, height) {
       dimensions = { width: actualWidth, height: actualHeight };
       channels = colorType === 6 ? 4 : 3;
     }
-    if (type === 'IDAT') compressed.push(data.subarray(offset + 8, next - 4));
+    if (type === 'IDAT') {
+      if (idatClosed) return { status: 'FAIL', reason: 'nonconsecutive PNG IDAT chunks' };
+      sawIdat = true;
+      compressed.push(data.subarray(offset + 8, next - 4));
+    }
     if (type === 'IEND') {
       if (length !== 0 || next !== data.length) return { status: 'FAIL', reason: 'invalid PNG end/trailing bytes' };
       sawIend = true;
@@ -79,32 +92,59 @@ export function inspectPng(path, width, height) {
   return { status: 'PASS', ...dimensions };
 }
 
+// file:// in Playwright is not automatically confined to the opened page's
+// directory. Restrict static fixture subresources to the checked-out web tree,
+// following symlinks to prevent a local file outside web from being loaded.
+export function allowLocalWebAssetRequest(address, webDir) {
+  try {
+    const url = new URL(address);
+    if (url.protocol === 'data:') return true;
+    if (url.protocol !== 'file:') return false;
+    const webRoot = realpathSync(webDir);
+    const candidate = realpathSync(fileURLToPath(url));
+    const within = relative(webRoot, candidate);
+    return !isAbsolute(within) && within !== '..' && !within.startsWith(`..${sep}`);
+  } catch { return false; }
+}
+
 export async function captureLocalStaticViews({ outputDir, playwrightModule = 'playwright' }) {
   const scenarios = [];
   let chromium;
   try {
     ({ chromium } = await import(playwrightModule));
-  } catch (error) {
-    return { status: 'NOT_RUN', reason: `Playwright is unavailable: ${error.code ?? error.message}`, scenarios };
+  } catch {
+    // This can include private absolute module resolution paths. Never echo it.
+    return { status: 'NOT_RUN', reason: 'Playwright is unavailable (module import failed)', scenarios };
   }
   let browser;
   try {
     browser = await chromium.launch({ headless: true });
-  } catch (error) {
-    return { status: 'NOT_RUN', reason: `Installed Chromium could not start: ${error.message}`, scenarios };
+  } catch {
+    // Playwright startup diagnostics may include local profiles, binary paths,
+    // environment variables or credentials. Public JSON contains a fixed code.
+    return { status: 'NOT_RUN', reason: 'Installed Chromium could not start (headless launch failed)', scenarios };
   }
   const webDir = resolve(dirname(fileURLToPath(import.meta.url)), '../../../web');
-  mkdirSync(outputDir, { recursive: true });
+  let browserCleanup = 'NOT_RUN';
+  const closeBrowser = async () => {
+    try { await browser.close(); browserCleanup = 'PASS'; }
+    catch { browserCleanup = 'FAIL'; }
+  };
+  try { mkdirSync(outputDir, { recursive: true }); }
+  catch {
+    await closeBrowser();
+    return { status: 'NOT_RUN', reason: 'Screenshot output directory is unavailable', browserCleanup, scenarios };
+  }
   try {
     for (const [name, spec] of Object.entries(PAGES)) {
       for (const viewport of VIEWPORTS) {
-        const context = await browser.newContext({ viewport: { width: viewport.width, height: viewport.height }, serviceWorkers: 'block' });
         const candidate = { page: name, viewport: viewport.name, width: viewport.width, height: viewport.height, screenshot: null, overflow: 'NOT_RUN', keyboardFocus: 'NOT_RUN' };
         scenarios.push(candidate);
+        let context;
         try {
+          context = await browser.newContext({ viewport: { width: viewport.width, height: viewport.height }, serviceWorkers: 'block' });
           await context.route('**/*', (route) => {
-            const protocol = new URL(route.request().url()).protocol;
-            return protocol === 'file:' || protocol === 'data:' ? route.continue() : route.abort();
+            return allowLocalWebAssetRequest(route.request().url(), webDir) ? route.continue() : route.abort();
           });
           const page = await context.newPage();
           await page.goto(pathToFileURL(join(webDir, spec.file)).href, { waitUntil: 'domcontentloaded' });
@@ -118,19 +158,23 @@ export async function captureLocalStaticViews({ outputDir, playwrightModule = 'p
           });
           candidate.layout = candidate.png.status === 'PASS' ? 'CAPTURED_STATIC_FILE' : 'FAIL';
           candidate.note = 'file:// static preview only; API-driven states and focus navigation unverified';
-        } catch (error) {
+        } catch {
           candidate.layout = 'FAIL';
-          candidate.error = error.message;
+          candidate.error = 'Static page capture failed (details redacted)';
         } finally {
-          await context.close();
+          if (context) {
+            try { await context.close(); candidate.contextCleanup = 'PASS'; }
+            catch { candidate.contextCleanup = 'FAIL'; }
+          }
         }
       }
     }
   } finally {
-    await browser.close();
+    await closeBrowser();
   }
   return {
-    status: scenarios.some((item) => item.layout === 'FAIL' || item.overflow === 'FAIL') ? 'FAIL' : 'PARTIAL',
+    status: browserCleanup === 'FAIL' || scenarios.some((item) => item.layout === 'FAIL' || item.overflow === 'FAIL' || item.contextCleanup === 'FAIL') ? 'FAIL' : 'PARTIAL',
+    browserCleanup,
     kind: 'LOCAL_STATIC_FILE',
     network: 'HTTP_AND_HTTPS_BLOCKED',
     keyboardFocus: 'NOT_RUN',
