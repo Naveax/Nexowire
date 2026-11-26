@@ -94,3 +94,43 @@ test('W-609/610: viewport allows zoom in source, physical keyboard/NVDA still NO
   assert.match(viewport, /width=device-width/);
   assert.doesNotMatch(viewport, /user-scalable\s*=\s*no|maximum-scale\s*=\s*1(?:\D|$)/i);
 });
+
+// W-609: deferred clipboard completion must not alter a newly selected OS panel.
+async function exerciseCopyAfterOSSwitch(rejectClipboard) {
+  const select = /function selectInstallOS\(os\) \{[\s\S]*?\n\}/.exec(js);
+  const handler = /\$\('copy-command'\)\.addEventListener\('click',\s*async\s*\(\)\s*=>\s*\{[\s\S]*?\n\}\);/.exec(js);
+  assert.ok(select && handler, 'real selection and copy handlers must exist');
+  let resolveCopy, rejectCopy, click, hidden = false;
+  const events = [];
+  const pending = new Promise((resolve, reject) => { resolveCopy = resolve; rejectCopy = reject; });
+  const controls = Object.fromEntries(['install-heading', 'install-description', 'download-installer',
+    'verify-installer', 'install-note', 'copy-status'].map(id => [id, { textContent: '' }]));
+  controls['install-command'] = { value: '', closest: () => ({ classList: { toggle(name, value) {
+    assert.equal(name, 'hidden'); hidden = value;
+  } } }), focus() { events.push('focus:hidden=' + hidden); }, select() { events.push('select:hidden=' + hidden); } };
+  controls['copy-command'] = { addEventListener(type, fn) { assert.equal(type, 'click'); click = fn; } };
+  const tabs = ['windows', 'macos'].map(os => ({ dataset: { os }, setAttribute() {} }));
+  const context = vm.createContext({ $: id => controls[id],
+    installers: { windows: { command: 'windows-command' }, macos: { command: '' } },
+    document: { querySelectorAll: () => tabs, querySelector: () => ({ classList: { toggle() {} } }) },
+    navigator: { clipboard: { writeText(value) { events.push('copy:' + value); return pending; } } } });
+  vm.runInContext(select[0] + '\n' + handler[0], context, { timeout: 1000 });
+  vm.runInContext("selectInstallOS('windows')", context);
+  const operation = click();
+  vm.runInContext("selectInstallOS('macos')", context);
+  assert.equal(hidden, true);
+  assert.equal(controls['copy-status'].textContent, '');
+  if (rejectClipboard) rejectCopy(new Error('denied')); else resolveCopy();
+  await operation;
+  return { feedback: controls['copy-status'].textContent, events };
+}
+
+test('W-609 SOURCE RED: late clipboard success must not announce in another OS panel', async () => {
+  const actual = await exerciseCopyAfterOSSwitch(false);
+  assert.deepEqual(actual, { feedback: '', events: ['copy:windows-command'] });
+});
+
+test('W-609 SOURCE RED: late clipboard rejection must not focus a hidden command', async () => {
+  const actual = await exerciseCopyAfterOSSwitch(true);
+  assert.deepEqual(actual, { feedback: '', events: ['copy:windows-command'] });
+});
