@@ -79,7 +79,7 @@ This is **not** a `nexowire node` subcommand or a requirement for the published 
 nexowire node bootstrap --device-name work-pc
 ```
 
-This first example starts the **local** Windows Hub/Agent route only. It does **not** produce a remotely usable ChatGPT connector. If the operator explicitly decides to expose authenticated MCP through Funnel **and** has verified all Tailscale requirements above, `--tailscale-funnel` may be added to the bootstrap invocation:
+On a fresh bootstrap with no saved Funnel request, this first example starts the **local** Windows Hub/Agent route only. It does **not** produce a remotely usable ChatGPT connector. On resume, an earlier saved Funnel request is retained: omitting `--tailscale-funnel` does not revoke it, and bootstrap may retry public HTTPS exposure. Check the existing state and confirm that the previously approved exposure is still intended before retrying. If the operator explicitly decides to expose authenticated MCP through Funnel **and** has verified all Tailscale requirements above, `--tailscale-funnel` may be added to the bootstrap invocation:
 
 ```powershell
 nexowire node bootstrap --device-name work-pc --tailscale-funnel
