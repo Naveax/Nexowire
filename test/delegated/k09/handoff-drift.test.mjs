@@ -61,3 +61,14 @@ test('issue and PR handoff identities must be positive canonical integers', () =
     }
   }
 });
+
+test('missing or malformed owner hold evidence must not imply permission to resume', () => {
+  const { hold, ...row } = observations.find((entry) => entry.number === 271);
+  assert.equal(hold, true);
+  assert.throws(() => reconcileHandoff([row]), /Invalid owner hold/);
+  for (const value of [null, 0, 1, 'false', 'true']) {
+    assert.throws(() => reconcileHandoff([{ ...row, hold: value }]), /Invalid owner hold/);
+  }
+  assert.equal(reconcileHandoff([{ ...row, hold: true }])[0].restriction, 'OWNER_HOLD_DO_NOT_RESUME');
+  assert.equal(reconcileHandoff([observations[1]])[0].restriction, 'NONE');
+});

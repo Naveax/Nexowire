@@ -34,6 +34,8 @@ export function reconcileHandoff(observationsToAudit) {
       throw new Error(`Invalid identity: ${key}`);
 
     if (row.type === 'issue') {
+      if (typeof row.hold !== 'boolean')
+        throw new Error(`Invalid owner hold: ${key}`);
       if (!['open', 'closed'].includes(row.previousState) ||
           !['open', 'closed'].includes(row.currentState))
         throw new Error(`Invalid issue state: ${key}`);
