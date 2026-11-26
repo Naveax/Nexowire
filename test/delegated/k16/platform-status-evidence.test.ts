@@ -177,3 +177,26 @@ test("#539 R17 W-671: empty Linux OS identity must not be reported ready", async
     assert.equal(result.origin, "synthetic_fixture");
   }
 });
+
+
+test("#539 R17 W-675: incomplete WSL inventory rows cannot satisfy required evidence", async () => {
+  // Exit 0 plus a trailing version digit does not establish a distro row.
+  // Both malformed rows omit the STATE column, unlike the valid fixture.
+  const scenarios: { stdout: string; requirements: DoctorRequirements }[] = [
+    { stdout: "WSL 2", requirements: { requireWsl: true } },
+    { stdout: "  NAME      STATE     VERSION\nUbuntu  2",
+      requirements: { wslDistros: ["Ubuntu"] } },
+  ];
+  for (const { stdout, requirements } of scenarios) {
+    const { result, check } = await diagnose("win32", {
+      ...windows, wsl: ok(stdout),
+    }, requirements);
+    assert.equal(check("wsl").required, true);
+    assert.notEqual(check("wsl").status, "pass",
+      "incomplete WSL row must not become verified inventory");
+    assert.equal(result.ready, false);
+    assert.equal(result.origin, "synthetic_fixture");
+    assert.equal(result.physicalAcceptance.find((x) => x.subject === "virtual_machine")?.status,
+      "not_tested");
+  }
+});
