@@ -63,8 +63,8 @@ test('runtime scope has nine exact files and 37 minimum cases, no silent signed-
   }
 });
 
-test('canonical boot policy requires thirteen exact files and 68 cases',()=>{
+test('canonical boot policy requires thirteen exact files and 69 cases',()=>{
   assert.equal(Object.keys(BOOT_FIXTURES).length,13);
-  assert.equal(Object.values(BOOT_FIXTURES).reduce((n,p)=>n+p.minimum,0),68);
-  assert.equal(BOOT_FIXTURES['test/hub-boot-machine-startup-admission.test.ts'].minimum,5);
+  assert.equal(Object.values(BOOT_FIXTURES).reduce((n,p)=>n+p.minimum,0),69);
+  assert.equal(BOOT_FIXTURES['test/hub-boot-machine-startup-admission.test.ts'].minimum,6);
 });

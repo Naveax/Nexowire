@@ -18,7 +18,7 @@ import {REVIEWED_CROSS_OWNER_FIXTURES} from './windows-cross-owner-fixture-recei
 import {GROUPS} from './windows-installer-core-fixture-receipt.mjs';
 const deny=reason=>{throw Error('COMBINED_COVERAGE_'+reason)};
 const BOOT_WORKFLOW='.github/workflows/release-readiness.yml';
-const BOOT_BLOB='599801e1190002b8618de4df54f319ca2a83f34d';
+const BOOT_BLOB='f3939a8a02b7474a558d2f62d9475045f898c80d';
 export const BOOT_FIXTURES=Object.freeze({
   'test/hub-boot-status-legacy-user.test.ts':Object.freeze({blob:'800ca3e6bc6b892c26f102ec7f250754cc1372f3',minimum:1}),
   'test/hub-boot-task-shell-trust.test.ts':Object.freeze({blob:'ce31e6c39b63647c5bb11e579262690694829b12',minimum:5}),
@@ -32,7 +32,7 @@ export const BOOT_FIXTURES=Object.freeze({
   'test/hub-boot-staged-activation.test.ts':Object.freeze({blob:'8fd5be6b05550dfe16d8d5f3c24c6a2a072f2933',minimum:9}),
   'test/hub-boot-hidden-task-visibility.test.ts':Object.freeze({blob:'29bdbe9b57f3889b4ff444c72d747e816545ed2c',minimum:5}),
   'test/windows-unattended-reboot-readiness.test.ts':Object.freeze({blob:'291b663e099f78bc6391a429b7aa53b1b278f217',minimum:7}),
-  'test/hub-boot-machine-startup-admission.test.ts':Object.freeze({blob:'559e004dc097972f00dd6c87503e7ccc70b130dd',minimum:5}),
+  'test/hub-boot-machine-startup-admission.test.ts':Object.freeze({blob:'21399d24da8ae7ca6b0c0bd994c5109f2b1d3094',minimum:6}),
 });
 const asPins=map=>Object.entries(map).map(([p,v])=>({path:p,gitBlobSha:v.blob,minimum:v.minimum}));
 const lane=(target,id,scope,schemaVersion,files,script,args=['--json'],timeoutMs=1800000)=>

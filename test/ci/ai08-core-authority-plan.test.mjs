@@ -22,8 +22,8 @@ test('composition exact side-effect imports are pinned and not independently exe
  assert.deepEqual(imported,Object.keys(COMPOSITION_IMPORTS));
  for(const [file,p] of Object.entries(COMPOSITION_IMPORTS))assert.equal(blob(readFileSync(file)),p.blob);
  for(const [file,[expected]] of Object.entries(WINDOWS_PLAN))assert.equal(blob(readFileSync(file)),expected,file);
- assert.equal(Object.keys(WINDOWS_PLAN).length,9);
- assert.equal(Object.values(WINDOWS_PLAN).reduce((n,p)=>n+p[1],0),76);
+ assert.equal(Object.keys(WINDOWS_PLAN).length,10);
+ assert.equal(Object.values(WINDOWS_PLAN).reduce((n,p)=>n+p[1],0),78);
  assert.throws(()=>validateWindowsPlan({...WINDOWS_PLAN,[imported[0]]:[COMPOSITION_IMPORTS[imported[0]].blob,14]}),/COMPOSITION_DUPLICATE/);
  assert.throws(()=>validateWindowsPlan({...WINDOWS_PLAN,[COMPOSITION]:[WINDOWS_PLAN[COMPOSITION][0],2]}),/COMPOSITION_DUPLICATE/);
 });

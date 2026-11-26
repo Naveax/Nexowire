@@ -17,7 +17,7 @@ const pins = {
   'sql/core-broker-dispatch-authority.sql':'a120585a92d7ab41bb2d1a3aaf5c0bc31f9ca74b',
   'src/security/postgres-protected-transfer-authority.ts':'7af2bbc273cfb67be2ca40b22bf6177788a67982',
   'src/security/protected-transfer-authority.ts':'f4bfb778b17dd2c9005059605051ec27cca27f08',
-  'src/security/protected-transfer-service.ts':'95e15f06e0485fc7e8f736ed27991110f8e96ed3',
+  'src/security/protected-transfer-service.ts':'17983b1635aac68c8de5e15712dddb939004f48d',
   'src/mcp/durable-large-transfer.ts':'5e5f5873fefba4724ee83bf7ac80a6296cbed726',
   'package-lock.json':'b4b0e6feacc5a340133363f68ff63b44ee649dc5'
 };

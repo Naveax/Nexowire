@@ -48,11 +48,11 @@ const runtimeDependencies=Object.freeze({
   'src/mcp/http.ts':'5d3cc338c34700f5d0adb0ba8bc9214de3749213',
   'src/mcp/protected-transfer-hub-startup.ts':'bbbdbe94857ae6d44b7fe18e5cb88e7f41b96cef',
   'src/runtime.ts':'463ec7146556c264212520d55ed91685fa390937',
-  'src/security/protected-transfer-services-startup.ts':'a51d980188b031f799856afa711af543bc2fae81',
+  'src/security/protected-transfer-services-startup.ts':'0465a83ef5a6c32d64d0673a6b8cac10c71512a3',
   'src/agent/windows-core-consent-transport.ts':'bcf994f6d23bc139ce43b26dcb77f8e1fdaf9cab',
-  'src/agent/windows-core-console-provider.ts':'2e305fbaefa8f3fdcbfe26d98aefc5e4564bd317',
+  'src/agent/windows-core-console-provider.ts':'602844cc1b41a2a10421c74118bf64b105e3aff9',
   'scripts/build-windows-user-bundle.ts':'3f71be3ce204e25b68fdf94d7bc33035e864f58f',
-  'src/agent/native-agent-lifecycle.ts':'5c054ee34c306f3490a2fabd3b7c8e4ff1b1c382',
+  'src/agent/native-agent-lifecycle.ts':'0af81d715afc504fbc18dd7e5d6360fa9f059e08',
   // Reviewed #1285 additive protected transfer path. Retain strict exact pin;
   // no fallback to unreviewed content or earlier receipt.
   'src/agent/native-agent.ts':'38abcec5b2c02a2c1cf62fe0ca95bb691397b2bd',
@@ -67,7 +67,7 @@ const runtimeDependencies=Object.freeze({
   'test/fixtures/agent-remote-cas-fixture.ts':'6d3e6e680543818d5c859409db291364be3ae1eb',
   'src/agent/windows-core-console-native.ts':'f3b7dddab82bc94075375866b12ee51e0ffb5909',
   'src/hub/hub-boot-lifecycle.ts':'e73e6c2b953d2f624652675e81b3db0450547f15',
-  'src/security/windows-machine-startup-admission.ts':'43659ac5f133fed3dc8d19d4e7b612e2f482ecf3',
+  'src/security/windows-machine-startup-admission.ts':'4c7feea21d6e2d6ce9727876d28af63f8241a2a2',
   'src/security/windows-privileged-runtime-trust.ts':'2eb3029f9790cd7b94aa7bf87711a2296e3d3df3',
   'src/agent/core-windows-mutation-dispatch.ts':'e8e34f4b8ff420efce6f78a37b65c48edf3d650b',
 });

@@ -10,7 +10,9 @@ const postgres={
 };
 const deps={
  'src/agent/windows-core-consent-transport.ts':'bcf994f6d23bc139ce43b26dcb77f8e1fdaf9cab',
- 'src/agent/windows-core-console-provider.ts':'2e305fbaefa8f3fdcbfe26d98aefc5e4564bd317',
+ 'src/agent/windows-core-console-provider.ts':'602844cc1b41a2a10421c74118bf64b105e3aff9',
+ 'src/security/protected-transfer-services-startup.ts':'0465a83ef5a6c32d64d0673a6b8cac10c71512a3',
+ 'src/security/protected-helper-rollback-guard.ts':'bb298c736a74951807427595a0990b16def2061b',
  'src/security/core-webauthn-approval.ts':'4b66824edb04d0fea503012f83b70c068a8c5c14',
  'src/agent/broker-dispatch-authority-handler.ts':'f559be00a35a683f0f3e8bb10fc9b7c2ec7fbb58',
  'src/agent/broker-dispatch-mtls-fetch.ts':'a5e8dc574a047095f77f7b9dec1278e30b3555a9',

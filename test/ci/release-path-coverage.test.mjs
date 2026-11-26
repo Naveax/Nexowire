@@ -167,15 +167,15 @@ test('DPAPI fixture budget preserves inner deadlines and does not relax other fi
   assert.match(lane,/result:'PASS',elapsedMs,timeoutMs,\.\.\.counts/);
 });
 
-test('canonical boot profile retains all 13 exact fixtures and 68 minimum tests',()=>{
+test('canonical boot profile retains all 13 exact fixtures and 69 minimum tests',()=>{
   const lane=workflow.split('\n  ai08-windows-hub-boot-fixtures:\n')[1]?.split('\n  package:')[0];
-  assert.ok(lane.includes("const canonicalReviewed={...stagedReviewed,'test/hub-boot-machine-startup-admission.test.ts':'559e004dc097972f00dd6c87503e7ccc70b130dd'};"));
+  assert.ok(lane.includes("const canonicalReviewed={...stagedReviewed,'test/hub-boot-machine-startup-admission.test.ts':'21399d24da8ae7ca6b0c0bd994c5109f2b1d3094'};"));
   assert.ok(lane.includes("const hasCanonical=tracked.has('test/hub-boot-machine-startup-admission.test.ts');"));
   assert.ok(lane.includes('WINDOWS_FIXTURE_CANONICAL_PROFILE_INCOMPLETE'));
   const minima=lane.split('const canonicalMinimums={')[1]?.split('};')[0];
   const counts=Object.fromEntries([...minima.matchAll(/'([^']+)':(\d+)/g)].map(m=>[m[1],Number(m[2])]));
-  assert.deepEqual(counts,{"test/hub-boot-status-legacy-user.test.ts":1,"test/hub-boot-task-shell-trust.test.ts":5,"test/hub-boot-root-boundary.test.ts":11,"test/hub-boot-handoff-transaction.test.ts":5,"test/hub-boot-startup-trigger-integrity.test.ts":6,"test/hub-boot-protected-state-gate.test.ts":3,"test/hub-boot-shared-ancestor-trust.test.ts":5,"test/hub-boot-uninstall-task-absence.test.ts":2,"test/windows-dpapi-shell-trust.test.ts":4,"test/hub-boot-staged-activation.test.ts":9,"test/hub-boot-hidden-task-visibility.test.ts":5,"test/windows-unattended-reboot-readiness.test.ts":7,"test/hub-boot-machine-startup-admission.test.ts":5});
+  assert.deepEqual(counts,{"test/hub-boot-status-legacy-user.test.ts":1,"test/hub-boot-task-shell-trust.test.ts":5,"test/hub-boot-root-boundary.test.ts":11,"test/hub-boot-handoff-transaction.test.ts":5,"test/hub-boot-startup-trigger-integrity.test.ts":6,"test/hub-boot-protected-state-gate.test.ts":3,"test/hub-boot-shared-ancestor-trust.test.ts":5,"test/hub-boot-uninstall-task-absence.test.ts":2,"test/windows-dpapi-shell-trust.test.ts":4,"test/hub-boot-staged-activation.test.ts":9,"test/hub-boot-hidden-task-visibility.test.ts":5,"test/windows-unattended-reboot-readiness.test.ts":7,"test/hub-boot-machine-startup-admission.test.ts":6});
   assert.equal(Object.keys(counts).length,13);
-  assert.equal(Object.values(counts).reduce((n,p)=>n+p,0),68);
+  assert.equal(Object.values(counts).reduce((n,p)=>n+p,0),69);
   assert.match(lane,/assertTapSummary\(r\.stdout,minimum\)/);
 });

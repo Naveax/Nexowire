@@ -193,7 +193,7 @@ jobs:
             'test/hub-boot-hidden-task-visibility.test.ts':'29bdbe9b57f3889b4ff444c72d747e816545ed2c',
             'test/windows-unattended-reboot-readiness.test.ts':'291b663e099f78bc6391a429b7aa53b1b278f217',
           };
-          const canonicalReviewed={...stagedReviewed,'test/hub-boot-machine-startup-admission.test.ts':'559e004dc097972f00dd6c87503e7ccc70b130dd'};
+          const canonicalReviewed={...stagedReviewed,'test/hub-boot-machine-startup-admission.test.ts':'21399d24da8ae7ca6b0c0bd994c5109f2b1d3094'};
           const hasStaged=tracked.has('test/hub-boot-staged-activation.test.ts');
           const hasCanonical=tracked.has('test/hub-boot-machine-startup-admission.test.ts');
           if(hasCanonical&&!hasStaged)throw Error('WINDOWS_FIXTURE_CANONICAL_PROFILE_INCOMPLETE');
@@ -210,15 +210,15 @@ jobs:
             'test/hub-boot-staged-activation.test.ts':9,
             'test/hub-boot-hidden-task-visibility.test.ts':5,
             'test/windows-unattended-reboot-readiness.test.ts':7,
-            'test/hub-boot-machine-startup-admission.test.ts':5,
+            'test/hub-boot-machine-startup-admission.test.ts':6,
           };
           const profileReviewed=hasStartup?startupReviewed:baselineReviewed;
           for(const file of Object.keys(sharedReviewed)){
             if(Object.hasOwn(profileReviewed,file))throw Error('WINDOWS_FIXTURE_DUPLICATE_REVIEW_PATH: '+file);
           }
           const reviewed=hasCanonical?canonicalReviewed:hasStaged?stagedReviewed:{...profileReviewed,...sharedReviewed};
-          const reviewProfile=hasCanonical?'AI01_CANONICAL_STARTUP_ADMISSION_23563DAB':hasStaged?'AI01_STAGED_ACTIVATION_C614956A':hasStartup?'AI01_STARTUP_REVIEW_EBEADC0A':'BASELINE_B04BF428';
-          const reviewExtension=hasCanonical?'FAIL_CLOSED_STARTUP_AUTHORITY_23563DAB':hasStaged?'COORDINATED_RECOVERY_DENIAL_C614956A':'STATE_ACL_UNINSTALL_DPAPI_D2696376';
+          const reviewProfile=hasCanonical?'AI01_CANONICAL_STARTUP_ADMISSION_4C7FEEA2':hasStaged?'AI01_STAGED_ACTIVATION_C614956A':hasStartup?'AI01_STARTUP_REVIEW_EBEADC0A':'BASELINE_B04BF428';
+          const reviewExtension=hasCanonical?'FAIL_CLOSED_NATIVE_ISOLATION_4C7FEEA2':hasStaged?'COORDINATED_RECOVERY_DENIAL_C614956A':'STATE_ACL_UNINSTALL_DPAPI_D2696376';
           const check=(file,blob)=>{
             const bytes=readFileSync(file);
             const actual=createHash('sha1').update('blob '+bytes.length+'\0').update(bytes).digest('hex');

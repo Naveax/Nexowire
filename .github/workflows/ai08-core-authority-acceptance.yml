@@ -17,6 +17,9 @@ on:
       - 'sql/core-broker-dispatch*.sql'
       - 'sql/core-broker-native-completion.sql'
       - 'src/agent/protected-native-completion-reader.ts'
+      - 'src/agent/windows-core-console-provider.ts'
+      - 'src/security/protected-transfer-services-startup.ts'
+      - 'src/security/protected-helper-rollback-guard.ts'
 permissions:
   contents: read
   actions: read

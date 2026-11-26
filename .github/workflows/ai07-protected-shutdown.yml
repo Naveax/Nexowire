@@ -19,6 +19,7 @@ on:
       - 'src/agent/protected-native-completion-reader.ts'
       - 'test/ai03/protected-dispatch-service.test.ts'
       - 'test/ai03/protected-native-completion-reader.test.ts'
+      - 'test/ai03/production-authority-boundary.test.ts'
       - 'test/ai05/protected-helper-startup-rollback.test.ts'
 permissions:
   contents: read
@@ -51,9 +52,9 @@ jobs:
           $ErrorActionPreference = 'Stop'
           if ((git rev-parse HEAD).Trim() -ne $env:EXPECTED_HEAD) { throw 'AI07_HEAD_MISMATCH' }
           $tap = Join-Path $env:RUNNER_TEMP 'ai07-shutdown.tap'
-          node --test --test-reporter=tap --import tsx --test-concurrency=1 test/mcp/ai07-protected-shutdown.test.ts test/ai05/protected-helper-startup-rollback.test.ts test/ai03/protected-dispatch-service.test.ts test/ai03/protected-native-completion-reader.test.ts | Tee-Object -FilePath $tap
+          node --test --test-reporter=tap --import tsx --test-concurrency=1 test/mcp/ai07-protected-shutdown.test.ts test/ai05/protected-helper-startup-rollback.test.ts test/ai03/protected-dispatch-service.test.ts test/ai03/protected-native-completion-reader.test.ts test/ai03/production-authority-boundary.test.ts | Tee-Object -FilePath $tap
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          node scripts/ci/assert-tap-summary.mjs $tap 17
+          node scripts/ci/assert-tap-summary.mjs $tap 19
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
   postgres-release:
     if: github.event.pull_request.head.repo.full_name == github.repository
