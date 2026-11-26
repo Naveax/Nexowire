@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  assertTrustedWindowsJobPublisher,
+  assertWindowsJobPostSigningDigest,
   parseBundleArgs,
   renderHiddenLauncher,
   renderSetupScript,
@@ -138,4 +140,47 @@ test('Windows setup is non-admin, versioned, and checksum-pinned', () => {
     setup,
     /bearer|credential|api[_ -]?key|secret/i,
   );
+});
+
+test('Windows release digest requires the actual post-signing bytes and exact approved hash', () => {
+  const unsigned = 'a'.repeat(64);
+  const signed = 'b'.repeat(64);
+  assert.doesNotThrow(() => assertWindowsJobPostSigningDigest(signed, signed + '\n', signed));
+  for (const [actual, manifest, approved] of [
+    [signed, unsigned, signed],
+    [unsigned, signed, signed],
+    [signed, signed, unsigned],
+    [signed, signed + ' extra', signed],
+    ['bad', 'bad', 'bad'],
+  ]) {
+    assert.throws(() => assertWindowsJobPostSigningDigest(actual!, manifest!, approved!),
+      /WINDOWS_JOB_POST_SIGNING_DIGEST_MISMATCH/);
+  }
+});
+
+test('Windows tagged publisher gate requires all independently provisioned release pins before touching files', () => {
+  const root = 'C:\\not-a-release-directory';
+  assert.equal(assertTrustedWindowsJobPublisher(root, { GITHUB_REF_TYPE: 'branch' }), undefined);
+  assert.throws(() => assertTrustedWindowsJobPublisher(root, { GITHUB_REF_TYPE: 'tag' }),
+    /WINDOWS_JOB_TRUSTED_PUBLISHER_NOT_CONFIGURED/);
+  const policy = {
+    GITHUB_REF_TYPE: 'tag',
+    NEXOWIRE_WINDOWS_JOB_PUBLISHER_THUMBPRINT: 'a'.repeat(40),
+    NEXOWIRE_WINDOWS_JOB_SIGNER_SHA256: 'b'.repeat(64),
+    NEXOWIRE_WINDOWS_JOB_PUBLISHER_SUBJECT: 'CN=Example fixture only',
+    NEXOWIRE_WINDOWS_JOB_ARTIFACT_SHA256: 'c'.repeat(64),
+    NEXOWIRE_WINDOWS_SIGNTOOL_PATH: 'C:\\SDK\\signtool.exe',
+  };
+  for (const key of [
+    'NEXOWIRE_WINDOWS_JOB_SIGNER_SHA256',
+    'NEXOWIRE_WINDOWS_JOB_PUBLISHER_SUBJECT',
+    'NEXOWIRE_WINDOWS_JOB_ARTIFACT_SHA256',
+    'NEXOWIRE_WINDOWS_SIGNTOOL_PATH',
+  ] as const) {
+    assert.throws(() => assertTrustedWindowsJobPublisher(root, { ...policy, [key]: '' }),
+      /WINDOWS_JOB_SIGNED_RELEASE_POLICY_NOT_CONFIGURED/);
+  }
+  assert.throws(() => assertTrustedWindowsJobPublisher(root, {
+    ...policy, NEXOWIRE_WINDOWS_SIGNTOOL_PATH: 'signtool.exe',
+  }), /WINDOWS_JOB_SIGNED_RELEASE_POLICY_NOT_CONFIGURED/);
 });
