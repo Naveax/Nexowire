@@ -15,6 +15,10 @@ const script = process.env.K01_CONNECT_REF
 const ownerSourcePortedUx = script.includes('const INSTALLER_RELEASE_ASSETS =') &&
   script.includes("let visibleError = '';");
 
+// Owner's current source generation makes POST outcomes terminal; legacy main remains covered.
+const terminalPostContract = script.includes('let pairingOutcomeUncertain = false;');
+const explicitPairingReady = script.includes("setPill('Eşleştirmeye hazır', 'muted');");
+
 function candidateSource(before, after) {
   // A test-only in-memory proposal, never a write to owner #1068 web source.
   assert.equal(script.split(before).length, 2, 'owner source changed; inspect before updating candidate');
@@ -142,7 +146,7 @@ test('T-255/256 #485: dashboard failure leaves approval blocked, and 401 only re
 
 test('T-256/259 #485/R11: ready means approval available, not remote device connected', async () => {
   const f = await boot({ query: search(), dashboard: async () => Response.json({ devices: [{ online: false }] }) });
-  assert.equal(f.get('connect-pill').textContent, 'Hazır');
+  assert.equal(f.get('connect-pill').textContent, explicitPairingReady ? 'Eşleştirmeye hazır' : 'Hazır');
   assert.equal(f.get('approve').disabled, false);
   assert.equal(f.navigations.length, 0);
   assert.equal(f.requests.filter(({ path }) => path === '/api/v1/pairing').length, 0);
@@ -162,11 +166,12 @@ test('T-258 #485: two clicks during a pending POST never issue two pairing reque
   response.resolve(Response.json({ error: 'fixture' }, { status: 503 }));
   await first;
   assert.equal(f.get('connect-pill').textContent, 'Hata');
-  assert.equal(f.get('approve').textContent, 'TEKRAR DENE');
+  assert.equal(f.get('approve').textContent, terminalPostContract ? 'BAĞLA' : 'TEKRAR DENE');
+  assert.equal(f.get('approve').disabled, terminalPostContract);
   assert.equal(f.navigations.length, 0);
 });
 
-test('T-258 #485: retry is serial; a failed response cannot overwrite a later success', async () => {
+test('T-258 #485: retry is serial on legacy source; terminal POST cannot be repeated on owner source', async () => {
   const first = deferred(), second = deferred();
   let attempts = 0;
   const f = await boot({
@@ -180,6 +185,14 @@ test('T-258 #485: retry is serial; a failed response cannot overwrite a later su
   assert.equal(f.get('connect-pill').textContent, 'Hata');
   const retry = f.get('approve').dispatch('click');
   await f.get('approve').dispatch('click');
+  if (terminalPostContract) {
+    await retry;
+    assert.equal(attempts, 1);
+    assert.equal(f.get('approve').disabled, true);
+    assert.equal(f.get('connect-pill').textContent, 'Hata');
+    assert.equal(f.navigations.length, 0);
+    return;
+  }
   assert.equal(attempts, 2);
   assert.equal(f.get('connect-pill').textContent, 'Bağlanıyor');
   second.resolve(Response.json({ pairingId: 'pair-2', token: 'fixture-value-2' }));
@@ -324,7 +337,7 @@ test('T-398 owner candidate: terminal 403 differs from transient 503', {
     Response.json({ error: 'fixture' }, { status: 503 }) });
   await outage.get('approve').dispatch('click');
   assert.equal(quota.get('approve').disabled, true);
-  assert.equal(outage.get('approve').disabled, false);
+  assert.equal(outage.get('approve').disabled, terminalPostContract);
   assert.notEqual(quota.get('error-message').textContent, outage.get('error-message').textContent);
 });
 
