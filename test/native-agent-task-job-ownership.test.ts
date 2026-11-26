@@ -493,3 +493,26 @@ test('AI09 unknown and malformed receipts cannot be garbage collected',{
     assert.equal((await readdir(dir)).filter(x=>x.endsWith('.status')).length,131);
   });
 });
+
+test('legacy retention preserves v6 assignments and orphaned terminal or cancellation evidence',{
+  skip:process.platform!=='win32',timeout:60000,
+},async()=>{
+  await withMockTask(async({marker,run,dir})=>{
+    for(let i=1;i<=20;i++)await marker(i);
+    const v6=path.join(dir,'agent-job-'+('a').repeat(32)+'.status');
+    const data='NWJOB6 1234 133900000000000001 128 133900000000000000 0\n';
+    await writeFile(v6,data,'utf8');
+    expectMockError(()=>run(),'NATIVE_AGENT_TASK_JOB_V6_TERMINAL_AUTHORITY_REQUIRED');
+    assert.equal(readFileSync(v6,'utf8'),data);
+    assert.equal((await readdir(dir)).filter(x=>x.endsWith('.status')).length,21);
+    await rm(v6);
+    for(const suffix of ['.cancel','.terminal']){
+      const residual=v6+suffix;
+      await writeFile(residual,'unresolved v6 evidence','utf8');
+      expectMockError(()=>run(),'NATIVE_AGENT_TASK_JOB_V6_TERMINAL_AUTHORITY_REQUIRED');
+      assert.equal(readFileSync(residual,'utf8'),'unresolved v6 evidence');
+      assert.equal((await readdir(dir)).filter(x=>x.endsWith('.status')).length,20);
+      await rm(residual);
+    }
+  });
+});

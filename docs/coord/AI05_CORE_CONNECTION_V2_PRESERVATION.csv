@@ -77,7 +77,7 @@ source,source_sha,path,source_blob_sha,integrated_blob_sha,classification
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","src/agent/windows-core-console-provider.ts","af1d11b59304df8feea871983c8f01b47a63a42e","602844cc1b41a2a10421c74118bf64b105e3aff9","EVOLVED"
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","src/agent/windows-environment.ts","aceedd58d1600302d5e0587bcc7cc8757e6aedcf","aceedd58d1600302d5e0587bcc7cc8757e6aedcf","EXACT_SOURCE_BLOB"
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","src/agent/windows-job-kernel-attestation.ts","9ba0c2709c9c9a76d0447457ed95bbb1d487c39d","b237adc4758a7da5fc536c1b3b2e542691fe0bd3","EVOLVED"
-"CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","src/agent/windows-job-owner.ts","fb58e81a39e400a8348a9d1e99ef1ce0f787f130","aa2a8de0fedd8664535d9e537a207d729375c0f0","EVOLVED"
+"CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","src/agent/windows-job-owner.ts","fb58e81a39e400a8348a9d1e99ef1ce0f787f130","1267f9ba98809d23562b4ca3987d0286a22deb59","EVOLVED"
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","src/agent/witness-delegation.ts","faec6c99d67acf1c28d3b1c71409c84651bccad5","faec6c99d67acf1c28d3b1c71409c84651bccad5","EXACT_SOURCE_BLOB"
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","src/agent/witness-revoke-coordinator.ts","f2e1999a8e1a6978be314f1c10760acf7332a52d","f2e1999a8e1a6978be314f1c10760acf7332a52d","EXACT_SOURCE_BLOB"
 "CORE_1067","6241b05a798b8dc684ab8a9caf762896fbf1f3f0","src/agent/witness-signed-provenance.ts","cbfbbe7d4769f67ee5f187c4a61316af442d1d3c","cbfbbe7d4769f67ee5f187c4a61316af442d1d3c","EXACT_SOURCE_BLOB"

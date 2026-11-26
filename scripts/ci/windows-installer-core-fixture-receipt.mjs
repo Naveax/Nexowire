@@ -52,7 +52,8 @@ const runtimeDependencies=Object.freeze({
   'src/agent/windows-core-consent-transport.ts':'bcf994f6d23bc139ce43b26dcb77f8e1fdaf9cab',
   'src/agent/windows-core-console-provider.ts':'602844cc1b41a2a10421c74118bf64b105e3aff9',
   'scripts/build-windows-user-bundle.ts':'3f71be3ce204e25b68fdf94d7bc33035e864f58f',
-  'src/agent/native-agent-lifecycle.ts':'0af81d715afc504fbc18dd7e5d6360fa9f059e08',
+  // #1368 preserves pending v6 evidence during legacy receipt retention.
+  'src/agent/native-agent-lifecycle.ts':'a2e1049af32518d25e41549be1ea78c8657b1d3b',
   // Reviewed #1285 additive protected transfer path. Retain strict exact pin;
   // no fallback to unreviewed content or earlier receipt.
   'src/agent/native-agent.ts':'38abcec5b2c02a2c1cf62fe0ca95bb691397b2bd',
