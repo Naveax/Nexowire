@@ -124,6 +124,16 @@ test('platform descriptions do not present unverified Linux/macOS as Windows boo
   assert.match(firstRun, /owner's informed approval/);
   const bootstrap = await read('src/self-host-bootstrap.ts');
   assert.match(bootstrap, /if \(arg === '--tailscale-funnel'\) \{\s*options\.tailscaleFunnel = true/);
+  // A saved Funnel request survives retries even without the command-line flag.
+  assert.match(bootstrap, /existing\.funnelRequested\s*\|\|\s*options\.tailscaleFunnel === true/);
+  assert.match(bootstrap, /if \(state\.funnelRequested\)\s*\{\s*try\s*\{\s*const exposure = await configureTailscaleExposure/);
+  const resumeExposureContract = (guide) =>
+    /On a fresh bootstrap with no saved Funnel request/.test(guide) &&
+    /an earlier saved Funnel request is retained/.test(guide) &&
+    /omitting `--tailscale-funnel` does not revoke it/.test(guide) &&
+    /confirm that the previously approved exposure is still intended/.test(guide);
+  assert.equal(resumeExposureContract(firstRun), true);
+  assert.equal(resumeExposureContract(firstRun.replace('does not revoke it', 'revokes it')), false);
   const preflight = section(doc, '### Core setup versus optional environment tools');
   assert.match(preflight, /node --import tsx scripts\/run-environment-doctor\.ts --tool=node:22/);
   assert.match(preflight, /NOT_TESTED.*physical USB, phone, gamepad or VM acceptance/);
