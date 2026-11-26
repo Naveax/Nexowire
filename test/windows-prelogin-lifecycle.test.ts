@@ -37,20 +37,18 @@ test('staged environment uses independent machine credentials and state',()=>{
     'C:\\ProgramData\\Nexowire\\system-agent');
 });
 
-test('launcher persistence retains machine paths without plaintext',()=>{
+test('machine environment stays separate and new staged launcher is inert without authority',()=>{
   const env=persistedNativeAgentEnvironment(systemAgentPreloginEnvironment());
   assert.equal(env.NEXOWIRE_WINDOWS_PRELOGIN_AGENT,'1');
   assert.match(env.NEXOWIRE_AGENT_IDENTITY_FILE??'',/system-agent\\agent\.json$/);
   assert.equal(env.NEXOWIRE_AGENT_TOKEN,undefined);
   const l=renderSystemAgentPreloginLauncher(planSystemAgentPrelogin(exe,cli));
   assert.equal(l.charCodeAt(0),0xFEFF);
-  assert.match(l,/NEXOWIRE_WINDOWS_PRELOGIN_AGENT/);
-  assert.match(l,/NEXOWIRE_AGENT_IDENTITY_FILE/);
-  assert.match(l,/NEXOWIRE_AGENT_TOKEN_DPAPI_FILE/);
-  assert.match(l,/NEXOWIRE_AGENT_TASK_JOB_GUARD_V1/);
-  assert.match(l,/windows-job-owner\.exe/);
-  assert.match(l,/\$jobMarker=Join-Path 'C:\\ProgramData\\Nexowire\\system-agent\\state'/);
-  assert.doesNotMatch(l,/\$jobMarker=Join-Path \$PSScriptRoot/);
+  assert.match(l,/# NEXOWIRE_AGENT_TASK_JOB_GUARD_V6\r\n/);
+  assert.match(l,/# NEXOWIRE_AGENT_TASK_JOB_STAGE_ONLY\r\n/);
+  assert.match(l,/throw 'NATIVE_AGENT_TASK_JOB_PROTOCOL_MIGRATION_REQUIRED'/);
+  assert.doesNotMatch(l,/NEXOWIRE_AGENT_TASK_JOB_GUARD_V1|windows-job-owner\.exe|node\.exe|--release|--parent|Start-Process|&\s/);
+  assert.doesNotMatch(l,/NEXOWIRE_AGENT_TOKEN_DPAPI_FILE|NEXOWIRE_AGENT_IDENTITY_FILE/);
   for(const forbidden of ['NEXOWIRE_CORE_AUTHORITY_URL','NEXOWIRE_PRIVILEGED_BROKER_TOKEN',
     'NEXOWIRE_AGENT_TOKEN_PLATFORM_NAME','NEXOWIRE_ALLOWED_ROOTS'])
     assert.doesNotMatch(l,new RegExp(forbidden));
