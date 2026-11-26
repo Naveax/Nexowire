@@ -670,6 +670,11 @@ for ($attempt=0; $attempt -lt 25; $attempt++) {
 }
 if ($null -eq $lock) { throw 'NATIVE_AGENT_TASK_RETENTION_LOCK_UNAVAILABLE' }
 try {
+  # Interrupted v6 migration can leave control/terminal evidence without
+  # its assignment file. The legacy retention routine cannot prove its drain.
+  $v6Residual=@(Get-ChildItem -LiteralPath $dir -Filter 'agent-job-*' -Force -ErrorAction Stop |
+    Where-Object { $_.Name -match '^agent-job-.*\.status\.(cancel|terminal)$' })
+  if ($v6Residual.Count -ne 0) { throw 'NATIVE_AGENT_TASK_JOB_V6_TERMINAL_AUTHORITY_REQUIRED' }
   $markers=@(Get-ChildItem -LiteralPath $dir -Filter 'agent-job-*.status' -File -ErrorAction Stop)
   # Bound untrusted filesystem work. Normal housekeeping removes only proved-dead receipts,
   # so the historical 128 count no longer acts as a permanent 129th-start failure.
@@ -742,6 +747,7 @@ try {
     $data=''
     for ($attempt=0; $attempt -lt 4; $attempt++) {
       $data=[IO.File]::ReadAllText($marker.FullName).Trim()
+      if ($data -cmatch '^NWJOB6(?: |$)') { throw 'NATIVE_AGENT_TASK_JOB_V6_TERMINAL_AUTHORITY_REQUIRED' }
       if ($data -cmatch '^NWJOB3 ([1-9][0-9]*) ([1-9][0-9]*)$') { break }
       Start-Sleep -Milliseconds 60
     }
