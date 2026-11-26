@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:net';
 import {readFileSync} from 'node:fs';
-import {assertWindowsLocalTcpListenerOwnedByPid} from '../src/security/windows-local-listener-owner.js';
+import {assertWindowsLocalTcpListenerOwnedByPid,classifyWindowsListenerProbe} from '../src/security/windows-local-listener-owner.js';
 
 test('read-only local listener inspector denies invalid ports or PIDs',()=>{
   if(process.platform!=='win32'){
@@ -53,9 +53,20 @@ test('Hub Boot success requires listener owner binding after health response',()
     'Get-NetTCPConnection -State Listen -LocalPort $listenPort',
     'OwningProcess -eq $expectedProcess',
     'NetTCPIP\\NetTCPIP.psd1',
-    "result.stdout.trim()!=='HUB_BOOT_LISTENER_PID_VERIFIED'",
+    "result.stdout?.trim()!=='HUB_BOOT_LISTENER_PID_VERIFIED'",
     'env:{',
     'protectedWindowsAclEnvironment()',
   ])assert.ok(inspector.includes(expected),expected);
   assert.doesNotMatch(inspector,/Set-Acl|icacls\.exe|Stop-Process|Start-ScheduledTask/);
+});
+
+test('listener probe timeout, query failure and actual wrong PID are distinct fail-closed outcomes',()=>{
+  const valid={status:0,stdout:'HUB_BOOT_LISTENER_PID_VERIFIED\r\n'};
+  assert.doesNotThrow(()=>classifyWindowsListenerProbe(valid));
+  assert.throws(()=>classifyWindowsListenerProbe({...valid,error:{code:'ETIMEDOUT'}}),/PROBE_TIMEOUT/);
+  assert.throws(()=>classifyWindowsListenerProbe({status:null,stdout:null,signal:'SIGTERM'}),/PROBE_UNAVAILABLE/);
+  assert.throws(()=>classifyWindowsListenerProbe({status:1,stdout:''}),/PROBE_UNVERIFIED/);
+  assert.throws(()=>classifyWindowsListenerProbe({status:17,stdout:'HUB_BOOT_LISTENER_PROCESS_MISMATCH'}),/PID_MISMATCH/);
+  assert.throws(()=>classifyWindowsListenerProbe({status:17,stdout:valid.stdout}),/PROBE_UNVERIFIED/);
+  assert.throws(()=>classifyWindowsListenerProbe({...valid,stdout:valid.stdout+'unexpected'}),/PROBE_UNVERIFIED/);
 });
