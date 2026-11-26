@@ -117,7 +117,11 @@ static BOOL nx_canonical_path(const wchar_t *p){
 }
 static BOOL nx_hold_ancestor(NX_HELD_FILE *f,const wchar_t *p){
   if(f->ancestor_count>=NX_MAX_ANCESTORS)return FALSE;
-  HANDLE h=CreateFileW(p,FILE_READ_ATTRIBUTES,FILE_SHARE_READ|FILE_SHARE_WRITE,
+  /* FILE_READ_ATTRIBUTES alone is a metadata-only open: Windows share
+   * checks need a read/write/delete access bit. FILE_LIST_DIRECTORY is
+   * directory data read access and makes omission of FILE_SHARE_DELETE
+   * effective. Never fall back to an attributes-only open if denied. */
+  HANDLE h=CreateFileW(p,FILE_LIST_DIRECTORY|FILE_READ_ATTRIBUTES,FILE_SHARE_READ|FILE_SHARE_WRITE,
     NULL,OPEN_EXISTING,FILE_FLAG_BACKUP_SEMANTICS|FILE_FLAG_OPEN_REPARSE_POINT,NULL);
   if(h==INVALID_HANDLE_VALUE)return FALSE;
   FILE_ATTRIBUTE_TAG_INFO tag={0};
