@@ -8,6 +8,7 @@ import {installNativeAgentLifecycle,startNativeAgentLifecycle,restartNativeAgent
 import {installStagedSystemAgentPrelogin} from '../src/agent/windows-prelogin-lifecycle.js';
 import {
   parseWindowsJobCompletion,validateWindowsJobRuntimeTimeout,
+  parseWindowsJobV6Assignment,assertSameWindowsJobHelperIdentity,
   launchWindowsJob,requestWindowsJobStop,assertScheduledAgentJobMigrationAdmission,type WindowsJobLaunch,
 } from '../src/agent/windows-job-owner.js';
 
@@ -197,4 +198,47 @@ test('Windows historical NWJOB3 argv fails before root creation without release 
     assert.equal(existsSync(marker),false);
     assert.equal(existsSync(effect),false);
   }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
+test('v6 assignment decoder binds canonical numeric identity and excludes legacy or malformed records',()=>{
+  const line='NWJOB6 1234 133900000000000001 128 133900000000000000 0\n';
+  assert.deepEqual(parseWindowsJobV6Assignment(line),{pid:1234,
+    creationFiletime:'133900000000000001',jobHandle:'128',
+    guardianCreationFiletime:'133900000000000000',sessionId:0});
+  for(const bad of [
+    'NWJOB3 1234 133900000000000001','NWJOB5 1234 133900000000000001 128',
+    line.replace('1234','4294967296'),line.replace('1234','01234'),
+    line.replace(' 128 ',' 0 '),line.replace(' 0\n',' 4294967296\n'),
+    line.replace('133900000000000000','133900000000000002'),
+    line.replace('133900000000000001','9999999999999999999'),
+    line+'\n',' '+line,line.replace(' 0\n',' 00\n'),
+  ])assert.throws(()=>parseWindowsJobV6Assignment(bad),/Invalid v6 suspended-root identity/);
+});
+
+test('release refuses a jointly replaced helper and build manifest or a same-byte different file',()=>{
+  const original={digest:'a'.repeat(64),signature:'1:2:100:4:5'};
+  assert.doesNotThrow(()=>assertSameWindowsJobHelperIdentity(original,{...original}));
+  assert.throws(()=>assertSameWindowsJobHelperIdentity(original,{...original,digest:'b'.repeat(64)}),
+    /helper changed during suspended-root admission/);
+  assert.throws(()=>assertSameWindowsJobHelperIdentity(original,{...original,signature:'1:3:100:4:5'}),
+    /helper changed during suspended-root admission/);
+  const owner=readFileSync(new URL('../src/agent/windows-job-owner.ts',import.meta.url),'utf8');
+  const launch=owner.slice(owner.indexOf('export async function launchWindowsJob('));
+  const initial=launch.indexOf('identity:initialHelperIdentity');
+  const spawn=launch.indexOf('child = spawn(');
+  const verify=launch.indexOf('await verifyWindowsKernelJob(');
+  const compare=launch.indexOf('assertSameWindowsJobHelperIdentity(initialHelperIdentity');
+  const release=launch.indexOf("await fs.writeFile(release,'verified'");
+  assert.ok(initial>=0&&initial<spawn&&spawn<verify&&verify<compare&&compare<release);
+});
+
+test('prelogin installed identity review is explicitly non-authoritative and uses separate expected hashes',()=>{
+  const source=readFileSync(new URL('../src/agent/windows-prelogin-lifecycle.ts',import.meta.url),'utf8');
+  const review=source.slice(source.indexOf('export async function reviewSystemAgentV6InstalledIdentity('),
+    source.indexOf('function assertWindowsElevation('));
+  assert.match(review,/expected\.launcherSha256/);
+  assert.match(review,/helper\.digest!==expected\.helperSha256/);
+  assert.match(review,/handle\.stat\(\{bigint:true\}\)/);
+  assert.match(review,/activationAuthorized:false,releaseAuthorized:false/);
+  assert.doesNotMatch(review,/writeFile|spawn|Register-ScheduledTask|Enable-ScheduledTask/);
 });

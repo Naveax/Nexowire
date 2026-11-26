@@ -89,6 +89,35 @@ function candidateBinary(): string {
 
 interface HelperIdentity { digest: string; signature: string }
 
+export interface WindowsJobV6Assignment {
+  pid:number;
+  creationFiletime:string;
+  jobHandle:string;
+  guardianCreationFiletime:string;
+  sessionId:number;
+}
+
+/** Syntax and incarnation evidence only, never permission to resume.
+ * Historical NWJOB3 and NWJOB5 records cannot enter this v6 release path. */
+export function parseWindowsJobV6Assignment(raw:string):WindowsJobV6Assignment {
+  const line=raw.endsWith('\n')?raw.slice(0,-1):raw;
+  const m=/^NWJOB6 ([1-9][0-9]{0,9}) ([1-9][0-9]{11,18}) ([1-9][0-9]{0,17}) ([1-9][0-9]{11,18}) (0|[1-9][0-9]{0,9})$/.exec(line);
+  if(!m||m[0]!==line||Number(m[1])>0xffffffff||Number(m[5])>0xffffffff||
+     BigInt(m[2]!)>0x7fffffffffffffffn||BigInt(m[4]!)>0x7fffffffffffffffn||
+     BigInt(m[4]!)>BigInt(m[2]!))
+    throw new WindowsJobOwnerError('WINDOWS_JOB_ASSIGNMENT_INVALID','Invalid v6 suspended-root identity.');
+  return {pid:Number(m[1]),creationFiletime:m[2]!,jobHandle:m[3]!,
+    guardianCreationFiletime:m[4]!,sessionId:Number(m[5])};
+}
+
+/** Bind the initial helper incarnation as well as its bytes. A helper
+ * and its adjacent build manifest can otherwise be replaced together. */
+export function assertSameWindowsJobHelperIdentity(before:HelperIdentity,after:HelperIdentity):void {
+  if(before.digest!==after.digest||before.signature!==after.signature)
+    throw new WindowsJobOwnerError('WINDOWS_JOB_HELPER_IDENTITY_CHANGED',
+      'Native Job helper changed during suspended-root admission.');
+}
+
 /**
  * Build-produced SHA detects helper-only substitution; release signer and
  * protected manifest provenance still require separate production acceptance.
@@ -115,31 +144,33 @@ export async function verifyWindowsJobHelperBinary(helper: string): Promise<Help
         !sameParent || !sameLeaf) {
       throw new Error('helper path is a link or reparse redirection');
     }
+    const stamp=(s:typeof first)=>[s.dev,s.ino,s.size,s.mtimeNs,s.ctimeNs].join(':');
     const handle = await fs.open(helper, 'r');
     let actual: string;
     try {
+      const opened=await handle.stat({bigint:true});
+      if(!opened.isFile()||stamp(opened)!==stamp(first))
+        throw new Error('opened helper does not match initial file identity');
       actual = createHash('sha256').update(await handle.readFile()).digest('hex');
+      if(stamp(await handle.stat({bigint:true}))!==stamp(opened))
+        throw new Error('opened helper changed during digest read');
+      const second = await fs.lstat(helper, { bigint: true });
+      if(!second.isFile()||second.isSymbolicLink()||stamp(second)!==stamp(opened)||
+         actual!==expected)
+        throw new Error('helper hash or file identity changed');
     } finally {
       await handle.close();
     }
-    const second = await fs.stat(helper, { bigint: true });
-    if (actual !== expected || first.dev !== second.dev ||
-        first.ino !== second.ino || first.size !== second.size ||
-        first.mtimeNs !== second.mtimeNs) {
-      throw new Error('helper hash or file identity changed');
-    }
-    return { digest: actual,
-      signature: [first.dev, first.ino, first.size, first.mtimeNs].join(':') };
+    return { digest: actual, signature:stamp(first) };
   } catch (cause) {
     throw new WindowsJobOwnerError('WINDOWS_JOB_HELPER_UNTRUSTED',
       'Windows Job helper image/path integrity unverified: ' +
       (cause instanceof Error ? cause.message : String(cause)));
   }
 }
-async function binaryPath(): Promise<string> {
+async function binaryPath(): Promise<{path:string;identity:HelperIdentity}> {
   const candidate = candidateBinary();
-  await verifyWindowsJobHelperBinary(candidate);
-  return candidate;
+  return {path:candidate,identity:await verifyWindowsJobHelperBinary(candidate)};
 }
 
 export async function launchWindowsJob(
@@ -155,7 +186,7 @@ export async function launchWindowsJob(
   const runtimeTimeout=validateWindowsJobRuntimeTimeout(options.runtimeTimeoutMs);
   if(options.guardOnParentExit===false)throw new WindowsJobOwnerError(
     'WINDOWS_JOB_OWNER_REQUIRED','Managed Job requires a live owning process.');
-  const helper = await binaryPath();
+  const {path:helper,identity:initialHelperIdentity} = await binaryPath();
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'nexowire-job-'));
   const marker = path.join(directory, 'assigned.txt');
   const release = path.join(directory, 'verified.ok');
@@ -231,23 +262,18 @@ export async function launchWindowsJob(
     while (Date.now() < deadline) {
       if (failed) throw failed;
       try {
-        const line = (await fs.readFile(marker, 'utf8')).trim();
-        const match = /^NWJOB6 ([1-9][0-9]*) ([1-9][0-9]*) ([1-9][0-9]*) ([1-9][0-9]*) ([0-9]+)$/.exec(line);
-        if (!match) throw new Error('Invalid Windows Job attestation');
-        const pid = Number(match[1]);
-        if (!Number.isSafeInteger(pid) || pid > 0xffffffff) {
-          throw new Error('Invalid owned Windows process ID');
-        }
+        const assigned=parseWindowsJobV6Assignment(await fs.readFile(marker,'utf8'));
+        const pid=assigned.pid;
         // Never trust helper-authored marker text without an independent
         // Win32 kernel membership + job limit verification.
         if (!child.pid) throw new Error('Windows Job guardian PID unavailable');
-        await verifyWindowsKernelJob(pid,match[2]!,child.pid,match[3]!,{
-          creationFiletime:match[4]!,sessionId:Number(match[5]),
+        await verifyWindowsKernelJob(pid,assigned.creationFiletime,child.pid,assigned.jobHandle,{
+          creationFiletime:assigned.guardianCreationFiletime,sessionId:assigned.sessionId,
         });
-        await verifyWindowsJobHelperBinary(helper);
+        assertSameWindowsJobHelperIdentity(initialHelperIdentity,await verifyWindowsJobHelperBinary(helper));
         if(closed||child.exitCode!==null||child.signalCode!==null||Date.now()>=deadline)
           throw new WindowsJobOwnerError('WINDOWS_JOB_LAUNCH_UNCONFIRMED','Guardian closed or admission expired.');
-        identity={pid,creationFiletime:match[2]!,guardianPid:child.pid};
+        identity={pid,creationFiletime:assigned.creationFiletime,guardianPid:child.pid};
         // Install the completion identity before release can make a fast
         // root exit. Failure to write the gate never becomes a receipt.
         await fs.writeFile(release,'verified',{flag:'wx',mode:0o600});

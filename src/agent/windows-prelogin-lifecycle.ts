@@ -4,7 +4,7 @@ import {promises as fs} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {buildNativeAgentLauncher,WINDOWS_NATIVE_AGENT_TASK_SETTINGS} from './native-agent-lifecycle.js';
-import {assertScheduledAgentJobMigrationAdmission} from './windows-job-owner.js';
+import {assertScheduledAgentJobMigrationAdmission,verifyWindowsJobHelperBinary,assertSameWindowsJobHelperIdentity} from './windows-job-owner.js';
 import {isWindowsProcessElevated} from './privileged-broker.js';
 import {hubBootLifecycleStatus} from '../hub/hub-boot-lifecycle.js';
 import {assertNoPrivilegedNodeStartupFlags,assertWindowsPrivilegedRuntimeTrusted,validatePrivilegedRuntimePaths} from '../security/windows-privileged-runtime-trust.js';
@@ -78,6 +78,67 @@ export function renderSystemAgentPreloginLauncher(plan:SystemAgentPreloginPlan):
     windowsTaskJobOwnerPath:plan.jobHelper,
     windowsTaskJobStatusDir:plan.stateRoot,
   });
+}
+
+/** Read-only candidate identity check for an independently reviewed prelogin
+ * launcher and helper. Expected hashes must come from outside the installed
+ * stage, not installation.json or the adjacent helper .sha256 alone.
+ * This does not authenticate that external source, establish a protected
+ * loader/ACL, provide a release handshake, or grant scheduler activation. */
+export async function reviewSystemAgentV6InstalledIdentity(
+  plan:SystemAgentPreloginPlan,
+  expected:Readonly<{launcherSha256:string;helperSha256:string}>,
+):Promise<{launcherSha256:string;helperSha256:string;launcherIdentity:string;
+  helperIdentity:string;activationAuthorized:false;releaseAuthorized:false}>{
+  if(process.platform!=='win32')throw Error('PRELOGIN_AGENT_WINDOWS_ONLY');
+  if(!/^[a-f0-9]{64}$/.test(expected.launcherSha256)||!/^[a-f0-9]{64}$/.test(expected.helperSha256))
+    throw Error('PRELOGIN_AGENT_V6_EXPECTED_IDENTITY_REQUIRED');
+  const canonical=planSystemAgentPrelogin(plan.executable,plan.cliEntrypoint);
+  if(plan.launcher!==canonical.launcher||plan.jobHelper!==canonical.jobHelper||
+     plan.root!==canonical.root||plan.stateRoot!==canonical.stateRoot||
+     plan.taskName!==canonical.taskName)
+    throw Error('PRELOGIN_AGENT_V6_PLAN_IDENTITY_MISMATCH');
+  // Reuse the existing static protected runtime path policy; it does not
+  // execute a probe or imply an ACL / publisher acceptance.
+  validatePrivilegedRuntimePaths({executable:plan.executable,cliEntrypoint:plan.cliEntrypoint});
+  const stamp=(s:import('node:fs').BigIntStats)=>[s.dev,s.ino,s.size,s.mtimeNs,s.ctimeNs].join(':');
+  const inspectLauncher=async()=>{
+    const before=await fs.lstat(plan.launcher,{bigint:true});
+    if(!before.isFile()||before.isSymbolicLink()||before.nlink!==1n||
+       before.size<1n||before.size>1048576n||
+       path.win32.normalize(await fs.realpath(plan.launcher)).toLowerCase()!==plan.launcher.toLowerCase())
+      throw Error('PRELOGIN_AGENT_V6_LAUNCHER_UNTRUSTED');
+    const handle=await fs.open(plan.launcher,'r');
+    try{
+      const held=await handle.stat({bigint:true});
+      if(!held.isFile()||held.nlink!==1n||stamp(held)!==stamp(before))
+        throw Error('PRELOGIN_AGENT_V6_LAUNCHER_CHANGED');
+      const bytes=await handle.readFile();
+      const digest=createHash('sha256').update(bytes).digest('hex');
+      const after=await fs.lstat(plan.launcher,{bigint:true});
+      if(stamp(await handle.stat({bigint:true}))!==stamp(held)||
+         !after.isFile()||after.isSymbolicLink()||after.nlink!==1n||stamp(after)!==stamp(held))
+        throw Error('PRELOGIN_AGENT_V6_LAUNCHER_CHANGED');
+      if(digest!==expected.launcherSha256)
+        throw Error('PRELOGIN_AGENT_V6_LAUNCHER_HASH_MISMATCH');
+      const script=bytes.toString('utf8');
+      if(script.includes('# NEXOWIRE_AGENT_TASK_JOB_GUARD_V1')||
+         !script.includes('# NEXOWIRE_AGENT_TASK_JOB_GUARD_V6'))
+        throw Error('PRELOGIN_AGENT_V6_LAUNCHER_PROTOCOL_REQUIRED');
+      return {digest,signature:stamp(held)};
+    }finally{await handle.close();}
+  };
+  const launcher=await inspectLauncher();
+  const helper=await verifyWindowsJobHelperBinary(plan.jobHelper);
+  if(helper.digest!==expected.helperSha256)
+    throw Error('PRELOGIN_AGENT_V6_HELPER_HASH_MISMATCH');
+  assertSameWindowsJobHelperIdentity(helper,await verifyWindowsJobHelperBinary(plan.jobHelper));
+  const latest=await inspectLauncher();
+  if(latest.digest!==launcher.digest||latest.signature!==launcher.signature)
+    throw Error('PRELOGIN_AGENT_V6_LAUNCHER_CHANGED');
+  return {launcherSha256:launcher.digest,helperSha256:helper.digest,
+    launcherIdentity:launcher.signature,helperIdentity:helper.signature,
+    activationAuthorized:false,releaseAuthorized:false};
 }
 
 function assertWindowsElevation():void{
