@@ -51,7 +51,8 @@ test('T-384 #487 transport parser rejects mislabeled KB/KiB/MiB counter units',(
 test('T-384 #487 S5 JSON keeps RSS byte unit and raw count, no inferred MiB',()=>{
   for(const item of fixture.cases){
     const scenario={kind:'SYNTHETIC_LOOPBACK_WS_OWNER_SQLITE',clients:1,
-      rpc:{attempted:1,reserved:1,backpressure:0},sockets:{peak:1},
+      rpc:{attempted:1,reserved:1,backpressure:0,duplicate:0,rateLimited:0,other:0},
+      sockets:{peak:1},
       elapsedMs:1,memoryBytes:{rssPeak:item.bytes},fairness:{jainIndex:1},
       latencyMs:{p50:1,p95:1,p99:1,max:1}} as S5LoadResult;
     const result=summarizeS5ScenarioResults([scenario]);
