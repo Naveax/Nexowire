@@ -13,6 +13,13 @@ function signed(value:object,domain:string,k:KeyObject){
   return {payload:payload.toString('base64url'),signature:sign(null,
     Buffer.concat([Buffer.from(domain+'\0'),payload]),k).toString('base64url')};
 }
+// Deterministic JSON for the validated registration state (ASCII field names).
+function canonical(value:unknown):string{
+  if(value===null||typeof value!=='object')return JSON.stringify(value);
+  if(Array.isArray(value))return '['+value.map(canonical).join(',')+']';
+  const object=value as Record<string,unknown>;
+  return '{'+Object.keys(object).sort().map(k=>JSON.stringify(k)+':'+canonical(object[k])).join(',')+'}';
+}
 // Synthetic signatures exercise only the read-only audit. They do not install
 // or authorize either source and cannot manufacture a consent proof.
 function fixture(){
@@ -41,7 +48,7 @@ function fixture(){
       witnessCalls++;
       return signed({version:1,kind:'core_owner_directory_continuity_v1',authorityId,directoryId,
         nonce:q.nonce,scope,generation:latest.generation,restoreEpoch:latest.restoreEpoch,
-        registrationSha256:createHash('sha256').update(JSON.stringify(latest),'utf8').digest('hex'),
+        registrationSha256:createHash('sha256').update(canonical(latest),'utf8').digest('hex'),
         observedAtMs:Date.now()},'nexowire.owner-directory.continuity.v1',witness.privateKey);
     }};
   return {config,directory,witness,original,setRecord:(v:typeof original)=>{record=structuredClone(v);},
