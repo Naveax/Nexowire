@@ -24,7 +24,7 @@ const shared=Object.freeze({[MIXED_FILE]:Object.freeze({
 })});
 export const PLATFORM_FIXTURES=Object.freeze({
   win32:Object.freeze({...shared,
-    'test/windows-local-listener-owner.test.ts':Object.freeze({blob:'d9fd6e154772ec1bb5573b92852f5fc8db211eea',minimum:3}),
+    'test/windows-local-listener-owner.test.ts':Object.freeze({blob:'83942adef36ed45d62c298fdc358bb44307dd827',minimum:4}),
     'test/windows-runtime-acl-audit.test.ts':Object.freeze({blob:'2aaecabe2f6cfabb33c3df6321ac70090b473571',minimum:3}),
     'test/windows-generic-acl-readonly-audit.test.ts':Object.freeze({blob:'9afc63a923e0f98bc0eea1892c50465eefe856fb',minimum:3}),
     'test/windows-private-acl-generic.test.ts':Object.freeze({blob:'c507f18bd6296c28c009600ae611f40ed22eee58',minimum:2}),
