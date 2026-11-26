@@ -1,0 +1,82 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { observations, reconcileHandoff, reportHandoff } from './handoff-drift.mjs';
+
+test('issue #481: two changed states, six unchanged issues, and one updated PR HEAD', () => {
+  const result = reconcileHandoff(observations);
+  assert.equal(result.length, 8);
+  assert.deepEqual(result.filter((row) => row.drift === 'STALE_HANDOFF').map((row) => row.key),
+    ['pull_request:480', 'issue:260']);
+  assert.equal(result.find((row) => row.key === 'pull_request:480').now, 'closed_unmerged');
+  assert.equal(result.find((row) => row.key === 'pull_request:480').ci, 'OLD_HEAD_CI_NOT_TRANSFERABLE');
+});
+
+test('PR 7/7 CI from the old SHA never becomes CI acceptance on changed HEAD', () => {
+  const result = reconcileHandoff([observations[0]])[0];
+  assert.equal(observations[0].previousCi, 'success');
+  assert.notEqual(observations[0].previousHead, observations[0].currentHead);
+  assert.equal(result.ci, 'OLD_HEAD_CI_NOT_TRANSFERABLE');
+  assert.equal(result.completion, 'NOT_VERIFIED');
+});
+
+test('closed without merged_at is not merged; real merged_at changes classification only', () => {
+  const [closed] = reconcileHandoff([observations[0]]);
+  assert.equal(closed.now, 'closed_unmerged');
+  const [merged] = reconcileHandoff([{ ...observations[0], mergedAt: '2026-11-07T00:00:00Z' }]);
+  assert.equal(merged.now, 'merged');
+  assert.equal(merged.completion, 'NOT_VERIFIED');
+});
+
+test('#271 remains owner HOLD even though the issue is open', () => {
+  const hold = reconcileHandoff([observations.find((row) => row.number === 271)])[0];
+  assert.equal(hold.now, 'open');
+  assert.equal(hold.restriction, 'OWNER_HOLD_DO_NOT_RESUME');
+  assert.equal(hold.completion, 'NOT_VERIFIED');
+});
+
+test('fail closed on duplicate identity, invalid issue state or absent PR merge status', () => {
+  assert.throws(() => reconcileHandoff([observations[1], observations[1]]), /Duplicate handoff identity/);
+  assert.throws(() => reconcileHandoff([{ ...observations[1], currentState: 'succeeded' }]), /Invalid issue state/);
+  const { mergedAt: _unused, ...missing } = observations[0];
+  assert.throws(() => reconcileHandoff([missing]), /Invalid pull request state/);
+});
+
+test('report is deterministic and cannot show an accepted live result', () => {
+  assert.equal(reportHandoff(), reportHandoff());
+  assert.equal(reportHandoff().split('\n').length, 8);
+  assert.doesNotMatch(reportHandoff(), /DEPLOYED|ACCEPTED|CI_PASS/);
+});
+
+test('impossible open/merged and malformed merged_at cannot masquerade as merged evidence', () => {
+  assert.throws(() => reconcileHandoff([{ ...observations[0], currentState: 'open', mergedAt: '2026-11-07T00:00:00Z' }]), /Invalid pull request state/);
+  assert.throws(() => reconcileHandoff([{ ...observations[0], mergedAt: 'not-a-timestamp' }]), /Invalid pull request state/);
+  assert.throws(() => reconcileHandoff([{ ...observations[0], mergedAt: '' }]), /Invalid pull request state/);
+  assert.throws(() => reconcileHandoff([{ ...observations[0], mergedAt: '2026-02-31T00:00:00Z' }]), /Invalid pull request state/);
+});
+
+test('issue and PR handoff identities must be positive canonical integers', () => {
+  for (const row of [observations[0], observations[1]]) {
+    for (const number of [0, -7]) {
+      assert.throws(() => reconcileHandoff([{ ...row, number }]), /Invalid identity/);
+    }
+  }
+});
+
+test('missing or malformed owner hold evidence must not imply permission to resume', () => {
+  const { hold, ...row } = observations.find((entry) => entry.number === 271);
+  assert.equal(hold, true);
+  assert.throws(() => reconcileHandoff([row]), /Invalid owner hold/);
+  for (const value of [null, 0, 1, 'false', 'true']) {
+    assert.throws(() => reconcileHandoff([{ ...row, hold: value }]), /Invalid owner hold/);
+  }
+  assert.equal(reconcileHandoff([{ ...row, hold: true }])[0].restriction, 'OWNER_HOLD_DO_NOT_RESUME');
+  assert.equal(reconcileHandoff([observations[1]])[0].restriction, 'NONE');
+});
+
+test('dated handoff must reject merge evidence after its observation day', () => {
+  const row = observations[0];
+  for (const mergedAt of ['2026-11-08T00:00:00Z', '2030-01-01T00:00:00Z']) {
+    assert.throws(() => reconcileHandoff([{ ...row, mergedAt }]), /Invalid pull request state/);
+  }
+  assert.equal(reconcileHandoff([{ ...row, mergedAt: '2026-11-07T23:59:59Z' }])[0].now, 'merged');
+});
