@@ -107,6 +107,55 @@ The internal backend/provider interface remains as an architectural seam for Nex
 - **Hub-local:** a tool whose handler can operate on Hub state without mapping
   to a remote Agent capability. Hub-local does not necessarily mean read-only.
 
+### Local status versus effective authorization (#812)
+
+`windows.console_control.status` is a **reported observation**, while the
+permission applied to an exact physical input action is determined by current
+Agent/CORE gates and locally approved grants. A historical Agent 1.0.5
+observation in [issue #812](https://github.com/Naveax/Nexowire/issues/812)
+reported `status.active:false` alongside accepted input in an owner-FULL
+context. This is a **source-versus-installed-build discrepancy to investigate**,
+not permission to remove the local consent gate or a claim that the current
+installed Agent has been verified.
+
+The current source in
+[`src/agent/windows-console-grant.ts`](../src/agent/windows-console-grant.ts)
+combines temporary and CORE status when reporting active authority, while
+[`AI_PHYSICAL_CONSOLE_FULL_ACCESS_GATE.md`](AI_PHYSICAL_CONSOLE_FULL_ACCESS_GATE.md)
+states that remote FULL scope alone does not silently authorize physical
+cursor, keyboard or foreground changes. Separate the reported grant status,
+the authoritative effective policy, the particular operation result, and the
+actual installed binary provenance. A read-only status value is neither a
+grant of new authority nor proof of a later action's success.
+
+For support logs, keep four columns separate: **reported console status**
+(`windows.console_control.status`), **local owner decision** (fresh enrollment
+and any expiry/revocation), **effective authorization at the individual
+mutation boundary**, and **observed input effect** (independent local
+readback). A stale `active:true` snapshot does not bypass a later revocation;
+an `active:false` report alone does not prove which installed binary and
+input path produced the historical #812 observation. Neither stored FULL
+preference nor a successful MCP status query supplies missing local consent.
+
+**Never write “physical authorization verified” from status text alone.** An
+HTTP `200`, Agent journal `succeeded`, Hub idempotency `succeeded`, device
+`online`, stored FULL preference, or signed Bridge `applied` receipt covers
+its *own* observation only. For issue #812, “yerel izin doğrulandı” needs
+fresh owner grant evidence, effective permission checked at the **exact
+physical action boundary**, installed build identity and independent local
+readback for the requested effect. Those device/Windows checks are **NOT_RUN**
+in these source-only documents. A signed Bridge command receipt may prove its
+particular Bridge application, not a separate physical input action.
+
+The same-word status collision across dashboard (“Bağlı” with `devices: []`),
+Bridge (`queued`/`claimed`/`applied`/`failed`/`expired`), Hub idempotency
+(`in_progress`/`succeeded`/`failed`/`unknown`) and native operation journal is
+broken down in [MCP surface documentation](MCP_SURFACE.md#do-not-combine-bridge-hub-and-device-status-namespaces-539).
+These **different namespaces** cannot be mapped to one global completed
+boolean. The dashboard wording remains with the owner [PR #1068](https://github.com/Naveax/Nexowire/pull/1068);
+K08 reproduced the no-device contradiction in [PR #1128](https://github.com/Naveax/Nexowire/pull/1128)
+and only maintains its own docs/test QA here.
+
 For compatibility and tool name details, see
 [`MCP_SURFACE.md`](MCP_SURFACE.md). For the versioned structured error
 classification, see
