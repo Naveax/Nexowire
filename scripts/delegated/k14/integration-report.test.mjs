@@ -63,7 +63,7 @@ test('live collector filters non-fork heads and performs no writes', async () =>
   const get = async path => {
     requested.push(path);
     if (path.includes('/branches/main')) return { commit: { sha: A } };
-    if (path.includes('/pulls?')) return [{ number: 1, head: { sha: B, repo: { full_name: 'SinsiVinci/Nexowire-fork' } }, user: { login: 'SinsiVinci' }, base: { sha: A } }, { number: 2, head: { sha: C, repo: { full_name: 'Naveax/Nexowire' } } }];
+    if (path.includes('/pulls?')) return [{ number: 1, state: 'open', draft: true, head: { sha: B, repo: { full_name: 'SinsiVinci/Nexowire-fork' } }, user: { login: 'SinsiVinci' }, base: { sha: A } }, { number: 2, head: { sha: C, repo: { full_name: 'Naveax/Nexowire' } } }];
     if (path.includes('/pulls/1/files')) return [{ filename: 'docs/readme.md' }];
     if (path.endsWith('/pulls/1')) return { number: 1, state: 'open', draft: true, head: { sha: B }, base: { sha: A } };
     throw new Error(`Unexpected read: ${path}`);
@@ -74,15 +74,29 @@ test('live collector filters non-fork heads and performs no writes', async () =>
   assert.ok(requested.every(path => path.startsWith('/repos/')));
   assert.ok(requested.every(path => !/git\/refs|\/merges|\/comments/.test(path)));
 });
-test('collector rejects a PR that changes HEAD during inspection', async () => {
-  const get = async path => {
-    if (path.includes('/branches/main')) return { commit: { sha: A } };
-    if (path.includes('/pulls?')) return [{ number: 1, head: { sha: B, repo: { full_name: 'SinsiVinci/Nexowire-fork' } }, base: { sha: A } }];
-    if (path.includes('/pulls/1/files')) return [{ filename: 'a.md' }];
-    if (path.endsWith('/pulls/1')) return { number: 1, head: { sha: C }, base: { sha: A } };
-    throw new Error('Unexpected path');
-  };
-  await assert.rejects(collectSnapshot(get), /changed HEAD\/base/);
+test('collector rejects HEAD/base/state/draft drift and accepts stable open PR metadata', async () => {
+  for (const [initialDraft, mutation, expected] of [
+    [true, { head: { sha: C } }, /changed HEAD\/base/],
+    [true, { base: { sha: C } }, /changed HEAD\/base/],
+    [true, { state: 'closed' }, /changed state\/draft during inspection/],
+    [true, { draft: false }, /changed state\/draft during inspection/],
+    [false, { draft: true }, /changed state\/draft during inspection/],
+    [true, {}, null],
+    [false, {}, null],
+  ]) {
+    const initial = { number: 1, state: 'open', draft: initialDraft,
+      head: { sha: B, repo: { full_name: 'SinsiVinci/Nexowire-fork' } },
+      base: { sha: A } };
+    const get = async path => {
+      if (path.includes('/branches/main')) return { commit: { sha: A } };
+      if (path.includes('/pulls?')) return [initial];
+      if (path.includes('/pulls/1/files')) return [{ filename: 'a.md' }];
+      if (path.endsWith('/pulls/1')) return { ...initial, ...mutation };
+      throw new Error('Unexpected path');
+    };
+    if (expected) await assert.rejects(collectSnapshot(get), expected);
+    else assert.equal((await collectSnapshot(get)).prs[0].draft, initialDraft);
+  }
 });
 test('dated 23-PR exact SHA fixture preserves zero-job merge block', async () => {
   const fixture = JSON.parse(await readFile(new URL('../../../docs/delegated/integration-k14/pr-1010-1032-rolling.json', import.meta.url), 'utf8'));
@@ -90,23 +104,4 @@ test('dated 23-PR exact SHA fixture preserves zero-job merge block', async () =>
   assert.equal(report.prs.length, 23);
   assert.equal(report.overlaps.length, 0);
   assert.ok(report.prs.every(pr => pr.ci === 'ACTION_REQUIRED_EMPTY_JOBS' && pr.mergeReady === false));
-});
-
-test('collector fails closed when a PR closes or leaves Draft during a HEAD-stable inspection', async () => {
-  for (const mutation of [{ state: 'closed', draft: true }, { state: 'open', draft: false }]) {
-    const get = async path => {
-      if (path.includes('/branches/main')) return { commit: { sha: A } };
-      if (path.includes('/pulls?')) return [{
-        number: 1, state: 'open', draft: true,
-        head: { sha: B, repo: { full_name: 'SinsiVinci/Nexowire-fork' } },
-        base: { sha: A },
-      }];
-      if (path.includes('/pulls/1/files')) return [{ filename: 'a.md' }];
-      if (path.endsWith('/pulls/1')) return {
-        number: 1, ...mutation, head: { sha: B }, base: { sha: A },
-      };
-      throw new Error('Unexpected path');
-    };
-    await assert.rejects(collectSnapshot(get), /changed state\/draft during inspection/);
-  }
 });
