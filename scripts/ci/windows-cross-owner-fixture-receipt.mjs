@@ -92,7 +92,7 @@ export function summarizeReviewedFixtureOutcomes(files,trackedFileCount){
 const reviewedDependencies=Object.freeze({
   'scripts/ai03-system-dpapi-acceptance.ps1':'446a1f31466b9ee8b941be20175dc42ab01d366d',
   'scripts/Build-Nexowire-SystemHubStage.ps1':'612445bfa2bb74037223ee67d03c1150c0e4b622',
-  'scripts/build-windows-user-bundle.ts':'3f71be3ce204e25b68fdf94d7bc33035e864f58f',
+  'scripts/build-windows-user-bundle.ts':'fd3966ce8cc2a3d53a9347834a78c409ddd4a503',
   'scripts/ai04-controlled-system-hub-cutover.ts':'c0cf0263c7128f8243eff3501429b70d05b07710',
 });
 function assertReviewedDependencies(root){
