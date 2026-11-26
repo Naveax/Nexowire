@@ -4,7 +4,7 @@ import {promises as fs} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {WINDOWS_NATIVE_AGENT_TASK_SETTINGS} from './native-agent-lifecycle.js';
-import {reviewScheduledAgentV6Evidence,type ScheduledAgentV6ReviewInput} from './windows-scheduled-v6-evidence.js';
+import {reviewScheduledAgentV6Evidence,reviewScheduledAgentV6ForwardEvidence,type ScheduledAgentV6ReviewInput,type ScheduledAgentV6ForwardReviewInput,type ScheduledAgentV6Binding} from './windows-scheduled-v6-evidence.js';
 import {assertScheduledAgentJobMigrationAdmission,verifyWindowsJobHelperBinary,assertSameWindowsJobHelperIdentity} from './windows-job-owner.js';
 import {isWindowsProcessElevated} from './privileged-broker.js';
 import {hubBootLifecycleStatus} from '../hub/hub-boot-lifecycle.js';
@@ -148,22 +148,38 @@ export async function reviewSystemAgentV6InstalledIdentity(
     activationAuthorized:false,releaseAuthorized:false};
 }
 
-/** Read-only bridge: signed evidence must match the actual installed
- * launcher and helper snapshots. No issuer, consume transaction or launch
- * provider is provisioned by this function; never use as an enable gate. */
+/** Read-only installed binding shared by the two supervisor phases.
+ * Use the immutable, parsed signed binding, never a mutable input after await. */
+async function reviewPreloginSignedInstalledBinding(
+  plan:SystemAgentPreloginPlan,binding:Readonly<ScheduledAgentV6Binding>,
+){
+  if(binding.taskName!==plan.taskName||binding.sessionId!==0||
+     binding.principalSid!=='S-1-5-18')
+    throw Error('PRELOGIN_AGENT_V6_TASK_BINDING_MISMATCH');
+  const installed=await reviewSystemAgentV6InstalledIdentity(plan,{
+    launcherSha256:binding.launcherSha256,helperSha256:binding.helperSha256,
+  });
+  if(installed.launcherIdentity!==binding.launcherIdentity||
+     installed.helperIdentity!==binding.helperIdentity)
+    throw Error('PRELOGIN_AGENT_V6_INSTALLED_IDENTITY_MISMATCH');
+  return installed;
+}
+
+/** Forward review before any native process creation. Not activation. */
+export async function reviewSystemAgentV6ForwardEvidence(
+  plan:SystemAgentPreloginPlan,input:ScheduledAgentV6ForwardReviewInput,
+){
+  const evidence=reviewScheduledAgentV6ForwardEvidence(input);
+  const installed=await reviewPreloginSignedInstalledBinding({...plan},evidence.verifiedBinding);
+  return {...evidence,installed,activationAuthorized:false as const,releaseAuthorized:false as const};
+}
+
+/** Release review of exact suspended assignment; no native effect or grant. */
 export async function reviewSystemAgentV6ReleaseEvidence(
   plan:SystemAgentPreloginPlan,input:ScheduledAgentV6ReviewInput,
 ){
   const evidence=reviewScheduledAgentV6Evidence(input);
-  if(input.observed.taskName!==plan.taskName||input.observed.sessionId!==0||
-     input.observed.principalSid!=='S-1-5-18')
-    throw Error('PRELOGIN_AGENT_V6_TASK_BINDING_MISMATCH');
-  const installed=await reviewSystemAgentV6InstalledIdentity(plan,{
-    launcherSha256:input.observed.launcherSha256,helperSha256:input.observed.helperSha256,
-  });
-  if(installed.launcherIdentity!==input.observed.launcherIdentity||
-     installed.helperIdentity!==input.observed.helperIdentity)
-    throw Error('PRELOGIN_AGENT_V6_INSTALLED_IDENTITY_MISMATCH');
+  const installed=await reviewPreloginSignedInstalledBinding({...plan},evidence.verifiedBinding);
   return {...evidence,installed,activationAuthorized:false as const,releaseAuthorized:false as const};
 }
 

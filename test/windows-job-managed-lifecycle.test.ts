@@ -1,5 +1,7 @@
-import test from 'node:test';
-import {createHash,generateKeyPairSync,sign} from 'node:crypto';
+import test,{type TestContext} from 'node:test';
+import {createHash,generateKeyPairSync,sign,randomUUID} from 'node:crypto';
+import {DatabaseSync} from 'node:sqlite';
+import {ScheduledAgentV6UseLedger} from '../src/agent/windows-scheduled-v6-use-ledger.js';
 import {reviewScheduledAgentV6Evidence,scheduledAgentV6ForwardSigningBytes,scheduledAgentV6ReleaseSigningBytes,scheduledAgentV6ForwardEnvelopeSha256,type ScheduledAgentV6Forward,type ScheduledAgentV6Release,type ScheduledAgentV6ReviewInput} from '../src/agent/windows-scheduled-v6-evidence.js';
 import assert from 'node:assert/strict';
 import {readFileSync,existsSync,mkdtempSync,rmSync} from 'node:fs';
@@ -273,7 +275,8 @@ function bootBoundFixture(){
   const input:ScheduledAgentV6ReviewInput={observed,observedAssignment:actual,nowMs:now,
     forwardEnvelope,releaseEnvelope:signRelease(release),forwardSpkiBase64:fp.encoded,forwardSpkiSha256:fp.hash,
     releaseSpkiBase64:rp.encoded,releaseSpkiSha256:rp.hash};
-  return {input,release,signRelease,forwardEnvelope};
+  const signForward=(payload:ScheduledAgentV6Forward)=>({payload,signature:sign(null,scheduledAgentV6ForwardSigningBytes(payload),fk.privateKey).toString('base64url')});
+  return {input,release,signRelease,forwardEnvelope,signForward};
 }
 
 test('independent boot-bound forward and release signatures are reviewed but never grant activation',()=>{
@@ -318,4 +321,74 @@ test('wrong key, swapped signature domain, stale lease and separately signed wro
     ...release,forwardSha256:'0'.repeat(64),
   })}),/FORWARD_CHAIN_MISMATCH/);
   assert.throws(()=>reviewScheduledAgentV6Evidence({...input,releaseEnvelope:undefined}));
+});
+
+
+function useLedgerFixture(t:TestContext){
+  const f=bootBoundFixture(),root=mkdtempSync(path.join(os.tmpdir(),'nx-v6-use-'));
+  const file=path.join(root,'authority.sqlite'),connections:DatabaseSync[]=[];
+  const {forwardSpkiBase64,releaseSpkiBase64,forwardSpkiSha256,releaseSpkiSha256}=f.input;
+  const config={authorityId:randomUUID(),storeId:randomUUID(),pins:{
+    forwardSpkiBase64,releaseSpkiBase64,forwardSpkiSha256,releaseSpkiSha256}};
+  let now=f.input.nowMs;
+  t.mock.method(Date,'now',()=>now);
+  const open=()=>{const db=new DatabaseSync(file);connections.push(db);db.exec('PRAGMA synchronous=FULL');return db;};
+  t.after(()=>{for(const db of connections)if(db.isOpen)db.close();rmSync(root,{recursive:true,force:true});});
+  const db=open();
+  db.exec(readFileSync(new URL('../sql/scheduled-agent-v6-use-ledger.sql',import.meta.url),'utf8'));
+  db.prepare('INSERT INTO scheduled_v6_metadata(singleton,authority_id,store_id,forward_pin,release_pin) VALUES(1,?,?,?,?)')
+    .run(config.authorityId,config.storeId,forwardSpkiSha256,releaseSpkiSha256);
+  const ledger=new ScheduledAgentV6UseLedger(db,config);
+  const forward={observed:f.input.observed,forwardEnvelope:f.forwardEnvelope};
+  const releaseInput=()=>({...forward,observedAssignment:f.input.observedAssignment,
+    releaseEnvelope:f.signRelease({...f.release,issuedAtMs:now})});
+  const alternate=(change:Partial<ScheduledAgentV6ReviewInput['observed']>)=>{
+    const observed={...f.input.observed,...change};
+    return {observed,forwardEnvelope:f.signForward({...f.forwardEnvelope.payload,binding:observed})};
+  };
+  return {db,ledger,config,open,forward,releaseInput,alternate,setNow:(v:number)=>{now=v;},f};
+}
+
+test('independent disk ledger consumes forward then exact release once across connections and reopen',t=>{
+  const x=useLedgerFixture(t),second=new ScheduledAgentV6UseLedger(x.open(),x.config);
+  assert.throws(()=>second.consumeRelease(x.releaseInput()),/RELEASE_DENIED_OR_REPLAY/);
+  const forward=x.ledger.consumeForward(x.forward);
+  assert.equal(forward.forwardConsumed,true);assert.equal(forward.activationAuthorized,false);
+  assert.throws(()=>second.consumeForward(x.forward),/FENCE_REPLAY_OR_STALE/);
+  x.db.close();
+  const reopened=new ScheduledAgentV6UseLedger(x.open(),x.config);
+  const release=reopened.consumeRelease(x.releaseInput());
+  assert.equal(release.releaseConsumed,true);assert.equal(release.releaseAuthorized,false);
+  assert.throws(()=>second.consumeRelease(x.releaseInput()),/RELEASE_DENIED_OR_REPLAY/);
+  assert.throws(()=>second.consumeForward(x.forward),/FENCE_REPLAY_OR_STALE/);
+});
+
+test('signed fresh nonce or boot cannot reissue same fence and new generation fences older release',t=>{
+  const x=useLedgerFixture(t);
+  x.ledger.consumeForward(x.forward);
+  assert.throws(()=>x.ledger.consumeForward(x.alternate({attemptId:randomUUID()})),/FENCE_REPLAY_OR_STALE/);
+  assert.throws(()=>x.ledger.consumeForward(x.alternate({attemptId:randomUUID(),bootEpoch:randomUUID()})),/FENCE_REPLAY_OR_STALE/);
+  x.ledger.consumeForward(x.alternate({attemptId:randomUUID(),bootEpoch:randomUUID(),fenceGeneration:4}));
+  assert.throws(()=>x.ledger.consumeRelease(x.releaseInput()),/RELEASE_DENIED_OR_REPLAY/);
+  assert.throws(()=>x.ledger.consumeForward(x.alternate({attemptId:randomUUID(),fenceGeneration:2})),/FENCE_REPLAY_OR_STALE/);
+});
+
+test('release issued before forward consume, wrong assignment, expired lease and clock rewind deny',t=>{
+  const x=useLedgerFixture(t),now=x.f.input.nowMs;
+  x.ledger.consumeForward(x.forward);
+  assert.throws(()=>x.ledger.consumeRelease({...x.releaseInput(),releaseEnvelope:x.f.input.releaseEnvelope}),/RELEASE_DENIED_OR_REPLAY/);
+  assert.throws(()=>x.ledger.consumeRelease({...x.releaseInput(),observedAssignment:{...x.f.input.observedAssignment,guardianPid:998}}),/ASSIGNMENT_MISMATCH/);
+  x.setNow(now-1);assert.throws(()=>x.ledger.consumeRelease(x.releaseInput()),/CLOCK_REWIND_OR_UNKNOWN/);
+  x.setNow(x.f.release.expiresAtMs);assert.throws(()=>x.ledger.consumeRelease({...x.releaseInput(),releaseEnvelope:x.f.input.releaseEnvelope}),/EXPIRED_OR_FUTURE/);
+  assert.equal(x.db.prepare('SELECT state FROM scheduled_v6_uses').get()?.state,'FORWARD_CONSUMED');
+});
+
+test('unprovisioned memory, wrong store pins, outer transaction and relaxed durability deny',t=>{
+  const x=useLedgerFixture(t),memory=new DatabaseSync(':memory:');
+  try{assert.throws(()=>new ScheduledAgentV6UseLedger(memory,x.config),/STORE_UNPROVISIONED/);}finally{memory.close();}
+  assert.throws(()=>new ScheduledAgentV6UseLedger(x.open(),{...x.config,storeId:randomUUID()}),/STORE_IDENTITY_MISMATCH/);
+  x.db.exec('BEGIN');
+  try{assert.throws(()=>x.ledger.consumeForward(x.forward),/STORE_UNPROVISIONED/);}finally{x.db.exec('ROLLBACK');}
+  x.db.exec('PRAGMA synchronous=NORMAL');
+  assert.throws(()=>x.ledger.consumeForward(x.forward),/STORE_UNPROVISIONED/);
 });
