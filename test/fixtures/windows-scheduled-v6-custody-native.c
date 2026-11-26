@@ -26,11 +26,39 @@ static BOOL hex_digest(const wchar_t *s,BYTE out[32]){
   }
   return TRUE;
 }
-static BOOL sharing_denied(const wchar_t *p,DWORD access,DWORD flags){
+static BOOL sharing_denied(const char *stage,const wchar_t *p,DWORD access,DWORD flags){
+  SetLastError(ERROR_SUCCESS);
   HANDLE h=CreateFileW(p,access,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
     NULL,OPEN_EXISTING,flags,NULL);
-  if(h!=INVALID_HANDLE_VALUE){CloseHandle(h);return FALSE;}
-  return GetLastError()==ERROR_SHARING_VIOLATION;
+  DWORD error=h==INVALID_HANDLE_VALUE?GetLastError():ERROR_SUCCESS;
+  if(h!=INVALID_HANDLE_VALUE)CloseHandle(h);
+  printf("NX_CUSTODY_SHARE stage=%s access=0x%08lx opened=%u win32=%lu expected=%lu\n",
+    stage,(unsigned long)access,h!=INVALID_HANDLE_VALUE?1U:0U,
+    (unsigned long)error,(unsigned long)ERROR_SHARING_VIOLATION);
+  fflush(stdout);
+  if(error!=ERROR_SHARING_VIOLATION){
+    fprintf(stderr,"NX_CUSTODY_FAIL %s win32=%lu\n",stage,(unsigned long)error);
+    return FALSE;
+  }
+  return TRUE;
+}
+/* A genuine baseline: an attributes-only directory open does not establish
+ * share-delete custody. This is a disposable fixture, not a fallback.
+ * Verify the expected behavior and prove DELETE access is available before
+ * the real held-file test, not denied by a preexisting ACL or unrelated lock. */
+static BOOL metadata_baseline(const wchar_t *dir){
+  HANDLE meta=CreateFileW(dir,FILE_READ_ATTRIBUTES,FILE_SHARE_READ|FILE_SHARE_WRITE,
+    NULL,OPEN_EXISTING,FILE_FLAG_BACKUP_SEMANTICS|FILE_FLAG_OPEN_REPARSE_POINT,NULL);
+  if(meta==INVALID_HANDLE_VALUE)return FALSE;
+  HANDLE candidate=CreateFileW(dir,DELETE,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
+    NULL,OPEN_EXISTING,FILE_FLAG_BACKUP_SEMANTICS,NULL);
+  DWORD error=candidate==INVALID_HANDLE_VALUE?GetLastError():ERROR_SUCCESS;
+  printf("NX_CUSTODY_SHARE stage=metadata_only_baseline opened=%u win32=%lu expected=0\n",
+    candidate!=INVALID_HANDLE_VALUE?1U:0U,(unsigned long)error);
+  fflush(stdout);
+  if(candidate!=INVALID_HANDLE_VALUE)CloseHandle(candidate);
+  CloseHandle(meta);
+  return error==ERROR_SUCCESS;
 }
 static BOOL mapped_source(const NX_HELD_FILE *f){
   HANDLE section=CreateFileMappingW(f->file,NULL,PAGE_READONLY|SEC_IMAGE_NO_EXECUTE,0,0,NULL);
@@ -172,19 +200,31 @@ int wmain(int argc,wchar_t **argv){
     if(nx_v6_hold_file(linked,expected,&held)){nx_v6_close_file(&held);return failed("hardlink");}
   }
   pass("wrong_digest_denied");pass("hardlink_denied");
+  if(!metadata_baseline(dir))return failed("metadata_only_baseline");
   if(!nx_v6_hold_file(file,expected,&held))return failed("hold");
-  int rc=1;
-  if(!nx_v6_recheck_file(&held))goto done;
+  const char *failure="held_sha256_fileid_recheck";
+  DWORD failure_error=0;
+  if(!nx_v6_recheck_file(&held)){failure_error=GetLastError();goto done;}
   pass("held_sha256_fileid_recheck");
-  if(!sharing_denied(file,GENERIC_WRITE,0)||!sharing_denied(file,DELETE,0)||
-     !sharing_denied(dir,DELETE,FILE_FLAG_BACKUP_SEMANTICS))goto done;
+  // Execute all three observations; do not short-circuit or lose the failing
+  // operation's error when closing the retained HANDLEs.
+  BOOL write_denied=sharing_denied("held_file_write",file,GENERIC_WRITE,0);
+  BOOL delete_denied=sharing_denied("held_file_delete",file,DELETE,0);
+  BOOL ancestor_denied=sharing_denied("held_ancestor_delete",dir,DELETE,FILE_FLAG_BACKUP_SEMANTICS);
+  if(!write_denied||!delete_denied||!ancestor_denied){
+    failure="held_share_exclusion";goto done;
+  }
   pass("held_file_write_delete_ancestor_denied");
-  if(!mapped_source(&held))goto done;
+  failure="nonexecuted_image_mapping_path_matches";
+  if(!mapped_source(&held)){failure_error=GetLastError();goto done;}
   pass("nonexecuted_image_mapping_path_matches");
-  rc=0;
+  failure=NULL;
 done:
   nx_v6_close_file(&held);
-  if(rc)return failed("held_custody");
+  if(failure){
+    fprintf(stderr,"NX_CUSTODY_FAIL %s captured_win32=%lu\n",failure,(unsigned long)failure_error);
+    return 1;
+  }
   // Same access must work after cleanup, proving exclusion was held custody.
   HANDLE unlocked=CreateFileW(file,GENERIC_WRITE|DELETE,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
     NULL,OPEN_EXISTING,0,NULL);
