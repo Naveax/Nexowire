@@ -190,3 +190,21 @@ test('T-564: exact current main audit remains source-only even where owner candi
   assert.equal(report.browser, 'NOT_RUN');
   assert.ok(report.errors[401].includes('http-error-collapsed-to-offline'));
 });
+
+// Overall acceptance is distinct from a valid partial/source-only record.
+test('W-608: wholly unexecuted samples cannot support overall PASS', () => {
+  const sample = sourceEvidence().samples[0];
+  const unrun = {...sample,hosted:'NOT_RUN',physical:'NOT_RUN',discovered:false,runId:null,physicalArtifact:null};
+  assert.ok(validateUiEvidence(sourceEvidence({overall:'PASS',samples:[unrun]})).includes('false-overall-pass'));
+});
+
+test('W-608: hosted PASS with physical NOT_RUN is not overall PASS', () => {
+  const sample = sourceEvidence().samples[0];
+  assert.ok(validateUiEvidence(sourceEvidence({overall:'PASS',samples:[sample]})).includes('false-overall-pass'));
+});
+
+test('W-608: partial evidence stays source-only and complete evidence remains valid', () => {
+  const sample = sourceEvidence().samples[0];
+  assert.deepEqual(validateUiEvidence(sourceEvidence()), []);
+  assert.deepEqual(validateUiEvidence(sourceEvidence({overall:'PASS',samples:[{...sample,physical:'PASS',physicalArtifact:'artifact://fixture'}]})), []);
+});

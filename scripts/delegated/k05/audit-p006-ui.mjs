@@ -131,7 +131,10 @@ export function validateUiEvidence(record) {
     }
     if (sample.physical === 'PASS' && !sample.physicalArtifact) findings.push('unsupported-physical-pass');
   }
-  if (record.overall === 'PASS' && findings.length) findings.push('false-overall-pass');
+  if (record.overall === 'PASS' && (findings.length ||
+      (record.samples ?? []).some(sample => sample.hosted !== 'PASS' || sample.physical !== 'PASS'))) {
+    findings.push('false-overall-pass');
+  }
   return findings;
 }
 
