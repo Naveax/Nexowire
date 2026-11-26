@@ -484,6 +484,13 @@ test('W-423 OPEN NEGATIVE: JSON-null HTTP 403 must retain terminal denial messag
     'JSON null must be treated as a generic permission denial, not a caught TypeError');
 });
 
+// The owner now blocks ambiguous POST retries and uses a longer fallback.
+// Recognize only the two known fallback messages, never arbitrary error text.
+const knownNullFallbacks = new Set([
+  'Beklenmeyen bağlantı hatası.',
+  'Beklenmeyen bağlantı hatası. Bağlantı sonucu belirsiz. Önce yerel uygulamadaki sonucu kontrol et; tekrar istek gönderme.',
+]);
+
 test('W-423 #539: 403 null guard or owner fix preserves quota denial', {
   skip: !ownerSourcePortedUx && 'requires #1160 integration source for terminal 403 semantics',
 }, async () => {
@@ -491,11 +498,11 @@ test('W-423 #539: 403 null guard or owner fix preserves quota denial', {
   const baseline = await boot({ query: search(), pairing: null403 });
   await baseline.get('approve').dispatch('click');
   const originalMessage = baseline.get('error-message').textContent;
-  assert.ok(['Beklenmeyen bağlantı hatası.', 'Bu cihaz bu hesaba bağlanamadı.'].includes(originalMessage),
+  assert.ok(knownNullFallbacks.has(originalMessage) || originalMessage === 'Bu cihaz bu hesaba bağlanamadı.',
     'owner 403 semantics changed: inspect actual denial instead of assuming the old RED');
   assert.equal(baseline.get('approve').disabled, true);
   // Never force a stale RED after owner repairs the source.
-  const proposed = originalMessage === 'Beklenmeyen bağlantı hatası.'
+  const proposed = knownNullFallbacks.has(originalMessage)
     ? candidateSource("body.error === 'DEVICE_LIMIT_REACHED'",
       "body?.error === 'DEVICE_LIMIT_REACHED'")
     : script;
@@ -532,10 +539,10 @@ test('W-423 #485: 200 null guard or owner fix preserves valid pairing', {
   const baseline = await boot({ query: search(), pairing: null200 });
   await baseline.get('approve').dispatch('click');
   const originalMessage = baseline.get('error-message').textContent;
-  assert.ok(['Beklenmeyen bağlantı hatası.', 'Bağlantı cevabı geçersiz.'].includes(originalMessage),
+  assert.ok(knownNullFallbacks.has(originalMessage) || originalMessage === 'Bağlantı cevabı geçersiz.',
     'owner 200 semantics changed: inspect malformed response instead of assuming the old RED');
   // Once the actual owner source is repaired, test the real guard, not a duplicate patch.
-  const proposed = originalMessage === 'Beklenmeyen bağlantı hatası.'
+  const proposed = knownNullFallbacks.has(originalMessage)
     ? candidateSource(
       "typeof body.pairingId !== 'string' || !body.pairingId.trim() ||",
       "!body || typeof body.pairingId !== 'string' || !body.pairingId.trim() ||",
@@ -545,6 +552,7 @@ test('W-423 #485: 200 null guard or owner fix preserves valid pairing', {
   await corrected.get('approve').dispatch('click');
   assert.equal(corrected.navigations.length, 0);
   assert.equal(corrected.get('error-message').textContent, 'Bağlantı cevabı geçersiz.');
+  assert.equal(corrected.get('approve').disabled, true);
   const valid = await boot({ query: search(), source: proposed,
     pairing: async () => Response.json({ pairingId: 'pair-valid', token: 'token-valid' }) });
   await valid.get('approve').dispatch('click');
