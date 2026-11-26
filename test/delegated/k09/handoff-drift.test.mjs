@@ -72,3 +72,11 @@ test('missing or malformed owner hold evidence must not imply permission to resu
   assert.equal(reconcileHandoff([{ ...row, hold: true }])[0].restriction, 'OWNER_HOLD_DO_NOT_RESUME');
   assert.equal(reconcileHandoff([observations[1]])[0].restriction, 'NONE');
 });
+
+test('dated handoff must reject merge evidence after its observation day', () => {
+  const row = observations[0];
+  for (const mergedAt of ['2026-11-08T00:00:00Z', '2030-01-01T00:00:00Z']) {
+    assert.throws(() => reconcileHandoff([{ ...row, mergedAt }]), /Invalid pull request state/);
+  }
+  assert.equal(reconcileHandoff([{ ...row, mergedAt: '2026-11-07T23:59:59Z' }])[0].now, 'merged');
+});

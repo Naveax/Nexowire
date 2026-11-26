@@ -52,7 +52,8 @@ export function reconcileHandoff(observationsToAudit) {
       row.currentState === 'closed' && typeof row.mergedAt === 'string' &&
       /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(row.mergedAt) &&
       !Number.isNaN(Date.parse(row.mergedAt)) &&
-      new Date(row.mergedAt).toISOString() === row.mergedAt.replace(/Z$/, '.000Z')
+      new Date(row.mergedAt).toISOString() === row.mergedAt.replace(/Z$/, '.000Z') &&
+      Date.parse(row.mergedAt) < Date.parse(`${handoffObservedAt}T00:00:00Z`) + 86400000
     );
     if (!['open', 'draft', 'closed'].includes(row.previousState) ||
         !['open', 'closed'].includes(row.currentState) || !validMergedAt)
