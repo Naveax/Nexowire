@@ -43,6 +43,13 @@ function authenticated(raw:unknown,key:KeyObject,domain:string){
   if(sig.length!==64||!verify(null,Buffer.concat([Buffer.from(domain+'\0'),payload]),key,sig))throw denied();
   return {payload,value:JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(payload)) as unknown};
 }
+// Deterministic JSON for the validated registration state (ASCII field names).
+function canonical(value:unknown):string{
+  if(value===null||typeof value!=='object')return JSON.stringify(value);
+  if(Array.isArray(value))return '['+value.map(canonical).join(',')+']';
+  const object=value as Record<string,unknown>;
+  return '{'+Object.keys(object).sort().map(k=>JSON.stringify(k)+':'+canonical(object[k])).join(',')+'}';
+}
 const sameScope=(a:Scope,b:Scope)=>a.ownerAccountId===b.ownerAccountId&&
   a.deviceId===b.deviceId&&a.installationId===b.installationId;
 
@@ -104,7 +111,7 @@ export function createOwnerDirectoryContinuityReview(config:{
       if(!credential.length||record.binding.windowsSessionId>0xfffffffe)throw denied();
       // Digest stable state, not the fresh transport nonce or observation time.
       const {nonce:_nonce,observedAtMs:_time,...state}=record;
-      const stateSha256=createHash('sha256').update(JSON.stringify(state),'utf8').digest('hex');
+      const stateSha256=createHash('sha256').update(canonical(state),'utf8').digest('hex');
       const fresh=(v:{authorityId:string;directoryId:string;nonce:string;observedAtMs:number})=>
         v.authorityId===authorityId&&v.directoryId===directoryId&&v.nonce===q.nonce&&
         v.observedAtMs>=start&&v.observedAtMs<=Date.now();
