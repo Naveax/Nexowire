@@ -466,13 +466,22 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
           // Deny current execution until readiness recovers; do not prompt.
           throw new Error('CORE_DEVICE_NOT_READY');
       }
-      if(this.profile.certificate&&this.matches(state)&&!this.revoked&&
+      const pendingBeforeEnrollment=!!this.profile.pendingDispatch||!!this.inFlightDispatch||
+        !!(await this.options.store.load())?.pendingDispatch;
+      if(this.profile.certificate&&this.matches(state)&&!this.revoked&&!pendingBeforeEnrollment&&
         !(await this.options.store.stopped())&&await this.currentNativeConsent(signal,state))return true;
       if(!this.options.native)await executeCoreConsoleNative('probe',{},'',signal);
       // Fence any legacy approval BEFORE issuing a new challenge. The challenge
       // must bind epochs after this monotonic revoke, not before it.
       await this.revoke();
+      // Remote revocation and a settled JS tail cannot prove the native
+      // effect has drained. Until a real independent recovery path exists,
+      // retain the original marker and deny a replacement enrollment.
+      if(this.profile.pendingDispatch||this.inFlightDispatch)
+        throw new Error('CORE_NATIVE_DRAIN_UNVERIFIED');
       await this.tail;
+      if(!await this.retainPendingDispatch()||this.profile.pendingDispatch||this.inFlightDispatch)
+        throw new Error('CORE_NATIVE_DRAIN_UNVERIFIED');
       const fresh=await this.options.authority.call(this.profile,'read',{},signal);
       if(!fresh.coreEnabled||fresh.accessMode!=='full'||!fresh.deviceOnline||
         !fresh.bridgeVerified||fresh.ownerAccountId!==state.ownerAccountId||
@@ -589,8 +598,10 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
       try{
         if(outcome==='unknown')await this.persistLocalStop();
         await this.options.authority.call(completionProfile,'complete',{...fields,outcome});
-        if(outcome==='unknown')await this.revoke();
-        else{
+        if(outcome==='unknown'||this.revoked||this.closed||signal.aborted){
+          outcome='unknown';
+          await this.revoke();
+        }else{
           const settled={...this.profile};delete settled.pendingDispatch;
           await this.options.store.save(settled);this.profile=settled;
         }
@@ -608,13 +619,33 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
   private latchLocalStop():void{
     this.revoked=true;const monitor=this.monitor;this.monitor=undefined;this.desktop=false;monitor?.kill();
   }
+  /** Read the durable marker even from a stale provider. A conflicting or
+   * unavailable local snapshot cannot justify clearing an unresolved effect.
+   * This is a local fence, not a cross-process CAS or independent OS proof. */
+  private async retainPendingDispatch():Promise<boolean>{
+    let disk:Profile|null;
+    try{disk=await this.options.store.load();}catch{return false;}
+    if(disk&&(disk.deviceId!==this.profile.deviceId||
+      disk.installationId!==this.profile.installationId||disk.authorityUrl!==this.profile.authorityUrl))
+      return false;
+    const markers=[this.profile.pendingDispatch,this.inFlightDispatch,disk?.pendingDispatch]
+      .filter((value):value is NonNullable<Profile['pendingDispatch']>=>value!==undefined);
+    const marker=markers[0];
+    if(marker&&markers.some(m=>m.requestId!==marker.requestId||m.fingerprint!==marker.fingerprint))
+      return false;
+    if(marker)this.profile={...this.profile,pendingDispatch:{...marker}};
+    return true;
+  }
   private async persistLocalStop():Promise<void>{
     this.latchLocalStop();
     await this.initialize();
     this.profile={...this.profile,pendingRevoke:true};
     // Independent local writes: one failed path cannot skip the other or the
     // subsequent external revoke. Failure never clears the pre-effect marker.
-    await Promise.allSettled([this.options.store.stop(),this.options.store.save(this.profile)]);
+    await Promise.allSettled([this.options.store.stop(),(async()=>{
+      // Never overwrite a different or unreadable persisted marker.
+      if(await this.retainPendingDispatch())await this.options.store.save(this.profile);
+    })()]);
   }
   revoke():Promise<void>{
     this.latchLocalStop();
@@ -622,8 +653,11 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
     const work=(async()=>{
       await this.persistLocalStop();
       await this.options.authority.call(this.profile,'revoke');
+      // An authenticated remote revoke is not an OS drain receipt. Keep
+      // pendingDispatch across restart, even after the remote ACK.
+      if(!await this.retainPendingDispatch())
+        throw new Error('CORE_NATIVE_DRAIN_UNVERIFIED');
       const cleared={...this.profile,certificate:null,privateKey:null,pendingRevoke:false};
-      delete cleared.pendingDispatch;
       await this.options.store.save(cleared);this.profile=cleared;
     })();
     this.revoking=work;

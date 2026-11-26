@@ -52,7 +52,7 @@ interface WorkerStatus {
   sessionId: string;
   workerPid: number;
   childPid: number | null;
-  status: 'starting' | 'running' | 'exited';
+  status: 'starting' | 'running' | 'exited' | 'orphaned';
   startedAt: string;
   exitedAt?: string;
   exitCode: number | null;
@@ -390,7 +390,7 @@ export async function runProcessWorker(
           if (command.type === 'stop') {
             if (status.status === 'running' && child) {
               if (job) {
-                const cleanup = requestWindowsJobStop(job);
+                const cleanup = await requestWindowsJobStop(job);
                 if (cleanup !== 'requested') {
                   socket.end(JSON.stringify({ok:false,error:'PROCESS_TREE_TERMINATION_UNCONFIRMED'})+'\n');
                   return;
@@ -447,7 +447,8 @@ export async function runProcessWorker(
     // Durable means independent of the Agent, not independent of the
     // owning sidecar: worker crash must close this Job and reap its shell.
     job = await launchWindowsJob(shell.executable, shell.args,
-      {cwd: init.cwd, env: process.env, guardOnParentExit: true});
+      {cwd: init.cwd, env: process.env, guardOnParentExit: true,
+        onOutput:(stream,chunk)=>{void append(stream,chunk).catch(()=>undefined);}});
   }
   child = job?.child ?? spawn(shell.executable, shell.args, {
     ...(init.cwd ? { cwd: init.cwd } : {}),
@@ -464,12 +465,14 @@ export async function runProcessWorker(
   };
   await persistStatus();
 
-  child.stdout.on('data', (chunk: Buffer) => {
-    void append('stdout', chunk).catch(() => undefined);
-  });
-  child.stderr.on('data', (chunk: Buffer) => {
-    void append('stderr', chunk).catch(() => undefined);
-  });
+  if(!job){
+    child.stdout.on('data', (chunk: Buffer) => {
+      void append('stdout', chunk).catch(() => undefined);
+    });
+    child.stderr.on('data', (chunk: Buffer) => {
+      void append('stderr', chunk).catch(() => undefined);
+    });
+  }
   child.once('error', (error) => {
     void append(
       'stderr',
@@ -477,19 +480,45 @@ export async function runProcessWorker(
     ).catch(() => undefined);
   });
 
+  const runningChild=child;
   await new Promise<void>((resolve) => {
-    child!.once('close', async (code, signal) => {
-      await eventChain.catch(() => undefined);
-      status = {
-        ...status,
-        status: 'exited',
-        exitCode: code,
-        signal,
-        exitedAt: new Date().toISOString(),
-      };
-      await persistStatus().catch(() => undefined);
+    let finalizing=false;
+    let drainTimer:ReturnType<typeof setTimeout>|undefined;
+    const finish=async(code:number|null,signal:NodeJS.Signals|null,forceUnknown=false):Promise<void>=>{
+      if(finalizing)return;
+      finalizing=true;
+      if(drainTimer)clearTimeout(drainTimer);
+      const observed=job?await job.completion:undefined;
+      const unknown=forceUnknown||(observed!==undefined&&observed.state!=='local_job_empty');
+      if(unknown){
+        // Only close this worker's pipe handles. Never kill a foreign PID
+        // or report escaped descendants as stopped.
+        runningChild.stdin.destroy();runningChild.stdout.destroy();runningChild.stderr.destroy();
+      }
+      await eventChain.catch(()=>undefined);
+      status={...status,status:unknown?'orphaned':'exited',
+        exitCode:unknown?null:code,signal:unknown?null:signal};
+      if(unknown)delete status.exitedAt;
+      else status.exitedAt=new Date().toISOString();
+      await persistStatus().catch(()=>undefined);
       resolve();
-    });
+    };
+    runningChild.once('close',(code,signal)=>{void finish(code,signal);});
+    if(job){
+      void job.completion.then(observed=>{
+        if(finalizing)return;
+        if(observed.state!=='local_job_empty'){
+          void finish(null,null,true);return;
+        }
+        // Fast exits can precede registration of this close listener.
+        if((runningChild.stdout.readableEnded||runningChild.stdout.destroyed)&&
+           (runningChild.stderr.readableEnded||runningChild.stderr.destroyed)){
+          void finish(runningChild.exitCode,runningChild.signalCode);return;
+        }
+        // A surviving external pipe holder is not Job completion evidence.
+        drainTimer=setTimeout(()=>{void finish(null,null,true);},2000);
+      });
+    }
   });
 
   server.close();

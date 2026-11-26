@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import * as z from 'zod';
+import {assertScheduledAgentJobMigrationAdmission} from './windows-job-owner.js';
 
 const WINDOWS_TASK_DEFAULT = 'Nexowire Native Agent';
 // A persistent interactive agent must not silently inherit Windows Scheduler's
@@ -559,6 +560,7 @@ export { assertNoResidualWindowsTaskOwnerArtifacts };
 async function installWindows(
   options: NativeAgentLifecycleOptions,
 ): Promise<NativeAgentLifecycleStatus> {
+  assertScheduledAgentJobMigrationAdmission();
   const root = lifecycleRoot(options);
   const launcher = launcherPath(options, 'win32');
   const helper = bundledNativeAgentJobHelper(options);
@@ -952,6 +954,7 @@ async function controlWindows(
   action: 'start' | 'stop' | 'restart',
   options: NativeAgentLifecycleOptions,
 ): Promise<NativeAgentLifecycleStatus> {
+  if(action!=='stop')assertScheduledAgentJobMigrationAdmission();
   const before = await windowsAgentTaskOwnerReadback(options);
   if (!before.installed || !before.guarded) {
     throw new Error('NATIVE_AGENT_TASK_JOB_GUARD_REQUIRED');
@@ -1450,6 +1453,7 @@ export async function installNativeAgentLifecycle(
   persistedNativeAgentEnvironment(options.env ?? process.env);
   const platform = platformOf(options);
   if (platform === 'win32') {
+    assertScheduledAgentJobMigrationAdmission();
     const prepared=await prepareWindowsCoreAgentInstallEnvironment(options.env ?? process.env);
     return await installWindows({...options,env:prepared});
   }

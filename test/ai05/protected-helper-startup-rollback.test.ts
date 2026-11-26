@@ -50,18 +50,65 @@ test('deployment rejects wrong role or scoped identity before transport',async()
     await assert.rejects(runSelectionBoundHelperDeployment(bad,request),/DEPLOYMENT_SCOPE_MISMATCH/);
 });
 
-test('canonical three-listener startup refuses missing or self-issued rollback guard before opening any service',async()=>{
-  const database={host:'127.0.0.1',port:5432,database:'must-not-connect',caPem:'fixture'};
+test('canonical three-listener startup independently exercises native completion, signer separation and rollback guard before opening any service',async()=>{
+  // Test-only keys. The baseline must satisfy every pre-resource gate, but
+  // intentionally has invalid DB credentials so no socket/pool can open.
+  const dispatch=generateKeyPairSync('ed25519'),coreObserver=generateKeyPairSync('ed25519');
+  const dispatchPrivate=dispatch.privateKey.export({type:'pkcs8',format:'pem'}).toString();
+  const database={host:'invalid.example',port:5432,database:'must-not-connect',caPem:'fixture'};
+  let externalCalls=0;
+  const never=async()=>{externalCalls++;throw Error('unexpected external authority work');};
+  const guard={observerPublicKeyPem:pem(other),approved,requestProof:never};
   const config={
-    core:{authorityId:scope.authorityId,database,port:8441,async verifyNativeDrain(){throw Error('unexpected drain');}},
-    transfer:{database,authority:{authorityId:scope.authorityId},server:{authorityId:scope.authorityId,async verifyIndependentProvenance(){throw Error('unexpected provenance');}}},
-    selection:{database,authority:{scope,async verifyProvenance(){throw Error('unexpected provenance');}},nativeEvidence:native},
+    core:{authorityId:scope.authorityId,database,port:8441,privateKeyPem:dispatchPrivate,
+      verifyNativeDrain:never,readNativeDrainProof:never,
+      nativeCompletion:{observerPublicKeyPem:pem(coreObserver),
+        evidenceByCapability:{'fixture.process':'JOB_OBJECT_EMPTY' as const}}},
+    transfer:{database,authority:{authorityId:scope.authorityId},server:{authorityId:scope.authorityId,verifyIndependentProvenance:never}},
+    selection:{database,authority:{scope,verifyProvenance:never},
+      nativeEvidence:{...native,requestProof:never}},
+    rollbackGuard:guard,
     startupScope:{ownerId:scope.ownerId,targetDeviceId:scope.deviceId},
     transferHost:'127.0.0.1',transferPort:8442,selectionHost:'127.0.0.1',selectionPort:8443,
-    async verifyTransferRuntimeDrain(){throw Error('unexpected drain');},
+    verifyTransferRuntimeDrain:never,
   };
   type Config=Parameters<typeof startProtectedTransferAndCoreServices>[0];
-  await assert.rejects(startProtectedTransferAndCoreServices(config as unknown as Config),/TRANSFER_CORE_SHARED_AUTHORITY_STARTUP_REQUIRED/);
-  const selfIssued={observerPublicKeyPem:pem(key),approved,async requestProof(){throw Error('unexpected proof');}};
-  await assert.rejects(startProtectedTransferAndCoreServices({...config,rollbackGuard:selfIssued} as unknown as Config),/HELPER_ROLLBACK_GUARD_CONFIG_INVALID/);
+  const denied=async(input:unknown,message:string)=>{
+    await assert.rejects(startProtectedTransferAndCoreServices(input as Config),{message});
+    assert.equal(externalCalls,0,'configuration denial must not invoke any authority or observer');
+  };
+
+  // Positive control for the preflight ONLY. The actual production DB pool
+  // constructor rejects this intentionally invalid fixture configuration.
+  // This establishes that later negative cases are not hidden by an earlier
+  // missing policy, shared signer or malformed rollback review.
+  await denied(config,'DISPATCH_PG_PROTECTED_CONFIGURATION_REQUIRED');
+
+  await denied({...config,rollbackGuard:undefined},'TRANSFER_CORE_SHARED_AUTHORITY_STARTUP_REQUIRED');
+  await denied({...config,core:{...config.core,nativeCompletion:undefined}},
+    'TRANSFER_CORE_NATIVE_COMPLETION_POLICY_REQUIRED');
+
+  // Independently exercise every prohibited recovery-key reuse. Native
+  // completion and the rest of the approved review remain present.
+  for(const signer of [key,coreObserver,dispatch]){
+    await denied({...config,rollbackGuard:{...guard,observerPublicKeyPem:pem(signer)}},
+      'TRANSFER_RECOVERY_SIGNER_NOT_INDEPENDENT');
+  }
+  await denied({...config,rollbackGuard:{...guard,
+    observerPublicKeyPem:other.privateKey.export({type:'pkcs8',format:'pem'}).toString()}},
+    'TRANSFER_RECOVERY_PUBLIC_KEY_REQUIRED');
+
+  // Distinct valid public keys must pass the preceding separation gate,
+  // so malformed evidence providers reach the original rollback guard.
+  await denied({...config,rollbackGuard:{...guard,requestProof:undefined}},
+    'HELPER_ROLLBACK_GUARD_CONFIG_INVALID');
+  await denied({...config,selection:{...config.selection,
+    nativeEvidence:{...config.selection.nativeEvidence,requestProof:undefined}}},
+    'HELPER_ROLLBACK_GUARD_CONFIG_INVALID');
+  await denied({...config,rollbackGuard:{...guard,approved:{...approved,sqliteTreeSha256:'invalid'}}},
+    'HELPER_ROLLBACK_REVIEW_PIN_REQUIRED');
+
+  // The direct guard's original self-issued-key denial is still tested by
+  // the first test above; the canonical startup now denies it even earlier.
+  // None of these configuration checks produces a native proof.
 });

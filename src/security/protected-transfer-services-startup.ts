@@ -1,4 +1,5 @@
 import {isIP} from 'node:net';
+import {createPublicKey} from 'node:crypto';
 import {createPostgresProtectedTransferService} from './protected-transfer-service.js';
 import {createPostgresHelperSelectionService} from './protected-helper-selection-service.js';
 import {createProtectedPostgresDispatchPool} from '../agent/protected-postgres-dispatch-pool.js';
@@ -40,6 +41,30 @@ async function listen(server:Listener,host:string,port:number){
   if(!address||typeof address==='string')throw Error('TRANSFER_AUTHORITY_LISTEN_FAILED');
   return address;
 }
+/** This is a configuration denial only. Distinct public keys are not
+ * evidence of key custody or an independently installed OS observer. */
+export function assertIndependentRecoverySigner(config:{
+  recoveryObserverPublicKeyPem:string;
+  coreObserverPublicKeyPem:string;
+  coreDispatchPrivateKeyPem:string;
+  helperObserverPublicKeyPem:string;
+}):void{
+  const publicSpki=(pem:string)=>{
+    if(typeof pem!=='string'||!/^-----BEGIN PUBLIC KEY-----\r?\n[A-Za-z0-9+/=\r\n]+-----END PUBLIC KEY-----\s*$/.test(pem))
+      throw Error('TRANSFER_RECOVERY_PUBLIC_KEY_REQUIRED');
+    const key=createPublicKey(pem);
+    if(key.asymmetricKeyType!=='ed25519')throw Error('TRANSFER_RECOVERY_SIGNER_INVALID');
+    return key.export({type:'spki',format:'der'});
+  };
+  const recovery=publicSpki(config.recoveryObserverPublicKeyPem);
+  const core=publicSpki(config.coreObserverPublicKeyPem);
+  const helper=publicSpki(config.helperObserverPublicKeyPem);
+  const dispatch=createPublicKey(config.coreDispatchPrivateKeyPem);
+  if(dispatch.asymmetricKeyType!=='ed25519')throw Error('TRANSFER_RECOVERY_SIGNER_INVALID');
+  if([core,helper,dispatch.export({type:'spki',format:'der'})].some(key=>recovery.equals(key)))
+    throw Error('TRANSFER_RECOVERY_SIGNER_NOT_INDEPENDENT');
+}
+
 /** Off-host production entrypoint. Three actual TLS listeners share the
  * independent authority row. No implicit enrollment, migration, signing,
  * native evidence issuer, or local fallback. */
@@ -57,8 +82,14 @@ export async function startProtectedTransferAndCoreServices(config:ProtectedTran
     new Set([core.port,transferPort,selectionPort]).size!==3)
     throw Error('TRANSFER_CORE_SHARED_AUTHORITY_STARTUP_REQUIRED');
   // Bind before any DB pool or listener exists. No raw selection fallback.
-  const guardedEvidence=bindHelperRollbackGuard(selection.nativeEvidence,config.rollbackGuard);
   if(!core.nativeCompletion)throw Error('TRANSFER_CORE_NATIVE_COMPLETION_POLICY_REQUIRED');
+  assertIndependentRecoverySigner({
+    recoveryObserverPublicKeyPem:config.rollbackGuard.observerPublicKeyPem,
+    coreObserverPublicKeyPem:core.nativeCompletion.observerPublicKeyPem,
+    coreDispatchPrivateKeyPem:core.privateKeyPem,
+    helperObserverPublicKeyPem:selection.nativeEvidence.observerPublicKeyPem,
+  });
+  const guardedEvidence=bindHelperRollbackGuard(selection.nativeEvidence,config.rollbackGuard);
   const service=createPostgresProtectedTransferService(transfer);
   const nativeEvidence=service.bindSelectionEvidence(guardedEvidence);
   let readPool:ReturnType<typeof createProtectedPostgresDispatchPool>|undefined;

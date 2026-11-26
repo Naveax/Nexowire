@@ -210,7 +210,7 @@ const WorkerStatusSchema = z.object({
   sessionId: z.string().uuid(),
   workerPid: z.number().int().positive(),
   childPid: z.number().int().positive().nullable(),
-  status: z.enum(['starting', 'running', 'exited']),
+  status: z.enum(['starting', 'running', 'exited', 'orphaned']),
   startedAt: z.string().datetime(),
   exitedAt: z.string().datetime().optional(),
   exitCode: z.number().int().nullable(),
@@ -597,6 +597,8 @@ export class ProcessManager {
             } else if (workerStatus.status === 'exited') {
               status = 'exited';
               exitedAt = workerStatus.exitedAt ?? exitedAt;
+            } else if(workerStatus.status==='orphaned'){
+              status='orphaned';exitedAt=undefined;exitCode=null;signal=null;
             } else {
               status = 'lost';
               exitedAt ??= new Date().toISOString();
@@ -707,6 +709,9 @@ export class ProcessManager {
       session.status = 'exited';
       session.exitedAt =
         workerStatus.exitedAt ?? session.exitedAt ?? new Date().toISOString();
+    } else if(workerStatus.status==='orphaned'){
+      session.status='orphaned';delete session.exitedAt;
+      session.exitCode=null;session.signal=null;
     } else if (!isPidAlive(workerStatus.workerPid)) {
       session.status = 'lost';
       session.exitedAt ??= new Date().toISOString();
@@ -729,7 +734,7 @@ export class ProcessManager {
 
       if (
         previousStatus === 'running' &&
-        session.status !== 'running'
+        session.status === 'exited'
       ) {
         this.emit({
           topic: 'process.exited',
@@ -980,7 +985,8 @@ export class ProcessManager {
       exitCode: workerStatus.exitCode,
       signal: workerStatus.signal as NodeJS.Signals | null,
       status:
-        workerStatus.status === 'exited' ? 'exited' : 'running',
+        workerStatus.status === 'exited' ? 'exited' :
+          workerStatus.status==='orphaned'?'orphaned':'running',
       recovered: false,
       durable: true,
       uiTarget:parsed.ui_target,
@@ -1189,14 +1195,17 @@ export class ProcessManager {
       delete session.exitedAt;
       void this.persistState().catch(() => undefined);
     };
-    const markExited = (
+    let finalizing=false;
+    const markExited = async (
       code: number | null,
       signal: NodeJS.Signals | null,
-    ): void => {
-      if (session.status === 'exited') return;
-      if (job && session.pid && isPidAlive(session.pid)) {
-        markUnconfirmed();
-        return;
+    ): Promise<void> => {
+      if (session.status === 'exited'||finalizing) return;
+      finalizing=true;
+      // A vanished root PID or closed guardian is not proof of an empty Job.
+      // Retain orphaned/UNKNOWN when the native terminal observation is missing.
+      if(job && (await job.completion).state!=='local_job_empty'){
+        markUnconfirmed();return;
       }
       session.status = 'exited';
       session.exitCode = code;
@@ -1215,9 +1224,11 @@ export class ProcessManager {
       void this.persistState().catch(() => undefined);
     };
     child.once('exit', () => {
-      if (job && session.pid && isPidAlive(session.pid)) markUnconfirmed();
+      if(job)void job.completion.then(result=>{
+        if(result.state!=='local_job_empty')markUnconfirmed();
+      });
     });
-    child.once('close', markExited);
+    child.once('close',(code,signal)=>{void markExited(code,signal);});
     // The guardian can close while launchWindowsJob is still reading its
     // attestation marker. Final status requires BOTH output streams drained.
     const finalizeEarlyClosedGuardian = (): void => {
@@ -1225,7 +1236,7 @@ export class ProcessManager {
       const drained = (stream: typeof child.stdout) =>
         stream.readableEnded || stream.destroyed;
       if (drained(child.stdout) && drained(child.stderr)) {
-        markExited(child.exitCode, child.signalCode);
+        void markExited(child.exitCode, child.signalCode);
       }
     };
     if (job) {
@@ -1350,7 +1361,18 @@ export class ProcessManager {
     session: ManagedSession,
     timeoutMs = 2_000,
   ): Promise<void> {
-    if (!session.child || session.status !== 'running') return;
+    if (!session.child) return;
+    const readStatus=():SessionStatus=>session.status;
+    if(readStatus()==='exited')return;
+    if(session.job){
+      const deadline=Date.now()+timeoutMs;
+      while(Date.now()<deadline&&readStatus()!=='exited'){
+        if(readStatus()==='orphaned'&&session.job.closed())return;
+        await new Promise(resolve=>setTimeout(resolve,25));
+      }
+      return;
+    }
+    if(session.status!=='running')return;
 
     await new Promise<void>((resolve) => {
       let settled = false;
@@ -1420,14 +1442,19 @@ export class ProcessManager {
       session.pid
     ) {
       treeCleanup = session.job
-        ? requestWindowsJobStop(session.job)
+        ? await requestWindowsJobStop(session.job)
         : await killPidTree(session.pid);
-      await this.waitForChildClose(session);
-      if (session.job && !session.job.closed()) {
-        throw new ProcessManagerError('PROCESS_TREE_TERMINATION_UNCONFIRMED',
-          'Windows Job guardian has not closed; the owned descendant tree is not confirmed stopped.');
+      await this.waitForChildClose(session,session.job?7_000:2_000);
+      if(session.job){
+        // The native guardian observes its exact retained Job. Do not use
+        // PID absence as a substitute when terminal evidence is unknown.
+        if(!session.job.closed()||summarize(session).status!=='exited'){
+          throw new ProcessManagerError('PROCESS_TREE_TERMINATION_UNCONFIRMED',
+            'Native Job terminal observation or output drain is unconfirmed.');
+        }
+        await this.persistState();
+        return {...summarize(session),treeCleanup:treeCleanup??'unconfirmed'};
       }
-
       for (let attempt = 0; attempt < 20; attempt++) {
         if (!isPidAlive(session.pid)) break;
         await new Promise((resolve) => setTimeout(resolve, 50));
@@ -1509,24 +1536,31 @@ export class ProcessManager {
     const volatile = [...this.sessions.values()].filter(
       (session) =>
         !session.durable &&
-        session.status === 'running' &&
+        (session.status === 'running'||(session.status==='orphaned'&&session.job!==undefined)) &&
         !session.recovered &&
         session.pid,
     );
 
     await Promise.all(
       volatile.map(async (session) => {
-        if (session.job) requestWindowsJobStop(session.job);
+        if (session.job) await requestWindowsJobStop(session.job);
         else await killPidTree(session.pid!);
-        await this.waitForChildClose(session);
+        await this.waitForChildClose(session,session.job?7_000:2_000);
+        if(session.job&&session.status!=='exited'){
+          session.status='orphaned';delete session.exitedAt;
+          session.exitCode=null;session.signal=null;
+        }
       }),
     );
     await this.persistState();
+    if([...this.sessions.values()].some(session=>!session.durable&&session.job&&session.status!=='exited'))
+      throw new ProcessManagerError('PROCESS_TREE_TERMINATION_UNCONFIRMED',
+        'One or more owned Jobs lack terminal observation. Local shutdown is UNKNOWN.');
   }
 
   async stopAll(): Promise<void> {
     const active = [...this.sessions.values()].filter(
-      (session) => session.status === 'running',
+      (session) => session.status === 'running'||(session.status==='orphaned'&&session.job!==undefined),
     );
 
     await Promise.all(
@@ -1552,9 +1586,16 @@ export class ProcessManager {
         }
 
         if (session.recovered || !session.pid) return;
-        if (session.job) requestWindowsJobStop(session.job);
+        if (session.job) await requestWindowsJobStop(session.job);
         else await killPidTree(session.pid);
-        await this.waitForChildClose(session);
+        await this.waitForChildClose(session,session.job?7_000:2_000);
+        if(session.job){
+          if(session.status!=='exited'){
+            session.status='orphaned';delete session.exitedAt;
+            session.exitCode=null;session.signal=null;
+          }
+          return;
+        }
         for (let attempt = 0; attempt < 20; attempt++) {
           if (!isPidAlive(session.pid)) break;
           await new Promise((resolve) => setTimeout(resolve, 50));
@@ -1568,6 +1609,9 @@ export class ProcessManager {
       }),
     );
     await this.persistState();
+    if(active.some(session=>session.job&&session.status!=='exited'))
+      throw new ProcessManagerError('PROCESS_TREE_TERMINATION_UNCONFIRMED',
+        'An owned Job has no verified local terminal observation.');
   }
 
   private require(id: string): ManagedSession {
