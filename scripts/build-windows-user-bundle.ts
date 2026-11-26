@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { promises as fs } from 'node:fs';
+import { promises as fs, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -418,6 +418,13 @@ export function assertTrustedWindowsJobPublisher(
     fail('WINDOWS_JOB_SIGNED_RELEASE_POLICY_NOT_CONFIGURED');
   }
   const helperSource = path.join(root, 'native', 'windows-job-owner.exe');
+  const manifestPath = path.join(root, 'native', 'windows-job-owner.sha256');
+  const verifyBytes = () => assertWindowsJobPostSigningDigest(
+    createHash('sha256').update(readFileSync(helperSource)).digest('hex'),
+    readFileSync(manifestPath, 'utf8'),
+    artifactSha256,
+  );
+  verifyBytes();
   const actual = JSON.parse(runPowerShell([
     '$ErrorActionPreference = "Stop"',
     '$signature = Microsoft.PowerShell.Security\\Get-AuthenticodeSignature -LiteralPath ' + psLiteral(helperSource),
@@ -439,6 +446,7 @@ export function assertTrustedWindowsJobPublisher(
   if (verified.error || verified.signal || verified.status !== 0) {
     fail('WINDOWS_JOB_TIMESTAMP_OR_SIGNATURE_VERIFICATION_FAILED');
   }
+  verifyBytes();
   return artifactSha256;
 }
 
