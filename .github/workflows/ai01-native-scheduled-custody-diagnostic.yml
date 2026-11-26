@@ -1,0 +1,31 @@
+name: AI-01 Native Scheduled Custody Diagnostic
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/ai01-native-scheduled-custody-diagnostic.yml"
+      - "scripts/test-windows-scheduled-v6-custody.ps1"
+      - "native/windows-scheduled-v6-custody.c"
+      - "test/fixtures/windows-scheduled-v6-custody-native.c"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai01-native-custody-${{ github.event.pull_request.head.sha }}
+  cancel-in-progress: false
+
+jobs:
+  native-custody:
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Build exact native library and run disposable handle acceptance
+        shell: powershell
+        env:
+          NEXOWIRE_EXPECTED_COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+        run: ./scripts/test-windows-scheduled-v6-custody.ps1
