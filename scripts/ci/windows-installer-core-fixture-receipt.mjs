@@ -18,7 +18,7 @@ export const INSTALLER_FIXTURES=Object.freeze({
 export const RUNTIME_FIXTURES=Object.freeze({
   'test/mcp/ai07-transfer-startup.test.ts':Object.freeze({blob:'857417b5e91004f3b7f4976a458478a04e7abff7',minimum:7,timeoutMs:180000}),
   'test/ai03/native-effect-startup-boundary.test.ts':Object.freeze({blob:'ac0b8808742debe2d05d7ed76002fa6a959e5b5d',minimum:3,timeoutMs:180000}),
-  'test/windows-user-bundle.test.ts':Object.freeze({blob:'c2d4adfbdb4f765a3c345c24e9a2d71c890dd1d5',minimum:4,timeoutMs:180000}),
+  'test/windows-user-bundle.test.ts':Object.freeze({blob:'3b83da43b1c119e25083c0145117488fdf068323',minimum:4,timeoutMs:180000}),
   'test/ai05/core-broker-install-mode.test.ts':Object.freeze({blob:'4e21a7aabc860495881199ac9805c73cc622065a',minimum:4,timeoutMs:180000}),
   'test/ai05/core-existing-agent-broker.test.ts':Object.freeze({blob:'17fe80b78825299efa4f351ec4399a61728a978a',minimum:4,timeoutMs:180000}),
   'test/ai05/core-native-hotkey-alias.test.ts':Object.freeze({blob:'c79b488372677933dd7210fe501a6c94494821d0',minimum:1,timeoutMs:120000}),
@@ -39,7 +39,7 @@ const coreDependencies=Object.freeze({
 });
 const installerDependencies=Object.freeze({
   'scripts/smoke-windows-user-setup.ts':'1e2c9ab56121e89013c72fb595df02822093b7ce',
-  'scripts/build-windows-user-bundle.ts':'3f71be3ce204e25b68fdf94d7bc33035e864f58f',
+  'scripts/build-windows-user-bundle.ts':'fd3966ce8cc2a3d53a9347834a78c409ddd4a503',
 });
 const runtimeDependencies=Object.freeze({
   'src/agent/privileged-broker.ts':'6fe4ade7e4f79fe981703717f6d3271d595b99a3',
@@ -51,7 +51,7 @@ const runtimeDependencies=Object.freeze({
   'src/security/protected-transfer-services-startup.ts':'0465a83ef5a6c32d64d0673a6b8cac10c71512a3',
   'src/agent/windows-core-consent-transport.ts':'bcf994f6d23bc139ce43b26dcb77f8e1fdaf9cab',
   'src/agent/windows-core-console-provider.ts':'602844cc1b41a2a10421c74118bf64b105e3aff9',
-  'scripts/build-windows-user-bundle.ts':'3f71be3ce204e25b68fdf94d7bc33035e864f58f',
+  'scripts/build-windows-user-bundle.ts':'fd3966ce8cc2a3d53a9347834a78c409ddd4a503',
   // #1368 preserves pending v6 evidence during legacy receipt retention.
   'src/agent/native-agent-lifecycle.ts':'a2e1049af32518d25e41549be1ea78c8657b1d3b',
   // Reviewed #1285 additive protected transfer path. Retain strict exact pin;
