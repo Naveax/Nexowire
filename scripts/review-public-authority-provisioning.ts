@@ -21,6 +21,12 @@ const signers=z.strictObject({
   coreDispatch:signer,coreNativeObserver:signer,helperObserver:signer,
   ownerDirectory:signer,restoreWitness:signer,hostedVerifier:signer,
 });
+// Independently read public scope/registration records. These are compared
+// for consistency only; their signatures/provenance must be verified by the
+// actual provider. Do not synthesize them from the common owner input.
+const scope=z.strictObject({ownerAccountId:z.string().min(8).max(128),
+  ownerEpoch:z.string().regex(/^[1-9][0-9]{0,15}$/),deviceId:uuid,
+  installationLineageId:uuid,directoryHead:digest,authorityId:uuid});
 const publicRecords=z.strictObject({
   version:z.literal(1),
   owner:z.strictObject({ownerAccountId:z.string().min(8).max(128),ownerEpoch:positive,
@@ -36,6 +42,13 @@ const publicRecords=z.strictObject({
   authenticator:spki.extend({rpId:z.string().max(253).regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/),
     credentialId:z.string().max(1366).regex(/^[A-Za-z0-9_-]+$/)}),
   signers,
+  bindings:z.strictObject({
+    recovery:scope.extend({storeId:uuid,ackSpkiSha256:digest,observerSpkiSha256:digest}),
+    scheduled:scope.extend({storeId:uuid,forwardSpkiSha256:digest,releaseSpkiSha256:digest}),
+    core:scope.extend({installationId:uuid,enrollmentId:uuid,issuerSpkiSha256:digest,
+      dispatchSpkiSha256:digest,nativeObserverSpkiSha256:digest,helperObserverSpkiSha256:digest,
+      directoryGeneration:positive,registrationSha256:digest}),
+  }),
   hostedVerifier:z.strictObject({origin:z.string().max(2048),serverSpkiSha256:digest,
     clientCertificateSha256:digest,caCertificateSha256:digest,principalRegistrationReceiptSha256:receipt}),
   publisher:z.strictObject({
@@ -91,6 +104,28 @@ export function reviewPublicProvisioning(raw:unknown){
   const credential=Buffer.from(r.authenticator.credentialId,'base64url');
   if(!credential.length||credential.length>1024||credential.toString('base64url')!==r.authenticator.credentialId)
     return deny('PUBLIC_PROVISIONING_CREDENTIAL_INVALID');
+  const {recovery,scheduled,core}=r.bindings;
+  for(const b of [recovery,scheduled,core]){
+    if(b.ownerAccountId!==r.owner.ownerAccountId||b.ownerEpoch!==String(r.owner.ownerEpoch)||
+      b.deviceId!==r.owner.deviceId||b.installationLineageId!==r.owner.installationLineageId||
+      b.directoryHead!==r.directory.directoryHead)
+      return deny('PUBLIC_PROVISIONING_OWNER_SCOPE_MISMATCH');
+  }
+  if(recovery.authorityId!==r.authority.authorityId||recovery.storeId!==r.authority.storeId||
+    scheduled.authorityId!==r.authority.scheduledAuthorityId||scheduled.storeId!==r.authority.scheduledStoreId||
+    core.authorityId!==r.authority.authorityId||core.installationId!==r.owner.installationId||
+    core.enrollmentId!==r.owner.enrollmentId||core.directoryGeneration!==r.directory.generation||
+    core.registrationSha256!==r.directory.registrationSha256)
+    return deny('PUBLIC_PROVISIONING_REGISTRATION_MISMATCH');
+  if(recovery.ackSpkiSha256!==r.signers.recoveryAck.spkiSha256||
+    recovery.observerSpkiSha256!==r.signers.recoveryObserver.spkiSha256||
+    scheduled.forwardSpkiSha256!==r.signers.scheduledForward.spkiSha256||
+    scheduled.releaseSpkiSha256!==r.signers.scheduledRelease.spkiSha256||
+    core.issuerSpkiSha256!==r.enrollmentKey.spkiSha256||
+    core.dispatchSpkiSha256!==r.signers.coreDispatch.spkiSha256||
+    core.nativeObserverSpkiSha256!==r.signers.coreNativeObserver.spkiSha256||
+    core.helperObserverSpkiSha256!==r.signers.helperObserver.spkiSha256)
+    return deny('PUBLIC_PROVISIONING_REGISTERED_PIN_MISMATCH');
   origin(r.hostedVerifier.origin);
   // Do not convert directoryHead into #1367 registrationSha256 or infer
   // installationLineageId from installationId. Their authenticated mapping
