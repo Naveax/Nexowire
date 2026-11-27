@@ -2,6 +2,7 @@ import type {DispatchStorePool,DispatchStoreConnection} from '../agent/postgres-
 import type {SignedHelperEvidenceConfig,HelperEvidenceChallenge} from './signed-helper-selection-evidence.js';
 import type {HelperAuthorityEvidenceRequest} from './postgres-helper-selection-authority.js';
 import {createProtectedPostgresDispatchPool} from '../agent/protected-postgres-dispatch-pool.js';
+import {ProtectedRecoveryWitnessReadback} from './recovery-provider-readback.js';
 import {createProtectedTransferAuthorityServer} from './protected-transfer-authority.js';
 import {PostgresProtectedTransferAuthority,composeTransferDrainObserver,type PostgresProtectedTransferConfig} from './postgres-protected-transfer-authority.js';
 
@@ -24,7 +25,7 @@ export function bindTransferClaimDrainEvidence(pool:DispatchStorePool,authorityI
       await db.query('BEGIN READ ONLY');begun=true;
       await db.query("SET LOCAL statement_timeout='1500ms'");
       await db.query("SET LOCAL lock_timeout='750ms'");
-      const rows=(await db.query("SELECT COUNT(*)::bigint AS n FROM transfer_authority.claims c JOIN transfer_authority.jobs j ON j.id=c.job_id WHERE j.authority_id=$1 AND j.owner_id=$2 AND (j.source_device_id=$3 OR j.target_device_id=$3) AND c.state NOT IN ('APPLIED','NO_EFFECT')",[authorityId,request.scope.ownerId,request.scope.deviceId])).rows;
+      const rows=(await db.query("SELECT COUNT(*)::bigint AS n FROM transfer_authority.jobs j WHERE j.authority_id=$1 AND (j.source_device_id=$2 OR j.target_device_id=$2) AND (j.pending_id IS NOT NULL OR EXISTS(SELECT 1 FROM transfer_authority.claims c WHERE c.job_id=j.id AND c.state NOT IN ('APPLIED','NO_EFFECT')))",[authorityId,request.scope.deviceId])).rows;
       if(rows.length!==1||!(rows[0]?.n===0||rows[0]?.n==='0'||rows[0]?.n===0n))
         throw Error('TRANSFER_HELPER_DRAIN_UNRESOLVED');
       await db.query('ROLLBACK');begun=false;
@@ -43,6 +44,10 @@ export function createPostgresProtectedTransferService(config:{
   server:Omit<Parameters<typeof createProtectedTransferAuthorityServer>[0],'backend'>;
 }){
   if(config.authority.authorityId!==config.server.authorityId)throw Error('TRANSFER_PG_AUTHORITY_ID_MISMATCH');
+  // Production composition cannot select the pre-V3 compatibility lane,
+  // including after restore to a database without lifecycle columns.
+  if(!(config.authority.recoveryWitness instanceof ProtectedRecoveryWitnessReadback)||config.authority.recoveryWitness.authorityId!==config.authority.authorityId)
+    throw Error('TRANSFER_PG_RECOVERY_WITNESS_REQUIRED');
   const database=createProtectedPostgresDispatchPool(config.database);
   try{
     const backend=new PostgresProtectedTransferAuthority({...config.authority,pool:database.pool});
