@@ -1,0 +1,43 @@
+name: AI-02 Isolated Recovery PostgreSQL Role Review
+on:
+  pull_request:
+    branches:
+      - agent/nx-02-recovery-evidence-binding-20261126
+    paths:
+      - '.github/workflows/ai02-isolated-recovery-pg-review.yml'
+      - 'sql/helper-selection-lifecycle-review.sql'
+      - 'test/ai02/run-recovery-role-pg-review.py'
+permissions:
+  contents: read
+jobs:
+  isolated-postgres:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'agent/nx-02-pg-review-20261127'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Exact reviewed source and disposable socket-only PostgreSQL
+        shell: bash
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          git rev-parse HEAD
+          test "$(id -u)" != 0
+          test "$(git hash-object sql/core-broker-dispatch-authority.sql)" = a120585a92d7ab41bb2d1a3aaf5c0bc31f9ca74b
+          test "$(git hash-object sql/helper-selection-authority.sql)" = 32338077c0cd85789f475b1a76e93ad4a1351863
+          test "$(git hash-object sql/helper-selection-lifecycle-review.sql)" = 8dc2efcb646fcdbd570be03e237a24975a579c5d
+          test "$(git hash-object src/security/recovery-anchored-authority-review.ts)" = 69e37b2e3b151209751e3ee3dd87ab47ce12edf5
+          test "$(git hash-object test/ai02/recovery-anchored-review.fixture.cjs)" = 291fbf9e71d96850eba61421f56caed7d84fd537
+          test "$(git hash-object test/ai02/run-recovery-role-pg-review.py)" = 7ffeaa6be3b884c39df095a3086c8cc690aa16c6
+          export PATH="/usr/lib/postgresql/16/bin:$PATH"
+          command -v initdb
+          command -v pg_ctl
+          command -v psql
+          initdb --version
+          python3 -I test/ai02/run-recovery-role-pg-review.py | tee "$RUNNER_TEMP/ai02-pg-review.txt"
+          grep -E '^SQL_ROLE_FIXTURE [0-9]+ PASS; witness and physical acceptance NOT_RUN$' "$RUNNER_TEMP/ai02-pg-review.txt"
