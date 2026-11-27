@@ -40,22 +40,42 @@ try {
   $digest=(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
   # Capture both streams without losing the exact native exit or cold evidence.
   # The expected cold logical mismatch is stdout/stderr data, not a PS exception.
-  $cold=@(& $exe --fixture-cold $file $digest $dir $linked 2>&1)
-  $coldExit=$LASTEXITCODE
-  $cold=@($cold|ForEach-Object {$_.ToString()})
+  function Invoke-CustodyFixture([string]$mode){
+    # Windows PowerShell treats redirected native stderr as ErrorRecords.
+    # Continue only within this native invocation; enforce exact exit below.
+    $saved=$ErrorActionPreference
+    try {
+      $ErrorActionPreference='Continue'
+      $LASTEXITCODE=-1
+      $raw=@(& $exe $mode $file $digest $dir $linked 2>&1)
+      $code=$LASTEXITCODE
+    } finally {$ErrorActionPreference=$saved}
+    @{Exit=$code;Lines=@($raw|ForEach-Object {$_.ToString()})}
+  }
+  $coldRun=Invoke-CustodyFixture '--fixture-cold'
+  $coldExit=$coldRun.Exit
+  $cold=@($coldRun.Lines)
   $cold|ForEach-Object {Write-Host "NX_CUSTODY_COLD $_"}
-  if($coldExit -ne 0 -and $coldExit -ne 19){throw "COLD_FIXTURE_FAILED exit=$coldExit"}
-  $output=@(& $exe --fixture $file $digest $dir $linked 2>&1)
-  $exit=$LASTEXITCODE
-  $output=@($output|ForEach-Object {$_.ToString()})
+  $controlRun=Invoke-CustodyFixture '--fixture'
+  $exit=$controlRun.Exit
+  $output=@($controlRun.Lines)
   $output|ForEach-Object {Write-Host $_}
+  if($coldExit -ne 0 -and $coldExit -ne 19){throw "COLD_FIXTURE_FAILED exit=$coldExit"}
   if($exit -ne 0){throw "NATIVE_FIXTURE_FAILED exit=$exit"}
   function Get-HandleDeltaSignature($lines,[string]$stage){
-    @($lines|ForEach-Object {
+    $prefix='^NX_HANDLE_STAGE stage='+[regex]::Escape($stage)+' before=(\d+) after=(\d+) added=(\d+) removed=(\d+)$'
+    $summary=@($lines|Where-Object {$_ -match $prefix})
+    if($summary.Count -ne 1 -or $summary[0] -notmatch $prefix){throw "HANDLE_STAGE_MISSING $stage"}
+    $added=[int]$Matches[3];$removed=[int]$Matches[4]
+    if(([int]$Matches[1]+$added-$removed) -ne [int]$Matches[2]){throw "HANDLE_STAGE_COUNT_INVALID $stage"}
+    $entries=@($lines|ForEach-Object {
       if($_ -match ('^NX_HANDLE_DELTA stage='+[regex]::Escape($stage)+' op=(add|remove) type=(.+) access=([0-9a-f]+) attrs=([0-9a-f]+) value=')){
         "$($Matches[1])|$($Matches[2])|$($Matches[3])|$($Matches[4])"
       }
     }|Sort-Object)
+    if(@($entries|Where-Object {$_ -like 'add|*'}).Count -ne $added -or
+       @($entries|Where-Object {$_ -like 'remove|*'}).Count -ne $removed){throw "HANDLE_STAGE_DELTA_INCOMPLETE $stage"}
+    $entries
   }
   function Assert-SameHandleDelta($left,$right,[string]$label){
     $a=@($left);$b=@($right)

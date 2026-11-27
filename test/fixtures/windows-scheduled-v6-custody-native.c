@@ -27,7 +27,7 @@ typedef LONG (NTAPI *NX_QOBJECT)(HANDLE,ULONG,PVOID,ULONG,PULONG);
 typedef struct NX_AUDIT_STRING { USHORT length,maximum; PWSTR buffer; } NX_AUDIT_STRING;
 static NX_QPROCESS audit_process=NULL;
 static NX_QOBJECT audit_object=NULL;
-static NX_AUDIT_TABLE audit_initial,audit_previous,audit_current,product_initial;
+static NX_AUDIT_TABLE audit_initial,audit_previous,audit_current,product_initial,after_first_digest;
 static wchar_t audit_types[512][64];
 static BOOL audit_capture(NX_AUDIT_TABLE *out){
   ULONG used=0;DWORD before=0,after=0;
@@ -278,7 +278,7 @@ static int ipc_case(void){
   if(!si.lpAttributeList||!InitializeProcThreadAttributeList(si.lpAttributeList,1,0,&bytes))goto done;
   initialized=TRUE;
   if(!UpdateProcThreadAttribute(si.lpAttributeList,0,PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
-      allowed,sizeof(allowed),NULL,NULL))goto done;
+      allowed,sizeof(allowed),NULL,NULL)||!audit_stage("ipc_attrlist_ready",FALSE))goto done;
   DWORD length=GetModuleFileNameW(NULL,exe,32768);
   if(!length||length>=32768||swprintf_s(command,32768,L"\"%ls\" --peer %llu %llu",exe,
     (unsigned long long)(uintptr_t)to.read_end,(unsigned long long)(uintptr_t)from.write_end)<0)goto done;
@@ -309,6 +309,7 @@ static int ipc_case(void){
      !GetExitCodeProcess(pi.hProcess,&code)||code!=0||
      peer_identity(pi.hProcess,pi.dwProcessId,created))goto done;
   pass("exited_peer_denied");
+  if(!audit_stage("ipc_peer_exited",FALSE))goto done;
   rc=0;
 done:
   nx_v6_close_channel(&to);nx_v6_close_channel(&from);nx_v6_close_channel(&excluded);
@@ -337,6 +338,7 @@ int wmain(int argc,wchar_t **argv){
   for(int i=0;i<16;++i){
     if(nx_v6_hold_file(file,wrong,&held)){nx_v6_close_file(&held);return failed("wrong_digest");}
     if(!audit_stage(i?"wrong_digest_repeat":"wrong_digest_first",i!=0||!cold))return failed("wrong_digest_handle_delta");
+    if(!i)after_first_digest=audit_previous;
     if(nx_v6_hold_file(linked,expected,&held)){nx_v6_close_file(&held);return failed("hardlink");}
     if(!audit_stage("hardlink_rejected",TRUE))return failed("hardlink_handle_delta");
   }
@@ -376,7 +378,8 @@ done:
   if(unlocked==INVALID_HANDLE_VALUE)return failed("unlocked_ancestor");
   CloseHandle(unlocked);pass("held_handles_released");
   if(!audit_stage("custody_closed",FALSE))return failed("custody_snapshot");
-  if(!cold&&!audit_delta("custody_vs_product_base",&product_initial,&audit_previous,TRUE))
+  if(!audit_delta(cold?"cold_custody_vs_hash_base":"custody_vs_product_base",
+      cold?&after_first_digest:&product_initial,&audit_previous,TRUE))
     return failed("custody_residual_handles");
   if(ipc_case())return 1;
   if(!audit_stage("ipc_closed",FALSE))return failed("ipc_snapshot");
@@ -391,10 +394,11 @@ done:
   if(nx_v6_native_gate_live(start)||elapsed<NX_NATIVE_GATE_MS)return failed("deadline_expired");
   printf("NX_CUSTODY_MEASURE native_elapsed_ms=%llu\n",(unsigned long long)elapsed);
   pass("monotonic_expiry_no_renewal");
+  if(!audit_stage("deadline_closed",TRUE))return failed("deadline_handle_delta");
   NX_BOOT_OBSERVATION boot={0};
   if(nx_v6_observe_boot(&boot))printf("NX_CUSTODY_OBSERVATION boot_support=AVAILABLE authoritative=false\n");
   else printf("NX_CUSTODY_OBSERVATION boot_support=UNAVAILABLE authoritative=false\n");
-  if(!audit_stage("deadline_boot_closed",TRUE))return failed("deadline_boot_handle_delta");
+  if(!audit_stage("boot_readback_closed",TRUE))return failed("boot_readback_handle_delta");
   if(!audit_delta(cold?"cold_final":"product_final",&product_initial,&audit_previous,TRUE)){
     fprintf(stderr,"NX_CUSTODY_FAIL handle_table_changed logical=true\n");
     return cold?19:1;
