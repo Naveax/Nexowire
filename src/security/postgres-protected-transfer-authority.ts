@@ -3,6 +3,7 @@ import path from 'node:path';
 import type {DispatchStorePool,DispatchStoreConnection} from '../agent/postgres-broker-dispatch-authority.js';
 import type {IndependentProvenanceCheck} from '../agent/postgres-monotonic-witness.js';
 import {verifyNativeTransferReceipt} from '../agent/native-transfer-publisher.js';
+import {assertLegacyAdmissionLocked,ProtectedRecoveryWitnessReadback} from './recovery-provider-readback.js';
 import {transferNativeClaimDigest,type ProtectedTransferAuthorityBackend,type TransferNativeClaim} from './protected-transfer-authority.js';
 import type {LargeTransferScope,LargeTransferBinding,LargeTransferLease,LargeTransferIntent,LargeTransferFinalReceipt,LargeTransferCommit} from '../mcp/durable-large-transfer.js';
 
@@ -31,6 +32,9 @@ export interface IndependentTransferObservation {
 }
 export interface PostgresProtectedTransferConfig {
   pool:DispatchStorePool;authorityId:string;verifyProvenance:IndependentProvenanceCheck;
+  /** Mandatory for the off-host service and any V3 schema. Only the isolated
+   * pre-V3 backend compatibility lane may omit it. No MCP-supplied witness. */
+  recoveryWitness?:ProtectedRecoveryWitnessReadback;
   /** Independently authenticated, signed protected Native readback of the
    * original intent and permanent drain/fence. Must NOT trust Hub progress. */
   observeNativeIntent:(b:Readonly<LargeTransferBinding>,p:Readonly<LargeTransferIntent>,c:Readonly<TransferNativeClaim>)=>Promise<IndependentTransferObservation|undefined>;
@@ -43,10 +47,12 @@ export class PostgresProtectedTransferAuthority implements ProtectedTransferAuth
   private readonly config:Readonly<PostgresProtectedTransferConfig>;
   constructor(c:PostgresProtectedTransferConfig){
     if(!c||!uuid.test(c.authorityId)||typeof c.pool?.connect!=='function'||typeof c.verifyProvenance!=='function'||typeof c.observeNativeIntent!=='function'||typeof c.readNativeReceipt!=='function')deny('TRANSFER_PG_CONFIG_INVALID');
+    if(c.recoveryWitness!==undefined&&(!(c.recoveryWitness instanceof ProtectedRecoveryWitnessReadback)||c.recoveryWitness.authorityId!==c.authorityId))deny('TRANSFER_PG_RECOVERY_WITNESS_INVALID');
     this.config=Object.freeze({...c});
   }
   private async trusted(){const p=await this.config.verifyProvenance();if(!p||p.verified!==true||p.authorityId!==this.config.authorityId||!Number.isSafeInteger(p.validUntil)||p.validUntil<=Date.now())deny('TRANSFER_PG_PROVENANCE_UNVERIFIED');}
-  private async tx<T>(f:(tx:Tx)=>Promise<T>):Promise<T>{
+  private async tx<T>(scope:LargeTransferScope,f:(tx:Tx)=>Promise<T>):Promise<T>{
+    scopeValid(scope);
     await this.trusted();const db=await this.config.pool.connect();let active=false,committing=false,destroy=false;
     try{
       await db.query('BEGIN');active=true;
@@ -58,10 +64,29 @@ export class PostgresProtectedTransferAuthority implements ProtectedTransferAuth
         "(has_table_privilege(current_user,'transfer_authority.jobs','DELETE,TRUNCATE') OR has_table_privilege(current_user,'transfer_authority.claims','DELETE,TRUNCATE')) AS erase,"+
         "EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='transfer_authority' AND pg_has_role(current_user,c.relowner,'MEMBER')) AS owns")).rows[0];
       if(!settings||settings.fsync!=='on'||settings.full_page_writes!=='on'||settings.recovery!==false||settings.elevated!==false||settings.ddl!==false||settings.grant_write!==false||settings.erase!==false||settings.owns!==false)deny('TRANSFER_PG_ROLE_OR_DURABILITY_INVALID');
-      const locked=(await db.query('SELECT max_seen_ms FROM core_dispatch.authorities WHERE authority_id=$1 FOR UPDATE',[this.config.authorityId])).rows[0];if(!locked)deny('TRANSFER_PG_AUTHORITY_MISSING');
+      const locked=(await db.query('SELECT max_seen_ms,to_jsonb(a) AS authority_row FROM core_dispatch.authorities a WHERE authority_id=$1 FOR UPDATE',[this.config.authorityId])).rows[0];if(!locked)return deny('TRANSFER_PG_AUTHORITY_MISSING');
+      // V3 quarantine is authority-wide, therefore covers BOTH source and
+      // target before any grant, claim, observer or receipt callback.
+      const row=locked.authority_row;
+      if(!row||typeof row!=='object'||Array.isArray(row))deny('TRANSFER_PG_RECOVERY_SCHEMA_UNKNOWN');
+      const anchor=row as Record<string,unknown>;
+      const v3=['lifecycle_store_id','lifecycle_sequence','lifecycle_head'].map(k=>Object.hasOwn(anchor,k));
+      const witness=this.config.recoveryWitness;
+      if(v3.some(Boolean)&&!v3.every(Boolean))deny('TRANSFER_PG_RECOVERY_SCHEMA_UNKNOWN');
+      if(v3.every(Boolean)){
+        if(anchor.lifecycle_store_id!==null||anchor.lifecycle_sequence!==null||anchor.lifecycle_head!==null)deny('LIFECYCLE_LEGACY_WRITER_NOT_ENROLLED');
+        if(!witness)deny('TRANSFER_PG_RECOVERY_WITNESS_REQUIRED');
+      }else if(witness)deny('TRANSFER_PG_RECOVERY_SCHEMA_REQUIRED');
+      // Same transaction and row lock as V3. A null/restore anchor is NOT
+      // permission: the independently signed witness must be UNANCHORED.
+      if(witness)await assertLegacyAdmissionLocked(db,witness);
       let last=integer(locked?.max_seen_ms,1);
       const now=async()=>{const x=integer((await db.query('SELECT FLOOR(EXTRACT(EPOCH FROM clock_timestamp())*1000)::bigint AS ms')).rows[0]?.ms,1);if(x<last)deny('TRANSFER_PG_CLOCK_REWIND');last=x;return x;};
-      await now();const result=await f({db,now});await this.trusted();await now();
+      await now();const result=await f({db,now});await this.trusted();
+      // Recheck before commit/return, including status-only settlements; a
+      // witness freeze while the original callback runs cannot mint authority.
+      if(witness)await assertLegacyAdmissionLocked(db,witness);
+      await now();
       await db.query('UPDATE core_dispatch.authorities SET max_seen_ms=$2 WHERE authority_id=$1',[this.config.authorityId,last]);
       committing=true;await db.query('COMMIT');active=false;committing=false;return result;
     }catch(e){if(committing){destroy=true;return deny('TRANSFER_PG_TRANSACTION_UNKNOWN');}if(active)try{await db.query('ROLLBACK');}catch{destroy=true;}throw e;}
@@ -100,9 +125,9 @@ export class PostgresProtectedTransferAuthority implements ProtectedTransferAuth
     if(!v||v.sealed!==true||v.jobId!==b.id||v.requestId!==p.requestId||v.epoch!==p.epoch||v.intentSha256!==c.intentSha256||v.offset!==p.offset||v.length!==p.length||v.sha256!==p.sha256||!['applied','no-effect','unknown'].includes(v.state))return deny('TRANSFER_PG_NATIVE_DRAIN_UNVERIFIED');
     return v.state;
   }
-  async assertGrant(s:LargeTransferScope){await this.tx(async tx=>{await this.grant(tx,s);});}
+  async assertGrant(s:LargeTransferScope){await this.tx(s,async tx=>{await this.grant(tx,s);});}
   async acquire(b:LargeTransferBinding,previousEpoch:number){bindingValid(b);if(!Number.isSafeInteger(previousEpoch)||previousEpoch<0)return deny('TRANSFER_PG_LEASE_INVALID');
-    return this.tx(async tx=>{
+    return this.tx(b,async tx=>{
       await this.grant(tx,b,b);
       const exists=(await tx.db.query('SELECT id FROM transfer_authority.jobs WHERE id=$1',[b.id])).rows[0];
       const token=randomBytes(32).toString('hex'),hash=sha(token);
@@ -125,7 +150,7 @@ export class PostgresProtectedTransferAuthority implements ProtectedTransferAuth
   }
   async assertCurrent(b:LargeTransferBinding,l:LargeTransferLease,offset:number){
     if(!Number.isSafeInteger(offset)||offset<0||offset>b.size)deny('TRANSFER_PG_OFFSET_INVALID');
-    await this.tx(async tx=>{
+    await this.tx(b,async tx=>{
       await this.grant(tx,b,b);const j=await this.job(tx,b);this.active(j,l);const old=integer(j.confirmed_offset);
       const pending=await this.pending(tx,j,b);
       if(!pending||pending.p.kind==='publish'){if(offset!==old)deny('TRANSFER_PG_OFFSET_FENCED');return;}
@@ -142,7 +167,7 @@ export class PostgresProtectedTransferAuthority implements ProtectedTransferAuth
   }
   async proveWriteNoEffect(b:LargeTransferBinding,p:LargeTransferIntent,l:LargeTransferLease){
     if(p.kind!=='write'||!uuid.test(p.requestId)||!Number.isSafeInteger(p.epoch)||p.epoch<1||l.epoch<=p.epoch)return false;
-    return this.tx(async tx=>{
+    return this.tx(b,async tx=>{
       await this.grant(tx,b,b);const j=await this.job(tx,b);this.active(j,l);
       if(integer(j.confirmed_offset)!==p.offset)return false;
       const pending=await this.pending(tx,j,b);
@@ -159,7 +184,7 @@ export class PostgresProtectedTransferAuthority implements ProtectedTransferAuth
   async claimNativeEffect(b:LargeTransferBinding,l:LargeTransferLease,p:LargeTransferIntent){
     bindingValid(b);leaseValid(l);const intentHash=transferNativeClaimDigest(b,l,p);
     if(!p.dispatched||p.epoch!==l.epoch)return deny('TRANSFER_PG_INTENT_INVALID');
-    return this.tx(async tx=>{
+    return this.tx(b,async tx=>{
       await this.grant(tx,b,b);const j=await this.job(tx,b);this.active(j,l);
       if(j.pending_id!==null||integer(j.confirmed_offset)!==p.offset||p.kind==='publish'&&(j.stage_created!==true||p.offset!==b.size)||p.kind==='write'&&p.length===0&&j.stage_created===true)return deny('TRANSFER_PG_MUTATION_UNRESOLVED');
       if((await tx.db.query('SELECT request_id FROM transfer_authority.claims WHERE request_id=$1',[p.requestId])).rows[0])return deny('TRANSFER_PG_REQUEST_REPLAY');
@@ -172,7 +197,7 @@ export class PostgresProtectedTransferAuthority implements ProtectedTransferAuth
   async settleNativeEffect(b:LargeTransferBinding,l:LargeTransferLease,p:LargeTransferIntent,c:TransferNativeClaim,outcome:'completed'|'unknown'){
     leaseValid(l);const h=transferNativeClaimDigest(b,l,p);
     if(!p.dispatched||p.epoch!==l.epoch||c.jobId!==b.id||c.requestId!==p.requestId||c.epoch!==l.epoch||c.intentSha256!==h||!uuid.test(c.claimId)||(outcome!=='completed'&&outcome!=='unknown'))deny('TRANSFER_PG_CLAIM_SCOPE_DENIED');
-    await this.tx(async tx=>{
+    await this.tx(b,async tx=>{
       // Original native settlement may occur after shared grant revoke.
       // No new authorization, no deletion, no generation rollback.
       const j=await this.job(tx,b),pending=await this.pending(tx,j,b);
@@ -180,7 +205,7 @@ export class PostgresProtectedTransferAuthority implements ProtectedTransferAuth
       await tx.db.query('UPDATE transfer_authority.claims SET state=$2 WHERE request_id=$1',[p.requestId,outcome==='completed'?'SETTLED':'UNKNOWN']);
     });
   }
-  async verifyFinal(b:LargeTransferBinding,r:LargeTransferFinalReceipt){return this.tx(async tx=>verifyNativeTransferReceipt(b,r,await this.grant(tx,b,b)));}
+  async verifyFinal(b:LargeTransferBinding,r:LargeTransferFinalReceipt){return this.tx(b,async tx=>verifyNativeTransferReceipt(b,r,await this.grant(tx,b,b)));}
   private async finish(tx:Tx,b:LargeTransferBinding,j:Row,p:LargeTransferIntent,r:LargeTransferFinalReceipt){
     const key=await this.grant(tx,b,b),pending=await this.pending(tx,j,b);
     if(!pending||!sameIntent(pending.p,p)||!receiptMatches(b,p,r)||!verifyNativeTransferReceipt(b,r,key)||await this.observe(b,p,pending.claim)!=='applied')return deny('TRANSFER_PG_PUBLICATION_UNVERIFIED');
@@ -191,25 +216,25 @@ export class PostgresProtectedTransferAuthority implements ProtectedTransferAuth
     await tx.db.query("UPDATE transfer_authority.jobs SET state='COMPLETE',pending_id=NULL,final_receipt=$2,final_commit=$3 WHERE id=$1",[b.id,JSON.stringify(r),JSON.stringify(commit)]);return commit;
   }
   async commitPublished(b:LargeTransferBinding,l:LargeTransferLease,r:LargeTransferFinalReceipt){
-    return this.tx(async tx=>{await this.grant(tx,b,b);const j=await this.job(tx,b);this.active(j,l);const pending=await this.pending(tx,j,b);if(!pending||pending.p.epoch!==l.epoch)return deny('TRANSFER_PG_PUBLICATION_UNVERIFIED');return this.finish(tx,b,j,pending.p,r);});
+    return this.tx(b,async tx=>{await this.grant(tx,b,b);const j=await this.job(tx,b);this.active(j,l);const pending=await this.pending(tx,j,b);if(!pending||pending.p.epoch!==l.epoch)return deny('TRANSFER_PG_PUBLICATION_UNVERIFIED');return this.finish(tx,b,j,pending.p,r);});
   }
   async recoverPublished(b:LargeTransferBinding,p:LargeTransferIntent){
-    return this.tx(async tx=>{const key=await this.grant(tx,b,b),j=await this.job(tx,b);if(j.state!=='COMPLETE')return undefined;
+    return this.tx(b,async tx=>{const key=await this.grant(tx,b,b),j=await this.job(tx,b);if(j.state!=='COMPLETE')return undefined;
       const r=j.final_receipt as LargeTransferFinalReceipt,c=j.final_commit as LargeTransferCommit;
       if(!r||!c||!receiptMatches(b,p,r)||!verifyNativeTransferReceipt(b,r,key)||c.jobId!==b.id||c.requestId!==p.requestId||c.epoch!==p.epoch||c.sha256!==b.sha256||!uuid.test(c.commitId))return deny('TRANSFER_PG_FINAL_COMMIT_CORRUPT');return {receipt:r,commit:c};});
   }
   async recoverNativeReceipt(b:LargeTransferBinding,p:LargeTransferIntent){
-    return this.tx(async tx=>{const key=await this.grant(tx,b,b),j=await this.job(tx,b);this.active(j);const pending=await this.pending(tx,j,b);if(!pending||!sameIntent(pending.p,p)||p.kind!=='publish'||await this.observe(b,p,pending.claim)!=='applied')return undefined;
+    return this.tx(b,async tx=>{const key=await this.grant(tx,b,b),j=await this.job(tx,b);this.active(j);const pending=await this.pending(tx,j,b);if(!pending||!sameIntent(pending.p,p)||p.kind!=='publish'||await this.observe(b,p,pending.claim)!=='applied')return undefined;
       const r=await this.config.readNativeReceipt(b,p);if(!r)return undefined;if(!receiptMatches(b,p,r)||!verifyNativeTransferReceipt(b,r,key))return deny('TRANSFER_PG_PUBLICATION_UNVERIFIED');return r;});
   }
-  async commitRecoveredPublication(b:LargeTransferBinding,p:LargeTransferIntent,r:LargeTransferFinalReceipt){return this.tx(async tx=>{await this.grant(tx,b,b);const j=await this.job(tx,b);this.active(j);return this.finish(tx,b,j,p,r);});}
+  async commitRecoveredPublication(b:LargeTransferBinding,p:LargeTransferIntent,r:LargeTransferFinalReceipt){return this.tx(b,async tx=>{await this.grant(tx,b,b);const j=await this.job(tx,b);this.active(j);return this.finish(tx,b,j,p,r);});}
   async cancelTransfer(b:LargeTransferBinding,l:LargeTransferLease){
-    await this.tx(async tx=>{await this.grant(tx,b,b);const j=await this.job(tx,b);leaseValid(l);if(integer(j.epoch,1)!==l.epoch||j.lease_hash!==sha(l.token)||j.state==='COMPLETE')return deny('TRANSFER_PG_LEASE_FENCED');if(j.state==='CANCELLED')return;await tx.db.query("UPDATE transfer_authority.jobs SET state='CANCELLED' WHERE id=$1",[b.id]);});
+    await this.tx(b,async tx=>{await this.grant(tx,b,b);const j=await this.job(tx,b);leaseValid(l);if(integer(j.epoch,1)!==l.epoch||j.lease_hash!==sha(l.token)||j.state==='COMPLETE')return deny('TRANSFER_PG_LEASE_FENCED');if(j.state==='CANCELLED')return;await tx.db.query("UPDATE transfer_authority.jobs SET state='CANCELLED' WHERE id=$1",[b.id]);});
   }
 }
 /** Called INSIDE the existing core revoke transaction's native drain hook.
- * No new lock on authorities: the caller already holds it. Unknown/active
- * transfer claims block a successful drain; real native drain remains required.
+ * No new lock on authorities: the caller already holds it. Every nonterminal
+ * claim or pending pointer blocks drain; real native drain remains required.
  * Do not use as a standalone proof of revoke completion. */
 export function composeTransferDrainObserver(config:{pool:DispatchStorePool;authorityId:string;verifyNativeDrain:(request:{ownerId:string;deviceId:string})=>Promise<boolean>}){
   if(!uuid.test(config.authorityId)||typeof config.pool?.connect!=='function'||typeof config.verifyNativeDrain!=='function')return deny('TRANSFER_PG_DRAIN_CONFIG_INVALID');
@@ -217,7 +242,7 @@ export function composeTransferDrainObserver(config:{pool:DispatchStorePool;auth
     if(!uuid.test(request.ownerId)||!uuid.test(request.deviceId))return false;
     const db=await config.pool.connect();
     try{
-      const row=(await db.query("SELECT COUNT(*)::bigint AS n FROM transfer_authority.claims c JOIN transfer_authority.jobs j ON j.id=c.job_id WHERE j.authority_id=$1 AND j.owner_id=$2 AND (j.source_device_id=$3 OR j.target_device_id=$3) AND c.state IN ('ACTIVE','UNKNOWN')",[config.authorityId,request.ownerId,request.deviceId])).rows[0];
+      const row=(await db.query("SELECT COUNT(*)::bigint AS n FROM transfer_authority.jobs j WHERE j.authority_id=$1 AND (j.source_device_id=$2 OR j.target_device_id=$2) AND (j.pending_id IS NOT NULL OR EXISTS(SELECT 1 FROM transfer_authority.claims c WHERE c.job_id=j.id AND c.state NOT IN ('APPLIED','NO_EFFECT')))",[config.authorityId,request.deviceId])).rows[0];
       return integer(row?.n)===0&&await config.verifyNativeDrain(request)===true;
     }finally{db.release();}
   };
