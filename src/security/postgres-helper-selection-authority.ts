@@ -2,6 +2,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import * as z from 'zod';
 import type {DispatchStorePool,DispatchStoreConnection} from '../agent/postgres-broker-dispatch-authority.js';
 import type {IndependentProvenanceCheck} from '../agent/postgres-monotonic-witness.js';
+import {assertLegacyAdmissionLocked,ProtectedRecoveryWitnessReadback} from './recovery-provider-readback.js';
 import type {HelperRequest,HelperSelection,HelperCommit,TransferHelperDeploymentAuthority} from '../installer/protected-transfer-helper-lifecycle.js';
 
 const uuid=z.string().uuid().transform(v=>v.toLowerCase());
@@ -21,6 +22,8 @@ export interface HelperSelectionAuthorityConfig {
   pool:DispatchStorePool;
   scope:HelperAuthorityScope;
   verifyProvenance:IndependentProvenanceCheck;
+  /** Protected service configuration, never supplied by a helper request. */
+  legacyWitness:ProtectedRecoveryWitnessReadback;
   /** Independently authenticated device/owner observer. BEGIN_DEPLOYMENT must
    * verify exact owner intent and drained previous runtime. COMMIT verifies
    * exact installed signed desired artifact (or detach), owner intent and
@@ -50,6 +53,21 @@ function parseSelection(row:Record<string,unknown>|undefined):HelperSelection{
 const integer=(v:unknown)=>{const n=typeof v==='string'&&/^[0-9]+$/.test(v)?Number(v):v;
   if(typeof n!=='number'||!Number.isSafeInteger(n)||n<1)return deny('HELPER_AUTHORITY_STATE_INVALID');return n;};
 
+/** DB-only pre-genesis prerequisite on the existing common transaction.
+ * The genesis operator must hold independently authenticated all-writer
+ * admission exclusion throughout drain and anchor/witness CAS. This does
+ * not authenticate native drain, clear orphaned slots or authorize genesis.
+ * No owner/epoch/device filter can hide a surviving lease. */
+export async function assertHelperSelectionGenesisSlotsDrainedLocked(db:DispatchStoreConnection,authorityId:string):Promise<void>{
+  const id=uuid.parse(authorityId);
+  const rows=(await db.query('SELECT lifecycle_store_id,lifecycle_sequence,lifecycle_head FROM core_dispatch.authorities WHERE authority_id=$1 FOR UPDATE',[id])).rows;
+  const row=rows[0];
+  if(rows.length!==1||!row||row.lifecycle_store_id!==null||row.lifecycle_sequence!==null||row.lifecycle_head!==null)
+    deny('HELPER_GENESIS_UNANCHORED_REQUIRED');
+  const occupied=(await db.query("SELECT id FROM helper_selection.leases WHERE authority_id=$1 AND state<>'RELEASED' LIMIT 1",[id])).rows;
+  if(occupied.length)deny('HELPER_GENESIS_TERMINAL_DRAIN_REQUIRED');
+}
+
 /** Independent service-side ledger. Never instantiate with Agent-local DB
  * credentials or expose methods to untrusted HTTP/MCP callers. An authenticated
  * transport must bind scope and independently verify evidence for each phase.
@@ -60,7 +78,10 @@ export class PostgresHelperSelectionAuthority {
   constructor(config:HelperSelectionAuthorityConfig){
     if(typeof config?.pool?.connect!=='function'||typeof config.verifyProvenance!=='function'||typeof config.verifyEvidence!=='function')
       deny('HELPER_AUTHORITY_CONFIGURATION_REQUIRED');
-    this.c=Object.freeze({...config,scope:Object.freeze(scope.parse(config.scope))});
+    const parsed=Object.freeze(scope.parse(config.scope));
+    if(!(config.legacyWitness instanceof ProtectedRecoveryWitnessReadback)||config.legacyWitness.authorityId!==parsed.authorityId)
+      deny('HELPER_LEGACY_ADMISSION_PROVIDER_REQUIRED');
+    this.c=Object.freeze({...config,scope:parsed});
   }
   /** Bind the authenticated server scope to the exact backend identity. */
   matchesScope(input:HelperAuthorityScope):boolean {
@@ -73,7 +94,6 @@ export class PostgresHelperSelectionAuthority {
       deny('HELPER_AUTHORITY_PROVENANCE_UNVERIFIED');
   }
   private async tx<T>(work:(db:DispatchStoreConnection,current:HelperSelection)=>Promise<T>):Promise<T>{
-    await this.trusted();
     const db=await this.c.pool.connect();let active=false,committing=false,destroy=false;
     const s=this.c.scope;
     try{
@@ -92,6 +112,11 @@ export class PostgresHelperSelectionAuthority {
       // Same lock and order as CORE revoke and transfer dispatch authority.
       const a=(await db.query('SELECT max_seen_ms FROM core_dispatch.authorities WHERE authority_id=$1 FOR UPDATE',[s.authorityId])).rows[0];
       if(!a)return deny('HELPER_AUTHORITY_MISSING');
+      // The independent witness and exact NULL anchor are checked while the
+      // same authority lock is held, before even the provenance observer.
+      // This includes READ, COMMIT readback and RELEASE, not just acquisition.
+      await assertLegacyAdmissionLocked(db,this.c.legacyWitness);
+      await this.trusted();
       const last=integer(a.max_seen_ms);
       const clock=async()=>integer((await db.query('SELECT FLOOR(EXTRACT(EPOCH FROM clock_timestamp())*1000)::bigint AS ms')).rows[0]?.ms);
       const before=await clock();if(before<last)return deny('HELPER_AUTHORITY_CLOCK_REWIND');
@@ -103,6 +128,9 @@ export class PostgresHelperSelectionAuthority {
       const row=(await db.query('SELECT * FROM helper_selection.selections WHERE authority_id=$1 AND device_id=$2 FOR UPDATE',values)).rows[0];
       if(!exact(row))return deny('HELPER_SELECTION_SCOPE_FENCED');
       const result=await work(db,parseSelection(row));
+      // A witness that becomes pending/frozen during observation cannot
+      // turn this legacy transaction into a successful effect/lease receipt.
+      await assertLegacyAdmissionLocked(db,this.c.legacyWitness);
       await this.trusted();const after=await clock();if(after<before)return deny('HELPER_AUTHORITY_CLOCK_REWIND');
       await db.query('UPDATE core_dispatch.authorities SET max_seen_ms=$2 WHERE authority_id=$1',[s.authorityId,after]);
       committing=true;await db.query('COMMIT');active=false;committing=false;return result;

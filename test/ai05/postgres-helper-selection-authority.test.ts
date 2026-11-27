@@ -11,10 +11,10 @@ import {composeHelperSelectionRevokeDrain} from '../../src/security/protected-he
 import {Pool} from 'pg';
 import {createTransferRuntimeLeaseAuthority,withVerifiedTransferHelper,assertSelectedTransferHelper} from '../../src/agent/protected-transfer-startup.js';
 import {createProtectedHelperSelectionServer,ProtectedHelperSelectionClient} from '../../src/security/protected-helper-selection-transport.js';
-import {createHelperSelectionTlsFixture} from './helper-selection-tls-fixture.js';
-import {PostgresHelperSelectionAuthority,createHelperSelectionLeaseProvider,type HelperAuthorityEvidenceRequest,type HelperAuthorityScope,type HelperSelectionLeaseTransport} from '../../src/security/postgres-helper-selection-authority.js';
+import {createHelperSelectionTlsFixture,createHelperLegacyWitnessFixture} from './helper-selection-tls-fixture.js';
+import {assertHelperSelectionGenesisSlotsDrainedLocked,PostgresHelperSelectionAuthority,createHelperSelectionLeaseProvider,type HelperAuthorityEvidenceRequest,type HelperAuthorityScope,type HelperSelectionLeaseTransport} from '../../src/security/postgres-helper-selection-authority.js';
 import {runTransferHelperLifecycle,type HelperSelection,type HelperRequest,type TransferHelperArtifactStore} from '../../src/installer/protected-transfer-helper-lifecycle.js';
-import type {DispatchStorePool} from '../../src/agent/postgres-broker-dispatch-authority.js';
+import type {DispatchStorePool,DispatchStoreConnection} from '../../src/agent/postgres-broker-dispatch-authority.js';
 
 const a={sha256:'a'.repeat(64),signerSha256:'1'.repeat(64)},b={sha256:'b'.repeat(64),signerSha256:'2'.repeat(64)};
 const requested=process.env.NEXOWIRE_HELPER_SELECTION_PG_FIXTURE==='1';
@@ -29,6 +29,11 @@ test('durable independent helper selection excludes runtime/deployment, preserve
   const pools:Pool[]=[admin];t.after(async()=>{await Promise.all(pools.map(p=>p.end()));});
   await admin.query(await readFile('sql/core-broker-dispatch-authority.sql','utf8'));
   await admin.query(await readFile('sql/helper-selection-authority.sql','utf8'));
+  // Exact existing V3 quarantine schema in the disposable CI DB only.
+  for(const file of ['core-broker-dispatch-credentials.sql','core-broker-dispatch-credential-fence.sql','large-transfer-authority.sql'])
+    await admin.query(await readFile('sql/'+file,'utf8'));
+  await admin.query('CREATE ROLE nx_lifecycle_sql_owner NOLOGIN; CREATE ROLE nx_lifecycle_consume NOLOGIN; CREATE ROLE nx_lifecycle_reconcile NOLOGIN');
+  await admin.query(await readFile('sql/helper-selection-lifecycle-review.sql','utf8'));
   await admin.query("CREATE ROLE helper_fixture_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD 'fixture-only-not-production'");
   await admin.query("GRANT USAGE ON SCHEMA core_dispatch,helper_selection TO helper_fixture_runtime; GRANT SELECT ON core_dispatch.authorities,core_dispatch.grants,helper_selection.selections,helper_selection.leases TO helper_fixture_runtime; GRANT UPDATE(max_seen_ms) ON core_dispatch.authorities TO helper_fixture_runtime; GRANT INSERT ON helper_selection.leases TO helper_fixture_runtime; GRANT UPDATE(state,committed_revision) ON helper_selection.leases TO helper_fixture_runtime; GRANT UPDATE(revision,sha256,signer_sha256) ON helper_selection.selections TO helper_fixture_runtime");
   const scope:HelperAuthorityScope={authorityId:randomUUID(),deviceId:randomUUID(),ownerId:randomUUID(),deviceEpoch:randomUUID(),sessionEpoch:randomUUID(),ownerEpoch:1,generation:1,brokerId:randomUUID()};
@@ -81,14 +86,23 @@ test('durable independent helper selection excludes runtime/deployment, preserve
       return {payload,proof:sign(null,Buffer.from(payload,'utf8'),rollbackObserver.privateKey).toString('base64url')};
     },
   });
-  const verifyEvidence=createSignedHelperSelectionEvidenceVerifier(nativeEvidence);
+  const signedEvidence=createSignedHelperSelectionEvidenceVerifier(nativeEvidence);
+  let provenanceCalls=0,evidenceCalls=0;
+  const verifyEvidence=async(v:HelperAuthorityEvidenceRequest)=>{evidenceCalls++;return signedEvidence(v);};
+  const verifyProvenance=async()=>{provenanceCalls++;return {verified:true as const,authorityId:scope.authorityId,validUntil:Date.now()+60000};};
+  const tls=createHelperSelectionTlsFixture();
+  t.after(()=>tls.close());
+  const {witnessFor,setState}=await createHelperLegacyWitnessFixture(t,tls);
+  const legacyWitness=witnessFor(scope);
   function backend(){
     const pool=new Pool({...common,user:'helper_fixture_runtime'});pools.push(pool);
     return new PostgresHelperSelectionAuthority({pool:pool as unknown as DispatchStorePool,scope,verifyEvidence,
-      verifyProvenance:async()=>({verified:true,authorityId:scope.authorityId,validUntil:Date.now()+60000})});
+      verifyProvenance,legacyWitness});
   }
   const first=backend(),second=backend();
-  const tls=createHelperSelectionTlsFixture();
+  // The actual provider requires a provisioned witness, never a permissive fallback.
+  assert.throws(()=>new PostgresHelperSelectionAuthority({pool:admin as unknown as DispatchStorePool,scope,verifyEvidence,
+    verifyProvenance,legacyWitness:undefined!}),/HELPER_LEGACY_ADMISSION_PROVIDER_REQUIRED/);
   const runtimeToken='r'.repeat(43),deploymentToken='d'.repeat(43);
   assert.throws(()=>createProtectedHelperSelectionServer({tls:{key:tls.server.key,cert:tls.server.cert,ca:tls.ca},
     scope:{...scope,deviceId:randomUUID()},authorityPrivateKeyPem:tls.privateKey,backend:first,
@@ -101,7 +115,7 @@ test('durable independent helper selection excludes runtime/deployment, preserve
       return undefined;
     },
   });
-  t.after(async()=>{try{server.closeAllConnections();if(server.listening)await new Promise<void>((resolve,reject)=>server.close(e=>e?reject(e):resolve()));}finally{tls.close();}});
+  t.after(async()=>{server.closeAllConnections();if(server.listening)await new Promise<void>((resolve,reject)=>server.close(e=>e?reject(e):resolve()));});
   await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',()=>resolve());});
   const address=server.address();assert(address&&typeof address==='object');
   const transportConfig={endpoint:'https://127.0.0.1:'+address.port+'/v1/helper-selection',scope,
@@ -110,9 +124,9 @@ test('durable independent helper selection excludes runtime/deployment, preserve
   const deploymentClient=new ProtectedHelperSelectionClient({...transportConfig,role:'deployment',certificatePem:tls.deployment.cert,keyPem:tls.deployment.key,credential:async()=>deploymentToken});
   const runtimeClient=new ProtectedHelperSelectionClient(runtimeConfig);
   const provider=createHelperSelectionLeaseProvider(deploymentClient);
-  const stored=new Set<string>();
+  const stored=new Set<string>();let stagingCalls=0;
   const store:TransferHelperArtifactStore={
-    async stage(_file,p){stored.add(p.sha256);},
+    async stage(_file,p){stagingCalls++;stored.add(p.sha256);},
     async verifyInstalled(p){assert(stored.has(p.sha256));},
   };
   const install=req('clean-install',current,a,'inert fixture A');
@@ -197,8 +211,7 @@ test('durable independent helper selection excludes runtime/deployment, preserve
       return {rows:result.rows as Record<string,unknown>[]};
     },release(destroy=false){client.release(destroy);}};
   }};
-  const lostBackend=new PostgresHelperSelectionAuthority({pool:lostPool,scope,verifyEvidence,
-    verifyProvenance:async()=>({verified:true,authorityId:scope.authorityId,validUntil:Date.now()+60000})});
+  const lostBackend=new PostgresHelperSelectionAuthority({pool:lostPool,scope,verifyEvidence,verifyProvenance,legacyWitness});
   await assert.rejects(lostBackend.commit(lease.id,uncertain),/TRANSACTION_UNKNOWN/);
   assert.equal(lostAck,true);
   const recovered=await second.read(lease.id);assert.notEqual(recovered.revision,current.revision);
@@ -222,6 +235,27 @@ test('durable independent helper selection excludes runtime/deployment, preserve
   assert.equal(current.pin,null);assert.equal(stored.size,2);
   await assert.rejects(first.beginRuntime(randomUUID()),/NOT_SELECTED/);
   const again=await runTransferHelperLifecycle(req('clean-install',current,a,'inert fixture A'),provider,store);current=again.selection;
+  // A restored NULL DB cannot override an independently pending witness.
+  async function genesisSlots(authorityId:string){
+    const client=await admin.connect();
+    const db:DispatchStoreConnection={async query(sql,values=[]){return {rows:(await client.query(sql,values)).rows};},release(destroy=false){client.release(destroy);}};
+    try{await client.query('BEGIN');await assertHelperSelectionGenesisSlotsDrainedLocked(db,authorityId);}
+    finally{try{await client.query('ROLLBACK');}finally{db.release();}}
+  }
+  await genesisSlots(scope.authorityId);
+  const outstanding=await first.beginRuntime(randomUUID());
+  await assert.rejects(genesisSlots(scope.authorityId),/HELPER_GENESIS_TERMINAL_DRAIN_REQUIRED/);
+  setState(scope.authorityId,'PENDING');
+  const callbackCounts=[provenanceCalls,evidenceCalls,stagingCalls];
+  await assert.rejects(first.read(outstanding.id),/LIFECYCLE_LEGACY_WRITER_NOT_ENROLLED/);
+  await assert.rejects(first.release(outstanding.id),/LIFECYCLE_LEGACY_WRITER_NOT_ENROLLED/);
+  await assert.rejects(first.beginRuntime(randomUUID()),/LIFECYCLE_LEGACY_WRITER_NOT_ENROLLED/);
+  await assert.rejects(runTransferHelperLifecycle(req('upgrade',current,b,'inert fixture B'),
+    createHelperSelectionLeaseProvider(deploymentClient),store),/TRANSPORT_UNKNOWN/);
+  assert.deepEqual([provenanceCalls,evidenceCalls,stagingCalls],callbackCounts,'no legacy observer or staging callback before admission');
+  setState(scope.authorityId,'UNANCHORED'); // disposable test witness only, never production thaw
+  await first.release(outstanding.id);
+  await genesisSlots(scope.authorityId);
   const pending=await first.beginRuntime(randomUUID());
   const revoke={deviceId:scope.deviceId,ownerId:scope.ownerId,deviceEpoch:scope.deviceEpoch,sessionEpoch:scope.sessionEpoch,
     expectedGeneration:scope.generation,signedOwnerApproval:'fixture-only-owner-approval'};
@@ -256,7 +290,41 @@ test('durable independent helper selection excludes runtime/deployment, preserve
   await assert.rejects(second.release(pending.id),/GRANT_FENCED/);
   assert.equal((await admin.query('SELECT state FROM helper_selection.leases WHERE id=$1',[pending.id])).rows[0].state,'ACTIVE');
   assert.equal((await admin.query("SELECT count(*)::int AS n FROM helper_selection.leases WHERE state<>'RELEASED'")).rows[0].n,1);
-  t.diagnostic('Real PostgreSQL + pinned mTLS startup lease and rollback selection; independent signed guard denies UNKNOWN and divergent disposable SQLite state before CAS, positive rollback preserves SHA-256 and quick_check; native evidence/store remain fixture-only');
+  // Deliberately reproduce an invalid genesis with surviving legacy slots,
+  // only in the disposable cluster. Keep the actual grant ACTIVE so the
+  // negative result proves the new early gate, not the old grant check.
+  for(const kind of ['RUNTIME','DEPLOYMENT'] as const){
+    const s={...scope,authorityId:randomUUID()};
+    const v=[s.authorityId,s.deviceId,s.ownerId,s.deviceEpoch,s.sessionEpoch,s.ownerEpoch,s.generation,s.brokerId];
+    const selected={revision:randomUUID(),pin:a};
+    await admin.query('INSERT INTO core_dispatch.authorities(authority_id,max_seen_ms) VALUES($1,$2)',[s.authorityId,Date.now()-1000]);
+    await admin.query("INSERT INTO core_dispatch.grants(authority_id,device_id,owner_id,device_epoch,session_epoch,owner_epoch,generation,broker_id,state) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'ACTIVE')",v);
+    await admin.query('INSERT INTO helper_selection.selections(authority_id,device_id,owner_id,device_epoch,session_epoch,owner_epoch,generation,broker_id,revision,sha256,signer_sha256) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',[...v,selected.revision,a.sha256,a.signerSha256]);
+    const witness=witnessFor(s),pool=new Pool({...common,user:'helper_fixture_runtime'});pools.push(pool);
+    let calls=0;
+    const other=new PostgresHelperSelectionAuthority({pool:pool as unknown as DispatchStorePool,scope:s,legacyWitness:witness,
+      async verifyProvenance(){calls++;return {verified:true,authorityId:s.authorityId,validUntil:Date.now()+60000};},
+      async verifyEvidence(){calls++;return true;}}); // synthetic observer, no native acceptance
+    const change=req('upgrade',selected,b,'inert fixture B');
+    const held=kind==='RUNTIME'?await other.beginRuntime(randomUUID()):await other.beginDeployment(change);
+    if(kind==='DEPLOYMENT')await other.commit(held.id,change);
+    await assert.rejects(genesisSlots(s.authorityId),/HELPER_GENESIS_TERMINAL_DRAIN_REQUIRED/);
+    const before=(await admin.query('SELECT state,committed_revision FROM helper_selection.leases WHERE id=$1',[held.id])).rows[0];
+    // Test-only broken genesis counterexample, never an operator migration.
+    await admin.query('ALTER TABLE core_dispatch.authorities DISABLE TRIGGER lifecycle_anchor_guard');
+    try{await admin.query('UPDATE core_dispatch.authorities SET lifecycle_store_id=$2,lifecycle_sequence=0,lifecycle_head=$3 WHERE authority_id=$1',[s.authorityId,witness.storeId,'0'.repeat(64)]);}
+    finally{await admin.query('ALTER TABLE core_dispatch.authorities ENABLE TRIGGER lifecycle_anchor_guard');}
+    const beforeCalls=calls;
+    await assert.rejects(other.read(held.id),/LIFECYCLE_LEGACY_WRITER_NOT_ENROLLED/);
+    await assert.rejects(other.release(held.id),/LIFECYCLE_LEGACY_WRITER_NOT_ENROLLED/);
+    await assert.rejects(other.commit(held.id,change),/LIFECYCLE_LEGACY_WRITER_NOT_ENROLLED/);
+    await assert.rejects(other.beginRuntime(randomUUID()),/LIFECYCLE_LEGACY_WRITER_NOT_ENROLLED/);
+    await assert.rejects(other.beginDeployment(change),/LIFECYCLE_LEGACY_WRITER_NOT_ENROLLED/);
+    assert.equal(calls,beforeCalls);
+    assert.deepEqual((await admin.query('SELECT state,committed_revision FROM helper_selection.leases WHERE id=$1',[held.id])).rows[0],before);
+    await assert.rejects(genesisSlots(s.authorityId),/HELPER_GENESIS_UNANCHORED_REQUIRED/);
+  }
+  t.diagnostic('Real PostgreSQL + V3 + signed mTLS witness fixture: legacy lifecycle preserved; restored NULL/pending witness and anchored ACTIVE/COMMITTED slots deny before provenance/evidence/staging; occupied history retained. Native drain and production witness NOT_RUN.');
 });
 test('provider retains lease on callback failure and refuses nested local acquisition',async()=>{
   const id=randomUUID(),revision=randomUUID();let releases=0,begins=0;

@@ -15,7 +15,7 @@ import {createTransferRuntimeLeaseAuthority,withVerifiedTransferHelper} from '..
 import {PostgresHelperSelectionAuthority,type HelperAuthorityScope} from '../../src/security/postgres-helper-selection-authority.js';
 import {createProtectedHelperSelectionServer,ProtectedHelperSelectionClient} from '../../src/security/protected-helper-selection-transport.js';
 import {createSignedHelperSelectionEvidenceVerifier,helperEvidenceRequiredFacts} from '../../src/security/signed-helper-selection-evidence.js';
-import {createHelperSelectionTlsFixture} from '../ai05/helper-selection-tls-fixture.js';
+import {createHelperSelectionTlsFixture,createHelperLegacyWitnessFixture} from '../ai05/helper-selection-tls-fixture.js';
 import type {TransferHelperArtifactStore} from '../../src/installer/protected-transfer-helper-lifecycle.js';
 
 const requested=process.env.NEXOWIRE_PG_TRANSFER_RESTART_INTEGRATION==='1';
@@ -144,6 +144,11 @@ test('PostgreSQL crash restart preserves original UNKNOWN claim, epoch and signe
   // Compose the reviewed selection ledger/client with the AI07 startup
   // adapter on the SAME recovered authority database. No production certs.
   await admin.query(await readFile(new URL('../../sql/helper-selection-authority.sql',import.meta.url),'utf8'));
+  // Disposable test DB only: keep the exact shared V3 legacy admission schema.
+  for(const file of ['core-broker-dispatch-credentials.sql','core-broker-dispatch-credential-fence.sql'])
+    await admin.query(await readFile(new URL('../../sql/'+file,import.meta.url),'utf8'));
+  await admin.query('CREATE ROLE nx_lifecycle_sql_owner NOLOGIN; CREATE ROLE nx_lifecycle_consume NOLOGIN; CREATE ROLE nx_lifecycle_reconcile NOLOGIN');
+  await admin.query(await readFile(new URL('../../sql/helper-selection-lifecycle-review.sql',import.meta.url),'utf8'));
   await admin.query("CREATE ROLE ai07_selection_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS PASSWORD 'ci-only-not-a-production-credential'");
   await admin.query("GRANT USAGE ON SCHEMA core_dispatch,helper_selection TO ai07_selection_runtime; GRANT SELECT ON core_dispatch.authorities,core_dispatch.grants,helper_selection.selections,helper_selection.leases TO ai07_selection_runtime; GRANT UPDATE(max_seen_ms) ON core_dispatch.authorities TO ai07_selection_runtime; GRANT INSERT ON helper_selection.leases TO ai07_selection_runtime; GRANT UPDATE(state,committed_revision) ON helper_selection.leases TO ai07_selection_runtime; GRANT UPDATE(revision,sha256,signer_sha256) ON helper_selection.selections TO ai07_selection_runtime");
   const brokerId=String((await admin.query('SELECT broker_id FROM core_dispatch.grants WHERE authority_id=$1 AND device_id=$2',[authorityId,targetDeviceId])).rows[0].broker_id);
@@ -161,8 +166,9 @@ test('PostgreSQL crash restart preserves original UNKNOWN claim, epoch and signe
       return {payload,proof:sign(null,Buffer.from(payload),observer.privateKey).toString('base64url')};
     },
   });
-  const backend=new PostgresHelperSelectionAuthority({pool:selectionPool as DispatchStorePool,scope:selectionScope,verifyEvidence:evidence,verifyProvenance:async()=>({verified:true,authorityId,validUntil:Date.now()+30000})});
   const tls=createHelperSelectionTlsFixture();
+  const {witnessFor}=await createHelperLegacyWitnessFixture(t,tls);
+  const backend=new PostgresHelperSelectionAuthority({pool:selectionPool as DispatchStorePool,scope:selectionScope,verifyEvidence:evidence,verifyProvenance:async()=>({verified:true,authorityId,validUntil:Date.now()+30000}),legacyWitness:witnessFor(selectionScope)});
   const token='r'.repeat(43);
   const server=createProtectedHelperSelectionServer({tls:{key:tls.server.key,cert:tls.server.cert,ca:tls.ca},scope:selectionScope,authorityPrivateKeyPem:tls.privateKey,backend,
     async resolvePrincipal(cert,credential){return cert===tls.runtime.certSha256&&credential===token?{scope:selectionScope,role:'runtime'}:undefined;}});
