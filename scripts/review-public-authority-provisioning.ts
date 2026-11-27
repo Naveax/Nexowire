@@ -47,10 +47,15 @@ const publicRecords=z.strictObject({
     scheduled:scope.extend({storeId:uuid,forwardSpkiSha256:digest,releaseSpkiSha256:digest}),
     core:scope.extend({installationId:uuid,enrollmentId:uuid,issuerSpkiSha256:digest,
       dispatchSpkiSha256:digest,nativeObserverSpkiSha256:digest,helperObserverSpkiSha256:digest,
-      directoryGeneration:positive,registrationSha256:digest}),
+      directoryGeneration:positive,registrationSha256:digest,approvalAuthorityId:uuid,
+      grantGeneration:positive,revokeEpoch:z.number().int().nonnegative().safe(),
+      windowsUserSid:z.string().max(184),rpId:z.string().max(253),credentialId:z.string().max(1366),
+      authenticatorSpkiSha256:digest}),
   }),
   hostedVerifier:z.strictObject({origin:z.string().max(2048),serverSpkiSha256:digest,
-    clientCertificateSha256:digest,caCertificateSha256:digest,principalRegistrationReceiptSha256:receipt}),
+    clientCertificateSha256:digest,caCertificateSha256:digest,principalRegistrationReceiptSha256:receipt,
+    responseSignerSpkiSha256:digest,principal:z.strictObject({role:z.literal('independent-enrollment-verifier'),
+      ownerAccountId:z.string().min(8).max(128),deviceId:uuid,installationId:uuid})}),
   publisher:z.strictObject({
     NEXOWIRE_WINDOWS_JOB_PUBLISHER_THUMBPRINT:z.string().regex(/^[a-f0-9]{40}$/),
     NEXOWIRE_WINDOWS_JOB_SIGNER_SHA256:digest,
@@ -115,7 +120,9 @@ export function reviewPublicProvisioning(raw:unknown){
     scheduled.authorityId!==r.authority.scheduledAuthorityId||scheduled.storeId!==r.authority.scheduledStoreId||
     core.authorityId!==r.authority.authorityId||core.installationId!==r.owner.installationId||
     core.enrollmentId!==r.owner.enrollmentId||core.directoryGeneration!==r.directory.generation||
-    core.registrationSha256!==r.directory.registrationSha256)
+    core.registrationSha256!==r.directory.registrationSha256||core.approvalAuthorityId!==r.authority.approvalAuthorityId||
+    core.grantGeneration!==r.owner.grantGeneration||core.revokeEpoch!==r.owner.revokeEpoch||
+    core.windowsUserSid!==r.owner.windowsUserSid||core.rpId!==r.authenticator.rpId||core.credentialId!==r.authenticator.credentialId)
     return deny('PUBLIC_PROVISIONING_REGISTRATION_MISMATCH');
   if(recovery.ackSpkiSha256!==r.signers.recoveryAck.spkiSha256||
     recovery.observerSpkiSha256!==r.signers.recoveryObserver.spkiSha256||
@@ -124,8 +131,13 @@ export function reviewPublicProvisioning(raw:unknown){
     core.issuerSpkiSha256!==r.enrollmentKey.spkiSha256||
     core.dispatchSpkiSha256!==r.signers.coreDispatch.spkiSha256||
     core.nativeObserverSpkiSha256!==r.signers.coreNativeObserver.spkiSha256||
-    core.helperObserverSpkiSha256!==r.signers.helperObserver.spkiSha256)
+    core.helperObserverSpkiSha256!==r.signers.helperObserver.spkiSha256||
+    core.authenticatorSpkiSha256!==r.authenticator.spkiSha256||
+    r.hostedVerifier.responseSignerSpkiSha256!==r.signers.hostedVerifier.spkiSha256)
     return deny('PUBLIC_PROVISIONING_REGISTERED_PIN_MISMATCH');
+  const principal=r.hostedVerifier.principal;
+  if(principal.ownerAccountId!==r.owner.ownerAccountId||principal.deviceId!==r.owner.deviceId||
+    principal.installationId!==r.owner.installationId)return deny('PUBLIC_PROVISIONING_HOSTED_SCOPE_MISMATCH');
   origin(r.hostedVerifier.origin);
   // Do not convert directoryHead into #1367 registrationSha256 or infer
   // installationLineageId from installationId. Their authenticated mapping
