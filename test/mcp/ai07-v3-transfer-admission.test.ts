@@ -44,7 +44,7 @@ test('V3 actual transfer service: signed admission, terminal evidence and two re
         assert.equal(r.domain,DOMAIN);assert.equal(r.action,'READBACK');assert.match(r.nonce,/^[a-f0-9]{64}$/);
         const s=snapshots.get(r.authorityId);assert(s);assert.equal(s.storeId,r.storeId);
         requests++;
-        if(hold?.authorityId===r.authorityId){const h=hold;hold=undefined;h.entered();await h.resume;}
+        if(hold&&hold.authorityId===r.authorityId){const h=hold;hold=undefined;h.entered();await h.resume;}
         const now=Date.now(),payload=Buffer.from(json({domain:DOMAIN,nonce:r.nonce,requestSha256:sha(raw),snapshot:{...s,issuedMs:now,expiresMs:now+3000}}));
         const body=Buffer.from(JSON.stringify({payload:payload.toString('base64url'),signature:sign(null,payload,keys.privateKey).toString('base64url')}));
         if(flip===r.authorityId){flip=undefined;snapshots.set(r.authorityId,{...s,state:'FROZEN',head:{sequence:'0',hash:hex('0')},transitionSha256:hex('1'),ownerAccountId:uid(),ownerEpoch:'1'});}
@@ -132,6 +132,13 @@ test('V3 actual transfer service: signed admission, terminal evidence and two re
   const sealed=await ne.a.acquire(ne.b,nl.epoch);assert.equal(await ne.claimState(np.requestId),'SEALED');
   assert.equal(await ne.a.proveWriteNoEffect(ne.b,np,sealed),true);assert.equal(await ne.claimState(np.requestId),'NO_EFFECT');assert.equal(await ne.count(),1);
   pass('original NO_EFFECT reconciliation retains one claim; no new effect dispatched');
+  const revoked=await seed(),rl=await revoked.a.acquire(revoked.b,0),rp=revoked.intent(rl.epoch),rc=await revoked.a.claimNativeEffect(revoked.b,rl,rp);
+  await admin.query("UPDATE core_dispatch.grants SET state='REVOKING',generation=generation+1 WHERE authority_id=$1 AND device_id=$2",[revoked.authorityId,revoked.targetDeviceId]);
+  await revoked.a.settleNativeEffect(revoked.b,rl,rp,rc,'unknown');
+  assert.equal(await revoked.claimState(rp.requestId),'UNKNOWN');
+  await assert.rejects(revoked.a.claimNativeEffect(revoked.b,rl,revoked.intent(rl.epoch)),/TRANSFER_PG_GRANT_REVOKED/);
+  assert.equal(await revoked.count(),1);
+  pass('unanchored revoked original settlement retained without new admission');
   for(const state of ['ACTIVE','UNKNOWN','SETTLED','SEALED'] as const){
     const x=await seed(),lease=await x.a.acquire(x.b,0),intent=x.intent(lease.epoch),original=await x.a.claimNativeEffect(x.b,lease,intent);
     if(state!=='ACTIVE')await x.a.settleNativeEffect(x.b,lease,intent,original,state==='SETTLED'?'completed':'unknown');
@@ -191,6 +198,6 @@ test('V3 actual transfer service: signed admission, terminal evidence and two re
   for(const deviceId of [w.sourceDeviceId,w.targetDeviceId])await assert.rejects(w.stage(consume,deviceId),/LIFECYCLE_WRITER_DRAIN_REQUIRED/);
   assert.equal(await w.count(),1);
   pass('writer-first real lock wait, V3 recovery sees original claim on both endpoints');
-  assert.equal(passes,13);
-  t.diagnostic('NX07_V3_TRANSFER_ACCEPTANCE 13 PASS; real PostgreSQL + signed fixture mTLS; physical native observer NOT_RUN');
+  assert.equal(passes,14);
+  t.diagnostic('NX07_V3_TRANSFER_ACCEPTANCE 14 PASS; real PostgreSQL + signed fixture mTLS; physical native observer NOT_RUN');
 });
