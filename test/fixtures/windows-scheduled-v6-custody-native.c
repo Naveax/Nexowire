@@ -533,6 +533,16 @@ done:
   if(!audit_delta(cold?"cold_custody_vs_hash_base":"custody_vs_product_base",
       cold?&after_first_digest:&product_initial,&audit_previous,TRUE))
     return failed("custody_residual_handles");
+  for(int i=0;i<7;++i){
+    if(!nx_v6_hold_file(file,expected,&held))return failed("custody_repeat_hold");
+    BOOL valid=nx_v6_recheck_file(&held)&&mapped_source(&held);
+    nx_v6_close_file(&held);
+    if(!valid)return failed("custody_repeat_identity");
+    char stage[64];sprintf_s(stage,sizeof(stage),"custody_repeat_%d_closed",i+2);
+    if(!audit_stage(stage,TRUE))return failed("custody_repeat_handle_growth");
+    sprintf_s(stage,sizeof(stage),"custody_repeat_%d_origin",i+2);
+    if(!audit_delta(stage,&product_initial,&audit_previous,FALSE))return failed("custody_repeat_origin");
+  }
   if(ipc_case())return 1;
   if(!audit_stage("ipc_closed",FALSE))return failed("ipc_snapshot");
   // Repeat full peer lifecycle, comparing cumulative deltas against the
