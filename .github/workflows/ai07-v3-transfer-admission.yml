@@ -1,0 +1,66 @@
+name: AI-07 V3 Transfer Admission
+on:
+  pull_request:
+    branches:
+      - agent/nx-02-recovery-provider-readback-20261127
+    paths:
+      - '.github/workflows/ai07-v3-transfer-admission.yml'
+      - 'src/security/postgres-protected-transfer-authority.ts'
+      - 'src/security/protected-transfer-service.ts'
+      - 'test/mcp/ai07-v3-transfer-admission.test.ts'
+permissions:
+  contents: read
+jobs:
+  v3-transfer:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'agent/nx-07-v3-transfer-fence-20261127'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: nx07_v3_ci
+          POSTGRES_USER: nx07_v3_ci
+          POSTGRES_PASSWORD: fixture-only-not-production
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U nx07_v3_ci -d nx07_v3_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Exact V3 SQL and real two-connection transfer service acceptance
+        shell: bash
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          NX07_V3_TRANSFER_PG_FIXTURE: '1'
+          NX07_V3_TRANSFER_PG_PORT: ${{ job.services.postgres.ports[5432] }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          git rev-parse HEAD
+          test "$(git hash-object sql/helper-selection-lifecycle-review.sql)" = 09a18ac5f64d282b5964740edddd6ad5d65cd866
+          test "$(git hash-object src/security/recovery-anchored-authority-review.ts)" = 417a1265dd6097ffedd01286aa58c07a2bbc0257
+          test "$(git hash-object src/security/recovery-provider-readback.ts)" = be42f2c9adbe3c5dc50760d435f3bd2852801853
+          test "$(git hash-object sql/large-transfer-authority.sql)" = ab495d8c34b10cdd04f88e5ad1b2d40fde8b082d
+          test "$(git hash-object src/mcp/durable-large-transfer.ts)" = 5e5f5873fefba4724ee83bf7ac80a6296cbed726
+          test "$(git hash-object src/agent/windows-protected-transfer-publisher.ts)" = c58489edc11eb54b9a01584868ff729b087d93bf
+          node --test --test-reporter=tap --import tsx --test-concurrency=1 test/mcp/ai07-v3-transfer-admission.test.ts | tee "$RUNNER_TEMP/ai07-v3-transfer.tap"
+          node scripts/ci/assert-tap-summary.mjs "$RUNNER_TEMP/ai07-v3-transfer.tap" 1
+          test "$(grep -c '^# NX07_V3 PASS ' "$RUNNER_TEMP/ai07-v3-transfer.tap")" = 14
+          grep -Fx '# NX07_V3_TRANSFER_ACCEPTANCE 14 PASS; real PostgreSQL + signed fixture mTLS; physical native observer NOT_RUN' "$RUNNER_TEMP/ai07-v3-transfer.tap"
