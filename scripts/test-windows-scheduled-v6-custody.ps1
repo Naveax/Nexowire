@@ -38,10 +38,40 @@ try {
   Copy-Item -LiteralPath $exe -Destination $linked
   $null=New-Item -ItemType HardLink -Path (Join-Path $work 'extra-link.exe') -Target $linked
   $digest=(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
-  $output=@(& $exe --fixture $file $digest $dir $linked)
+  # Capture both streams without losing the exact native exit or cold evidence.
+  # The expected cold logical mismatch is stdout/stderr data, not a PS exception.
+  $cold=@(& $exe --fixture-cold $file $digest $dir $linked 2>&1)
+  $coldExit=$LASTEXITCODE
+  $cold=@($cold|ForEach-Object {$_.ToString()})
+  $cold|ForEach-Object {Write-Host "NX_CUSTODY_COLD $_"}
+  if($coldExit -ne 0 -and $coldExit -ne 19){throw "COLD_FIXTURE_FAILED exit=$coldExit"}
+  $output=@(& $exe --fixture $file $digest $dir $linked 2>&1)
   $exit=$LASTEXITCODE
+  $output=@($output|ForEach-Object {$_.ToString()})
   $output|ForEach-Object {Write-Host $_}
   if($exit -ne 0){throw "NATIVE_FIXTURE_FAILED exit=$exit"}
+  function Get-HandleDeltaSignature($lines,[string]$stage){
+    @($lines|ForEach-Object {
+      if($_ -match ('^NX_HANDLE_DELTA stage='+[regex]::Escape($stage)+' op=(add|remove) type=(.+) access=([0-9a-f]+) attrs=([0-9a-f]+) value=')){
+        "$($Matches[1])|$($Matches[2])|$($Matches[3])|$($Matches[4])"
+      }
+    }|Sort-Object)
+  }
+  function Assert-SameHandleDelta($left,$right,[string]$label){
+    $a=@($left);$b=@($right)
+    if($a.Count -ne $b.Count -or ($a -join "`n") -cne ($b -join "`n") -or
+       @($a|Where-Object {$_ -like 'remove|*'}).Count -ne 0){
+      throw "HANDLE_ATTRIBUTION_MISMATCH $label"
+    }
+  }
+  # Require exact type/access/attribute multisets at the actual cold SHA and RNG
+  # calls, plus the final table delta. No arbitrary count tolerance or type allowlist.
+  Assert-SameHandleDelta @(Get-HandleDeltaSignature $cold 'wrong_digest_first') @(Get-HandleDeltaSignature $output 'control_sha') 'sha'
+  Assert-SameHandleDelta @(Get-HandleDeltaSignature $cold 'ipc_rng') @(Get-HandleDeltaSignature $output 'control_rng') 'rng'
+  Assert-SameHandleDelta @(Get-HandleDeltaSignature $cold 'cold_final') @(Get-HandleDeltaSignature $output 'control_final') 'final'
+  $coldDelta=@(Get-HandleDeltaSignature $cold 'cold_final')
+  if(($coldExit -eq 19) -ne ($coldDelta.Count -gt 0)){throw 'COLD_EXIT_DELTA_MISMATCH'}
+  Write-Host "NX_CUSTODY_HANDLE_ATTRIBUTION=PASS independent_cng_delta=$($coldDelta.Count) product_residual=0"
   $expected=@('wrong_digest_denied','hardlink_denied','held_sha256_fileid_recheck','held_file_write_delete_ancestor_denied',
     'nonexecuted_image_mapping_path_matches','held_handles_released','anonymous_noninherited_endpoints',
     'explicit_handle_allowlist_excludes_inheritable_canary','held_peer_pid_filetime_nonce','wrong_peer_incarnation_denied',
