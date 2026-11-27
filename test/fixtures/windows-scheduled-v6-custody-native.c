@@ -6,6 +6,140 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stddef.h>
+
+/* Test-only current-process handle table census. No foreign processes, object
+ * names, duplicated handles or production authority. ProcessHandleInformation
+ * (51) is a private NT ABI; unsupported or unstable snapshots FAIL this test.
+ * Type names come from NtQueryObject(ObjectTypeInformation=2). */
+typedef struct NX_AUDIT_ENTRY {
+  HANDLE value;
+  ULONG_PTR handle_count,pointer_count;
+  ULONG access,type_index,attributes,reserved;
+} NX_AUDIT_ENTRY;
+#define NX_AUDIT_CAP 2048
+typedef struct NX_AUDIT_TABLE {
+  ULONG_PTR count,reserved;
+  NX_AUDIT_ENTRY entry[NX_AUDIT_CAP];
+} NX_AUDIT_TABLE;
+typedef LONG (NTAPI *NX_QPROCESS)(HANDLE,ULONG,PVOID,ULONG,PULONG);
+typedef LONG (NTAPI *NX_QOBJECT)(HANDLE,ULONG,PVOID,ULONG,PULONG);
+typedef struct NX_AUDIT_STRING { USHORT length,maximum; PWSTR buffer; } NX_AUDIT_STRING;
+static NX_QPROCESS audit_process=NULL;
+static NX_QOBJECT audit_object=NULL;
+static NX_AUDIT_TABLE audit_initial,audit_previous,audit_current,product_initial,after_first_digest;
+static wchar_t audit_types[512][64];
+static BOOL audit_capture(NX_AUDIT_TABLE *out){
+  ULONG used=0;DWORD before=0,after=0;
+  if(!GetProcessHandleCount(GetCurrentProcess(),&before))return FALSE;
+  LONG status=audit_process(GetCurrentProcess(),51,out,(ULONG)sizeof(*out),&used);
+  if(status!=0||out->count>NX_AUDIT_CAP||
+     used>sizeof(*out)||used<offsetof(NX_AUDIT_TABLE,entry)+out->count*sizeof(NX_AUDIT_ENTRY)){
+    fprintf(stderr,"NX_HANDLE_SNAPSHOT_UNAVAILABLE ntstatus=0x%08lx used=%lu\n",
+      (unsigned long)status,(unsigned long)used);return FALSE;
+  }
+  for(ULONG_PTR i=0;i<out->count;++i){
+    NX_AUDIT_ENTRY *e=&out->entry[i];
+    if(!e->value||e->type_index>=512)return FALSE;
+    if(audit_types[e->type_index][0])continue;
+    union { void *align; BYTE bytes[1024]; } info={0};
+    ULONG length=0;
+    status=audit_object(e->value,2,info.bytes,(ULONG)sizeof(info.bytes),&length);
+    NX_AUDIT_STRING name={0};memcpy(&name,info.bytes,sizeof(name));
+    uintptr_t address=(uintptr_t)name.buffer,base=(uintptr_t)info.bytes;
+    if(status!=0||!name.length||name.length%sizeof(wchar_t)||
+       name.length>=sizeof(audit_types[0])||address<base||
+       address-base>sizeof(info.bytes)-name.length){
+      fprintf(stderr,"NX_HANDLE_TYPE_UNAVAILABLE index=%lu ntstatus=0x%08lx\n",
+        (unsigned long)e->type_index,(unsigned long)status);return FALSE;
+    }
+    memcpy(audit_types[e->type_index],name.buffer,name.length);
+  }
+  if(!GetProcessHandleCount(GetCurrentProcess(),&after)||before!=after||out->count!=after){
+    fprintf(stderr,"NX_HANDLE_SNAPSHOT_UNSTABLE before=%lu after=%lu table=%llu\n",
+      (unsigned long)before,(unsigned long)after,(unsigned long long)out->count);return FALSE;
+  }
+  return TRUE;
+}
+static BOOL audit_has(const NX_AUDIT_TABLE *table,const NX_AUDIT_ENTRY *e){
+  for(ULONG_PTR i=0;i<table->count;++i){
+    const NX_AUDIT_ENTRY *x=&table->entry[i];
+    if(x->value==e->value&&x->type_index==e->type_index&&x->access==e->access&&
+       x->attributes==e->attributes)return TRUE;
+  }
+  return FALSE;
+}
+static BOOL audit_delta(const char *stage,const NX_AUDIT_TABLE *before,const NX_AUDIT_TABLE *after,BOOL require_same){
+  ULONG added=0,removed=0;
+  for(ULONG_PTR i=0;i<after->count;++i){
+    const NX_AUDIT_ENTRY *e=&after->entry[i];
+    if(audit_has(before,e))continue;
+    ++added;
+    printf("NX_HANDLE_DELTA stage=%s op=add type=%ls access=%08lx attrs=%08lx value=%p\n",
+      stage,audit_types[e->type_index],(unsigned long)e->access,(unsigned long)e->attributes,e->value);
+  }
+  for(ULONG_PTR i=0;i<before->count;++i){
+    const NX_AUDIT_ENTRY *e=&before->entry[i];
+    if(audit_has(after,e))continue;
+    ++removed;
+    printf("NX_HANDLE_DELTA stage=%s op=remove type=%ls access=%08lx attrs=%08lx value=%p\n",
+      stage,audit_types[e->type_index],(unsigned long)e->access,(unsigned long)e->attributes,e->value);
+  }
+  printf("NX_HANDLE_STAGE stage=%s before=%llu after=%llu added=%lu removed=%lu\n",stage,
+    (unsigned long long)before->count,(unsigned long long)after->count,
+    (unsigned long)added,(unsigned long)removed);
+  fflush(stdout);
+  return !require_same||(!added&&!removed);
+}
+static BOOL audit_stage(const char *stage,BOOL same){
+  if(!audit_capture(&audit_current))return FALSE;
+  BOOL ok=audit_delta(stage,&audit_previous,&audit_current,same);
+  audit_previous=audit_current;return ok;
+}
+static BOOL audit_init(void){
+  HMODULE ntdll=GetModuleHandleW(L"ntdll.dll");
+  if(!ntdll)return FALSE;
+  FARPROC a=GetProcAddress(ntdll,"NtQueryInformationProcess"),b=GetProcAddress(ntdll,"NtQueryObject");
+  if(!a||!b||sizeof(a)!=sizeof(audit_process)||sizeof(b)!=sizeof(audit_object))return FALSE;
+  memcpy(&audit_process,&a,sizeof(a));memcpy(&audit_object,&b,sizeof(b));
+  // Warm only the diagnostic's output path, not CNG or custody operations.
+  printf("NX_HANDLE_AUDIT current_process_only=true\n");fflush(stdout);
+  if(!audit_capture(&audit_previous)||!audit_stage("census_stability",TRUE))return FALSE;
+  audit_initial=audit_previous;
+  return TRUE;
+}
+/* Independent API-only control: no native custody function, files, pipes,
+ * peer creation or image mapping. Check actual close results and a known
+ * SHA256 answer; never silently warm an unmeasured product operation. */
+static BOOL control_sha(void){
+  static const BYTE expected[32]={0xba,0x78,0x16,0xbf,0x8f,0x01,0xcf,0xea,0x41,0x41,0x40,0xde,0x5d,0xae,0x22,0x23,
+    0xb0,0x03,0x61,0xa3,0x96,0x17,0x7a,0x9c,0xb4,0x10,0xff,0x61,0xf2,0x00,0x15,0xad};
+  BCRYPT_ALG_HANDLE alg=NULL;BCRYPT_HASH_HANDLE hash=NULL;
+  BYTE input[3]={'a','b','c'},digest[32]={0};
+  BOOL ok=FALSE;
+  if(BCryptOpenAlgorithmProvider(&alg,BCRYPT_SHA256_ALGORITHM,NULL,0)>=0&&
+     BCryptCreateHash(alg,&hash,NULL,0,NULL,0,0)>=0&&
+     BCryptHashData(hash,input,3,0)>=0&&BCryptFinishHash(hash,digest,32,0)>=0&&
+     !memcmp(digest,expected,32))ok=TRUE;
+  if(hash&&BCryptDestroyHash(hash)<0)ok=FALSE;
+  if(alg&&BCryptCloseAlgorithmProvider(alg,0)<0)ok=FALSE;
+  SecureZeroMemory(digest,sizeof(digest));return ok;
+}
+static BOOL control_rng(void){
+  BYTE nonce[32];
+  BOOL ok=BCryptGenRandom(NULL,nonce,32,BCRYPT_USE_SYSTEM_PREFERRED_RNG)>=0;
+  SecureZeroMemory(nonce,sizeof(nonce));return ok;
+}
+static BOOL audit_control(void){
+  if(!control_sha()||!audit_stage("control_sha",FALSE)||
+     !control_rng()||!audit_stage("control_rng",FALSE))return FALSE;
+  if(!audit_delta("control_final",&audit_initial,&audit_previous,FALSE))return FALSE;
+  for(int i=0;i<4;++i){
+    if(!control_sha()||!audit_stage("control_repeat_sha",TRUE)||
+       !control_rng()||!audit_stage("control_repeat_rng",TRUE))return FALSE;
+  }
+  return TRUE;
+}
 
 static int failed(const char *name){
   fprintf(stderr,"NX_CUSTODY_FAIL %s win32=%lu\n",name,GetLastError());
@@ -132,6 +266,7 @@ static int ipc_case(void){
   if(!nx_noninheritable(to.read_end)||!nx_noninheritable(to.write_end)||
      !nx_noninheritable(from.read_end)||!nx_noninheritable(from.write_end))goto done;
   pass("anonymous_noninherited_endpoints");
+  if(!audit_stage("ipc_pipes_open",FALSE))goto done;
   // Mark only child endpoints (and one deliberate excluded canary) inheritable.
   if(!SetHandleInformation(to.read_end,HANDLE_FLAG_INHERIT,HANDLE_FLAG_INHERIT)||
      !SetHandleInformation(from.write_end,HANDLE_FLAG_INHERIT,HANDLE_FLAG_INHERIT)||
@@ -143,7 +278,7 @@ static int ipc_case(void){
   if(!si.lpAttributeList||!InitializeProcThreadAttributeList(si.lpAttributeList,1,0,&bytes))goto done;
   initialized=TRUE;
   if(!UpdateProcThreadAttribute(si.lpAttributeList,0,PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
-      allowed,sizeof(allowed),NULL,NULL))goto done;
+      allowed,sizeof(allowed),NULL,NULL)||!audit_stage("ipc_attrlist_ready",FALSE))goto done;
   DWORD length=GetModuleFileNameW(NULL,exe,32768);
   if(!length||length>=32768||swprintf_s(command,32768,L"\"%ls\" --peer %llu %llu",exe,
     (unsigned long long)(uintptr_t)to.read_end,(unsigned long long)(uintptr_t)from.write_end)<0)goto done;
@@ -156,9 +291,11 @@ static int ipc_case(void){
   DWORD avail=0;
   if(PeekNamedPipe(excluded.read_end,NULL,0,NULL,&avail,NULL)||GetLastError()!=ERROR_BROKEN_PIPE)goto done;
   pass("explicit_handle_allowlist_excludes_inheritable_canary");
-  if(!GetProcessTimes(pi.hProcess,&created,&e,&k,&u)||
-     !peer_identity(pi.hProcess,pi.dwProcessId,created)||
-     BCryptGenRandom(NULL,nonce,32,BCRYPT_USE_SYSTEM_PREFERRED_RNG)<0||
+  if(!audit_stage("ipc_spawned",FALSE)||
+     !GetProcessTimes(pi.hProcess,&created,&e,&k,&u)||
+     !peer_identity(pi.hProcess,pi.dwProcessId,created))goto done;
+  if(BCryptGenRandom(NULL,nonce,32,BCRYPT_USE_SYSTEM_PREFERRED_RNG)<0||
+     !audit_stage("ipc_rng",FALSE)||
      !write_exact(to.write_end,nonce,32)||!wait_reply(from.read_end,pi.hProcess,&reply)||
      reply.pid!=pi.dwProcessId||CompareFileTime(&created,&reply.creation)||
      memcmp(nonce,reply.nonce,32)||!peer_identity(pi.hProcess,reply.pid,reply.creation))goto done;
@@ -172,6 +309,7 @@ static int ipc_case(void){
      !GetExitCodeProcess(pi.hProcess,&code)||code!=0||
      peer_identity(pi.hProcess,pi.dwProcessId,created))goto done;
   pass("exited_peer_denied");
+  if(!audit_stage("ipc_peer_exited",FALSE))goto done;
   rc=0;
 done:
   nx_v6_close_channel(&to);nx_v6_close_channel(&from);nx_v6_close_channel(&excluded);
@@ -188,23 +326,28 @@ done:
 }
 int wmain(int argc,wchar_t **argv){
   if(argc==4&&!wcscmp(argv[1],L"--peer"))return peer_child(argv[2],argv[3]);
-  if(argc!=6||wcscmp(argv[1],L"--fixture"))return failed("args");
+  if(argc!=6||(wcscmp(argv[1],L"--fixture")&&wcscmp(argv[1],L"--fixture-cold")))return failed("args");
+  BOOL cold=!wcscmp(argv[1],L"--fixture-cold");
   const wchar_t *file=argv[2],*dir=argv[4],*linked=argv[5];
   BYTE expected[32],wrong[32];
   NX_HELD_FILE held={0};
-  DWORD before=0,after=0;
-  if(!hex_digest(argv[3],expected)||!GetProcessHandleCount(GetCurrentProcess(),&before))return failed("setup");
+  if(!hex_digest(argv[3],expected)||!audit_init())return failed("setup");
+  if(!cold&&!audit_control())return failed("control_unstable");
+  product_initial=audit_previous;
   memcpy(wrong,expected,32);wrong[0]^=1;
   for(int i=0;i<16;++i){
     if(nx_v6_hold_file(file,wrong,&held)){nx_v6_close_file(&held);return failed("wrong_digest");}
+    if(!audit_stage(i?"wrong_digest_repeat":"wrong_digest_first",i!=0||!cold))return failed("wrong_digest_handle_delta");
+    if(!i)after_first_digest=audit_previous;
     if(nx_v6_hold_file(linked,expected,&held)){nx_v6_close_file(&held);return failed("hardlink");}
+    if(!audit_stage("hardlink_rejected",TRUE))return failed("hardlink_handle_delta");
   }
   pass("wrong_digest_denied");pass("hardlink_denied");
-  if(!metadata_baseline(dir))return failed("metadata_only_baseline");
+  if(!metadata_baseline(dir)||!audit_stage("metadata_closed",TRUE))return failed("metadata_only_baseline");
   if(!nx_v6_hold_file(file,expected,&held))return failed("hold");
   const char *failure="held_sha256_fileid_recheck";
   DWORD failure_error=0;
-  if(!nx_v6_recheck_file(&held)){failure_error=GetLastError();goto done;}
+  if(!nx_v6_recheck_file(&held)||!audit_stage("custody_held",FALSE)){failure_error=GetLastError();goto done;}
   pass("held_sha256_fileid_recheck");
   // Execute all three observations; do not short-circuit or lose the failing
   // operation's error when closing the retained HANDLEs.
@@ -216,7 +359,7 @@ int wmain(int argc,wchar_t **argv){
   }
   pass("held_file_write_delete_ancestor_denied");
   failure="nonexecuted_image_mapping_path_matches";
-  if(!mapped_source(&held)){failure_error=GetLastError();goto done;}
+  if(!mapped_source(&held)||!audit_stage("mapping_closed",TRUE)){failure_error=GetLastError();goto done;}
   pass("nonexecuted_image_mapping_path_matches");
   failure=NULL;
 done:
@@ -234,7 +377,14 @@ done:
     NULL,OPEN_EXISTING,FILE_FLAG_BACKUP_SEMANTICS,NULL);
   if(unlocked==INVALID_HANDLE_VALUE)return failed("unlocked_ancestor");
   CloseHandle(unlocked);pass("held_handles_released");
+  if(!audit_stage("custody_closed",FALSE))return failed("custody_snapshot");
+  if(!audit_delta(cold?"cold_custody_vs_hash_base":"custody_vs_product_base",
+      cold?&after_first_digest:&product_initial,&audit_previous,TRUE))
+    return failed("custody_residual_handles");
   if(ipc_case())return 1;
+  if(!audit_stage("ipc_closed",FALSE))return failed("ipc_snapshot");
+  if(!cold&&!audit_delta("ipc_vs_product_base",&product_initial,&audit_previous,TRUE))
+    return failed("ipc_residual_handles");
   ULONGLONG start=GetTickCount64();
   if(!nx_v6_native_gate_live(start)||nx_v6_native_gate_live(0)||
      nx_v6_native_gate_live(start+60000ULL))return failed("deadline_initial");
@@ -244,12 +394,14 @@ done:
   if(nx_v6_native_gate_live(start)||elapsed<NX_NATIVE_GATE_MS)return failed("deadline_expired");
   printf("NX_CUSTODY_MEASURE native_elapsed_ms=%llu\n",(unsigned long long)elapsed);
   pass("monotonic_expiry_no_renewal");
+  if(!audit_stage("deadline_closed",TRUE))return failed("deadline_handle_delta");
   NX_BOOT_OBSERVATION boot={0};
   if(nx_v6_observe_boot(&boot))printf("NX_CUSTODY_OBSERVATION boot_support=AVAILABLE authoritative=false\n");
   else printf("NX_CUSTODY_OBSERVATION boot_support=UNAVAILABLE authoritative=false\n");
-  if(!GetProcessHandleCount(GetCurrentProcess(),&after)||before!=after){
-    fprintf(stderr,"NX_CUSTODY_HANDLES before=%lu after=%lu\n",before,after);
-    return failed("handle_leak");
+  if(!audit_stage("boot_readback_closed",TRUE))return failed("boot_readback_handle_delta");
+  if(!audit_delta(cold?"cold_final":"product_final",&product_initial,&audit_previous,TRUE)){
+    fprintf(stderr,"NX_CUSTODY_FAIL handle_table_changed logical=true\n");
+    return cold?19:1;
   }
   pass("exact_handle_count_restored");
   printf("NX_CUSTODY_RESULT pass=14 fail=0 production_authorized=false\n");

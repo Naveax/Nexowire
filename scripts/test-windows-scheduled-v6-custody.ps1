@@ -38,10 +38,62 @@ try {
   Copy-Item -LiteralPath $exe -Destination $linked
   $null=New-Item -ItemType HardLink -Path (Join-Path $work 'extra-link.exe') -Target $linked
   $digest=(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
-  $output=@(& $exe --fixture $file $digest $dir $linked)
-  $exit=$LASTEXITCODE
+  # Capture both streams without losing the exact native exit or cold evidence.
+  # The expected cold logical mismatch is stdout/stderr data, not a PS exception.
+  function Invoke-CustodyFixture([string]$mode){
+    # Windows PowerShell treats redirected native stderr as ErrorRecords.
+    # Continue only within this native invocation; enforce exact exit below.
+    $saved=$ErrorActionPreference
+    try {
+      $ErrorActionPreference='Continue'
+      $global:LASTEXITCODE=-1
+      $raw=@(& $exe $mode $file $digest $dir $linked 2>&1)
+      $code=$global:LASTEXITCODE
+    } finally {$ErrorActionPreference=$saved}
+    @{Exit=$code;Lines=@($raw|ForEach-Object {$_.ToString()})}
+  }
+  $coldRun=Invoke-CustodyFixture '--fixture-cold'
+  $coldExit=$coldRun.Exit
+  $cold=@($coldRun.Lines)
+  $cold|ForEach-Object {Write-Host "NX_CUSTODY_COLD $_"}
+  $controlRun=Invoke-CustodyFixture '--fixture'
+  $exit=$controlRun.Exit
+  $output=@($controlRun.Lines)
   $output|ForEach-Object {Write-Host $_}
+  if($coldExit -ne 0 -and $coldExit -ne 19){throw "COLD_FIXTURE_FAILED exit=$coldExit"}
   if($exit -ne 0){throw "NATIVE_FIXTURE_FAILED exit=$exit"}
+  function Get-HandleDeltaSignature($lines,[string]$stage){
+    $prefix='^NX_HANDLE_STAGE stage='+[regex]::Escape($stage)+' before=(\d+) after=(\d+) added=(\d+) removed=(\d+)$'
+    $summary=@($lines|Where-Object {$_ -match $prefix})
+    if($summary.Count -ne 1){throw "HANDLE_STAGE_MISSING $stage"}
+    $m=[regex]::Match([string]$summary[0],$prefix)
+    if(!$m.Success){throw "HANDLE_STAGE_INVALID $stage"}
+    $added=[int]$m.Groups[3].Value;$removed=[int]$m.Groups[4].Value
+    if(([int]$m.Groups[1].Value+$added-$removed) -ne [int]$m.Groups[2].Value){throw "HANDLE_STAGE_COUNT_INVALID $stage"}
+    $entries=@($lines|ForEach-Object {
+      if($_ -match ('^NX_HANDLE_DELTA stage='+[regex]::Escape($stage)+' op=(add|remove) type=(.+) access=([0-9a-f]+) attrs=([0-9a-f]+) value=')){
+        "$($Matches[1])|$($Matches[2])|$($Matches[3])|$($Matches[4])"
+      }
+    }|Sort-Object)
+    if(@($entries|Where-Object {$_ -like 'add|*'}).Count -ne $added -or
+       @($entries|Where-Object {$_ -like 'remove|*'}).Count -ne $removed){throw "HANDLE_STAGE_DELTA_INCOMPLETE $stage"}
+    $entries
+  }
+  function Assert-SameHandleDelta($left,$right,[string]$label){
+    $a=@($left);$b=@($right)
+    if($a.Count -ne $b.Count -or ($a -join "`n") -cne ($b -join "`n") -or
+       @($a|Where-Object {$_ -like 'remove|*'}).Count -ne 0){
+      throw "HANDLE_ATTRIBUTION_MISMATCH $label"
+    }
+  }
+  # Require exact type/access/attribute multisets at the actual cold SHA and RNG
+  # calls, plus the final table delta. No arbitrary count tolerance or type allowlist.
+  Assert-SameHandleDelta @(Get-HandleDeltaSignature $cold 'wrong_digest_first') @(Get-HandleDeltaSignature $output 'control_sha') 'sha'
+  Assert-SameHandleDelta @(Get-HandleDeltaSignature $cold 'ipc_rng') @(Get-HandleDeltaSignature $output 'control_rng') 'rng'
+  Assert-SameHandleDelta @(Get-HandleDeltaSignature $cold 'cold_final') @(Get-HandleDeltaSignature $output 'control_final') 'final'
+  $coldDelta=@(Get-HandleDeltaSignature $cold 'cold_final')
+  if(($coldExit -eq 19) -ne ($coldDelta.Count -gt 0)){throw 'COLD_EXIT_DELTA_MISMATCH'}
+  Write-Host "NX_CUSTODY_HANDLE_ATTRIBUTION=PASS independent_cng_delta=$($coldDelta.Count) product_residual=0"
   $expected=@('wrong_digest_denied','hardlink_denied','held_sha256_fileid_recheck','held_file_write_delete_ancestor_denied',
     'nonexecuted_image_mapping_path_matches','held_handles_released','anonymous_noninherited_endpoints',
     'explicit_handle_allowlist_excludes_inheritable_canary','held_peer_pid_filetime_nonce','wrong_peer_incarnation_denied',
