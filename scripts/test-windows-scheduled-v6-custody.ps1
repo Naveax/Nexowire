@@ -46,9 +46,9 @@ try {
     $saved=$ErrorActionPreference
     try {
       $ErrorActionPreference='Continue'
-      $LASTEXITCODE=-1
+      $global:LASTEXITCODE=-1
       $raw=@(& $exe $mode $file $digest $dir $linked 2>&1)
-      $code=$LASTEXITCODE
+      $code=$global:LASTEXITCODE
     } finally {$ErrorActionPreference=$saved}
     @{Exit=$code;Lines=@($raw|ForEach-Object {$_.ToString()})}
   }
@@ -65,9 +65,11 @@ try {
   function Get-HandleDeltaSignature($lines,[string]$stage){
     $prefix='^NX_HANDLE_STAGE stage='+[regex]::Escape($stage)+' before=(\d+) after=(\d+) added=(\d+) removed=(\d+)$'
     $summary=@($lines|Where-Object {$_ -match $prefix})
-    if($summary.Count -ne 1 -or $summary[0] -notmatch $prefix){throw "HANDLE_STAGE_MISSING $stage"}
-    $added=[int]$Matches[3];$removed=[int]$Matches[4]
-    if(([int]$Matches[1]+$added-$removed) -ne [int]$Matches[2]){throw "HANDLE_STAGE_COUNT_INVALID $stage"}
+    if($summary.Count -ne 1){throw "HANDLE_STAGE_MISSING $stage"}
+    $m=[regex]::Match([string]$summary[0],$prefix)
+    if(!$m.Success){throw "HANDLE_STAGE_INVALID $stage"}
+    $added=[int]$m.Groups[3].Value;$removed=[int]$m.Groups[4].Value
+    if(([int]$m.Groups[1].Value+$added-$removed) -ne [int]$m.Groups[2].Value){throw "HANDLE_STAGE_COUNT_INVALID $stage"}
     $entries=@($lines|ForEach-Object {
       if($_ -match ('^NX_HANDLE_DELTA stage='+[regex]::Escape($stage)+' op=(add|remove) type=(.+) access=([0-9a-f]+) attrs=([0-9a-f]+) value=')){
         "$($Matches[1])|$($Matches[2])|$($Matches[3])|$($Matches[4])"
