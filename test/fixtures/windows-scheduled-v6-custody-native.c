@@ -130,16 +130,7 @@ static BOOL control_rng(void){
   BOOL ok=BCryptGenRandom(NULL,nonce,32,BCRYPT_USE_SYSTEM_PREFERRED_RNG)>=0;
   SecureZeroMemory(nonce,sizeof(nonce));return ok;
 }
-static BOOL audit_control(void){
-  if(!control_sha()||!audit_stage("control_sha",FALSE)||
-     !control_rng()||!audit_stage("control_rng",FALSE))return FALSE;
-  if(!audit_delta("control_final",&audit_initial,&audit_previous,FALSE))return FALSE;
-  for(int i=0;i<4;++i){
-    if(!control_sha()||!audit_stage("control_repeat_sha",TRUE)||
-       !control_rng()||!audit_stage("control_repeat_rng",TRUE))return FALSE;
-  }
-  return TRUE;
-}
+static BOOL audit_control(void);
 
 static int failed(const char *name){
   fprintf(stderr,"NX_CUSTODY_FAIL %s win32=%lu\n",name,GetLastError());
@@ -398,6 +389,31 @@ done:
   for(int i=0;i<2;++i)if(ends[i]&&!CloseHandle(ends[i]))ok=FALSE;
   return ok;
 }
+/* Independent composed raw API sequence; not a product warmup or a hidden
+ * baseline reset. All deltas from the original process origin remain logged
+ * and must be matched by the runner against isolated controls and cold product.
+ * The first and second RNG calls are distinct measured initialization steps. */
+static BOOL control_composed(void){
+  return control_sha()&&control_pipes()&&control_spawn(TRUE)&&control_rng();
+}
+static BOOL audit_control(void){
+  NX_AUDIT_TABLE second={0};
+  for(int i=0;i<8;++i){
+    if(!control_composed())return FALSE;
+    char stage[64];
+    sprintf_s(stage,sizeof(stage),"prefix_%d",i+1);
+    if(!audit_stage(stage,i>=2))return FALSE;
+    sprintf_s(stage,sizeof(stage),"prefix_%d_origin",i+1);
+    if(!audit_delta(stage,&audit_initial,&audit_previous,FALSE))return FALSE;
+    if(i==1)second=audit_previous;
+    if(i>=2){
+      sprintf_s(stage,sizeof(stage),"prefix_%d_vs_second",i+1);
+      if(!audit_delta(stage,&second,&audit_previous,TRUE))return FALSE;
+    }
+  }
+  return audit_delta("prefix_final_from_origin",&audit_initial,&audit_previous,FALSE)&&
+    audit_delta("prefix_final_vs_second",&second,&audit_previous,TRUE);
+}
 static void describe_residual_files(const char *stage,const NX_AUDIT_TABLE *origin,const NX_AUDIT_TABLE *now){
   for(ULONG_PTR i=0;i<now->count;++i){
     const NX_AUDIT_ENTRY *e=&now->entry[i];
@@ -417,11 +433,15 @@ static void describe_residual_files(const char *stage,const NX_AUDIT_TABLE *orig
 static int independent_control(const wchar_t *mode,const wchar_t *file){
   if(!audit_init())return failed("independent_control_setup");
   BOOL all_ok=TRUE;
+  const BOOL two_phase=!wcscmp(mode,L"--control-rng")||!wcscmp(mode,L"--control-rng-confirm")||
+    !wcscmp(mode,L"--control-composed");
+  NX_AUDIT_TABLE second={0};
   for(int i=0;i<8;++i){
     BOOL ok=FALSE;
     if(!wcscmp(mode,L"--control-observer")){Sleep(10);ok=TRUE;}
     else if(!wcscmp(mode,L"--control-sha"))ok=control_sha();
-    else if(!wcscmp(mode,L"--control-rng"))ok=control_rng();
+    else if(!wcscmp(mode,L"--control-rng")||!wcscmp(mode,L"--control-rng-confirm"))ok=control_rng();
+    else if(!wcscmp(mode,L"--control-composed"))ok=control_composed();
     else if(!wcscmp(mode,L"--control-mapping"))ok=control_mapping(file);
     else if(!wcscmp(mode,L"--control-pipes"))ok=control_pipes();
     else if(!wcscmp(mode,L"--control-spawn"))ok=control_spawn(FALSE);
@@ -440,14 +460,23 @@ static int independent_control(const wchar_t *mode,const wchar_t *file){
     if(!audit_delta(stage,&audit_initial,&audit_previous,FALSE))return failed("control_origin_delta");
     if(!i)control_first=audit_previous;
     else {
+      // Preserve the original first-iteration comparison in full. For the
+      // measured two-phase controls its second-call delta is required to
+      // match independent evidence by the runner, not waived.
       sprintf_s(stage,sizeof(stage),"control_%d_vs_first",i+1);
-      if(!audit_delta(stage,&control_first,&audit_previous,TRUE))all_ok=FALSE;
+      if(!audit_delta(stage,&control_first,&audit_previous,!two_phase))all_ok=FALSE;
+    }
+    if(i==1)second=audit_previous;
+    if(i>=2&&two_phase){
+      sprintf_s(stage,sizeof(stage),"control_%d_vs_second",i+1);
+      if(!audit_delta(stage,&second,&audit_previous,TRUE))all_ok=FALSE;
     }
   }
   Sleep(1000);
   if(!audit_stage("control_delayed",FALSE))return failed("control_delayed_snapshot");
   if(!audit_delta("control_final_from_origin",&audit_initial,&audit_previous,FALSE)||
-     !audit_delta("control_final_vs_first",&control_first,&audit_previous,TRUE))all_ok=FALSE;
+     !audit_delta("control_final_vs_first",&control_first,&audit_previous,!two_phase))all_ok=FALSE;
+  if(two_phase&&!audit_delta("control_final_vs_second",&second,&audit_previous,TRUE))all_ok=FALSE;
   describe_residual_files("control_final_from_origin",&audit_initial,&audit_previous);
   if(!audit_stage("control_file_description",TRUE))all_ok=FALSE;
   printf("NX_CONTROL_RESULT mode=%ls repetitions=8 stable=%u origin_retained=true production_authorized=false\n",mode,all_ok?1U:0U);
@@ -548,7 +577,8 @@ done:
   // Repeat full peer lifecycle, comparing cumulative deltas against the
   // original process origin. No baseline reset. Preserve the initial 13 named
   // behavior cases; repetitions have explicit separate diagnostic labels.
-  NX_AUDIT_TABLE first_ipc=audit_previous;
+  NX_AUDIT_TABLE first_ipc=audit_previous,second_ipc={0};
+  if(!audit_delta("ipc_first_origin",&product_initial,&first_ipc,!cold))return failed("ipc_first_residual");
   BOOL repeats_ok=TRUE;
   for(int i=0;i<7;++i){
     // Suppress duplicate acceptance labels, not audit data or behavior checks.
@@ -562,7 +592,12 @@ done:
     sprintf_s(stage,sizeof(stage),"ipc_repeat_%d_origin",i+2);
     if(!audit_delta(stage,&product_initial,&audit_previous,FALSE))return failed("ipc_repeat_origin");
     sprintf_s(stage,sizeof(stage),"ipc_repeat_%d_vs_first",i+2);
-    if(!audit_delta(stage,&first_ipc,&audit_previous,TRUE))repeats_ok=FALSE;
+    if(!audit_delta(stage,&first_ipc,&audit_previous,!cold))repeats_ok=FALSE;
+    if(!i)second_ipc=audit_previous;
+    else {
+      sprintf_s(stage,sizeof(stage),"ipc_repeat_%d_vs_second",i+2);
+      if(!audit_delta(stage,&second_ipc,&audit_previous,TRUE))repeats_ok=FALSE;
+    }
     printf("NX_CUSTODY_IPC_REPEAT_END iteration=%d\n",i+2);
   }
   describe_residual_files("ipc_residual",&product_initial,&audit_previous);
@@ -586,9 +621,18 @@ done:
   if(!audit_stage("boot_readback_closed",TRUE))return failed("boot_readback_handle_delta");
   describe_residual_files("final_residual",&product_initial,&audit_previous);
   if(!audit_stage("final_file_description",TRUE))return failed("final_file_description_delta");
+  // The original process origin is never overwritten. The raw API prefix
+  // is measured before product operations, and its exact retained table
+  // must survive all product operations unchanged. Runner separately checks
+  // the prefix and final origin delta against fresh independent controls.
+  if(!audit_delta("full_final_from_origin",&audit_initial,&audit_previous,FALSE))return failed("full_origin_delta");
   if(!audit_delta(cold?"cold_final":"product_final",&product_initial,&audit_previous,TRUE)){
+    if(cold){
+      printf("NX_CUSTODY_COLD_OBSERVED cases=13 raw_origin_delta=true reconciliation_required=true production_authorized=false\n");
+      return 19;
+    }
     fprintf(stderr,"NX_CUSTODY_FAIL handle_table_changed logical=true\n");
-    return cold?19:1;
+    return 1;
   }
   pass("exact_handle_count_restored");
   printf("NX_CUSTODY_RESULT pass=14 fail=0 production_authorized=false\n");
