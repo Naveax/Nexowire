@@ -1,0 +1,44 @@
+name: AI-02 Protected Recovery Provider Readback
+on:
+  pull_request:
+    branches:
+      - agent/nx-02-pg-review-20261127
+    paths:
+      - '.github/workflows/ai02-recovery-provider-readback.yml'
+      - 'src/security/recovery-provider-readback.ts'
+      - 'test/ai02/recovery-provider-readback.integration.cjs'
+permissions:
+  contents: read
+jobs:
+  isolated-provider-readback:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'agent/nx-02-recovery-provider-readback-20261127'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - name: Exact accepted V3 source and real PG + mTLS readback
+        shell: bash
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          NX02_READBACK_REAL_PG_FIXTURE: '1'
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          git rev-parse HEAD
+          test "$(git hash-object sql/helper-selection-lifecycle-review.sql)" = 09a18ac5f64d282b5964740edddd6ad5d65cd866
+          test "$(git hash-object src/security/recovery-anchored-authority-review.ts)" = 417a1265dd6097ffedd01286aa58c07a2bbc0257
+          test "$(git hash-object test/ai02/recovery-anchored-review.fixture.cjs)" = 3bde82c937441a8fc99a7a24c1ae281ef529395a
+          test "$(git hash-object test/ai02/run-recovery-role-pg-review.py)" = 0d4a509c366183d772d806db66dea61e93430964
+          export PATH="/usr/lib/postgresql/16/bin:$PATH"
+          initdb --version
+          node --test test/ai02/recovery-provider-readback.integration.cjs | tee "$RUNNER_TEMP/ai02-readback.tap"
+          grep -F 'REAL_PG_AUTHENTICATED_READBACK 9 PASS; actual effect ACK NOT_RUN; independent deployment NOT_RUN' "$RUNNER_TEMP/ai02-readback.tap"
+          grep -Fx '# pass 2' "$RUNNER_TEMP/ai02-readback.tap"
+          grep -Fx '# skipped 0' "$RUNNER_TEMP/ai02-readback.tap"
