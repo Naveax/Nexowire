@@ -4,7 +4,7 @@ import {createHash,generateKeyPairSync,randomUUID,sign} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {Pool} from 'pg';
 import {actualAgentStop} from '../fixtures/ai07-protected-agent-stop.js';
-import {createHelperSelectionTlsFixture} from '../ai05/helper-selection-tls-fixture.js';
+import {createHelperSelectionTlsFixture,createHelperLegacyWitnessFixture} from '../ai05/helper-selection-tls-fixture.js';
 import {bindTransferClaimDrainEvidence} from '../../src/security/protected-transfer-service.js';
 import {PostgresHelperSelectionAuthority,type HelperAuthorityScope} from '../../src/security/postgres-helper-selection-authority.js';
 import {createProtectedHelperSelectionServer} from '../../src/security/protected-helper-selection-transport.js';
@@ -30,11 +30,17 @@ test('real Agent clean stop reaches signed mTLS RELEASE; denied observer and UNK
   t.after(async()=>{await Promise.all([admin.end(),transferPool.end(),selectionPool.end()]);});
   for(const sql of ['core-broker-dispatch-authority.sql','large-transfer-authority.sql','helper-selection-authority.sql'])
     await admin.query(await readFile(new URL('../../sql/'+sql,import.meta.url),'utf8'));
+  // Disposable test DB only: keep the exact shared V3 legacy admission schema.
+  for(const file of ['core-broker-dispatch-credentials.sql','core-broker-dispatch-credential-fence.sql'])
+    await admin.query(await readFile(new URL('../../sql/'+file,import.meta.url),'utf8'));
+  await admin.query('CREATE ROLE nx_lifecycle_sql_owner NOLOGIN; CREATE ROLE nx_lifecycle_consume NOLOGIN; CREATE ROLE nx_lifecycle_reconcile NOLOGIN');
+  await admin.query(await readFile(new URL('../../sql/helper-selection-lifecycle-review.sql',import.meta.url),'utf8'));
   await admin.query("CREATE ROLE ai07_transfer_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS PASSWORD 'fixture-only-not-production'; CREATE ROLE ai07_selection_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS PASSWORD 'fixture-only-not-production'");
   await admin.query("GRANT USAGE ON SCHEMA core_dispatch,transfer_authority TO ai07_transfer_runtime; GRANT SELECT ON core_dispatch.authorities,core_dispatch.grants,transfer_authority.grants,transfer_authority.jobs,transfer_authority.claims TO ai07_transfer_runtime; GRANT UPDATE(max_seen_ms) ON core_dispatch.authorities TO ai07_transfer_runtime; GRANT INSERT ON transfer_authority.jobs,transfer_authority.claims TO ai07_transfer_runtime; GRANT UPDATE(epoch,lease_hash,confirmed_offset,stage_created,pending_id,state,final_receipt,final_commit) ON transfer_authority.jobs TO ai07_transfer_runtime; GRANT UPDATE(state) ON transfer_authority.claims TO ai07_transfer_runtime");
   await admin.query("GRANT USAGE ON SCHEMA core_dispatch,helper_selection TO ai07_selection_runtime; GRANT SELECT ON core_dispatch.authorities,core_dispatch.grants,helper_selection.selections,helper_selection.leases TO ai07_selection_runtime; GRANT UPDATE(max_seen_ms) ON core_dispatch.authorities TO ai07_selection_runtime; GRANT INSERT ON helper_selection.leases TO ai07_selection_runtime; GRANT UPDATE(state,committed_revision) ON helper_selection.leases TO ai07_selection_runtime; GRANT UPDATE(revision,sha256,signer_sha256) ON helper_selection.selections TO ai07_selection_runtime");
   const tls=createHelperSelectionTlsFixture();
   t.after(()=>tls.close());
+  const {witnessFor}=await createHelperLegacyWitnessFixture(t,tls);
   for(const mode of ['clean','observer-denied','unknown','active'] as const){
     const authorityId=randomUUID(),ownerId=randomUUID(),deviceId=randomUUID(),sourceDeviceId=randomUUID(),deviceEpoch=randomUUID(),sessionEpoch=randomUUID(),sourceEpoch=randomUUID(),sourceSession=randomUUID(),brokerId=randomUUID();
     const scope:HelperAuthorityScope={authorityId,deviceId,ownerId,deviceEpoch,sessionEpoch,ownerEpoch:1,generation:1,brokerId};
@@ -71,7 +77,7 @@ test('real Agent clean stop reaches signed mTLS RELEASE; denied observer and UNK
         return {payload,proof:sign(null,Buffer.from(payload),observer.privateKey).toString('base64url')};
       },
     });
-    const backend=new PostgresHelperSelectionAuthority({pool:selectionPool as unknown as DispatchStorePool,scope,verifyEvidence:createSignedHelperSelectionEvidenceVerifier(evidence),verifyProvenance:provenance});
+    const backend=new PostgresHelperSelectionAuthority({pool:selectionPool as unknown as DispatchStorePool,scope,verifyEvidence:createSignedHelperSelectionEvidenceVerifier(evidence),verifyProvenance:provenance,legacyWitness:witnessFor(scope)});
     const token='r'.repeat(43);
     const server=createProtectedHelperSelectionServer({tls:{key:tls.server.key,cert:tls.server.cert,ca:tls.ca},scope,authorityPrivateKeyPem:tls.privateKey,backend,
       async resolvePrincipal(cert,credential){return cert===tls.runtime.certSha256&&credential===token?{scope,role:'runtime'}:undefined;}});
