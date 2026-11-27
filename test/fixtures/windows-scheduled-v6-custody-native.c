@@ -145,7 +145,8 @@ static int failed(const char *name){
   fprintf(stderr,"NX_CUSTODY_FAIL %s win32=%lu\n",name,GetLastError());
   return 1;
 }
-static void pass(const char *name){printf("NX_CUSTODY_PASS %s\n",name);fflush(stdout);}
+static BOOL repeating_ipc=FALSE;
+static void pass(const char *name){printf(repeating_ipc?"NX_CUSTODY_REPEAT_PASS %s\n":"NX_CUSTODY_PASS %s\n",name);fflush(stdout);}
 static BOOL hex_digest(const wchar_t *s,BYTE out[32]){
   if(wcslen(s)!=64)return FALSE;
   for(int i=0;i<32;++i){
@@ -285,6 +286,7 @@ static int ipc_case(void){
   si.StartupInfo.cb=sizeof(si);
   if(!CreateProcessW(exe,command,NULL,NULL,TRUE,EXTENDED_STARTUPINFO_PRESENT|CREATE_NO_WINDOW,
     NULL,NULL,&si.StartupInfo,&pi))goto done;
+  if(!audit_stage("ipc_createprocess_returned",FALSE))goto done;
   CloseHandle(to.read_end);to.read_end=NULL;
   CloseHandle(from.write_end);from.write_end=NULL;
   CloseHandle(excluded.write_end);excluded.write_end=NULL;
@@ -324,7 +326,157 @@ done:
   if(si.lpAttributeList)HeapFree(GetProcessHeap(),0,si.lpAttributeList);
   return rc?failed("ipc"):0;
 }
+
+/* Independent controls run in separate fresh processes. Their cold origin is
+ * immutable. Every iteration is compared with that origin AND the first
+ * measured settled table; neither substitutes for the product acceptance.
+ * No type exemptions; instability is retained as a failing diagnostic. */
+static NX_AUDIT_TABLE control_first;
+static BOOL control_mapping(const wchar_t *file){
+  HANDLE h=CreateFileW(file,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,0,NULL);
+  if(h==INVALID_HANDLE_VALUE)return FALSE;
+  HANDLE section=CreateFileMappingW(h,NULL,PAGE_READONLY|SEC_IMAGE_NO_EXECUTE,0,0,NULL);
+  void *view=section?MapViewOfFile(section,FILE_MAP_READ,0,0,0):NULL;
+  BOOL ok=FALSE;
+  if(view){
+    MEMORY_BASIC_INFORMATION m={0};
+    wchar_t mapped[32768],held[32768];
+    DWORD a=GetMappedFileNameW(GetCurrentProcess(),view,mapped,32768);
+    DWORD b=GetFinalPathNameByHandleW(h,held,32768,VOLUME_NAME_NT);
+    ok=VirtualQuery(view,&m,sizeof(m))==sizeof(m)&&m.Type==MEM_IMAGE&&
+      a>0&&a<32768&&b>0&&b<32768&&!_wcsicmp(mapped,held);
+    if(!UnmapViewOfFile(view))ok=FALSE;
+  }
+  if(section&&!CloseHandle(section))ok=FALSE;
+  if(!CloseHandle(h))ok=FALSE;
+  return ok;
+}
+static BOOL control_pipes(void){
+  HANDLE ends[6]={0};BOOL ok=TRUE;
+  for(int i=0;i<3;++i){
+    if(!CreatePipe(&ends[i*2],&ends[i*2+1],NULL,4096)){ok=FALSE;break;}
+  }
+  for(int i=0;i<6;++i)if(ends[i]&&!CloseHandle(ends[i]))ok=FALSE;
+  return ok;
+}
+/* No CNG/custody calls. Fixed self child only, no production process.
+ * Plain spawn and extended spawn are separate experiments. For the latter,
+ * build raw pipes and explicit HANDLE_LIST, never inherit all. */
+static BOOL control_spawn(BOOL extended){
+  HANDLE ends[2]={0};STARTUPINFOEXW si={0};PROCESS_INFORMATION pi={0};
+  SIZE_T bytes=0;BOOL initialized=FALSE,ok=FALSE;
+  wchar_t exe[32768],command[32768];
+  DWORD n=GetModuleFileNameW(NULL,exe,32768),code=99;
+  if(!n||n>=32768||swprintf_s(command,32768,L"\"%ls\" --control-child",exe)<0)goto done;
+  si.StartupInfo.cb=extended?(DWORD)sizeof(si):(DWORD)sizeof(STARTUPINFOW);
+  if(extended){
+    if(!CreatePipe(&ends[0],&ends[1],NULL,4096)||
+       !SetHandleInformation(ends[0],HANDLE_FLAG_INHERIT,HANDLE_FLAG_INHERIT))goto done;
+    InitializeProcThreadAttributeList(NULL,1,0,&bytes);
+    if(!bytes)goto done;
+    si.lpAttributeList=HeapAlloc(GetProcessHeap(),0,bytes);
+    if(!si.lpAttributeList||!InitializeProcThreadAttributeList(si.lpAttributeList,1,0,&bytes))goto done;
+    initialized=TRUE;
+    if(!UpdateProcThreadAttribute(si.lpAttributeList,0,PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+       &ends[0],sizeof(HANDLE),NULL,NULL))goto done;
+  }
+  if(!CreateProcessW(exe,command,NULL,NULL,extended,
+      CREATE_NO_WINDOW|(extended?EXTENDED_STARTUPINFO_PRESENT:0),NULL,NULL,&si.StartupInfo,&pi))goto done;
+  if(WaitForSingleObject(pi.hProcess,5000)!=WAIT_OBJECT_0||
+     !GetExitCodeProcess(pi.hProcess,&code)||code!=0)goto done;
+  ok=TRUE;
+done:
+  if(pi.hProcess){
+    if(WaitForSingleObject(pi.hProcess,0)==WAIT_TIMEOUT){
+      if(!TerminateProcess(pi.hProcess,98)||WaitForSingleObject(pi.hProcess,5000)!=WAIT_OBJECT_0)ok=FALSE;
+    }
+    if(!CloseHandle(pi.hProcess))ok=FALSE;
+  }
+  if(pi.hThread&&!CloseHandle(pi.hThread))ok=FALSE;
+  if(initialized)DeleteProcThreadAttributeList(si.lpAttributeList);
+  if(si.lpAttributeList&&!HeapFree(GetProcessHeap(),0,si.lpAttributeList))ok=FALSE;
+  for(int i=0;i<2;++i)if(ends[i]&&!CloseHandle(ends[i]))ok=FALSE;
+  return ok;
+}
+static void describe_residual_files(const char *stage,const NX_AUDIT_TABLE *origin,const NX_AUDIT_TABLE *now){
+  for(ULONG_PTR i=0;i<now->count;++i){
+    const NX_AUDIT_ENTRY *e=&now->entry[i];
+    if(audit_has(origin,e)||wcscmp(audit_types[e->type_index],L"File"))continue;
+    SetLastError(0);DWORD kind=GetFileType(e->value),kind_error=GetLastError();
+    DWORD flags=0,out_size=0,in_size=0,max=0,pipe_error=0;BOOL pipe=FALSE;
+    if(kind==FILE_TYPE_PIPE){
+      SetLastError(0);pipe=GetNamedPipeInfo(e->value,&flags,&out_size,&in_size,&max);
+      pipe_error=GetLastError();
+    }
+    printf("NX_HANDLE_FILE stage=%s value=%p access=%08lx filetype=%lu type_error=%lu pipe_info=%u pipe_error=%lu\n",
+      stage,e->value,(unsigned long)e->access,(unsigned long)kind,(unsigned long)kind_error,
+      pipe?1U:0U,(unsigned long)pipe_error);
+  }
+  fflush(stdout);
+}
+static int independent_control(const wchar_t *mode,const wchar_t *file){
+  if(!audit_init())return failed("independent_control_setup");
+  BOOL all_ok=TRUE;
+  for(int i=0;i<8;++i){
+    BOOL ok=FALSE;
+    if(!wcscmp(mode,L"--control-observer")){Sleep(10);ok=TRUE;}
+    else if(!wcscmp(mode,L"--control-sha"))ok=control_sha();
+    else if(!wcscmp(mode,L"--control-rng"))ok=control_rng();
+    else if(!wcscmp(mode,L"--control-mapping"))ok=control_mapping(file);
+    else if(!wcscmp(mode,L"--control-pipes"))ok=control_pipes();
+    else if(!wcscmp(mode,L"--control-spawn"))ok=control_spawn(FALSE);
+    else if(!wcscmp(mode,L"--control-spawn-extended"))ok=control_spawn(TRUE);
+    else return failed("independent_control_mode");
+    if(!ok){all_ok=FALSE;fprintf(stderr,"NX_CONTROL_API_FAILED iteration=%d win32=%lu\n",i+1,GetLastError());}
+    char stage[64];
+    sprintf_s(stage,sizeof(stage),"control_%d_immediate",i+1);
+    if(!audit_stage(stage,FALSE))return failed("control_immediate_snapshot");
+    // Observe both immediate and delayed state. A transient object is logged,
+    // not silently removed from the census or ignored by a type whitelist.
+    Sleep(250);
+    sprintf_s(stage,sizeof(stage),"control_%d_settled",i+1);
+    if(!audit_stage(stage,FALSE))return failed("control_settled_snapshot");
+    sprintf_s(stage,sizeof(stage),"control_%d_from_origin",i+1);
+    if(!audit_delta(stage,&audit_initial,&audit_previous,FALSE))return failed("control_origin_delta");
+    if(!i)control_first=audit_previous;
+    else {
+      sprintf_s(stage,sizeof(stage),"control_%d_vs_first",i+1);
+      if(!audit_delta(stage,&control_first,&audit_previous,TRUE))all_ok=FALSE;
+    }
+  }
+  Sleep(1000);
+  if(!audit_stage("control_delayed",FALSE))return failed("control_delayed_snapshot");
+  if(!audit_delta("control_final_from_origin",&audit_initial,&audit_previous,FALSE)||
+     !audit_delta("control_final_vs_first",&control_first,&audit_previous,TRUE))all_ok=FALSE;
+  describe_residual_files("control_final_from_origin",&audit_initial,&audit_previous);
+  if(!audit_stage("control_file_description",TRUE))all_ok=FALSE;
+  printf("NX_CONTROL_RESULT mode=%ls repetitions=8 stable=%u origin_retained=true production_authorized=false\n",mode,all_ok?1U:0U);
+  fflush(stdout);
+  return all_ok?0:1;
+}
+/* Count-only observer control has no NtQueryObject or typed census. It
+ * distinguishes measurement machinery from ordinary elapsed time. */
+static int count_observer(void){
+  DWORD before=0,after=0;
+  if(!GetProcessHandleCount(GetCurrentProcess(),&before))return failed("count_observer_start");
+  BOOL same=TRUE;
+  for(int i=0;i<8;++i){
+    Sleep(260);
+    if(!GetProcessHandleCount(GetCurrentProcess(),&after))return failed("count_observer_read");
+    printf("NX_COUNT_OBSERVER iteration=%d origin=%lu current=%lu\n",i+1,before,after);
+    if(before!=after)same=FALSE;
+  }
+  Sleep(1000);
+  if(!GetProcessHandleCount(GetCurrentProcess(),&after))return failed("count_observer_final");
+  if(before!=after)same=FALSE;
+  printf("NX_CONTROL_RESULT mode=--control-count-observer repetitions=8 stable=%u origin_retained=true production_authorized=false\n",same?1U:0U);
+  return same?0:1;
+}
+
 int wmain(int argc,wchar_t **argv){
+  if(argc==2&&!wcscmp(argv[1],L"--control-child"))return 0;
+  if(argc==6&&!wcscmp(argv[1],L"--control-count-observer"))return count_observer();
+  if(argc==6&&!wcsncmp(argv[1],L"--control-",10))return independent_control(argv[1],argv[2]);
   if(argc==4&&!wcscmp(argv[1],L"--peer"))return peer_child(argv[2],argv[3]);
   if(argc!=6||(wcscmp(argv[1],L"--fixture")&&wcscmp(argv[1],L"--fixture-cold")))return failed("args");
   BOOL cold=!wcscmp(argv[1],L"--fixture-cold");
@@ -383,6 +535,29 @@ done:
     return failed("custody_residual_handles");
   if(ipc_case())return 1;
   if(!audit_stage("ipc_closed",FALSE))return failed("ipc_snapshot");
+  // Repeat full peer lifecycle, comparing cumulative deltas against the
+  // original process origin. No baseline reset. Preserve the initial 13 named
+  // behavior cases; repetitions have explicit separate diagnostic labels.
+  NX_AUDIT_TABLE first_ipc=audit_previous;
+  BOOL repeats_ok=TRUE;
+  for(int i=0;i<7;++i){
+    // Suppress duplicate acceptance labels, not audit data or behavior checks.
+    printf("NX_CUSTODY_IPC_REPEAT_BEGIN iteration=%d\n",i+2);
+    repeating_ipc=TRUE;
+    int repeat_result=ipc_case();
+    repeating_ipc=FALSE;
+    if(repeat_result)return failed("ipc_repeat_behavior");
+    char stage[64];sprintf_s(stage,sizeof(stage),"ipc_repeat_%d_closed",i+2);
+    if(!audit_stage(stage,FALSE))return failed("ipc_repeat_snapshot");
+    sprintf_s(stage,sizeof(stage),"ipc_repeat_%d_origin",i+2);
+    if(!audit_delta(stage,&product_initial,&audit_previous,FALSE))return failed("ipc_repeat_origin");
+    sprintf_s(stage,sizeof(stage),"ipc_repeat_%d_vs_first",i+2);
+    if(!audit_delta(stage,&first_ipc,&audit_previous,TRUE))repeats_ok=FALSE;
+    printf("NX_CUSTODY_IPC_REPEAT_END iteration=%d\n",i+2);
+  }
+  describe_residual_files("ipc_residual",&product_initial,&audit_previous);
+  if(!audit_stage("ipc_file_description",TRUE))repeats_ok=FALSE;
+  if(!repeats_ok)return failed("ipc_repeat_handle_growth");
   if(!cold&&!audit_delta("ipc_vs_product_base",&product_initial,&audit_previous,TRUE))
     return failed("ipc_residual_handles");
   ULONGLONG start=GetTickCount64();
@@ -399,6 +574,8 @@ done:
   if(nx_v6_observe_boot(&boot))printf("NX_CUSTODY_OBSERVATION boot_support=AVAILABLE authoritative=false\n");
   else printf("NX_CUSTODY_OBSERVATION boot_support=UNAVAILABLE authoritative=false\n");
   if(!audit_stage("boot_readback_closed",TRUE))return failed("boot_readback_handle_delta");
+  describe_residual_files("final_residual",&product_initial,&audit_previous);
+  if(!audit_stage("final_file_description",TRUE))return failed("final_file_description_delta");
   if(!audit_delta(cold?"cold_final":"product_final",&product_initial,&audit_previous,TRUE)){
     fprintf(stderr,"NX_CUSTODY_FAIL handle_table_changed logical=true\n");
     return cold?19:1;
