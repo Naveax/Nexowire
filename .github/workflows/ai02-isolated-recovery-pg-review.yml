@@ -30,7 +30,7 @@ jobs:
           test "$(id -u)" != 0
           test "$(git hash-object sql/core-broker-dispatch-authority.sql)" = a120585a92d7ab41bb2d1a3aaf5c0bc31f9ca74b
           test "$(git hash-object sql/helper-selection-authority.sql)" = 32338077c0cd85789f475b1a76e93ad4a1351863
-          test "$(git hash-object sql/helper-selection-lifecycle-review.sql)" = 8dc2efcb646fcdbd570be03e237a24975a579c5d
+          test "$(git hash-object sql/helper-selection-lifecycle-review.sql)" = f052b0c83b3b353d79d419bd6dfda3123ef59894
           test "$(git hash-object src/security/recovery-anchored-authority-review.ts)" = 69e37b2e3b151209751e3ee3dd87ab47ce12edf5
           test "$(git hash-object test/ai02/recovery-anchored-review.fixture.cjs)" = 291fbf9e71d96850eba61421f56caed7d84fd537
           test "$(git hash-object test/ai02/run-recovery-role-pg-review.py)" = 7ffeaa6be3b884c39df095a3086c8cc690aa16c6

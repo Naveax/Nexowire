@@ -95,7 +95,7 @@ BEGIN
   IF r.rolcanlogin OR r.rolsuper OR r.rolcreaterole OR r.rolcreatedb OR r.rolreplication OR r.rolbypassrls
   THEN RAISE EXCEPTION 'LIFECYCLE_ROLE_UNSAFE'; END IF;
  END LOOP;
- IF EXISTS (SELECT 1 FROM pg_catalog.pg_auth_members m JOIN pg_catalog.pg_roles r ON r.oid=m.roleid WHERE r.rolname='nx_lifecycle_sql_owner')
+ IF EXISTS (SELECT 1 FROM pg_catalog.pg_auth_members m JOIN pg_catalog.pg_roles role_row ON role_row.oid=m.roleid WHERE role_row.rolname='nx_lifecycle_sql_owner')
  THEN RAISE EXCEPTION 'LIFECYCLE_OWNER_MEMBERSHIP_DENIED'; END IF;
  IF pg_has_role('nx_lifecycle_consume','nx_lifecycle_reconcile','MEMBER') OR pg_has_role('nx_lifecycle_reconcile','nx_lifecycle_consume','MEMBER')
  THEN RAISE EXCEPTION 'LIFECYCLE_ROLE_COLLISION'; END IF;
