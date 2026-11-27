@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { promises as fs } from 'node:fs';
+import { promises as fs, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -387,29 +387,68 @@ async function downloadNodeRuntime(
 
 // Verify BEFORE reading built outputs or mutating the output directory.
 // A CI negative fixture should test the policy itself even if dist/ is absent.
+export function assertWindowsJobPostSigningDigest(
+  actual: string, manifest: string, approved?: string,
+): void {
+  if (!/^[a-f0-9]{64}$/.test(actual) ||
+      manifest.trim() !== actual ||
+      (approved !== undefined && approved !== actual)) {
+    fail('WINDOWS_JOB_POST_SIGNING_DIGEST_MISMATCH');
+  }
+}
+
 export function assertTrustedWindowsJobPublisher(
   root: string, env: NodeJS.ProcessEnv = process.env,
-): void {
-  // A tag-scoped production bundle MUST use an Authenticode-valid helper
-  // from the explicitly pinned trusted publisher. PR bundles remain
-  // unsigned staging artifacts and are NEVER production acceptance.
-  if (env.GITHUB_REF_TYPE === 'tag') {
-    const expectedPublisher =
-      (env.NEXOWIRE_WINDOWS_JOB_PUBLISHER_THUMBPRINT ?? '').trim().toLowerCase();
-    if (!/^[a-f0-9]{40}$/.test(expectedPublisher)) {
-      fail('WINDOWS_JOB_TRUSTED_PUBLISHER_NOT_CONFIGURED: tagged release blocked.');
-    }
-    const helperSource = path.join(root, 'native', 'windows-job-owner.exe');
-    const actualPublisher = runPowerShell([
-      '$ErrorActionPreference = "Stop"',
-      '$signature = Get-AuthenticodeSignature -LiteralPath ' + psLiteral(helperSource),
-      'if ($signature.Status -ne "Valid" -or -not $signature.SignerCertificate) { throw "WINDOWS_JOB_HELPER_UNSIGNED_OR_INVALID" }',
-      '$signature.SignerCertificate.Thumbprint.ToLowerInvariant()',
-    ].join('; ')).trim().toLowerCase();
-    if (actualPublisher !== expectedPublisher) {
-      fail('WINDOWS_JOB_PUBLISHER_MISMATCH: tagged release blocked.');
-    }
+): string | undefined {
+  // PR bundles are unsigned staging artifacts, never release authorization.
+  if (env.GITHUB_REF_TYPE !== 'tag') return undefined;
+  const expectedPublisher =
+    (env.NEXOWIRE_WINDOWS_JOB_PUBLISHER_THUMBPRINT ?? '').trim().toLowerCase();
+  if (!/^[a-f0-9]{40}$/.test(expectedPublisher)) {
+    fail('WINDOWS_JOB_TRUSTED_PUBLISHER_NOT_CONFIGURED: tagged release blocked.');
   }
+  const signerSha256 = (env.NEXOWIRE_WINDOWS_JOB_SIGNER_SHA256 ?? '').trim().toLowerCase();
+  const subject = (env.NEXOWIRE_WINDOWS_JOB_PUBLISHER_SUBJECT ?? '').trim();
+  const artifactSha256 = (env.NEXOWIRE_WINDOWS_JOB_ARTIFACT_SHA256 ?? '').trim().toLowerCase();
+  const signTool = env.NEXOWIRE_WINDOWS_SIGNTOOL_PATH ?? '';
+  if (!/^[a-f0-9]{64}$/.test(signerSha256) ||
+      !/^[a-f0-9]{64}$/.test(artifactSha256) || !subject ||
+      !/^[A-Za-z]:\\/.test(signTool) ||
+      path.win32.normalize(signTool) !== signTool ||
+      path.win32.basename(signTool).toLowerCase() !== 'signtool.exe') {
+    fail('WINDOWS_JOB_SIGNED_RELEASE_POLICY_NOT_CONFIGURED');
+  }
+  const helperSource = path.join(root, 'native', 'windows-job-owner.exe');
+  const manifestPath = path.join(root, 'native', 'windows-job-owner.sha256');
+  const verifyBytes = () => assertWindowsJobPostSigningDigest(
+    createHash('sha256').update(readFileSync(helperSource)).digest('hex'),
+    readFileSync(manifestPath, 'utf8'),
+    artifactSha256,
+  );
+  verifyBytes();
+  const actual = JSON.parse(runPowerShell([
+    '$ErrorActionPreference = "Stop"',
+    '$signature = Microsoft.PowerShell.Security\\Get-AuthenticodeSignature -LiteralPath ' + psLiteral(helperSource),
+    'if ($signature.Status -ne "Valid" -or $signature.SignatureType -ne "Authenticode" -or -not $signature.SignerCertificate) { throw "WINDOWS_JOB_HELPER_UNSIGNED_OR_INVALID" }',
+    'if (-not $signature.TimeStamperCertificate) { throw "WINDOWS_JOB_TIMESTAMP_REQUIRED" }',
+    '$h = [Security.Cryptography.SHA256]::Create()',
+    'try { $der = [BitConverter]::ToString($h.ComputeHash($signature.SignerCertificate.RawData)).Replace("-","").ToLowerInvariant() } finally { $h.Dispose() }',
+    '[pscustomobject]@{ thumbprint=$signature.SignerCertificate.Thumbprint.ToLowerInvariant(); signerSha256=$der; subject=$signature.SignerCertificate.Subject } | ConvertTo-Json -Compress',
+  ].join('; '))) as { thumbprint: string; signerSha256: string; subject: string };
+  if (actual.thumbprint !== expectedPublisher || actual.signerSha256 !== signerSha256 ||
+      actual.subject !== subject) {
+    fail('WINDOWS_JOB_PUBLISHER_MISMATCH: tagged release blocked.');
+  }
+  // SignTool /tw warns if no timestamp; require exit 0, not warnings (2).
+  // The SDK tool and all pins must be provisioned by the release authority.
+  const verified = spawnSync(signTool, ['verify', '/pa', '/all', '/tw', '/v', helperSource], {
+    shell: false, windowsHide: true, encoding: 'utf8', timeout: 60_000, maxBuffer: 1024 * 1024,
+  });
+  if (verified.error || verified.signal || verified.status !== 0) {
+    fail('WINDOWS_JOB_TIMESTAMP_OR_SIGNATURE_VERIFICATION_FAILED');
+  }
+  verifyBytes();
+  return artifactSha256;
 }
 
 export async function buildWindowsUserBundle(
@@ -426,7 +465,11 @@ export async function buildWindowsUserBundle(
   assert.equal(packageJson.name, 'nexowire');
   const version = safeVersion(packageJson.version ?? '');
 
-  assertTrustedWindowsJobPublisher(root);
+  const approvedJobDigest = assertTrustedWindowsJobPublisher(root);
+  const jobSource = path.join(root, 'native', 'windows-job-owner.exe');
+  const jobManifest = await fs.readFile(path.join(root, 'native', 'windows-job-owner.sha256'), 'utf8');
+  const jobDigest = await sha256File(jobSource);
+  assertWindowsJobPostSigningDigest(jobDigest, jobManifest, approvedJobDigest);
 
   const cli = path.join(root, 'dist', 'src', 'cli.js');
   await fs.access(cli);
@@ -456,10 +499,15 @@ export async function buildWindowsUserBundle(
     // Fail the release rather than shipping a silently unmanaged shell.
     const bundledJobOwner=path.join(appRoot,'dist','native','windows-job-owner.exe');
     await fs.mkdir(path.dirname(bundledJobOwner),{recursive:true});
-    await fs.copyFile(path.join(root,'native','windows-job-owner.exe'),bundledJobOwner);
-    await fs.copyFile(
-      path.join(root, 'native', 'windows-job-owner.sha256'),
+    await fs.copyFile(jobSource,bundledJobOwner);
+    // Bind the staged bytes to the verified post-signing digest, not a stale
+    // pre-signing build checksum or a mutable adjacent manifest.
+    const bundledJobDigest = await sha256File(bundledJobOwner);
+    assertWindowsJobPostSigningDigest(bundledJobDigest, jobManifest, jobDigest);
+    await fs.writeFile(
       path.join(appRoot, 'dist', 'native', 'windows-job-owner.sha256'),
+      bundledJobDigest + '\n',
+      'utf8',
     );
     await copyTree(
       path.join(root, 'skills'),

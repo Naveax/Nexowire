@@ -3,7 +3,8 @@ import {spawnSync} from 'node:child_process';
 import {promises as fs} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {buildNativeAgentLauncher,WINDOWS_NATIVE_AGENT_TASK_SETTINGS} from './native-agent-lifecycle.js';
+import {WINDOWS_NATIVE_AGENT_TASK_SETTINGS} from './native-agent-lifecycle.js';
+import {reviewScheduledAgentV6Evidence,reviewScheduledAgentV6ForwardEvidence,type ScheduledAgentV6ReviewInput,type ScheduledAgentV6ForwardReviewInput,type ScheduledAgentV6Binding} from './windows-scheduled-v6-evidence.js';
 import {assertScheduledAgentJobMigrationAdmission,verifyWindowsJobHelperBinary,assertSameWindowsJobHelperIdentity} from './windows-job-owner.js';
 import {isWindowsProcessElevated} from './privileged-broker.js';
 import {hubBootLifecycleStatus} from '../hub/hub-boot-lifecycle.js';
@@ -71,13 +72,18 @@ export function systemAgentPreloginEnvironment():NodeJS.ProcessEnv{
 }
 
 export function renderSystemAgentPreloginLauncher(plan:SystemAgentPreloginPlan):string{
-  const env=systemAgentPreloginEnvironment();
-  return buildNativeAgentLauncher({
-    platform:'win32',execPath:plan.executable,
-    cliEntrypoint:plan.cliEntrypoint,execArgv:[],env,
-    windowsTaskJobOwnerPath:plan.jobHelper,
-    windowsTaskJobStatusDir:plan.stateRoot,
-  });
+  if(plan.taskName!==TASK||plan.launcher!==LAUNCHER)
+    throw Error('PRELOGIN_AGENT_V6_PLAN_IDENTITY_MISMATCH');
+  // A new stage is not an installed protected supervisor. Never emit an
+  // executable NWJOB3 fallback, even if an older helper is still on disk.
+  // Do not read credentials or invoke a child from this staging artifact.
+  return '\uFEFF'+[
+    "$ErrorActionPreference='Stop'",
+    '# NEXOWIRE_AGENT_TASK_JOB_GUARD_V6',
+    '# NEXOWIRE_AGENT_TASK_JOB_STAGE_ONLY',
+    "throw 'NATIVE_AGENT_TASK_JOB_PROTOCOL_MIGRATION_REQUIRED'",
+    '',
+  ].join('\r\n');
 }
 
 /** Read-only candidate identity check for an independently reviewed prelogin
@@ -123,7 +129,8 @@ export async function reviewSystemAgentV6InstalledIdentity(
         throw Error('PRELOGIN_AGENT_V6_LAUNCHER_HASH_MISMATCH');
       const script=bytes.toString('utf8');
       if(script.includes('# NEXOWIRE_AGENT_TASK_JOB_GUARD_V1')||
-         !script.includes('# NEXOWIRE_AGENT_TASK_JOB_GUARD_V6'))
+         script.includes('# NEXOWIRE_AGENT_TASK_JOB_STAGE_ONLY')||
+         !/^# NEXOWIRE_AGENT_TASK_JOB_GUARD_V6\r?$/m.test(script))
         throw Error('PRELOGIN_AGENT_V6_LAUNCHER_PROTOCOL_REQUIRED');
       return {digest,signature:stamp(held)};
     }finally{await handle.close();}
@@ -139,6 +146,41 @@ export async function reviewSystemAgentV6InstalledIdentity(
   return {launcherSha256:launcher.digest,helperSha256:helper.digest,
     launcherIdentity:launcher.signature,helperIdentity:helper.signature,
     activationAuthorized:false,releaseAuthorized:false};
+}
+
+/** Read-only installed binding shared by the two supervisor phases.
+ * Use the immutable, parsed signed binding, never a mutable input after await. */
+async function reviewPreloginSignedInstalledBinding(
+  plan:SystemAgentPreloginPlan,binding:Readonly<ScheduledAgentV6Binding>,
+){
+  if(binding.taskName!==plan.taskName||binding.sessionId!==0||
+     binding.principalSid!=='S-1-5-18')
+    throw Error('PRELOGIN_AGENT_V6_TASK_BINDING_MISMATCH');
+  const installed=await reviewSystemAgentV6InstalledIdentity(plan,{
+    launcherSha256:binding.launcherSha256,helperSha256:binding.helperSha256,
+  });
+  if(installed.launcherIdentity!==binding.launcherIdentity||
+     installed.helperIdentity!==binding.helperIdentity)
+    throw Error('PRELOGIN_AGENT_V6_INSTALLED_IDENTITY_MISMATCH');
+  return installed;
+}
+
+/** Forward review before any native process creation. Not activation. */
+export async function reviewSystemAgentV6ForwardEvidence(
+  plan:SystemAgentPreloginPlan,input:ScheduledAgentV6ForwardReviewInput,
+){
+  const evidence=reviewScheduledAgentV6ForwardEvidence(input);
+  const installed=await reviewPreloginSignedInstalledBinding({...plan},evidence.verifiedBinding);
+  return {...evidence,installed,activationAuthorized:false as const,releaseAuthorized:false as const};
+}
+
+/** Release review of exact suspended assignment; no native effect or grant. */
+export async function reviewSystemAgentV6ReleaseEvidence(
+  plan:SystemAgentPreloginPlan,input:ScheduledAgentV6ReviewInput,
+){
+  const evidence=reviewScheduledAgentV6Evidence(input);
+  const installed=await reviewPreloginSignedInstalledBinding({...plan},evidence.verifiedBinding);
+  return {...evidence,installed,activationAuthorized:false as const,releaseAuthorized:false as const};
 }
 
 function assertWindowsElevation():void{

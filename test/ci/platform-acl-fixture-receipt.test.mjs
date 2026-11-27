@@ -44,3 +44,15 @@ test('wrong platform skip, substituted case, forged plan or summary, partial TAP
   assert.throws(()=>reconcilePlatformResult(MIXED_FILE,{status:0,error:{code:'ETIMEDOUT'},stdout:original},'win32'),/PROCESS_FAILED/);
   assert.throws(()=>reconcilePlatformResult('test/guardian-sqlite-sidecar-preflight.test.ts',{status:0,stdout:original},'win32'),/UNREVIEWED_PATH/);
 });
+
+test('Windows listener fixture requires all four reviewed cases without a platform skip',()=>{
+  const file='test/windows-local-listener-owner.test.ts';
+  assert.equal(PLATFORM_FIXTURES.win32[file].minimum,4);
+  assert.equal(Object.hasOwn(PLATFORM_FIXTURES.linux,file),false);
+  const summary=(n,skip=0)=>['TAP version 13','1..'+n,'# tests '+n,
+    '# pass '+(n-skip),'# fail 0','# cancelled 0','# skipped '+skip,'# todo 0',''].join('\n');
+  const result=stdout=>({status:0,signal:null,stdout});
+  assert.throws(()=>reconcilePlatformResult(file,result(summary(3)),'win32'));
+  assert.throws(()=>reconcilePlatformResult(file,result(summary(4,1)),'win32'));
+  assert.equal(reconcilePlatformResult(file,result(summary(4)),'win32').pass,4);
+});
