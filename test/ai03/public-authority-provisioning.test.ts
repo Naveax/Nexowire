@@ -42,7 +42,9 @@ function fixture(){
   const scope={ownerAccountId:f.owner.ownerAccountId,ownerEpoch:String(f.owner.ownerEpoch),
     deviceId:f.owner.deviceId,installationLineageId:f.owner.installationLineageId,
     directoryHead:f.directory.directoryHead,authorityId:f.authority.authorityId};
-  return {...f,bindings:{
+  return {...f,hostedVerifier:{...f.hostedVerifier,responseSignerSpkiSha256:f.signers.hostedVerifier.spkiSha256,
+    principal:{role:'independent-enrollment-verifier',ownerAccountId:f.owner.ownerAccountId,
+      deviceId:f.owner.deviceId,installationId:f.owner.installationId}},bindings:{
     recovery:{...scope,storeId:f.authority.storeId,ackSpkiSha256:f.signers.recoveryAck.spkiSha256,
       observerSpkiSha256:f.signers.recoveryObserver.spkiSha256},
     scheduled:{...scope,authorityId:f.authority.scheduledAuthorityId,storeId:f.authority.scheduledStoreId,
@@ -51,7 +53,9 @@ function fixture(){
       issuerSpkiSha256:f.enrollmentKey.spkiSha256,dispatchSpkiSha256:f.signers.coreDispatch.spkiSha256,
       nativeObserverSpkiSha256:f.signers.coreNativeObserver.spkiSha256,
       helperObserverSpkiSha256:f.signers.helperObserver.spkiSha256,directoryGeneration:f.directory.generation,
-      registrationSha256:f.directory.registrationSha256}}};
+      registrationSha256:f.directory.registrationSha256,approvalAuthorityId:f.authority.approvalAuthorityId,
+      grantGeneration:f.owner.grantGeneration,revokeEpoch:f.owner.revokeEpoch,windowsUserSid:f.owner.windowsUserSid,
+      rpId:f.authenticator.rpId,credentialId:f.authenticator.credentialId,authenticatorSpkiSha256:f.authenticator.spkiSha256}}};
 }
 test('complete synthetic public records produce only a nonauthorizing review receipt',()=>{
   const f=fixture(),r=reviewPublicProvisioning(f);
@@ -125,4 +129,12 @@ test('independently read records must agree on owner epoch, lineage, authority/s
     ['scheduled','forwardSpkiSha256'],['scheduled','releaseSpkiSha256'],['core','issuerSpkiSha256'],
     ['core','dispatchSpkiSha256'],['core','nativeObserverSpkiSha256'],['core','helperObserverSpkiSha256']] as const)
     assert.throws(()=>reviewPublicProvisioning(mutate(role,{[field]:hash('wrong pin')})),/PUBLIC_PROVISIONING_REGISTERED_PIN_MISMATCH/);
+});
+
+test('hosted verifier principal and response signer must match independently recorded scope',()=>{
+  const f=fixture();
+  assert.throws(()=>reviewPublicProvisioning({...f,hostedVerifier:{...f.hostedVerifier,
+    principal:{...f.hostedVerifier.principal,deviceId:randomUUID()}}}),/PUBLIC_PROVISIONING_HOSTED_SCOPE_MISMATCH/);
+  assert.throws(()=>reviewPublicProvisioning({...f,hostedVerifier:{...f.hostedVerifier,
+    responseSignerSpkiSha256:hash('other response signer')}}),/PUBLIC_PROVISIONING_REGISTERED_PIN_MISMATCH/);
 });
