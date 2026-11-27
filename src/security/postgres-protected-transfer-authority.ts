@@ -64,7 +64,7 @@ export class PostgresProtectedTransferAuthority implements ProtectedTransferAuth
         "(has_table_privilege(current_user,'transfer_authority.jobs','DELETE,TRUNCATE') OR has_table_privilege(current_user,'transfer_authority.claims','DELETE,TRUNCATE')) AS erase,"+
         "EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='transfer_authority' AND pg_has_role(current_user,c.relowner,'MEMBER')) AS owns")).rows[0];
       if(!settings||settings.fsync!=='on'||settings.full_page_writes!=='on'||settings.recovery!==false||settings.elevated!==false||settings.ddl!==false||settings.grant_write!==false||settings.erase!==false||settings.owns!==false)deny('TRANSFER_PG_ROLE_OR_DURABILITY_INVALID');
-      const locked=(await db.query('SELECT max_seen_ms,to_jsonb(a) AS authority_row FROM core_dispatch.authorities a WHERE authority_id=$1 FOR UPDATE',[this.config.authorityId])).rows[0];if(!locked)deny('TRANSFER_PG_AUTHORITY_MISSING');
+      const locked=(await db.query('SELECT max_seen_ms,to_jsonb(a) AS authority_row FROM core_dispatch.authorities a WHERE authority_id=$1 FOR UPDATE',[this.config.authorityId])).rows[0];if(!locked)return deny('TRANSFER_PG_AUTHORITY_MISSING');
       // V3 quarantine is authority-wide, therefore covers BOTH source and
       // target before any grant, claim, observer or receipt callback.
       const row=locked.authority_row;
