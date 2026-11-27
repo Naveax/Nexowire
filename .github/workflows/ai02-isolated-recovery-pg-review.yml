@@ -30,14 +30,15 @@ jobs:
           test "$(id -u)" != 0
           test "$(git hash-object sql/core-broker-dispatch-authority.sql)" = a120585a92d7ab41bb2d1a3aaf5c0bc31f9ca74b
           test "$(git hash-object sql/helper-selection-authority.sql)" = 32338077c0cd85789f475b1a76e93ad4a1351863
-          test "$(git hash-object sql/helper-selection-lifecycle-review.sql)" = f052b0c83b3b353d79d419bd6dfda3123ef59894
-          test "$(git hash-object src/security/recovery-anchored-authority-review.ts)" = 69e37b2e3b151209751e3ee3dd87ab47ce12edf5
-          test "$(git hash-object test/ai02/recovery-anchored-review.fixture.cjs)" = 291fbf9e71d96850eba61421f56caed7d84fd537
-          test "$(git hash-object test/ai02/run-recovery-role-pg-review.py)" = 7ffeaa6be3b884c39df095a3086c8cc690aa16c6
+          test "$(git hash-object sql/helper-selection-lifecycle-review.sql)" = 09a18ac5f64d282b5964740edddd6ad5d65cd866
+          test "$(git hash-object src/security/recovery-anchored-authority-review.ts)" = 417a1265dd6097ffedd01286aa58c07a2bbc0257
+          test "$(git hash-object test/ai02/recovery-anchored-review.fixture.cjs)" = 3bde82c937441a8fc99a7a24c1ae281ef529395a
+          test "$(git hash-object test/ai02/run-recovery-role-pg-review.py)" = 0d4a509c366183d772d806db66dea61e93430964
           export PATH="/usr/lib/postgresql/16/bin:$PATH"
           command -v initdb
           command -v pg_ctl
           command -v psql
           initdb --version
           python3 -I test/ai02/run-recovery-role-pg-review.py | tee "$RUNNER_TEMP/ai02-pg-review.txt"
-          grep -E '^SQL_ROLE_FIXTURE [0-9]+ PASS; witness and physical acceptance NOT_RUN$' "$RUNNER_TEMP/ai02-pg-review.txt"
+          grep -Fx 'SQL_ROLE_FIXTURE 45 PASS; witness and physical acceptance NOT_RUN' "$RUNNER_TEMP/ai02-pg-review.txt"
+          grep -Fx 'COUNTEREXAMPLE_UNANCHORED_COMMIT_REPRODUCED local head ahead of unchanged fixture witness; effect ACK NOT_RUN' "$RUNNER_TEMP/ai02-pg-review.txt"

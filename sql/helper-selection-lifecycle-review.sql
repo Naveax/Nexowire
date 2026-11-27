@@ -148,23 +148,96 @@ CREATE FUNCTION helper_selection.guard_anchored_selection() RETURNS trigger
  LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog AS $$
 DECLARE anchored uuid;
 BEGIN
- SELECT lifecycle_store_id INTO anchored FROM core_dispatch.authorities WHERE authority_id=OLD.authority_id FOR UPDATE;
+ SELECT lifecycle_store_id INTO anchored FROM core_dispatch.authorities WHERE authority_id=CASE WHEN TG_OP='INSERT' THEN NEW.authority_id ELSE OLD.authority_id END FOR UPDATE;
  IF NOT FOUND OR anchored IS NOT NULL THEN RAISE EXCEPTION 'LIFECYCLE_LEGACY_WRITER_NOT_ENROLLED'; END IF;
  IF TG_OP='DELETE' THEN RETURN OLD; END IF;
- IF (NEW.authority_id,NEW.device_id) IS DISTINCT FROM (OLD.authority_id,OLD.device_id) THEN
+ IF TG_OP='UPDATE' AND (NEW.authority_id,NEW.device_id) IS DISTINCT FROM (OLD.authority_id,OLD.device_id) THEN
   RAISE EXCEPTION 'LIFECYCLE_SELECTION_IDENTITY_REWRITE_DENIED'; END IF;
  RETURN NEW;
 END $$;
-CREATE TRIGGER lifecycle_selection_guard BEFORE UPDATE OR DELETE ON helper_selection.selections
+CREATE TRIGGER lifecycle_selection_guard BEFORE INSERT OR UPDATE OR DELETE ON helper_selection.selections
  FOR EACH ROW EXECUTE FUNCTION helper_selection.guard_anchored_selection();
+-- Review-only shared-writer quarantine. Unanchored behavior is unchanged.
+-- This is NOT writer enrollment. Existing clients must explicitly reject under
+-- the authority lock before observation/effects; these SQL guards backstop raw
+-- DML and prevent legacy tx returning authority after even a no-op clock write.
+CREATE FUNCTION helper_selection.guard_unintegrated_authority_clock() RETURNS trigger
+ LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog AS $$
+BEGIN
+ IF OLD.lifecycle_store_id IS NOT NULL THEN RAISE EXCEPTION 'LIFECYCLE_LEGACY_WRITER_NOT_ENROLLED'; END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER lifecycle_legacy_clock_guard BEFORE UPDATE OF sequence,max_seen_ms ON core_dispatch.authorities
+ FOR EACH ROW EXECUTE FUNCTION helper_selection.guard_unintegrated_authority_clock();
+-- No implicit waiver for an absent schema. Review fixture supplies exact
+-- credential and transfer DDL; full inventory required before operator review.
+-- The definer has only the reads/row-lock rights required for this guard.
+CREATE FUNCTION helper_selection.guard_unintegrated_writer() RETURNS trigger
+ LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE old_a uuid; new_a uuid; aid uuid; anchored uuid;
+BEGIN
+ IF TG_TABLE_SCHEMA='transfer_authority' AND TG_TABLE_NAME='claims' THEN
+  IF TG_OP<>'INSERT' THEN SELECT authority_id INTO STRICT old_a FROM transfer_authority.jobs WHERE id=OLD.job_id; END IF;
+  IF TG_OP<>'DELETE' THEN SELECT authority_id INTO STRICT new_a FROM transfer_authority.jobs WHERE id=NEW.job_id; END IF;
+ ELSE
+  IF TG_OP<>'INSERT' THEN old_a:=OLD.authority_id; END IF;
+  IF TG_OP<>'DELETE' THEN new_a:=NEW.authority_id; END IF;
+ END IF;
+ IF TG_OP='UPDATE' AND old_a IS DISTINCT FROM new_a THEN RAISE EXCEPTION 'LIFECYCLE_WRITER_IDENTITY_REWRITE_DENIED'; END IF;
+ aid:=COALESCE(old_a,new_a);
+ SELECT lifecycle_store_id INTO anchored FROM core_dispatch.authorities WHERE authority_id=aid FOR UPDATE;
+ IF NOT FOUND OR anchored IS NOT NULL THEN RAISE EXCEPTION 'LIFECYCLE_LEGACY_WRITER_NOT_ENROLLED'; END IF;
+ IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+ RETURN NEW;
+END $$;
+ALTER FUNCTION helper_selection.guard_unintegrated_writer() OWNER TO nx_lifecycle_sql_owner;
+GRANT USAGE ON SCHEMA transfer_authority TO nx_lifecycle_sql_owner;
+GRANT SELECT ON transfer_authority.jobs,transfer_authority.claims,core_dispatch.claims TO nx_lifecycle_sql_owner;
+REVOKE ALL ON FUNCTION helper_selection.guard_unintegrated_writer(),helper_selection.guard_unintegrated_authority_clock() FROM PUBLIC;
+CREATE TRIGGER lifecycle_unintegrated_writer BEFORE INSERT OR UPDATE OR DELETE ON core_dispatch.grants FOR EACH ROW EXECUTE FUNCTION helper_selection.guard_unintegrated_writer();
+CREATE TRIGGER lifecycle_unintegrated_writer BEFORE INSERT OR UPDATE OR DELETE ON core_dispatch.claims FOR EACH ROW EXECUTE FUNCTION helper_selection.guard_unintegrated_writer();
+CREATE TRIGGER lifecycle_unintegrated_writer BEFORE INSERT OR UPDATE OR DELETE ON core_dispatch.broker_credentials FOR EACH ROW EXECUTE FUNCTION helper_selection.guard_unintegrated_writer();
+CREATE TRIGGER lifecycle_unintegrated_writer BEFORE INSERT OR UPDATE OR DELETE ON core_dispatch.claim_credentials FOR EACH ROW EXECUTE FUNCTION helper_selection.guard_unintegrated_writer();
+CREATE TRIGGER lifecycle_unintegrated_writer BEFORE INSERT OR UPDATE OR DELETE ON transfer_authority.grants FOR EACH ROW EXECUTE FUNCTION helper_selection.guard_unintegrated_writer();
+CREATE TRIGGER lifecycle_unintegrated_writer BEFORE INSERT OR UPDATE OR DELETE ON transfer_authority.jobs FOR EACH ROW EXECUTE FUNCTION helper_selection.guard_unintegrated_writer();
+CREATE TRIGGER lifecycle_unintegrated_writer BEFORE INSERT OR UPDATE OR DELETE ON transfer_authority.claims FOR EACH ROW EXECUTE FUNCTION helper_selection.guard_unintegrated_writer();
+-- TRUNCATE bypasses row triggers. It was never part of legacy runtime semantics.
+CREATE FUNCTION helper_selection.guard_writer_truncate() RETURNS trigger
+ LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog AS $$
+BEGIN RAISE EXCEPTION 'LIFECYCLE_HISTORY_TRUNCATE_DENIED'; END $$;
+REVOKE ALL ON FUNCTION helper_selection.guard_writer_truncate() FROM PUBLIC;
+CREATE TRIGGER lifecycle_truncate_guard BEFORE TRUNCATE ON core_dispatch.authorities FOR EACH STATEMENT EXECUTE FUNCTION helper_selection.guard_writer_truncate();
+CREATE TRIGGER lifecycle_truncate_guard BEFORE TRUNCATE ON core_dispatch.grants FOR EACH STATEMENT EXECUTE FUNCTION helper_selection.guard_writer_truncate();
+CREATE TRIGGER lifecycle_truncate_guard BEFORE TRUNCATE ON core_dispatch.claims FOR EACH STATEMENT EXECUTE FUNCTION helper_selection.guard_writer_truncate();
+CREATE TRIGGER lifecycle_truncate_guard BEFORE TRUNCATE ON core_dispatch.broker_credentials FOR EACH STATEMENT EXECUTE FUNCTION helper_selection.guard_writer_truncate();
+CREATE TRIGGER lifecycle_truncate_guard BEFORE TRUNCATE ON core_dispatch.claim_credentials FOR EACH STATEMENT EXECUTE FUNCTION helper_selection.guard_writer_truncate();
+CREATE TRIGGER lifecycle_truncate_guard BEFORE TRUNCATE ON helper_selection.selections FOR EACH STATEMENT EXECUTE FUNCTION helper_selection.guard_writer_truncate();
+CREATE TRIGGER lifecycle_truncate_guard BEFORE TRUNCATE ON helper_selection.leases FOR EACH STATEMENT EXECUTE FUNCTION helper_selection.guard_writer_truncate();
+CREATE TRIGGER lifecycle_truncate_guard BEFORE TRUNCATE ON transfer_authority.grants FOR EACH STATEMENT EXECUTE FUNCTION helper_selection.guard_writer_truncate();
+CREATE TRIGGER lifecycle_truncate_guard BEFORE TRUNCATE ON transfer_authority.jobs FOR EACH STATEMENT EXECUTE FUNCTION helper_selection.guard_writer_truncate();
+CREATE TRIGGER lifecycle_truncate_guard BEFORE TRUNCATE ON transfer_authority.claims FOR EACH STATEMENT EXECUTE FUNCTION helper_selection.guard_writer_truncate();
+-- Called inside the common locked transaction. No owner/epoch/job-state filter
+-- may hide a previous claim. Both endpoints, all nonterminal states and any
+-- unresolved pending_id block. Native drain remains a separate signed proof.
+CREATE FUNCTION helper_selection.assert_recovery_writer_drained(aid uuid,did uuid) RETURNS void
+ LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog AS $$
+BEGIN
+ IF EXISTS(SELECT 1 FROM core_dispatch.claims c WHERE c.authority_id=aid AND c.device_id=did AND c.state<>'RELEASED')
+ OR EXISTS(SELECT 1 FROM transfer_authority.jobs j WHERE j.authority_id=aid AND (j.source_device_id=did OR j.target_device_id=did)
+  AND (j.pending_id IS NOT NULL OR EXISTS(SELECT 1 FROM transfer_authority.claims c WHERE c.job_id=j.id AND c.state NOT IN ('APPLIED','NO_EFFECT'))))
+ THEN RAISE EXCEPTION 'LIFECYCLE_WRITER_DRAIN_REQUIRED'; END IF;
+END $$;
+ALTER FUNCTION helper_selection.assert_recovery_writer_drained(uuid,uuid) OWNER TO nx_lifecycle_sql_owner;
+REVOKE ALL ON FUNCTION helper_selection.assert_recovery_writer_drained(uuid,uuid) FROM PUBLIC;
 -- Stage only. Neither function authenticates an external signature or emits
 -- an effect ACK. Caller holds the transaction across independent witness CAS.
 -- Role is trusted service boundary, NOT an Agent credential.
-CREATE FUNCTION helper_selection.stage_recovery_consume(s jsonb, lease uuid, prev_seq bigint, prev_hash text, next_hash text)
+CREATE FUNCTION helper_selection.stage_recovery_consume_internal(s jsonb, lease uuid, prev_seq bigint, prev_hash text, next_hash text, historical boolean)
  RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE a core_dispatch.authorities%ROWTYPE; aid uuid; did uuid; inserted uuid;
 BEGIN
- IF NOT pg_has_role(session_user,'nx_lifecycle_consume','MEMBER') OR pg_has_role(session_user,'nx_lifecycle_reconcile','MEMBER')
+ IF historical IS NULL OR (NOT historical AND (NOT pg_has_role(session_user,'nx_lifecycle_consume','MEMBER') OR pg_has_role(session_user,'nx_lifecycle_reconcile','MEMBER')))
+ OR (historical AND (NOT pg_has_role(session_user,'nx_lifecycle_reconcile','MEMBER') OR pg_has_role(session_user,'nx_lifecycle_consume','MEMBER')))
  THEN RAISE EXCEPTION 'LIFECYCLE_CONSUME_ROLE_DENIED'; END IF;
  IF s IS NULL OR jsonb_typeof(s)<>'object' OR NOT (s ?& ARRAY[
  'authorityId','storeId','ownerAccountId','ownerEpoch','directoryHead','deviceId','installationLineageId','resourceId','bootId','sessionEpoch','generation','purpose','transactionSha256','authorizationId','attemptId','requestId','challenge','requestSha256','bindingSha256','envelopeSha256','signerSpkiSha256','deadlineMs'])
@@ -175,7 +248,7 @@ BEGIN
    WHERE jsonb_typeof(s->k.key) IS DISTINCT FROM 'string' OR (s->>k.key) !~ '^[0-9a-f]{64}$')
  OR EXISTS (SELECT 1 FROM unnest(ARRAY['ownerEpoch','generation']) AS k(key)
    WHERE jsonb_typeof(s->k.key) IS DISTINCT FROM 'string' OR (s->>k.key) !~ '^[1-9][0-9]{0,18}$')
- OR jsonb_typeof(s->'deadlineMs') IS DISTINCT FROM 'number'
+ OR jsonb_typeof(s->'deadlineMs') IS DISTINCT FROM 'number' OR (s->>'deadlineMs') !~ '^[1-9][0-9]{0,15}$'
  THEN RAISE EXCEPTION 'LIFECYCLE_SCOPE_SHAPE_DENIED'; END IF;
  aid:=(s->>'authorityId')::uuid; did:=(s->>'deviceId')::uuid;
  SELECT * INTO a FROM core_dispatch.authorities WHERE authority_id=aid FOR UPDATE;
@@ -184,9 +257,11 @@ BEGIN
  jsonb_typeof(s->'purpose') IS DISTINCT FROM 'string' OR s->>'purpose' NOT IN ('rollback','coordinated-uninstall') OR
  s->>'ownerAccountId' IS NULL OR s->>'ownerEpoch' IS NULL OR s->>'directoryHead' IS NULL OR
  s->>'installationLineageId' IS NULL OR s->>'resourceId' IS NULL OR
- (s->>'deadlineMs')::bigint IS NULL OR (s->>'deadlineMs')::bigint<=floor(extract(epoch from clock_timestamp())*1000) OR
- (s->>'deadlineMs')::bigint>floor(extract(epoch from clock_timestamp())*1000)+30000
+ (s->>'deadlineMs')::bigint>9007199254740991 OR
+ (NOT historical AND ((s->>'deadlineMs')::bigint<=floor(extract(epoch from clock_timestamp())*1000) OR
+ (s->>'deadlineMs')::bigint>floor(extract(epoch from clock_timestamp())*1000)+30000))
  THEN RAISE EXCEPTION 'LIFECYCLE_SCOPE_OR_ANCHOR_DENIED'; END IF;
+ PERFORM helper_selection.assert_recovery_writer_drained(aid,did);
  IF EXISTS (SELECT 1 FROM helper_selection.leases WHERE authority_id=aid AND device_id=did AND state<>'RELEASED')
  THEN RAISE EXCEPTION 'LIFECYCLE_OCCUPIED'; END IF;
  INSERT INTO helper_selection.leases(id,request_id,authority_id,device_id,kind,request_hash,state,lifecycle_scope,transaction_sha256,authorization_id,lifecycle_generation,consume_sequence,consume_head)
@@ -196,6 +271,20 @@ BEGIN
  UPDATE core_dispatch.authorities SET lifecycle_sequence=prev_seq+1,lifecycle_head=next_hash WHERE authority_id=aid;
  RETURN inserted;
 END $$;
+-- Same immutable row shape and CAS for reconstruction; deadline is historical,
+-- never extended. The service MUST verify a frozen external witness transition
+-- before calling the restore function. SQL is not a witness verifier.
+CREATE FUNCTION helper_selection.stage_recovery_consume(s jsonb, lease uuid, prev_seq bigint, prev_hash text, next_hash text)
+ RETURNS uuid LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog AS $$
+ SELECT helper_selection.stage_recovery_consume_internal(s,lease,prev_seq,prev_hash,next_hash,false)
+$$;
+CREATE FUNCTION helper_selection.restore_recovery_consume(s jsonb, lease uuid, prev_seq bigint, prev_hash text, next_hash text)
+ RETURNS uuid LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog AS $$
+ SELECT helper_selection.stage_recovery_consume_internal(s,lease,prev_seq,prev_hash,next_hash,true)
+$$;
+REVOKE ALL ON FUNCTION helper_selection.stage_recovery_consume_internal(jsonb,uuid,bigint,text,text,boolean),helper_selection.restore_recovery_consume(jsonb,uuid,bigint,text,text) FROM PUBLIC;
+ALTER FUNCTION helper_selection.stage_recovery_consume_internal(jsonb,uuid,bigint,text,text,boolean) OWNER TO nx_lifecycle_sql_owner;
+ALTER FUNCTION helper_selection.restore_recovery_consume(jsonb,uuid,bigint,text,text) OWNER TO nx_lifecycle_sql_owner;
 CREATE FUNCTION helper_selection.stage_recovery_terminal(s jsonb, lease uuid, original_seq bigint, original_hash text, prev_seq bigint, prev_hash text, next_hash text, outcome text, evidence_hash text)
  RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE a core_dispatch.authorities%ROWTYPE; aid uuid; released uuid;
@@ -207,6 +296,7 @@ BEGIN
  IF NOT FOUND OR a.lifecycle_store_id IS NULL OR a.lifecycle_store_id IS DISTINCT FROM (s->>'storeId')::uuid OR
  a.lifecycle_sequence IS DISTINCT FROM prev_seq OR a.lifecycle_head IS DISTINCT FROM prev_hash OR next_hash IS NULL OR next_hash=prev_hash
  THEN RAISE EXCEPTION 'LIFECYCLE_ANCHOR_CAS_FAILED'; END IF;
+ PERFORM helper_selection.assert_recovery_writer_drained(aid,(s->>'deviceId')::uuid);
  UPDATE helper_selection.leases SET state='RELEASED',terminal_sequence=prev_seq+1,terminal_head=next_hash,terminal_evidence_sha256=evidence_hash,terminal_outcome=outcome
  WHERE id=lease AND authority_id=aid AND device_id=(s->>'deviceId')::uuid AND kind='RECOVERY' AND state='ACTIVE'
  AND lifecycle_scope=s AND consume_sequence=original_seq AND consume_head=original_hash RETURNING id INTO released;
@@ -233,7 +323,7 @@ ALTER FUNCTION helper_selection.lock_recovery_anchor(uuid) OWNER TO nx_lifecycle
 REVOKE ALL ON FUNCTION helper_selection.lock_recovery_anchor(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION helper_selection.lock_recovery_anchor(uuid) TO nx_lifecycle_consume,nx_lifecycle_reconcile;
 GRANT EXECUTE ON FUNCTION helper_selection.stage_recovery_consume(jsonb,uuid,bigint,text,text) TO nx_lifecycle_consume;
-GRANT EXECUTE ON FUNCTION helper_selection.stage_recovery_terminal(jsonb,uuid,bigint,text,bigint,text,text,text,text) TO nx_lifecycle_reconcile;
+GRANT EXECUTE ON FUNCTION helper_selection.stage_recovery_terminal(jsonb,uuid,bigint,text,bigint,text,text,text,text),helper_selection.restore_recovery_consume(jsonb,uuid,bigint,text,text) TO nx_lifecycle_reconcile;
 REVOKE ALL ON FUNCTION helper_selection.guard_lifecycle_admission(),helper_selection.guard_lifecycle_anchor(),helper_selection.guard_anchored_selection() FROM PUBLIC;
 -- Abort on unexpected default ACLs, mixed role membership or inherited raw
 -- writes for service principals that already exist at migration time. Repeat
@@ -246,18 +336,27 @@ BEGIN
   c:=pg_has_role(r.oid,'nx_lifecycle_consume','MEMBER');
   t:=pg_has_role(r.oid,'nx_lifecycle_reconcile','MEMBER');
   IF c AND t THEN RAISE EXCEPTION 'LIFECYCLE_SERVICE_ROLE_COLLISION'; END IF;
+  IF (c OR t) AND EXISTS(SELECT 1 FROM pg_catalog.pg_roles reachable WHERE reachable.oid<>r.oid
+    AND reachable.rolname NOT IN ('nx_lifecycle_consume','nx_lifecycle_reconcile')
+    AND pg_has_role(r.oid,reachable.oid,'MEMBER')) THEN RAISE EXCEPTION 'LIFECYCLE_SERVICE_SET_ROLE_REACHABILITY_DENIED'; END IF;
   IF (has_function_privilege(r.oid,'helper_selection.stage_recovery_consume(jsonb,uuid,bigint,text,text)','EXECUTE') AND NOT c)
    OR (has_function_privilege(r.oid,'helper_selection.stage_recovery_terminal(jsonb,uuid,bigint,text,bigint,text,text,text,text)','EXECUTE') AND NOT t)
    OR (has_function_privilege(r.oid,'helper_selection.lock_recovery_anchor(uuid)','EXECUTE') AND NOT (c OR t))
+   OR (has_function_privilege(r.oid,'helper_selection.restore_recovery_consume(jsonb,uuid,bigint,text,text)','EXECUTE') AND NOT t)
+   OR has_function_privilege(r.oid,'helper_selection.stage_recovery_consume_internal(jsonb,uuid,bigint,text,text,boolean)','EXECUTE')
   THEN RAISE EXCEPTION 'LIFECYCLE_UNEXPECTED_FUNCTION_ACL'; END IF;
   IF (c OR t) AND (r.rolcreaterole OR r.rolcreatedb OR r.rolreplication OR r.rolbypassrls
+   OR has_parameter_privilege(r.oid,'session_replication_role','SET')
    OR has_any_column_privilege(r.oid,'helper_selection.leases','INSERT,UPDATE')
    OR has_any_column_privilege(r.oid,'helper_selection.selections','INSERT,UPDATE')
    OR has_any_column_privilege(r.oid,'core_dispatch.authorities','INSERT,UPDATE')
    OR has_table_privilege(r.oid,'helper_selection.leases','DELETE,TRUNCATE,TRIGGER')
    OR has_table_privilege(r.oid,'helper_selection.selections','DELETE,TRUNCATE,TRIGGER')
    OR has_table_privilege(r.oid,'core_dispatch.authorities','DELETE,TRUNCATE,TRIGGER')
-   OR has_schema_privilege(r.oid,'helper_selection','CREATE') OR has_schema_privilege(r.oid,'core_dispatch','CREATE'))
+   OR has_schema_privilege(r.oid,'helper_selection','CREATE') OR has_schema_privilege(r.oid,'core_dispatch','CREATE')
+   OR has_schema_privilege(r.oid,'transfer_authority','CREATE')
+   OR EXISTS(SELECT 1 FROM (VALUES ('core_dispatch.grants'),('core_dispatch.claims'),('core_dispatch.broker_credentials'),('core_dispatch.claim_credentials'),('transfer_authority.grants'),('transfer_authority.jobs'),('transfer_authority.claims')) AS wt(tbl)
+      WHERE has_any_column_privilege(r.oid,wt.tbl,'INSERT,UPDATE') OR has_table_privilege(r.oid,wt.tbl,'DELETE,TRUNCATE,TRIGGER')))
   THEN RAISE EXCEPTION 'LIFECYCLE_SERVICE_DIRECT_PRIVILEGE_DENIED'; END IF;
  END LOOP;
 END $$;
