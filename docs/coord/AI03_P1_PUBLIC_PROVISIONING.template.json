@@ -1,0 +1,184 @@
+{
+  "version": 1,
+  "owner": {
+    "ownerAccountId": "",
+    "ownerEpoch": 0,
+    "deviceId": "",
+    "installationId": "",
+    "installationLineageId": "",
+    "enrollmentId": "",
+    "grantGeneration": 0,
+    "revokeEpoch": 0,
+    "windowsUserSid": "",
+    "mappingReceiptSha256": ""
+  },
+  "directory": {
+    "directoryId": "",
+    "generation": 0,
+    "directoryHead": "",
+    "registrationSha256": "",
+    "restoreEpoch": "",
+    "continuityReceiptSha256": ""
+  },
+  "authority": {
+    "authorityId": "",
+    "storeId": "",
+    "scheduledAuthorityId": "",
+    "scheduledStoreId": "",
+    "approvalAuthorityId": "",
+    "anchorReceiptSha256": ""
+  },
+  "enrollmentKey": {
+    "publicSpkiBase64": "",
+    "spkiSha256": "",
+    "registrationReceiptSha256": ""
+  },
+  "authenticator": {
+    "publicSpkiBase64": "",
+    "spkiSha256": "",
+    "registrationReceiptSha256": "",
+    "rpId": "",
+    "credentialId": ""
+  },
+  "signers": {
+    "recoveryAck": {
+      "publicSpkiBase64": "",
+      "spkiSha256": "",
+      "registrationReceiptSha256": "",
+      "serviceIdentity": "",
+      "custodyReceiptSha256": ""
+    },
+    "recoveryObserver": {
+      "publicSpkiBase64": "",
+      "spkiSha256": "",
+      "registrationReceiptSha256": "",
+      "serviceIdentity": "",
+      "custodyReceiptSha256": ""
+    },
+    "scheduledForward": {
+      "publicSpkiBase64": "",
+      "spkiSha256": "",
+      "registrationReceiptSha256": "",
+      "serviceIdentity": "",
+      "custodyReceiptSha256": ""
+    },
+    "scheduledRelease": {
+      "publicSpkiBase64": "",
+      "spkiSha256": "",
+      "registrationReceiptSha256": "",
+      "serviceIdentity": "",
+      "custodyReceiptSha256": ""
+    },
+    "coreDispatch": {
+      "publicSpkiBase64": "",
+      "spkiSha256": "",
+      "registrationReceiptSha256": "",
+      "serviceIdentity": "",
+      "custodyReceiptSha256": ""
+    },
+    "coreNativeObserver": {
+      "publicSpkiBase64": "",
+      "spkiSha256": "",
+      "registrationReceiptSha256": "",
+      "serviceIdentity": "",
+      "custodyReceiptSha256": ""
+    },
+    "helperObserver": {
+      "publicSpkiBase64": "",
+      "spkiSha256": "",
+      "registrationReceiptSha256": "",
+      "serviceIdentity": "",
+      "custodyReceiptSha256": ""
+    },
+    "ownerDirectory": {
+      "publicSpkiBase64": "",
+      "spkiSha256": "",
+      "registrationReceiptSha256": "",
+      "serviceIdentity": "",
+      "custodyReceiptSha256": ""
+    },
+    "restoreWitness": {
+      "publicSpkiBase64": "",
+      "spkiSha256": "",
+      "registrationReceiptSha256": "",
+      "serviceIdentity": "",
+      "custodyReceiptSha256": ""
+    },
+    "hostedVerifier": {
+      "publicSpkiBase64": "",
+      "spkiSha256": "",
+      "registrationReceiptSha256": "",
+      "serviceIdentity": "",
+      "custodyReceiptSha256": ""
+    }
+  },
+  "bindings": {
+    "recovery": {
+      "ownerAccountId": "",
+      "ownerEpoch": "",
+      "deviceId": "",
+      "installationLineageId": "",
+      "directoryHead": "",
+      "authorityId": "",
+      "storeId": "",
+      "ackSpkiSha256": "",
+      "observerSpkiSha256": ""
+    },
+    "scheduled": {
+      "ownerAccountId": "",
+      "ownerEpoch": "",
+      "deviceId": "",
+      "installationLineageId": "",
+      "directoryHead": "",
+      "authorityId": "",
+      "storeId": "",
+      "forwardSpkiSha256": "",
+      "releaseSpkiSha256": ""
+    },
+    "core": {
+      "ownerAccountId": "",
+      "ownerEpoch": "",
+      "deviceId": "",
+      "installationLineageId": "",
+      "directoryHead": "",
+      "authorityId": "",
+      "installationId": "",
+      "enrollmentId": "",
+      "issuerSpkiSha256": "",
+      "dispatchSpkiSha256": "",
+      "nativeObserverSpkiSha256": "",
+      "helperObserverSpkiSha256": "",
+      "directoryGeneration": 0,
+      "registrationSha256": "",
+      "approvalAuthorityId": "",
+      "grantGeneration": 0,
+      "revokeEpoch": 0,
+      "windowsUserSid": "",
+      "rpId": "",
+      "credentialId": "",
+      "authenticatorSpkiSha256": ""
+    }
+  },
+  "hostedVerifier": {
+    "origin": "",
+    "serverSpkiSha256": "",
+    "clientCertificateSha256": "",
+    "caCertificateSha256": "",
+    "principalRegistrationReceiptSha256": "",
+    "responseSignerSpkiSha256": "",
+    "principal": {
+      "role": "independent-enrollment-verifier",
+      "ownerAccountId": "",
+      "deviceId": "",
+      "installationId": ""
+    }
+  },
+  "publisher": {
+    "NEXOWIRE_WINDOWS_JOB_PUBLISHER_THUMBPRINT": "",
+    "NEXOWIRE_WINDOWS_JOB_SIGNER_SHA256": "",
+    "NEXOWIRE_WINDOWS_JOB_PUBLISHER_SUBJECT": "",
+    "NEXOWIRE_WINDOWS_JOB_ARTIFACT_SHA256": "",
+    "NEXOWIRE_WINDOWS_SIGNTOOL_PATH": "",
+    "signedArtifactReceiptSha256": ""
+  }
+}
