@@ -52,6 +52,16 @@ try {
     } finally {$ErrorActionPreference=$saved}
     @{Exit=$code;Lines=@($raw|ForEach-Object {$_.ToString()})}
   }
+  $controlFailures=@()
+  foreach($mode in @('--control-count-observer','--control-observer','--control-sha','--control-rng',
+    '--control-mapping','--control-pipes','--control-spawn','--control-spawn-extended')){
+    $run=Invoke-CustodyFixture $mode
+    $run.Lines|ForEach-Object {Write-Host "NX_INDEPENDENT $mode $_"}
+    if($run.Exit -ne 0){$controlFailures+=("$mode exit="+$run.Exit)}
+    elseif(@($run.Lines|Where-Object {$_ -ceq "NX_CONTROL_RESULT mode=$mode repetitions=8 stable=1 origin_retained=true production_authorized=false"}).Count -ne 1){
+      $controlFailures+=("$mode missing_exact_receipt")
+    }
+  }
   $coldRun=Invoke-CustodyFixture '--fixture-cold'
   $coldExit=$coldRun.Exit
   $cold=@($coldRun.Lines)
@@ -60,8 +70,10 @@ try {
   $exit=$controlRun.Exit
   $output=@($controlRun.Lines)
   $output|ForEach-Object {Write-Host $_}
+  if($controlFailures.Count){Write-Host ("NX_CONTROL_FAILURES "+($controlFailures -join '; '))}
   if($coldExit -ne 0 -and $coldExit -ne 19){throw "COLD_FIXTURE_FAILED exit=$coldExit"}
   if($exit -ne 0){throw "NATIVE_FIXTURE_FAILED exit=$exit"}
+  if($controlFailures.Count){throw 'INDEPENDENT_HANDLE_CONTROL_FAILED'}
   function Get-HandleDeltaSignature($lines,[string]$stage){
     $prefix='^NX_HANDLE_STAGE stage='+[regex]::Escape($stage)+' before=(\d+) after=(\d+) added=(\d+) removed=(\d+)$'
     $summary=@($lines|Where-Object {$_ -match $prefix})
