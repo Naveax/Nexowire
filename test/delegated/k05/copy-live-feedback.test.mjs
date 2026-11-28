@@ -104,7 +104,7 @@ async function exerciseCopyAfterOSSwitch(rejectClipboard) {
   const events = [];
   const pending = new Promise((resolve, reject) => { resolveCopy = resolve; rejectCopy = reject; });
   const controls = Object.fromEntries(['install-heading', 'install-description', 'download-installer',
-    'verify-installer', 'install-note', 'copy-status'].map(id => [id, { textContent: '' }]));
+    'verify-installer', 'install-note', 'copy-status', 'install-content'].map(id => [id, { textContent: '', setAttribute() {} }]));
   controls['install-command'] = { value: '', closest: () => ({ classList: { toggle(name, value) {
     assert.equal(name, 'hidden'); hidden = value;
   } } }), focus() { events.push('focus:hidden=' + hidden); }, select() { events.push('select:hidden=' + hidden); } };
@@ -133,4 +133,48 @@ test('W-609 SOURCE RED: late clipboard success must not announce in another OS p
 test('W-609 SOURCE RED: late clipboard rejection must not focus a hidden command', async () => {
   const actual = await exerciseCopyAfterOSSwitch(true);
   assert.deepEqual(actual, { feedback: '', events: ['copy:windows-command'] });
+});
+
+// W-609: selected OS tabs must expose a named installation panel.
+function installPanelNames(markup, source) {
+  const select = /function selectInstallOS\(os\) \{[\s\S]*?\n\}/.exec(source);
+  assert.ok(select, 'real OS selection function must exist');
+  const opening = /<[^>]+\bid=["']install-content["'][^>]*>/i.exec(markup)?.[0];
+  assert.ok(opening, 'installation panel must exist');
+  const attrs = new Map([...opening.matchAll(/\b(aria-label|aria-labelledby)\s*=\s*["']([^"']*)["']/gi)].map(m => [m[1], m[2]]));
+  const nodes = new Map();
+  const node = id => {
+    if (!nodes.has(id)) nodes.set(id, {textContent: '', setAttribute() {}, closest: () => ({classList: {toggle() {}}})});
+    return nodes.get(id);
+  };
+  const panel = node('install-content');
+  panel.setAttribute = (key, value) => attrs.set(key, value);
+  panel.getAttribute = key => attrs.get(key) ?? null;
+  const osNames = ['windows', 'macos', 'linux'];
+  const tabs = osNames.map(os => Object.assign(node('tab-' + os), {id:'tab-' + os,dataset:{os},textContent:os}));
+  const installers = Object.fromEntries(osNames.map(os => [os, {heading:os+' installation',command:''}]));
+  const context = vm.createContext({$:node, installers, document:{getElementById:node,
+    querySelectorAll:()=>tabs, querySelector:()=>({classList:{toggle(){}}})}});
+  vm.runInContext(select[0], context, {timeout:1000});
+  return osNames.map(os => {
+    vm.runInContext('selectInstallOS(' + JSON.stringify(os) + ')', context, {timeout:1000});
+    const refs = (attrs.get('aria-labelledby') ?? '').trim().split(/\s+/).filter(Boolean);
+    const validRefs = refs.filter(id => {
+      const exists = [...markup.matchAll(/\bid=["']([^"']+)["']/g)].some(m => m[1] === id);
+      return exists && (id.startsWith('tab-') ? id === 'tab-' + os : true);
+    });
+    return {os,named:refs.length ? validRefs.length === refs.length : Boolean((attrs.get('aria-label') ?? '').trim())};
+  });
+}
+
+test('W-609 SOURCE RED: installation tabpanel has an explicit valid accessible name across OS choices', () => {
+  assert.deepEqual(installPanelNames(html, js), ['windows','macos','linux'].map(os => ({os,named:true})));
+});
+
+test('W-609: selected-tab naming fixture passes and stale tab reference is rejected', () => {
+  const plain = '<button id="tab-windows">Windows</button><button id="tab-macos">macOS</button><button id="tab-linux">Linux</button><div id="install-content" role="tabpanel">';
+  const fixture = 'function selectInstallOS(os) {\n  $(\'install-content\').setAttribute(\'aria-labelledby\', \'tab-\' + os);\n}';
+  assert.ok(installPanelNames(plain, fixture).every(x => x.named));
+  const stale = fixture.replace("'tab-' + os", "'tab-windows'");
+  assert.deepEqual(installPanelNames(plain, stale).map(x=>x.named), [true,false,false]);
 });
