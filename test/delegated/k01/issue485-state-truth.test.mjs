@@ -263,7 +263,7 @@ test('T-257 owner candidate: terminal account error receives focus', {
 });
 
 test('T-259 OPEN NEGATIVE: empty success pairing fields must never navigate', {
-  skip: process.env.K01_RUN_OPEN_NEGATIVES !== '1' && 'unfixed on main and owner #1068',
+  skip: !ownerSourcePortedUx && process.env.K01_RUN_OPEN_NEGATIVES !== '1' && 'legacy source remains unfixed',
 }, async () => {
   // Pair one valid control with the negative, so a blanket refusal to pair
   // cannot make the negative gate pass after the owner-side fix.
@@ -342,7 +342,7 @@ test('T-398 owner candidate: terminal 403 differs from transient 503', {
 });
 
 test('T-398 OPEN NEGATIVE: 429 Retry-After should not be identical to 503 error', {
-  skip: process.env.K01_RUN_OPEN_NEGATIVES !== '1' && 'unfixed on main and owner #1068',
+  skip: !ownerSourcePortedUx && process.env.K01_RUN_OPEN_NEGATIVES !== '1' && 'legacy source remains unfixed',
 }, async () => {
   const limited = await boot({ query: search(), pairing: async () =>
     Response.json({ error: 'RATE_LIMITED' }, { status: 429, headers: { 'Retry-After': '15' } }) });
@@ -352,6 +352,15 @@ test('T-398 OPEN NEGATIVE: 429 Retry-After should not be identical to 503 error'
   await unavailable.get('approve').dispatch('click');
   assert.equal(limited.navigations.length, 0);
   assert.equal(unavailable.navigations.length, 0);
+  if (terminalPostContract) {
+    assert.match(limited.get('error-message').textContent, /15 saniye bekle/);
+    assert.match(unavailable.get('error-message').textContent, /HTTP 503/);
+    for (const f of [limited, unavailable]) {
+      assert.equal(f.get('approve').disabled, true);
+      await f.get('approve').dispatch('click');
+      assert.equal(f.requests.filter(({ path }) => path === '/api/v1/pairing').length, 1);
+    }
+  }
   assert.notEqual(limited.get('error-message').textContent,
     unavailable.get('error-message').textContent,
     '429 has Retry-After but currently shows the same generic error as HTTP 503');
@@ -574,7 +583,7 @@ test('W-423 #485: 200 null guard or owner fix preserves valid pairing', {
 });
 
 test('T-539 OPEN NEGATIVE: synthetic failed fetch must not disclose a token in the error panel', {
-  skip: process.env.K01_RUN_OPEN_NEGATIVES !== '1' && 'owner displays raw fetch error.message',
+  skip: !ownerSourcePortedUx && process.env.K01_RUN_OPEN_NEGATIVES !== '1' && 'legacy source displays raw fetch error.message',
 }, async () => {
   const secret = 'nxw-fixture-SECRET-uzun-秘密-🪿-' + 'a'.repeat(120);
   const f = await boot({ query: search(), pairing: async () => {
@@ -588,7 +597,7 @@ test('T-539 OPEN NEGATIVE: synthetic failed fetch must not disclose a token in t
 });
 
 test('D-003 #539 OPEN NEGATIVE: expired pairing session 401 must differ from service outage 503', {
-  skip: process.env.K01_RUN_OPEN_NEGATIVES !== '1' && 'owner #1068 handles pairing 401 as a generic retryable 503',
+  skip: !ownerSourcePortedUx && process.env.K01_RUN_OPEN_NEGATIVES !== '1' && 'legacy source conflates 401 and 503',
 }, async () => {
   const expired = await boot({ query: search(), pairing: async () =>
     Response.json({ error: 'SESSION_EXPIRED' }, { status: 401 }) });
@@ -599,6 +608,12 @@ test('D-003 #539 OPEN NEGATIVE: expired pairing session 401 must differ from ser
   assert.equal(expired.navigations.length, 0);
   assert.equal(outage.navigations.length, 0);
   assert.equal(expired.get('connect-pill').textContent, 'Hata');
+  if (terminalPostContract) {
+    assert.match(expired.get('error-message').textContent, /Oturumun sona erdi/);
+    assert.match(outage.get('error-message').textContent, /HTTP 503/);
+    assert.equal(expired.get('approve').disabled, true);
+    assert.equal(outage.get('approve').disabled, true);
+  }
   assert.notEqual(expired.get('error-message').textContent,
     outage.get('error-message').textContent,
     'session expiration needs an actionable login/session explanation, not a transient-service message');
