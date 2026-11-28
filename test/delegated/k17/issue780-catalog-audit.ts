@@ -1,11 +1,12 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { parseSkillManifest } from '../../../src/skills/manifest.js';
 
 export interface CatalogueFinding {
   directory: string;
   code: 'missing-manifest' | 'symlink-entry' | 'symlink-manifest' |
     'duplicate-field' | 'identity-mismatch' | 'platform-unknown' |
-    'unsupported-platform-claim' | 'unknown-metadata-key';
+    'unsupported-platform-claim' | 'unknown-metadata-key' | 'invalid-manifest';
   detail: string;
 }
 
@@ -44,6 +45,12 @@ function unquote(value: string): string {
 /** Only explicit text claims are checked; platform mentions alone are not promises. */
 export function auditManifestText(directory: string, markdown: string): CatalogueFinding[] {
   const findings: CatalogueFinding[] = [];
+  // Keep syntax/value rejection aligned with the actual runtime parser.
+  try {
+    parseSkillManifest(markdown, directory);
+  } catch {
+    findings.push({ directory, code: 'invalid-manifest', detail: 'Runtime manifest parser rejected this skill' });
+  }
   const lines = markdown.replace(/^\uFEFF/, '').split(/\r?\n/);
   const ending = lines[0]?.trim() === '---'
     ? lines.findIndex((line, i) => i > 0 && line.trim() === '---')
