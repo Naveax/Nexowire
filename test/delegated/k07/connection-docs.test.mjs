@@ -134,6 +134,14 @@ test('platform descriptions do not present unverified Linux/macOS as Windows boo
     /confirm that the previously approved exposure is still intended/.test(guide);
   assert.equal(resumeExposureContract(firstRun), true);
   assert.equal(resumeExposureContract(firstRun.replace('does not revoke it', 'revokes it')), false);
+  // Resuming must not silently imply that a previously selected root list is retained.
+  assert.match(bootstrap, /options\.allowedRoots\?\.length\s*\?\s*options\.allowedRoots\.map\(\(entry\) => path\.resolve\(entry\)\)\s*:\s*\[homeDir\]/);
+  const resumeRootsContract = (guide) =>
+    /This default also applies on resume/.test(guide) &&
+    /the previous explicit root list is not restored/.test(guide) &&
+    /omitting them may broaden access to the entire user home/.test(guide);
+  assert.equal(resumeRootsContract(firstRun), true);
+  assert.equal(resumeRootsContract(firstRun.replace('is not restored', 'is restored')), false);
   const preflight = section(doc, '### Core setup versus optional environment tools');
   assert.match(preflight, /node --import tsx scripts\/run-environment-doctor\.ts --tool=node:22/);
   assert.match(preflight, /NOT_TESTED.*physical USB, phone, gamepad or VM acceptance/);
