@@ -154,3 +154,24 @@ test('P013: every platform in an explicit support list is checked, not only the 
   assert.deepEqual(auditManifestText('offline-audit', markdown('offline-audit', 'linux', 'Inspects Windows logs from Linux.')), []);
   assert.deepEqual(auditManifestText('offline-audit', markdown('offline-audit', 'linux,win32,darwin', 'Supports Linux, Windows, and macOS.')), []);
 });
+
+test('P013: runtime-rejected manifests cannot pass catalogue QA silently', () => {
+  const base = markdown('offline-audit');
+  const invalid = [
+    base.replace('platforms: linux', 'platforms: windows'),
+    base.replace('version: 0.1', 'version: bad'),
+    base.replace('requires: files.read', 'requires: files.read\ntags: bad tag'),
+    base.replace('requires: files.read', 'requires: files.read\nprefers: files.read'),
+  ];
+  for (const source of invalid) {
+    assert.throws(() => parseSkillManifest(source, 'offline-audit'));
+    assert.deepEqual(auditManifestText('offline-audit', source).map((finding) => finding.code), [
+      'invalid-manifest',
+    ]);
+  }
+  assert.doesNotThrow(() => parseSkillManifest(base, 'offline-audit'));
+  assert.deepEqual(auditManifestText('offline-audit', base), []);
+  assert.deepEqual(auditManifestText('offline-audit', base.replace('platforms: linux\n', '')).map((finding) => finding.code), [
+    'platform-unknown',
+  ]);
+});
