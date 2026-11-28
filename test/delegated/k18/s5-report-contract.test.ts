@@ -83,6 +83,18 @@ test('T-108/W-683/W-684 invalid RSS, fairness, reservation and duplicate evidenc
   assert.throws(()=>summarizeS5ScenarioResults([{
     ...standard,rpc:{...standard.rpc,reserved:standard.rpc.attempted+1},
   }]),/Invalid or non-monotonic scenario measurement/);
+  // The synthetic load generator creates at most one simultaneous socket per client.
+  const two=sample(2,2);
+  for(const peak of [3,Number.MAX_SAFE_INTEGER]){
+    assert.throws(()=>summarizeS5ScenarioResults([{
+      ...two,sockets:{...two.sockets,peak},
+    }]),/Invalid or non-monotonic scenario measurement/);
+  }
+  for(const peak of [1,2]){
+    assert.equal(summarizeS5ScenarioResults([{
+      ...two,sockets:{...two.sockets,peak},
+    }]).scenarios[0]?.peakSockets,peak);
+  }
   for(const jainIndex of [0,0.5,1]){
     const result=summarizeS5ScenarioResults([{
       ...standard,fairness:{...standard.fairness,jainIndex},

@@ -31,7 +31,7 @@ export function summarizeS5ScenarioResults(results:readonly S5LoadResult[]){
     const finite=(n:number)=>Number.isFinite(n)&&n>=0;
     const {p50,p95,p99,max}=r.latencyMs;
     if(!integer(r.clients)||r.clients===0||!integer(r.rpc.attempted)||
-      !integer(r.rpc.reserved)||r.rpc.reserved>r.rpc.attempted||!integer(r.sockets.peak)||
+      !integer(r.rpc.reserved)||r.rpc.reserved>r.rpc.attempted||!integer(r.sockets.peak)||r.sockets.peak>r.clients||
       !integer(r.rpc.backpressure)||!finite(r.elapsedMs)||
       !integer(r.memoryBytes.rssPeak)||!finite(r.fairness.jainIndex)||
       r.fairness.jainIndex>1||
