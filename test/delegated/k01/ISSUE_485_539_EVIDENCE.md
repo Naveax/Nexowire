@@ -1,0 +1,692 @@
+# K01 — Issue #485 / #539 R01-R11 source-only evidence (7 Nov 2026)
+
+## P004 T-255: exact source comparison
+
+| Source | HEAD | `web/connect.js` blob | `web/connect.html` blob |
+| --- | --- | --- | --- |
+| `Naveax/main` | `4e7db16f4233048a956664bef6b607781eb63fb7` | `a417a2715333ab555cbda25d1b3c020aa19d8b6a` | `8810145a37d25dcb3d6eef89b93161228a6edf7a` |
+| [Draft #1011](https://github.com/Naveax/Nexowire/pull/1011) | `6e740dfe919e5f615655f68815b078447915ce6f` | `5618fd2a8a1bdfcd5d7e1a2ef7db688b8ed3eda1` | `1fdbe1c4d3e8cf92a3dbaddc06ecb7dbbcaa6c24` |
+| [Owner Draft #1068](https://github.com/Naveax/Nexowire/pull/1068) | `94d38799e9e4b50fe84f7924e6fc84f90aeba090` | `5618fd2a8a1bdfcd5d7e1a2ef7db688b8ed3eda1` | `1fdbe1c4d3e8cf92a3dbaddc06ecb7dbbcaa6c24` |
+
+Owner #1068 also includes the exact #1011 `test/delegated/k01/connect-state.test.ts`
+blob `3a8ea6a60c0896021a4dce3d28d62ab4efe52bdb`. Those paths are
+already owned by an unmerged coordinator PR. **Do not update them from K01.**
+
+Main still exposes these presentation gaps: quota/403 maps to an enabled
+TEKRAR DENE; the terminal account error receives no explicit focus; MCP
+discovery timeout and aborted request share a generic failure message. The
+candidate owner version changes these behaviors, but remains Draft and is
+not accepted on `main`. This is a source difference, **not** physical proof.
+
+## T-256…T-259: additive, independent negative tests
+
+New file `issue485-state-truth.test.mjs` uses offline `node:vm`, stubbed DOM
+and synthetic `fetch`, with **no** live Hub, Agent, OAuth or device. It tests:
+
+- dashboard 500/503 and 401 never issue a pairing POST or show connected;
+- dashboard 200 means only `Hazır`/approval, even with an offline device in
+  the fixture, never proof of a remote Agent connection;
+- in-flight double-click issues one POST; rejected retry is serial;
+- metadata 503, invalid address, timeout and abort never enable guessed MCP URL;
+- unsafe/non-loopback callbacks never request dashboard or pairing;
+- malformed successful-looking pairing data never navigates/claims success.
+
+Reproduce on pinned `main`:
+
+```sh
+node --test test/delegated/k01/issue485-state-truth.test.mjs
+```
+
+Results on `main@4e7db16` with Node 24.22.1: **7/7 PASS**.
+Also tested against owner PR #1068 exact HEAD by fetching the PR into
+`FETCH_HEAD` and running:
+
+```sh
+K01_CONNECT_REF=FETCH_HEAD node --test test/delegated/k01/issue485-state-truth.test.mjs
+```
+
+Result: **7/7 PASS**. `git rev-parse FETCH_HEAD` was verified equal to
+`94d38799e9e4b50fe84f7924e6fc84f90aeba090` in this run.
+
+## T-257 owner gates and T-259 new negative (adım 4)
+
+Added three opt-in tests with visible `skip` markers in the default suite.
+This keeps known-unfixed source behavior from becoming a false green while
+providing an executable red test for a future owner fix.
+
+1. On owner #1068, `K01_EXPECT_OWNER_VERSION=1 K01_CONNECT_REF=FETCH_HEAD
+   node --test test/delegated/k01/issue485-state-truth.test.mjs` yielded
+   **9 PASS / 1 SKIP / 0 FAIL**. The two extra owner-only gates checked
+   quota `403` disables retry and terminal account errors focus the alert.
+2. **Confirmed source gap**, in current main **and** owner #1068:
+   `web/connect.js` validates only that `body.pairingId` and `body.token`
+   have JavaScript type `string`. Empty `pairingId`, empty `token`, and
+   both empty, and whitespace-only values still trigger a loopback callback
+   navigation after HTTP 200.
+   That is a false accepted-response boundary, *not* evidence that server
+   issues empty credentials or that an attacker exploited it.
+3. Run the opt-in negative with
+   `K01_RUN_OPEN_NEGATIVES=1 node --test
+   test/delegated/k01/issue485-state-truth.test.mjs`.
+   Against **main** and **#1068**, result **7 PASS / 2 SKIP / 1 FAIL**;
+   the failing assertion enumerates all five blank-field variants. This
+   result is **FAIL, not PASS**. The normal suite reports
+   **7 PASS / 3 SKIP / 0 FAIL**.
+
+Smallest proposed owner-side fix: reject blank or whitespace-only
+`pairingId`/`token` strings before callback navigation, with HTTP 200
+negative test coverage. K01 does not patch `web/connect.js` while owner
+#1068 controls that path. Existing validation of callback origin, state
+and device identity must remain intact.
+
+## P005 T-395…T-398 — paired controls and additional source evidence (8 Nov 2026)
+
+Upstream `main@b5a3f8840517d65ecbd6a018699c4c8bdde09987` contains
+the unchanged `web/connect.js` blob `a417a2715333ab555cbda25d1b3c020aa19d8b6a`;
+the active owner [#1068](https://github.com/Naveax/Nexowire/pull/1068)
+remains Draft at `94d38799e9e4b50fe84f7924e6fc84f90aeba090` with blob
+`5618fd2a8a1bdfcd5d7e1a2ef7db688b8ed3eda1`. No owner source code
+was changed by this PR.
+
+### T-395: one positive, five negative payloads
+
+The opt-in negative **first** verifies a fully specified HTTP 200 pairing
+response (`pairingId='pair-395', token='value-395'`) yields exactly one
+127.0.0.1 callback containing the expected `state`, ID and token. It then
+requires **zero** callback navigations and an explicit error for each of
+five invalid cases: empty ID, empty token, both empty, whitespace ID and
+whitespace token. The five cases still **FAIL** on both main and #1068.
+This pairing of a valid control and invalid controls guards against the
+misleading workaround of blocking all callback navigation.
+
+Minimal owner recommendation, immediately after `const body = await pairing.json()`:
+
+```js
+if (!body ||
+    typeof body.pairingId !== 'string' || !body.pairingId.trim() ||
+    typeof body.token !== 'string' || !body.token.trim()) {
+  throw new Error('Bağlantı cevabı geçersiz.');
+}
+```
+
+The blank-string source gap is **not** a demonstrated live Hub behavior or
+an authorization exploit. #1068 owner must decide whether to apply the
+source fix, then turn the gated test into a regular required regression.
+
+### T-396: stale dashboard 401 versus pairing
+
+In the real `connect.js` control flow, `loadAccount()` **awaits** the
+dashboard response before attaching the click handler. A delayed 401
+fixtures the original button as disabled, then redirects to GitHub auth
+without any pairing POST or click handler. **PASS for this narrow single-page
+race**, not proof of cross-tab or live network sequencing.
+
+### T-397: callback authority and missing context
+
+Seven negative query fixtures reject lookalike hosts, user-info callback
+URLs, wrong callback path and absent state/device identity/name. None
+performs dashboard or pairing requests, navigates, or claims connected.
+**PASS source/VM**. Real loopback listener identity/provenance cannot be
+proved by this browser page; actual device approval is **NOT_RUN**.
+
+### T-398: 403/429/503 semantic distinction
+
+On owner #1068, device quota HTTP 403 disables retry with a specific
+message, unlike generic 503 (**owner-only PASS**). A new opt-in **RED**
+fixture shows both HTTP 429 with `Retry-After: 15` and 503 produce the exact
+same generic `Bağlantı hazırlanamadı.` message. No observed 429 delay is
+communicated. This is a **source/UI communication gap**, not evidence that
+the upstream endpoint currently emits a 429; only owner #1068 may alter
+`web/connect.js` before merge. Suggest a distinct rate-limit message,
+honoring bounded server Retry-After semantics in the owner design.
+
+### Commands and observed outcomes
+
+```sh
+node --test test/delegated/k01/issue485-state-truth.test.mjs
+# main: 14 tests / 9 PASS / 5 SKIP / 0 FAIL
+K01_CONNECT_REF=FETCH_HEAD K01_EXPECT_OWNER_VERSION=1 node --test test/delegated/k01/issue485-state-truth.test.mjs
+# owner #1068: 14 tests / 12 PASS / 2 SKIP / 0 FAIL
+K01_RUN_OPEN_NEGATIVES=1 node --test test/delegated/k01/issue485-state-truth.test.mjs
+# main: 9 PASS / 3 SKIP / 2 FAIL (T-395 and T-398 remain RED)
+K01_CONNECT_REF=FETCH_HEAD K01_RUN_OPEN_NEGATIVES=1 node --test test/delegated/k01/issue485-state-truth.test.mjs
+# owner: 9 PASS / 3 SKIP / 2 FAIL (same RED)
+```
+
+The previous #1114 HEAD `3808997566139a56bb6f60f479932c91451e600b`
+has [CI run 42411724295](https://github.com/Naveax/Nexowire/actions/runs/42411724295)
+**completed/success** (seven jobs). However upstream `.github/workflows/ci.yml`
+does **not** explicitly execute `test/delegated/k01/issue485-state-truth.test.mjs`,
+and its `npm test` path discovers `.test.ts`, not nested `.test.mjs`. Thus
+the **new K01 test itself was NOT_RUN in hosted CI**, despite an overall
+green CI status; the offline commands above were executed locally. The
+new commit needs its own exact-HEAD CI assessment. No existing run was
+manually restarted.
+
+**Limits:** Tests are independent source contracts, not actual disconnected
+device health/reconnect/UNKNOWN lifecycle acceptance. T-256 and T-257 remain
+partial for physical/UI semantics; T-258 and narrow T-259 are offline-covered.
+Issue #485's signed installer, native pairing/recovery and #539's multi-layer
+error-origin contract remain separate protected owner work.
+
+## P006 T-535…T-539 — same-source RED / proposal GREEN (8 Nov 2026)
+
+**Source provenance:** upstream main now
+`52d452f717d891eeaf4c2b9aff3c6e1ea68369b0`; UI `web/connect.js`
+retains blob `a417a2715333ab555cbda25d1b3c020aa19d8b6a`.
+Owner Draft [#1068](https://github.com/Naveax/Nexowire/pull/1068)
+remains at `94d38799e9e4b50fe84f7924e6fc84f90aeba090` with UI blob
+`5618fd2a8a1bdfcd5d7e1a2ef7db688b8ed3eda1`.
+
+**T-535:** The actual owner `connect.js` receives a synthetic blank
+`pairingId`/`token` HTTP 200 response; original source navigates (RED).
+The test then runs an **in-memory replacement only** requiring
+`!value.trim()`; the blank results show `Hata` without navigation, and a
+valid ID/token still navigates (candidate GREEN). No owner source file
+changed; no production fix or device acceptance is claimed.
+
+**T-536:** 429 with `Retry-After: 15` still presents exactly the same
+generic message as 503 (RED). A test-only in-memory candidate adds a
+different rate-limit message with a bounded 15-second display hint and
+leaves 503 generic (candidate GREEN). No actual retry timing or server
+rate limiting was changed; owner #1068 chooses final behavior.
+
+**T-537:** GitHub's latest release is
+[v1.0.8](https://github.com/Naveax/Nexowire/releases/tag/v1.0.8),
+but the connection screen intentionally pins installer commit
+`96315d5dd4986fffbd24a96859309271d2a88ffe`. Its
+`installers/Nexowire-Setup.cmd` blob
+`8f7880123a0e21e345fcd1d9299514a0cc965c2b` explicitly sets
+`NX_VERSION=1.0.7` and downloads v1.0.7. UI CTA says v1.0.7 and
+does not claim to install v1.0.8/latest (**PASS source/VM**).
+K06 documentation can clarify pinned tested installer versus latest
+release; modifying installer binaries is release-owner work.
+
+**T-538:** A successful synthetic POST holds the in-page click handler
+busy while callback navigation is requested; a second click yields no
+second POST or navigation (**PASS source/VM**). Actual out-of-order
+responses across sessions, tabs or live requests are **NOT_RUN**.
+
+**T-539, new opt-in RED:** A synthetic fetch rejection containing a long
+Unicode fixture token is directly exposed in
+`error-message.textContent` via raw caught `error.message`, on both main
+and #1068. This source-level display gate **FAILS**. It does **not**
+prove that native browser fetch errors or live backend replies include
+tokens. Owner can map known actionable exceptions to user-safe messages
+and use a generic fallback for unexpected diagnostic details; K01 may
+not modify auth, tokens, logging or owner web source.
+
+### Repeatable local commands and results
+
+```sh
+node --test test/delegated/k01/issue485-state-truth.test.mjs
+# main: 19 tests / 13 PASS / 6 SKIP / 0 FAIL
+K01_CONNECT_REF=FETCH_HEAD K01_EXPECT_OWNER_VERSION=1 node --test test/delegated/k01/issue485-state-truth.test.mjs
+# owner #1068: 19 tests / 16 PASS / 3 SKIP / 0 FAIL
+K01_RUN_OPEN_NEGATIVES=1 node --test test/delegated/k01/issue485-state-truth.test.mjs
+# main: 13 PASS / 3 SKIP / 3 FAIL (blank pairing, 429, raw error token)
+K01_CONNECT_REF=FETCH_HEAD K01_RUN_OPEN_NEGATIVES=1 node --test test/delegated/k01/issue485-state-truth.test.mjs
+# owner #1068: 13 PASS / 3 SKIP / 3 FAIL (same three)
+```
+
+Previous exact HEAD `25f505f0fa36d52ec3ea0c23674a1d92de4a2df9`
+had [seven-job CI success](https://github.com/Naveax/Nexowire/actions/runs/42473583303).
+However the K01 nested `.test.mjs` is **not selected by the required CI**;
+new fixtures were run locally, **hosted NOT_RUN** unless an explicit
+per-file runner proves execution on exact HEAD. Real Windows/Agent/Hub,
+browser screenshots, device pairing/loopback listener **NOT_RUN**.
+
+## P007 D-001…D-006 — PR consolidation evidence (8 Nov 2026)
+
+**PR inventory and path ownership (D-001).** Source PR
+[#1011](https://github.com/Naveax/Nexowire/pull/1011)
+exact HEAD `6e740dfe919e5f615655f68815b078447915ce6f`
+has four changed paths. All **four** file blobs are **byte-identical**
+to owner Draft [#1068](https://github.com/Naveax/Nexowire/pull/1068)
+HEAD `94d38799e9e4b50fe84f7924e6fc84f90aeba090`:
+
+| Path | Matching SHA in both PR heads |
+| --- | --- |
+| `web/connect.js` | `5618fd2a8a1bdfcd5d7e1a2ef7db688b8ed3eda1` |
+| `web/connect.html` | `1fdbe1c4d3e8cf92a3dbaddc06ecb7dbbcaa6c24` |
+| `test/delegated/k01/connect-state.test.ts` | `3a8ea6a60c0896021a4dce3d28d62ab4efe52bdb` |
+| `test/delegated/k01/ACCEPTANCE.md` | `f1af623799d264fbaf79bee9d12788fa8194ef41` |
+
+Therefore **#1011 has no unique content to preserve by copying files**.
+Its standalone merge would conflict with #1068 web ownership. Preserve
+the owner-integrated blobs and keep the distinct #1114 negative tests
+on the existing #1114 branch. Recommend **closing redundant Draft #1011
+only after owner/ŞEF confirmation**, not unilateral closure or merge.
+
+**D-002:** Both current main `52d452f717d891eeaf4c2b9aff3c6e1ea68369b0`
+and owner #1068 (exact SHA above) still present three source-level
+RED gates: blank pairingId/token, 429 vs 503 identical error text, and
+raw exception text in DOM. Their associated test-only in-memory proposals
+are GREEN for the narrow stimuli; no owner source was changed.
+
+**D-003, new RED:** The original owner `connect.js` completes dashboard
+200 then, if the pairing POST returns **401 SESSION_EXPIRED**, shows
+the identical generic `Bağlantı hazırlanamadı.` retry text as a 503
+service outage. Its 403 quota denial *does* get a terminal message
+with retry disabled in owner #1068. A new opt-in test enforces that 401
+and 503 explain different user actions: it **FAILS** on main and owner.
+The appropriate login/expired-session decision is auth-owner work;
+K01 only supplies UI evidence and no auth flow changes.
+
+**D-004, actual hosted CI:** #1011 HEAD `6e740df` had
+[run 41337712422](https://github.com/Naveax/Nexowire/actions/runs/41337712422)
+`completed/action_required` and **zero jobs**; this is NOT_PASS.
+#1114 prior HEAD `0366113952f8a006432a3370ffc4933fc4c9f40d`
+had [run 42485193172](https://github.com/Naveax/Nexowire/actions/runs/42485193172)
+`completed/success`, seven jobs; nevertheless required CI workflow blob
+`90185b6f4297bc3e4feaca44817ed6a8248bd4be` does not call
+`test/delegated/k01/issue485-state-truth.test.mjs` or even its directory.
+Thus **K01's new .mjs is hosted NOT_RUN**. K13 owns auxiliary test
+discovery; upstream ci.yml remains owner #1096.
+
+**D-005, exact owner request:** on `web/connect.js` blob `5618fd2a`:
+
+1. Reject empty/whitespace pairingId and token strings (the test already
+   proves valid pairing continues to navigate after candidate validation).
+2. Give 429 with valid bounded Retry-After distinct, actionable text
+   from 503, keeping terminal 403 distinct.
+3. Pairing 401 should offer a session-expiry or reauthentication path,
+   rather than suggesting another identical transient-service retry.
+4. Do not copy unexpected exception diagnostics verbatim to the DOM;
+   preserve user-facing known errors and generic fallback for unknowns.
+
+These are **proposals**, not source changes or claims that live services
+sent the synthetic payloads.
+
+**D-006 acceptance/closure recommendation:** #1114 remains Draft with
+intentional failing opt-in tests, hosted test discovery NOT_RUN, and
+real keyboard/375-768px screenshots/Windows/two-device/onboarding
+NOT_RUN. Retain #1114 until owner fixes plus exact-source tests and
+CI discovery are verified; do not merge or close issue #485/#539.
+For #1011, get owner/ŞEF signoff to close it as redundant once #1068
+will carry the identical four blobs. No unilateral PR closure.
+
+New local test totals: main **20 tests / 13 PASS / 7 SKIP**; owner
+**20 / 16 PASS / 4 SKIP**. Opt-in RED main and owner **13 PASS / 3 SKIP /
+4 FAIL** (pairing blanks, 429, raw exception, pairing 401). Host exact
+HEAD for any following commit must be checked again; no rerun of existing
+same-SHA workflows.
+
+## D-005 follow-up — reproducible UI fallback candidate (8 Nov 2026)
+
+After the P007 duplicate-PR audit, two further **in-memory-only** source
+proposals were exercised on pinned main and owner #1068:
+
+1. **Pairing POST 401** is genuinely identical to 503 in the original
+   source. The candidate displays a session-expiry and re-login hint for
+   401, while leaving the 503 message unchanged. This is only a message
+   example, **not** an auth/session change or proof that a live 401 occurs.
+   Authorization behavior remains with its owner.
+2. **Unexpected exception text** can contain a synthetic token, which is
+   copied into the DOM by the original catch handler. The candidate
+   preserves four known user-safe messages, sends an unexpected diagnostic
+   to a generic user message and does not copy the fixture secret into the
+   DOM. It is a narrow sample policy, not a production allowlist or
+   security review. Owner must review future error contracts.
+
+The two tests assert original source **RED in behavior**, proposed source
+**GREEN in the VM**, and do not write any `web/connect.js` content.
+No auth tokens, backend data, release or protected source were modified.
+
+```sh
+node --test test/delegated/k01/issue485-state-truth.test.mjs
+# main 22 tests: 15 PASS / 7 SKIP / 0 FAIL
+K01_CONNECT_REF=FETCH_HEAD K01_EXPECT_OWNER_VERSION=1 node --test test/delegated/k01/issue485-state-truth.test.mjs
+# owner 22 tests: 18 PASS / 4 SKIP / 0 FAIL
+K01_RUN_OPEN_NEGATIVES=1 node --test test/delegated/k01/issue485-state-truth.test.mjs
+# main 15 PASS / 3 SKIP / 4 FAIL (the original 4 owner gaps)
+K01_CONNECT_REF=FETCH_HEAD K01_RUN_OPEN_NEGATIVES=1 node --test test/delegated/k01/issue485-state-truth.test.mjs
+# owner 15 PASS / 3 SKIP / 4 FAIL (same gaps)
+```
+
+Previous HEAD `e539348e209cd007d4e094a4eca99d49aebe7945`
+[CI run 42500485458](https://github.com/Naveax/Nexowire/actions/runs/42500485458)
+finished **success** for seven generic jobs, but still did not select
+the nested K01 `.test.mjs`. Explicit hosted K01 test invocation remains
+**NOT_RUN**; source fix, owner signoff and real browser are pending.
+
+## T-260: real browser attempt and blocker
+
+`browser-capture.mjs` serves the three web source files through an isolated
+127.0.0.1-only fixture and tries Chromium headless screenshots for install,
+ready and error across 375px/768px/desktop. No real credentials or Agent.
+
+In the current Linux execution environment Chromium 156 failed before page
+load: `singleton_posix.cc:297 Check failed: . socket() failed: Operation not permitted (1)`;
+therefore **zero screenshots / real browser focus / viewport acceptance**.
+Do not treat successful Node VM tests as browser PASS. A permitted Chromium
+runner or independent K10 browser environment is needed for T-260.
+
+## P008 / K01 R-001..R-006 source audit (12 Nov 2026)
+
+- Exact source pin: upstream `Naveax/main@52d452f717d891eeaf4c2b9aff3c6e1ea68369b0` (unchanged from P007); owner `#1068@94d38799e9e4b50fe84f7924e6fc84f90aeba090` (unchanged); current #1114 previous HEAD `edd73b575fdbe1eb38f8b47b43a098a1aa35e957` (unchanged before the R-001 edit).
+- #1011 and owner #1068 remain byte-for-byte identical for four changed files: `web/connect.js` 5618fd2a, `web/connect.html` 1fdbe1c4, `test/delegated/k01/connect-state.test.ts` 3a8ea6a6, `test/delegated/k01/ACCEPTANCE.md` f1af6237. #1114 remains independent (three new paths: evidence, browser-capture and source-VM test) and its test paths are not on main. Branch compare vs fork main: 11 commits ahead / 2 behind, **not a merge clearance**.
+- Exact #1114 previous HEAD `edd73b575fdbe1eb38f8b47b43a098a1aa35e957` has workflow run [42514666903](https://github.com/Naveax/Nexowire/actions/runs/42514666903), 7/7 generic jobs completed/success; test(22) job 128834971425 and test(24) job 128834971418 logs inspected. Their explicit delegated commands include K05/K07/K08/K06 and **not** `test/delegated/k01/issue485-state-truth.test.mjs`. Browser-live job 128834971304 runs the generic `test/browser-live.test.ts`, not this K01 fixture. Therefore **hosted K01 test NOT_RUN**. #1011 run 41337712422 has 0 jobs, not PASS. No dispatch/rerun.
+- Actual owner source still accepts whitespace-only `pairingId`/`token`; does not distinguish 429 from 503 or 401 from 503 in pairing POST; and displays raw caught error text. These are four previously documented synthetic VM negatives, not claims of actual provider/session leak in a live service. Owner source `web/connect.js@5618fd2a8a1bdfcd5d7e1a2ef7db688b8ed3eda1` must be corrected by #1068 owner. Suggested minimal patch: validate nonempty trimmed pairing fields; make 429 bounded `Retry-After` message distinct; give 401 an actionable session explanation; map unknown errors to a safe generic UI message rather than rendering arbitrary diagnostics.
+- New K01-only negative fixture `R-001 #539: malformed Retry-After values do not become a misleading wait hint` adds six malformed/missing headers (null, negative, zero, fractional, excessive and untrusted text) against the existing **in-memory candidate**, preserving T-536's valid 15-second case. Commit `1fc5409b593aa9efde66e7d3b579b7cf519d68af` on existing `k01/issue485-state-truth` branch. **New test execution NOT_RUN**: repository environment cannot be cloned through current container network, no actual Node test run or exact-new-HEAD CI proof. Candidate checks are written, not declared PASS. No production web source, authorization, workflow, release or native files changed.
+- Real Chrome/375px/768px screenshots, keyboard, Windows, Hub/Agent, OAuth and two-device pairing remain **NOT_RUN**. Issue #485/#539 remain open; #1114 and #1011 remain Draft, no merge/closure.
+
+
+## P012 / W-421…W-426 — 19 Nov owner-port verification
+
+**Current boundaries.** Upstream `Naveax/main` is still `52d452f717d891eeaf4c2b9aff3c6e1ea68369b0`.
+Owner integration [#1160](https://github.com/Naveax/Nexowire/pull/1160)
+is OPEN/DRAFT at exact HEAD `81028bf643e3dc3cb5b0ab3f9c609c239732a413`;
+`web/connect.js` blob `3937291dcfb731ecc6fb1323c6771fc19983d577`.
+Older owner [#1068](https://github.com/Naveax/Nexowire/pull/1068)
+closed **unmerged**; its historical `web/connect.js` blob
+`5618fd2a8a1bdfcd5d7e1a2ef7db688b8ed3eda1` is no longer
+the latest integration candidate. Do not reissue its RED findings as if
+they apply to the new #1160 source.
+
+**W-421/W-423 — OWNER_PORTED, source-level findings:**
+
+- Owner `web/connect.js` lines 294–299 reject non-string **and**
+  whitespace-only pairing IDs/tokens before callback navigation.
+- Lines 268–276 distinguish 429; strictly numeric positive `Retry-After`
+  up to 3600 seconds is displayed, otherwise generic wait text. The bounded
+  candidate supersedes old K01 in-memory `candidateSource` assumptions.
+- Lines 262–267 show pairing POST 401 as a terminal expired session with
+  login guidance; lines 277–282 distinguish 503/403. Source no longer
+  conflates 401, 429 and 503.
+- Lines 305–313 display a bounded UI message for unexpected pairing errors
+  rather than arbitrary `Error.message`; the outer account-fetch catch
+  uses fixed generic text (around lines 319–324).
+
+These are exact owner source observations, **not** a claim that #1160 is
+in main or that installed-device pairing has passed.
+
+**Actual test execution, not green-by-association.**
+[#1160 exact-HEAD CI run 44576357852](https://github.com/Naveax/Nexowire/actions/runs/44576357852)
+has Node 24 job `135744799071` and Node 22 job `135744799105`
+completed/success. Both job logs explicitly select
+`test/delegated/k01/connect-state.test.ts` (owner blob
+`3086bc017b155d85490d872fc4a1e10bbd75fd90`), and actually log
+`ok 34…39` for these six named subtests:
+
+1. empty or whitespace pairing fields versus valid control
+2. 429 Retry-After differs from 503
+3. malformed Retry-After does not become a misleading duration
+4. 401 session expiry differs from 503
+5. unexpected HTTP pairing error hides raw credential diagnostics
+6. initial account-fetch failure hides raw diagnostics
+
+This supports **OWNER_PORTED + hosted explicit fixture PASS (six named
+subtests on both Node versions)** for those narrow owner scenarios.
+No local Node test was run in this turn: current container cannot resolve
+github.com. No browser/Windows/two-PC or installed-device acceptance was run.
+
+**W-422/W-424/W-425/W-426 — existing #1114 state.**
+Our [#1114](https://github.com/Naveax/Nexowire/pull/1114) is still
+OPEN/DRAFT, exact HEAD `7b4b2c753897f58de0b17be7491e79434f800cba`,
+with three changed paths, only under `test/delegated/k01/`;
+`#1160` changed paths do **not** include those three paths.
+[#1114 CI run 43285226036](https://github.com/Naveax/Nexowire/actions/runs/43285226036)
+completed/success generic seven jobs, but Node22 `131416855475` and
+Node24 `131416856627` logs **do not invoke**
+`test/delegated/k01/issue485-state-truth.test.mjs`; our nested
+fixture is **HOSTED_NOT_RUN**, regardless of the green workflow.
+Some historical #1114 tests deliberately assume the old owner source is
+RED and use text replacement against old literals; do not run/merge them
+unchanged against #1160 and mislabel mismatch as a product regression.
+Preserve still-unique candidate tests for owner/integration review; no
+second implementation of owner-ported functionality and no new PR.
+
+**Decision:** `OWNER_PORTED` for the four previously open K01 UI
+source behaviors, `CI_REPAIR` for independent #1114 fixture discovery
+and compatibility, `PHYSICAL_NOT_RUN` for real
+browser/Windows/Agent/Hub/OAuth/installer/two-PC pairing. No new unique
+source RED was demonstrated on #1160, so this audit makes **NO_DELTA**
+to production and adds no redundant negative fixture.
+#485/#539 acceptance and upstream main merge are still open owner gates.
+
+
+## P012 / W-423 new RED: JSON-null HTTP 403 error mapping
+
+**Source owner/current exact SHA (19 Nov 2026):** owner integration
+[#1160](https://github.com/Naveax/Nexowire/pull/1160) remains
+OPEN/DRAFT `81028bf643e3dc3cb5b0ab3f9c609c239732a413`,
+`web/connect.js` blob `3937291dcfb731ecc6fb1323c6771fc19983d577`.
+The 403 branch around lines 281–287 parses the JSON body with
+`await pairing.json().catch(() => ({}))` and immediately reads
+`body.error`. **Valid JSON `null` is not a parse failure**, so
+`pairing.json()` returns `null` and the dereference raises a
+`TypeError`, rather than the intended generic terminal 403 denial.
+The surrounding catch at 304–313 falls back to
+`Beklenmeyen bağlantı hatası.` instead of
+`Bu cihaz bu hesaba bağlanamadı.`. A 403 still disables retry; this is
+an error-origin/truthfulness problem, **not a claimed authorization bypass**.
+The existing owner `test/delegated/k01/connect-state.test.ts` exercises
+403 quota with an object body, but not valid JSON `null`.
+
+**Reproduction, source excerpt executed directly (not browser):**
+the exact 403 code block taken from blob `3937291d` was evaluated with
+three parsed-body values:
+
+| Parsed 403 body | Original executed branch | retryable |
+| --- | --- | --- |
+| `null` | `TypeError: Cannot read properties of null (reading 'error')` | false |
+| `{}` | `Error: Bu cihaz bu hesaba bağlanamadı.` | false |
+| `{error:'DEVICE_LIMIT_REACHED'}` | `Error: Bu hesap için cihaz limiti dolu.` | false |
+
+A **test-only** single-token replacement `body.error` →
+`body?.error` in this same branch classified the `null` case as
+`Bu cihaz bu hesaba bağlanamadı.` while preserving quota semantics
+in the extracted source. Owner must evaluate and implement any production
+fix; no `web/**` or auth source was edited.
+
+**New K01 test-only commit:** 
+[\`d7774e040f212fba6f40d9866747e9d0dd352db2\`](https://github.com/SinsiVinci/Nexowire-fork/commit/d7774e040f212fba6f40d9866747e9d0dd352db2)
+on existing [#1114](https://github.com/Naveax/Nexowire/pull/1114).
+Added the opt-in `K01_RUN_NULL_403_NEGATIVE=1` 403-null RED gate
+and owner-specific in-memory before/after candidate gate;
+the default fixture leaves the known-broken RED **SKIP**, not PASS.
+Five old in-memory proposals are now SKIP against a recognized already-ported
+#1160 source rather than producing a misleading fail; historical old-main
+behavior is retained. Installer CTA test now checks owner-pinned **v1.0.8**
+release assets and checksum note versus historical main's v1.0.7 bootstrap,
+avoiding false regressions from a release-source change.
+
+**Execution state:** V8 parsed the updated `.mjs` successfully after
+isolated import removal (**syntax-only PASS**, not Node test execution).
+The full Node suite and new 403-null test are **NOT_RUN** on the updated
+commit, because the local container cannot resolve `github.com`; the
+actual #1114 CI workflow does not select this nested K01 MJS in the
+previous HEAD. New exact #1114 HEAD `d7774e040f212fba6f40d9866747e9d0dd352db2`
+automatically started [run 44607615460](https://github.com/Naveax/Nexowire/actions/runs/44607615460),
+observed **in_progress** (no rerun requested). Re-check job
+command/output before claiming any hosted test result.
+
+**Disposition:** `UNIQUE_FIX_ADAYI` only for the specific null-JSON 403
+classification gap. The previous four UI fixes remain `OWNER_PORTED`.
+Any repaired source still requires exact-SHA explicit tests and owner review;
+installed Windows, browser, real account, Agent/Hub, two-PC pairing and
+release acceptance remain **PHYSICAL_NOT_RUN**. Issue #539/R01
+(and parent #485) stay OPEN.
+
+
+## P012 follow-up — 200 OK with JSON-null pairing body
+
+Source pin is still owner [#1160](https://github.com/Naveax/Nexowire/pull/1160)
+HEAD `81028bf643e3dc3cb5b0ab3f9c609c239732a413`,
+`web/connect.js` blob `3937291dcfb731ecc6fb1323c6771fc19983d577`.
+At lines 292–298, HTTP-200 pairing success parses `pairing.json()`
+and then reads `body.pairingId`. A standards-valid
+`Response.json(null, {status:200})` produces `null` and causes a
+TypeError at the unguarded dereference. The catch then labels the
+response `Beklenmeyen bağlantı hatası.` rather than the existing
+`Bağlantı cevabı geçersiz.` contract. This does **not** navigate or
+successfully pair; it is an error-origin/malformed-response classification
+bug, distinct from the 403 null-body case.
+
+A **narrow Node 22 execution** of the source condition plus its existing
+user-message mapping, transcribed from the exact owner blob, produced
+`2/2 TAP PASS` **reproduction** (not a product-fix PASS):
+1. 403 null displays unexpected error; 403 `{}` and quota object keep their appropriate denial strings
+2. 200 null displays unexpected error; 200 `{}` gives invalid-pairing string; a valid ID/token succeeds
+
+Command: `node --test /mnt/data/nexowire-qa/k01-null-bodies.test.mjs`.
+Separately, native Node 22 verified
+`Response.json(null,{status:200|403}).json()` resolves `null`, so
+the fixture is a valid JSON response, not a JSON parse exception. The
+two TAP tests use a **transcribed limited source excerpt**, not a checkout
+of the complete repository or end-to-end browser/Agent/Hub. Do not
+substitute these results for running the full K01 `.test.mjs`.
+
+Existing [#1114](https://github.com/Naveax/Nexowire/pull/1114)
+test-only commit [46dba1b](https://github.com/SinsiVinci/Nexowire-fork/commit/46dba1bccc804f8d3f819030f7b21a7a1f1eec8f)
+adds opt-in `K01_RUN_NULL_200_NEGATIVE=1` and an owner-#1160
+in-memory candidate comparison. The narrow suggested owner fix is to
+null-check the successfully parsed pairing body before reading
+`body.pairingId`; retain valid response navigation and missing-field
+rejection. This is owner code, so **K01 did not edit it**.
+
+For the preceding HEAD `3ad60de`, CI run
+[44607883406](https://github.com/Naveax/Nexowire/actions/runs/44607883406)
+was still in_progress until superseded and then completed/cancelled after
+the next commit; its test(22)/test(24) jobs were success but neither
+explicitly called `test/delegated/k01/issue485-state-truth.test.mjs`.
+New exact HEAD `46dba1b` automatically started
+[run 44609049069](https://github.com/Naveax/Nexowire/actions/runs/44609049069)
+and was **in_progress** at audit time. No rerun manually triggered.
+The full Node K01 suite, both opt-in 403/200 tests, and real
+browser/Windows/two-PC behavior remain **NOT_RUN** for this new HEAD.
+
+**Decision:** two narrow, reproducible owner-source error classification
+gaps (HTTP 403 null, HTTP 200 null) are `UNIQUE_FIX_ADAYI`.
+Prior four UI error classification fixes are `OWNER_PORTED`, with
+explicit Node22/24 CI evidence as recorded above.
+#1160 is not upstream main; #485/#539 still open, physical NO-GO.
+
+
+## P013 / W-581–W-586 — executable null response QA gate
+
+**Current owner / upstream:** #1160 remains OPEN/DRAFT at
+`06a9df635b6731c02170ca3583ba6de2b8b909dd`. Its
+`web/connect.js` blob is **unchanged**
+`3937291dcfb731ecc6fb1323c6771fc19983d577`
+from previously inspected owner HEAD `81028bf643e3dc3cb5b0ab3f9c609c239732a413`.
+Upstream main still `52d452f717d891eeaf4c2b9aff3c6e1ea68369b0`.
+No source change to the protected owner PR was made.
+
+**Concrete new QA artifact:** existing Draft [#1114](https://github.com/Naveax/Nexowire/pull/1114),
+commit [fd39c698ebe4aa2448d5d0e704daabbf010b07b1](https://github.com/SinsiVinci/Nexowire-fork/commit/fd39c698ebe4aa2448d5d0e704daabbf010b07b1).
+New `test/delegated/k01/p013-null-pairing.test.mjs` Git blob
+`d5c3196f7039394cdd273515f53f9d740967bdad`.
+This standalone Node test extracts the **actual source branch text** using exact string anchors,
+accepts `K01_CONNECT_REF` to read a pinned owner commit via `git show`, and
+optionally verifies its Git blob SHA with `K01_EXPECT_BLOB`.
+It executes the extracted 403 and 200 classification branches, including
+positive `{}` and valid pairing control cases, not the full UI.
+
+**Reproducible owner-check command in a repo checkout:**
+
+```sh
+K01_CONNECT_REF=06a9df635b6731c02170ca3583ba6de2b8b909dd \
+K01_EXPECT_BLOB=3937291dcfb731ecc6fb1323c6771fc19983d577 \
+node --test test/delegated/k01/p013-null-pairing.test.mjs
+```
+
+Then, **only to expose expected owner failure**,
+`K01_REQUIRE_NULL_FIX=1` enables two intentionally failing acceptance gates.
+Do not label them PASS while the source is unfixed.
+
+**Actual local test execution:** With `K01_CONNECT_SOURCE_PATH` set to a
+local fixture consisting of the **literal two excerpts copied from owner source blob**
+`3937291d`, Node **v22.16.0** ran
+`node --test /mnt/data/nexowire_k01/p013-null-pairing.test.mjs`,
+exit **0**, TAP **4 total / 2 PASS / 2 SKIP / 0 FAIL**.
+Setting `K01_REQUIRE_NULL_FIX=1` on the same fixture returned exit **1**,
+TAP **4 total / 2 PASS / 2 FAIL / 0 SKIP** (expected RED).
+The committed file content and locally executed file have matching
+Git blob `d5c3196f7039394cdd273515f53f9d740967bdad`.
+**Limitation:** local material is a fragment-only fixture rather than an actual
+full `git show` checkout of the owner; the source SHA was independently
+checked in GitHub. The exact pinned-owner command above is **NOT_RUN** in
+this environment because GitHub DNS was unavailable. Browser, Windows,
+Agent, Hub and two-device tests remain **NOT_RUN**.
+
+**W-581/W-583/W-585 source distinction:**
+- HTTP 403 + valid JSON null: `body.error` dereference raises
+  `TypeError`, terminal `retryable=false` preserved, but intended
+  generic `Bu cihaz bu hesaba bağlanamadı.` message is lost.
+- HTTP 200 + valid JSON null: `body.pairingId` dereference raises
+  `TypeError`; intended `Bağlantı cevabı geçersiz.` message is lost,
+  and callback navigation still does not occur.
+- Proposed minimum owner-only changes: `body?.error` in 403 branch
+  and `!body ||` before 200 `body.pairingId` checks.
+  Test-only in-memory substitutions preserve the 403 quota message,
+  the 200 invalid object rejection and the valid ID/token happy path.
+
+**W-582/W-584:** Separate 401/429/503 and raw diagnostic guards are already
+OWNER_PORTED into #1160 and have explicit Node22/24 CI tests
+on older `81028bf6` as documented above. No duplicate code was created.
+
+**CI coverage:** #1114 new exact code HEAD `fd39c698ebe4aa2448d5d0e704daabbf010b07b1`
+automatically triggered [run 44616385373](https://github.com/Naveax/Nexowire/actions/runs/44616385373),
+initially **queued**; it is not evidence of the new test executing.
+Previous #1114 `.test.mjs` files were not discovered by required workflows.
+An exact SHA, workflow/job-log and test-path receipt is still needed.
+No manual dispatch or rerun.
+Owner release, physical installer / login / pairing and upstream
+main integration remain **NO-GO**; issue #485 and #539 stay open.
+
+
+## P013 follow-up: fix K01 false RED after owner repair
+
+The first `p013-null-pairing.test.mjs` from `fd39c698` made its **two
+source-red evidence tests** assert that original owner code **must**
+throw `TypeError`. Once #1160 adopts the proposed `body?.error`
+and `!body ||` fixes, those baseline assertions would fail **despite
+correct owner behavior**; a future repaired owner would show false RED.
+This is an actual QA test defect, not a new product bug.
+
+**Narrow owned test fix:** existing open
+[#1114](https://github.com/Naveax/Nexowire/pull/1114), code commit
+[`b23a55edd7827c9e1345603b250343e434cdb60d`](https://github.com/SinsiVinci/Nexowire-fork/commit/b23a55edd7827c9e1345603b250343e434cdb60d),
+`test/delegated/k01/p013-null-pairing.test.mjs` Git blob
+`97a2c2edb36710bb4ea65f2704eb5e3a347aca62`. The source tests
+now distinguish unrepaired (`TypeError`, use in-memory candidate)
+from repaired (expected classifiable message, no replacement),
+while preserving 403 quota and valid-200 positive controls. Explicit
+`K01_REQUIRE_NULL_FIX=1` acceptance gates remain strictly failing
+on unfixed code.
+
+**Executed local Node v22.16.0 results (no false PASS):**
+`K01_CONNECT_SOURCE_PATH=<fixture> node --test p013-null-pairing.test.mjs`
+against literal 403/200 fragments of owner
+`web/connect.js@3937291dcfb731ecc6fb1323c6771fc19983d577`:
+exit 0, TAP 4 tests / 2 PASS / 2 SKIP / 0 FAIL.
+With `K01_REQUIRE_NULL_FIX=1` on the same unfixed fragments:
+exit 1, TAP 2 PASS / 2 **FAIL** / 0 SKIP, an expected acceptance RED.
+A separately crafted **hypothetical repaired** fragment fixture
+(where exactly `body.error` → `body?.error` and
+`typeof body.pairingId` is guarded by `!body ||`) yielded
+exit 0, TAP 2 PASS / 2 SKIP; with acceptance enabled, exit 0,
+**4 PASS / 0 FAIL / 0 SKIP**. The test file run locally and committed
+file have matching Git blob `97a2c2ed`.
+
+All four local runs execute only **source fragments** in Node, not the
+full pinned owner `git show`, browser, credential flow, signed
+installer, or live device. The fixed fragment is a simulation, **not
+an owner commit or a product fix**. Full owner-source execution
+and physical acceptance remain **NOT_RUN**.
+
+**Exact hosted distinction:** previous #1114 HEAD `b98b05fc...` CI
+[44616602032](https://github.com/Naveax/Nexowire/actions/runs/44616602032)
+completed **success** (seven generic jobs), but Node 24 job
+`135886980192` and Node 22 job `135886980726` logs explicitly
+**do not contain** either `test/delegated/k01/p013-null-pairing.test.mjs`
+or `issue485-state-truth.test.mjs`, so new K01 nested tests were
+**HOSTED_NOT_RUN** even though the workflow was green.
+After the code commit, exact #1114 HEAD `b23a55ed...` CI
+[44619051609](https://github.com/Naveax/Nexowire/actions/runs/44619051609)
+was **queued** at check time, not PASS. Existing workflow dispatch
+was not restarted. Owner #1160 source blob `3937291d` remained
+unfixed in this check, owner PR HEAD `06a9df635b6731c02170ca3583ba6de2b8b909dd`.
+No new PR, main merge, issue close, CI workflow source or owner code edit.
