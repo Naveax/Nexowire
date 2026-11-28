@@ -149,6 +149,26 @@ test('high-contrast keyboard focus uses a forced-color system outline', { skip }
   assert.equal(value(rules, 'button:focus-visible', 'outline-offset', 375), '3px');
 });
 
+// #539: computed outline alone is insufficient when a full-width summary
+// sits inside an overflow-clipped details element. Chromium pixel comparison
+// showed zero visible change on Tab at 320/375/640px in both color modes.
+test('utility panel summary focus outline is not clipped by its details container', { skip }, () => {
+  for (const width of [320, 375, 640]) {
+    for (const features of [[], ['forced-colors:active']]) {
+      const overflow = value(rules, '.utility-panel', 'overflow', width, features);
+      if (!['hidden', 'clip', 'auto', 'scroll'].includes(overflow)) continue;
+      const offset = value(rules, '.utility-panel summary:focus-visible', 'outline-offset', width, features)
+        ?? value(rules, 'summary:focus-visible', 'outline-offset', width, features);
+      const outline = value(rules, 'summary:focus-visible', 'outline', width, features);
+      const thickness = Number(/^([0-9]+)px\b/.exec(outline ?? '')?.[1]);
+      assert.match(offset ?? '', /^-\d+px(?:\s+!important)?$/, 
+        `${width}px clipped summary requires an inset focus outline (${features.join(',') || 'normal'})`);
+      assert.ok(Number.isFinite(thickness) && parseInt(offset, 10) <= -thickness,
+        'the focus outline must fit entirely inside the clipped summary');
+    }
+  }
+});
+
 test('zoom CSS-width proxies keep 640px one-column and 320px mobile wrap', { skip }, () => {
   // Approximate CSS widths for 1280px / 200% and / 400%; real browser zoom NOT_RUN.
   assert.equal(value(rules, '.device-list', 'grid-template-columns', 640), '1fr');
