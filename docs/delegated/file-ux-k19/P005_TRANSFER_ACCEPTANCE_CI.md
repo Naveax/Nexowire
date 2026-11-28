@@ -5,6 +5,48 @@ Baseline: upstream `main` `b5a3f8840517d65ecbd6a018699c4c8bdde09987`
 against that baseline by temporarily placing their exact test sources in a
 clean main worktree; it **does not** mean either Draft is merged.
 
+## Updated evidence — 2026-11-28
+
+The results below are historical P005 baseline receipts, not current owner-branch
+discovery status. Do not carry their NOT_RUN labels across different SHAs.
+
+- [#1136 run 45893598706](https://github.com/Naveax/Nexowire/actions/runs/45893598706):
+  exact PR head `3075cc55ace53d3c83b279959922b59ea4b876ea`, seven successful
+  jobs. Node 22 job 140161956985 and Node 24 job 140161956868 checked out merge
+  `1bba965` of this head into `52d452f7`. Neither log contains the
+  `p005-ci-discovery-qa.test.ts` path or its new folded-YAML test title.
+  **P005 itself: hosted execution not evidenced; do not report PASS.**
+- Owner integration [#1160](https://github.com/Naveax/Nexowire/pull/1160),
+  exact head `a8150192f5d6066c61b0905c14ad8e279cbdf096`,
+  [run 45621340192](https://github.com/Naveax/Nexowire/actions/runs/45621340192):
+  both Node jobs checked out merge `b6b9482`, and explicitly invoked the
+  following three files. Every named test from each exact source blob has a
+  matching non-SKIP/non-TODO successful TAP result in both jobs.
+
+| Owner source file (under test/delegated/k19/) | Exact source blob | Node 22 | Node 24 |
+| --- | --- | --- | --- |
+| issue588-limits-inventory.test.ts | eb6e806d9597dd64710a2d3d1f5082603682f935 | 5/5 | 5/5 |
+| issue588-large-file-acceptance.test.ts | 1c36f04e172d0b8eef6b67180f6b18b35096cb30 | 5/5 | 5/5 |
+| p006-receiver-ack-reference.test.ts | fd7c6a1f7ae365e88360f2ebac21afb84105ae63 | 12/12 | 12/12 |
+
+Job receipts: [Node 22](https://github.com/Naveax/Nexowire/actions/runs/45621340192/job/139229998281),
+[Node 24](https://github.com/Naveax/Nexowire/actions/runs/45621340192/job/139229997968).
+Each delegated batch footer has 410 tests / 410 pass / 0 fail / 0 skipped /
+0 todo. The 22 named tests are a subset, not additional tests. These are
+hosted source/fixture results, not production delivery. The run-attempt
+number is unavailable from the queried metadata.
+
+- [Historical HTTP boundary measurement](https://github.com/Naveax/Nexowire/issues/588#issuecomment-6297511324):
+  raw HTTP bodies of 102400 bytes returned 400; 102401 bytes returned 413,
+  consistent with the historical SDK Express parser default. This is not a
+  220 KiB disk-file limit. [#598](https://github.com/Naveax/Nexowire/pull/598)
+  remains an unmerged bounded-parser candidate; current deployed route and
+  provider limits still require authorized verification. Do not raise or
+  bypass authentication, quota or request bounds.
+- **#588 remains OPEN / physical NO-GO.** No new live device test was run for
+  this update. Existing historical chunked receipts do not establish a single
+  logical resumable transfer above 256 MiB.
+
 ## Results by actual execution level (P005 T-503–T-507)
 
 | Evidence | Actual result | What it establishes / does not establish |
@@ -18,10 +60,10 @@ clean main worktree; it **does not** mean either Draft is merged.
 | #1124 exact HEAD `4d1a3dc3...` hosted CI run [42411882607](https://github.com/Naveax/Nexowire/actions/runs/42411882607) | **7/7 completed success** | Other CI jobs PASS; new `issue588-limits-inventory.test.ts` **NOT_RUN by CI discovery** |
 | Original user ~220 KB failure, ChatGPT/client, two real PCs/Windows, Hub authentication, actual UI filenames and final destination readback | **NOT_RUN / OPEN** | No end-to-end fix or customer acceptance claim |
 
-Why **CI 7/7 ≠ K19 tests passed in CI:** current `package.json` runs
+Why **CI 7/7 ≠ K19 tests passed in CI:** at the historical P005 baseline, `package.json` runs
 `node --test --import tsx test/**/*.test.ts`; the Linux shell expands this
 without `globstar` and does not include two nested `test/delegated/k19/issue588-*.test.ts`
-files. Current `.github/workflows/ci.yml` explicitly names two *older* K19 tests
+files. The baseline `.github/workflows/ci.yml` explicitly names two *older* K19 tests
 but neither new file. Inspected actual `test (22)` job logs of both runs:
 no `issue588` test-file invocation. The read-only negative and positive controls
 in `p005-ci-discovery-qa.test.ts` reproduce this discovery gap. **K13 owns CI
