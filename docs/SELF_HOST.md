@@ -89,7 +89,7 @@ Do not add Funnel merely to make a failing local health check disappear. Either 
 
 Optional flags (do not put tokens into arguments):
 
-- `--allow-root <path>` may be repeated. The Windows user home is used when omitted.
+- `--allow-root <path>` may be repeated. The Windows user home is used when omitted. This default also applies on resume: the previous explicit root list is not restored from the bootstrap state. Repeat the same approved `--allow-root` arguments when retrying an interrupted bootstrap; omitting them may broaden access to the entire user home. Do not use bootstrap as a diagnostic-only retry.
 - `--port <1-65535>` changes the loopback Hub port from the configured/default port.
 - `--ttl-days <1-365>` controls the initial MCP and native-agent credential lifetime.
 - `--tailscale-funnel` requests public HTTPS MCP exposure through Tailscale Funnel.
